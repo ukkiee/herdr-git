@@ -7,6 +7,10 @@ import { makeGit } from "./git.js";
 import { readStatus } from "./git-status.js";
 import { translator } from "./i18n.js";
 
+// The person's own git settings stay out of every repository here.
+process.env.GIT_CONFIG_GLOBAL = "/dev/null";
+process.env.GIT_CONFIG_NOSYSTEM = "1";
+
 const base = realpathSync(mkdtempSync(`${tmpdir()}/git-tools-status-`));
 // Same shape as herdr's exec: resolves with { code, stdout, stderr }, rejects when it can't start.
 const exec = (cmd, args = [], { cwd } = {}) => new Promise((resolve, reject) => {
@@ -51,13 +55,13 @@ git add -A && git commit -q -m first`);
   assert.equal(r.hasHead, true);
   const byPath = (a, b) => (a.path < b.path ? -1 : 1);
   assert.deepEqual([...r.changes].sort(byPath), [
-    { path: "docs/my notes.md", status: "modified" },
-    { path: "docs/한글 문서.md", status: "modified" },
-    { path: "later.ts", status: "added" },
-    { path: "src/app/a.ts", status: "modified" },
-    { path: "src/app/added.ts", status: "added" },
-    { path: "src/app/gone.ts", status: "deleted" },
-    { path: "staged-gone.txt", status: "deleted" },
+    { path: "docs/my notes.md", status: "modified", xy: "M." },
+    { path: "docs/한글 문서.md", status: "modified", xy: ".M" },
+    { path: "later.ts", status: "added", xy: ".A" },
+    { path: "src/app/a.ts", status: "modified", xy: ".M" },
+    { path: "src/app/added.ts", status: "added", xy: "A." },
+    { path: "src/app/gone.ts", status: "deleted", xy: ".D" },
+    { path: "staged-gone.txt", status: "deleted", xy: "D." },
   ]);
   assert.deepEqual([...r.unversioned].sort(byPath), [
     { path: ".gitignore", status: "unversioned" },
@@ -75,7 +79,7 @@ git add -A && git commit -q -m first`);
   r = await readStatus(git, repo);
   assert.equal(r.ok, true);
   assert.equal(r.hasHead, false);
-  assert.deepEqual(r.changes, [{ path: "first.txt", status: "added" }]);
+  assert.deepEqual(r.changes, [{ path: "first.txt", status: "added", xy: "A." }]);
   assert.deepEqual(r.unversioned, [{ path: "other.txt", status: "unversioned" }]);
 }
 
@@ -95,7 +99,27 @@ git checkout -q main && echo ours > "both sides.txt" && git commit -q -am ours
 git merge other >/dev/null 2>&1 || true`);
   const r = await readStatus(git, repo);
   assert.equal(r.ok, true);
-  assert.deepEqual(r.changes, [{ path: "both sides.txt", status: "conflict" }]);
+  assert.deepEqual(r.changes, [{ path: "both sides.txt", status: "conflict", xy: "UU" }]);
+}
+
+// Each conflict keeps git's two letters, so a screen can say which side changed or
+// deleted the file: both modified (UU), both added (AA), deleted by us (DU), deleted by
+// them (UD). A file the merge brought in without a conflict is staged (X is not ".").
+{
+  const repo = init("conflict-kinds");
+  sh(repo, `echo base > both.txt && echo base > ours-gone.txt && echo base > theirs-gone.txt && git add -A && git commit -q -m base
+git checkout -q -b other && echo theirs > both.txt && echo theirs > ours-gone.txt && git rm -q theirs-gone.txt && echo theirs > added.txt && echo new > brought.txt && git add -A && git commit -q -m theirs
+git checkout -q main && echo ours > both.txt && git rm -q ours-gone.txt && echo ours > theirs-gone.txt && echo ours > added.txt && git add -A && git commit -q -m ours
+git merge other >/dev/null 2>&1 || true`);
+  const r = await readStatus(git, repo);
+  // git lists ordinary entries before conflicts.
+  assert.deepEqual(r.changes, [
+    { path: "brought.txt", status: "added", xy: "A." },
+    { path: "added.txt", status: "conflict", xy: "AA" },
+    { path: "both.txt", status: "conflict", xy: "UU" },
+    { path: "ours-gone.txt", status: "conflict", xy: "DU" },
+    { path: "theirs-gone.txt", status: "conflict", xy: "UD" },
+  ]);
 }
 
 // Reading leaves .git/index alone, bytes and modification time. A file whose timestamp
@@ -111,7 +135,7 @@ git merge other >/dev/null 2>&1 || true`);
   writeFileSync(`${repo}/b.txt`, "2\n");
   const before = snapshot();
   const r = await readStatus(git, repo);
-  assert.deepEqual(r.changes, [{ path: "b.txt", status: "modified" }]);
+  assert.deepEqual(r.changes, [{ path: "b.txt", status: "modified", xy: ".M" }]);
   assert.deepEqual(snapshot(), before, "reading the status does not rewrite the index");
   // The same question asked without the read flags does rewrite it, so the check above means something.
   sh(repo, "git status --porcelain >/dev/null");

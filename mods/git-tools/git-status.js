@@ -19,9 +19,11 @@ function statusOf(xy) {
 
 // readStatus(git, root) → { ok, err, hasHead, detached, changes, unversioned }
 //   git: from makeGit (git.js). root: the repository root.
-//   changes: [{ path, status }]: tracked files that differ from HEAD; status is
+//   changes: [{ path, status, xy }]: tracked files that differ from HEAD; status is
 //   "modified" | "added" | "deleted" | "conflict". "added" also covers a file only
-//   registered with `git add --intent-to-add`.
+//   registered with `git add --intent-to-add`. xy: porcelain v2's two letters as git
+//   wrote them: X the index against HEAD, Y the work tree against the index ("." for no
+//   change); for a conflict, our side and their side (UU, AA, AU, UA, DU, UD, DD).
 //   unversioned: [{ path, status: "unversioned" }]: untracked and not ignored.
 //   hasHead: false in a repository without commits.
 //   detached: HEAD is on a commit and no branch (a commit made there is on no branch).
@@ -47,8 +49,8 @@ export async function readStatus(git, root) {
       // branch reads as detached here too.
       else if (entry === "# branch.head (detached)") detached = true;
     }
-    else if (kind === "1") changes.push({ path: pathAfter(entry, 8), status: statusOf(entry.slice(2, 4)) });
-    else if (kind === "u") changes.push({ path: pathAfter(entry, 10), status: "conflict" });
+    else if (kind === "1") changes.push({ path: pathAfter(entry, 8), status: statusOf(entry.slice(2, 4)), xy: entry.slice(2, 4) });
+    else if (kind === "u") changes.push({ path: pathAfter(entry, 10), status: "conflict", xy: entry.slice(2, 4) });
     else if (kind === "?") unversioned.push({ path: entry.slice(2), status: "unversioned" });
   }
   return { ok: true, err: "", hasHead, detached, changes, unversioned };

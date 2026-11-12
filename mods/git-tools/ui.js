@@ -58,15 +58,18 @@ export function rememberLang(lang) {
 }
 
 // The language of the computer the window is on (a remote space's too): macOS's first
-// preferred language, Linux's locale variables, English on Windows. null when it isn't
-// known: no window yet (right after the app starts) or the command failed or couldn't
-// start. The copy then keeps what it has and asks again (main.js).
+// preferred language, Linux's locale variables, Windows' display language (UI culture).
+// null when it isn't known: no window yet (right after the app starts) or the command
+// failed, couldn't start or said nothing. The copy then keeps what it has and asks again
+// (main.js).
 export async function readSystemLang() {
   const platform = hostWindow()?.platform;
   let read = null;
   try {
     if (platform === "macos") read = await exec("defaults", ["read", "-g", "AppleLanguages"], { timeout: 5000 });
     else if (platform === "linux") read = await exec("sh", ["-c", 'printf "%s\\n%s\\n%s\\n" "$LC_ALL" "$LC_MESSAGES" "$LANG"'], { timeout: 5000 });
+    // -NoProfile: a person's profile script can print text of its own or be slow to load.
+    else if (platform === "windows") read = await exec("powershell", ["-NoProfile", "-Command", "(Get-UICulture).Name"], { timeout: 5000 });
   } catch { /* read stays null: not known */ }
   return systemLang(platform, read);
 }

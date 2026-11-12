@@ -3,7 +3,7 @@ import { execFile, execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, realpathSync, statSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
-import { makeGit, repoRoot, chunks } from "./git.js";
+import { makeGit, repoRoot, chunks, READ, recordWith } from "./git.js";
 
 const root = realpathSync(mkdtempSync(`${tmpdir()}/git-tools-`));
 // Same shape as herdr's exec: resolves with { code, stdout, stderr }, rejects when it can't start.
@@ -125,6 +125,56 @@ const git = makeGit(exec, null);
   const huge = "h".repeat(30000);
   assert.deepEqual(chunks(["a", huge, "b"]), [["a"], [huge], ["b"]]);
   assert.deepEqual(chunks(many.slice(0, 600), () => 200).map((part) => part.length), [300, 300]);
+}
+
+// Every command that may write is handed to the recorder (the Git console), with where it
+// ran and what came of it; reads (git.read, the READ flags) never are.
+{
+  const calls = [];
+  const logged = makeGit(exec, null, { record: (call) => { calls.push(call); } });
+  const before = Date.now();
+  const made = await logged(repo, ["branch", "console-made"]);
+  assert.equal(made.ok, true);
+  const refused = await logged(repo, ["branch", "console-made"]);
+  assert.equal(refused.ok, false);
+  await logged.read(repo, ["status", "--porcelain=v1"]);
+  await logged(repo, [...READ, "rev-parse", "HEAD"]);
+  await logged(repo, ["commit", "--allow-empty", "-q", "-m", "from env"], { env: { GIT_AUTHOR_NAME: "Env" } });
+  assert.deepEqual(calls.map((c) => c.args), [["branch", "console-made"], ["branch", "console-made"], ["commit", "--allow-empty", "-q", "-m", "from env"]]);
+  const [first, second] = calls;
+  assert.equal(first.cwd, repo);
+  assert.equal(first.on, null);
+  assert.equal(first.code, 0);
+  assert.ok(first.at >= before && first.at <= Date.now());
+  assert.equal(second.code, 128);
+  assert.match(second.stderr, /already exists/);
+  assert.equal(execFileSync("git", ["log", "-1", "--format=%an"], { cwd: repo, encoding: "utf8" }), "Env\n", "the env still reaches git");
+  // A command that couldn't start is recorded too, as code -1 with the reason.
+  const down = [];
+  const gone = makeGit(() => Promise.reject(new Error("machine vps is unreachable")), "vps", { record: (c) => { down.push(c); } });
+  await gone("/r", ["push"]);
+  assert.equal(down.length, 1);
+  assert.deepEqual({ on: down[0].on, code: down[0].code }, { on: "vps", code: -1 });
+  assert.match(down[0].stderr, /unreachable/);
+  // A recorder that fails never fails git.
+  const broken = makeGit(exec, null, { record: () => { throw new Error("disk full"); } });
+  assert.equal((await broken(repo, ["branch", "-D", "console-made"])).ok, true);
+  const rejecting = makeGit(exec, null, { record: () => Promise.reject(new Error("disk full")) });
+  assert.equal((await rejecting(repo, ["branch", "console-two"])).ok, true);
+  sh(repo, "git branch -D console-two && git reset -q --hard HEAD~1");
+}
+
+// Without a recorder of its own, a runner hands writes to the one installed for every
+// runner (main.js installs the Git console's); none installed, nothing is recorded.
+{
+  const calls = [];
+  recordWith((call) => { calls.push(call); });
+  try {
+    await makeGit(exec, null)(repo, ["branch", "console-installed"]);
+    await makeGit(exec, null).read(repo, ["status"]);
+  } finally { recordWith(null); }
+  await makeGit(exec, null)(repo, ["branch", "-D", "console-installed"]);
+  assert.deepEqual(calls.map((c) => c.args), [["branch", "console-installed"]]);
 }
 
 console.log("ok");

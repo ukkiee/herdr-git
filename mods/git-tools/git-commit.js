@@ -3,6 +3,8 @@
 // itself comes in English in `err` with its key in `msg` ({ key, args }, i18n.js);
 // git's own words come without `msg`.
 
+import { readOperation, continueOperation, conflictsLeft } from "./git-operation.js";
+
 // Hooks can run for minutes (lint, tests); this is exec's cap.
 const COMMIT_TIMEOUT = 600000;
 
@@ -21,10 +23,25 @@ const fail = (err, extra = {}) => ({ ok: false, code: -1, out: "", err, ...extra
 //   amend: rewrite the last commit instead of adding one. `files` may then be empty
 //   (only the message changes).
 //   Hooks run. When one fails nothing is committed and its output is in `err`.
+//   While any file is in conflict nothing is committed, Amend included, whatever left the
+//   conflict (an operation, a stash that came back): git takes a commit of a file with
+//   conflict markers in it during a revert or a rebase. While a merge, rebase, cherry-pick
+//   or revert is in progress, the commit goes on with it instead (git-operation.js
+//   Continue): the operation's staged files go in with the checked ones, and the result
+//   carries its `outcome` and `operation`. Amend is refused then.
+//   The state is read here, right before committing, not trusted from a screen: another
+//   copy or a terminal may have started or ended an operation since.
 export async function commit(git, root, { files = [], message = "", amend = false } = {}) {
   // Refused here, before anything is touched: git would refuse too, but only after the
   // untracked files had been registered.
   if (!message.trim()) return fail("Specify a commit message.", { msg: { key: "commit.noMessage" } });
+  const op = await readOperation(git, root);
+  if (!op.ok) return op;
+  if (op.conflicts.length) return conflictsLeft(op.conflicts.length);
+  if (op.kind) {
+    if (amend) return fail("Amend is off while an operation is in progress.", { msg: { key: "ops.noAmend" } });
+    return continueOperation(git, root, { message, files });
+  }
   if (!files.length && !amend) return fail("No files to commit.", { msg: { key: "commit.noFiles" } });
   const paths = files.map((file) => file.path);
   // `commit --only` takes paths git knows. An untracked file is made known without

@@ -205,6 +205,15 @@ export default class LogView {
     if (deleted && this.shows(repo)) this.deleted = { ...deleted, repo: { root: repo.root, on: repo.on ?? null } };
   }
 
+  // restoredElsewhere(repo, restored): the Deleted Branches dialog brought `restored`
+  // ([{ name, hash }]) back on `repo`. The notice for one of them goes: its Restore would
+  // only be refused now. A notice for any other branch stays. Called from a running
+  // write: the write redraws when it ends.
+  restoredElsewhere(repo, restored) {
+    const gone = this.deleted;
+    if (gone && sameRepo(gone.repo, repo) && restored.some((b) => b.name === gone.name && b.hash === gone.hash)) this.deleted = null;
+  }
+
   // The notice's Restore: the branch again at its commit, with its upstream, under the
   // write lock. On success the notice goes and every screen on the repository reads
   // again; on failure (a branch of that name exists now) git's words go to the strip and

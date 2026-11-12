@@ -52,13 +52,16 @@ function requested(list) {
 //   e.args.root, under the write lock (ui.js serveRequest). The answer's msg is worded
 //   here, in the panel's language: it travels without the skipped list, so the dialog
 //   can't word each reason itself. A restore that brought some back counts as a change
-//   even when others were skipped, so every screen reads the branches again.
+//   even when others were skipped, so every screen reads the branches again. The
+//   branches that came back are passed to panel.restoredElsewhere, so its Restore notice
+//   for one of them goes.
 export function serveDeletedBranches(panel, e, cx) {
   if (e.action !== "branches-restore") return false;
   const branches = requested(e.args?.branches);
   serveRequest(panel, e, { key: "branches.restoring" }, async (repo) => {
     if (!branches.length) return { ok: false, err: "No branches to restore.", msg: { key: "branches.noneChecked" } };
     const r = await restoreBranches(makeGit(exec, repo.on), repo.root, branches);
+    panel.restoredElsewhere(repo, r.restored);
     if (r.ok) return r;
     const list = r.skipped.map((s) => `${s.name}: ${sentence(panel.t, s.msg, s.reason)}`).join("\n");
     return { ...r, changed: r.restored.length > 0, msg: r.msg ? { key: r.msg.key, args: { ...r.msg.args, list } } : r.msg };

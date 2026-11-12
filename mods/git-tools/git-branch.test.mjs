@@ -876,4 +876,31 @@ const ended = Math.floor(Date.now() / 1000);
   assert.deepEqual(r.branches.map((b) => b.name), order.slice(0, 50));
 }
 
+// ---- how long a deleted branch is kept: git's own reflog expiry, default settings
+
+// A git runner whose commands run `days` ago: the records it writes carry that time.
+const gitDaysAgo = (days) => makeGit((cmd, args = [], { cwd } = {}) => new Promise((resolve, reject) => {
+  const env = { ...process.env, GIT_COMMITTER_DATE: `@${Math.floor(Date.now() / 1000) - days * 86400} +0000` };
+  execFile(cmd, args, { cwd, env, maxBuffer: 64 * 1024 * 1024 }, (err, stdout, stderr) => {
+    if (err && typeof err.code !== "number") return reject(err);
+    resolve({ code: err ? err.code : 0, stdout, stderr });
+  });
+}), null);
+
+// A record 29 days old outlives a default gc; one 31 days old goes with its commit. The
+// commit is made without touching HEAD, so no other reflog keeps it.
+for (const [days, kept] of [[29, true], [31, false]]) {
+  const dir = lone(`aged-${days}`);
+  const tip = raw(dir, ["commit-tree", "-m", `aged ${days}`, "-p", "HEAD", "HEAD^{tree}"]);
+  raw(dir, ["update-ref", "refs/heads/aged", tip]);
+  const del = await deleteBranch(gitDaysAgo(days), dir, "aged", { confirmed: true });
+  assert.equal(del.ok, true, del.err);
+  const listedAt = (await readDeletedBranches(git, dir)).branches[0].time;
+  assert.ok(Math.abs(listedAt - (Date.now() / 1000 - days * 86400)) < 120, `deleted ${days} days ago`);
+  // gc expires reflog entries by the default settings, then drops what nothing keeps.
+  raw(dir, ["gc", "-q", "--prune=now"]);
+  assert.equal(alive(dir, tip), kept, `${days} days`);
+  assert.deepEqual((await readDeletedBranches(git, dir)).branches.map((b) => b.hash), kept ? [tip] : []);
+}
+
 console.log("ok");

@@ -46,6 +46,8 @@ const shown = (sel) => pickedInOrder(sel, list.at);
   assert.deepEqual(shown(s), ["a", "c", "e"]);
   s = pickCommit(s, "c", cmd, list);
   assert.deepEqual(shown(s), ["a", "e"]);
+  // The one taken out is not what a one-commit action works on: the newest still picked is.
+  assert.equal(s.lead, "a");
   // Taking out the last one leaves nothing picked.
   s = pickCommit(pickCommit(NONE, "a", plain, list), "a", cmd, list);
   assert.deepEqual(shown(s), []);

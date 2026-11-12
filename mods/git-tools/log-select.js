@@ -14,7 +14,8 @@ export const NONE = Object.freeze({ picked: new Set(), anchor: null, lead: null 
 //   list: { at(hash) → row number or undefined, hashAt(row) → hash }.
 //   Shift: the rows from the anchor to this one, in place of what was picked (with Cmd too:
 //   added to it). Without an anchor in the list, Shift acts as a plain click.
-//   Cmd: this one in or out; it becomes the anchor.
+//   Cmd: this one in or out; it becomes the anchor. Taken out, the lead moves to the newest
+//   commit still picked.
 export function pickCommit(sel, hash, mods = {}, list) {
   const from = sel.anchor !== null ? list.at(sel.anchor) : undefined, to = list.at(hash);
   if (mods.shift && from !== undefined && to !== undefined) {
@@ -24,8 +25,9 @@ export function pickCommit(sel, hash, mods = {}, list) {
   }
   if (mods.cmd) {
     const picked = new Set(sel.picked);
-    if (picked.has(hash)) picked.delete(hash); else picked.add(hash);
-    return { picked, anchor: hash, lead: picked.size ? hash : null };
+    if (!picked.has(hash)) return { picked: picked.add(hash), anchor: hash, lead: hash };
+    picked.delete(hash);
+    return { picked, anchor: hash, lead: picked.size ? pickedInOrder({ picked }, list.at)[0] : null };
   }
   return { picked: new Set([hash]), anchor: hash, lead: hash };
 }

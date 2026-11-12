@@ -16,7 +16,7 @@
 // ctx, as each screen hands it:
 //   commit menu:   { count (commits selected), current (branch name), writing }
 //   branch menus:  { name, current, upstream, writing, deleteBlock }
-//   toolbars:      { loaded, name, writing, deleteBlock }
+//   toolbars:      { loaded, name, writing, deleteBlock, fixed (a Log tab on a chosen folder) }
 
 const RULE = "|";
 
@@ -120,7 +120,7 @@ const ITEMS = {
   "log.cherryPick": { key: "log.cherryPick" },
   "log.displayOptions": { key: "log.displayOptions" },
   "log.goToHash": { key: "log.goToHash" },
-  "log.hide": { key: "log.hide" },
+  "log.hide": { key: "log.hide", shown: (ctx) => !ctx.fixed },
 };
 
 // Order and separators. A branch row's menu depends on the row: a local branch, the

@@ -85,6 +85,8 @@ const all = (name, ctx = {}, t = ko) => look(menuItems(name, everything, ctx), t
 {
   assert.deepEqual(all("logTools"), ["그래프 옵션", "새로고침", "페치", "Cherry-Pick", "옵션 표시", "해시/브랜치/태그로 이동", "숨기기"]);
   assert.deepEqual(all("logSearch"), ["정규식", "대/소문자 구분"]);
+  // A Log tab on a chosen folder has nothing to hide.
+  assert.ok(!all("logTools", { fixed: true }).includes("숨기기"));
 }
 
 // Every name in the model is in both languages' tables.

@@ -39,6 +39,9 @@ import { openPush } from "./view-push.js";
 import { broadcast, button, checkbox, errorStrip, textBox, writingOn, fromRepo, sentence } from "./ui.js";
 import { sameRepo } from "./lock.js";
 
+// The repository a message and Amend belong to.
+const place = (repo) => JSON.stringify([repo.on, repo.root]);
+
 // Words come from host.t (the panel's, main.js), asked again on every use: the panel's
 // language can change after the form is made.
 export default class CommitForm {
@@ -91,7 +94,7 @@ export default class CommitForm {
   follow() {
     const repo = this.host.repo;
     if (!repo) return;
-    const where = JSON.stringify([repo.on, repo.root]);
+    const where = place(repo);
     if (where === this.where) return;
     if (this.where !== null) this.drafts.set(this.where, this.text.value());
     this.where = where;
@@ -101,6 +104,11 @@ export default class CommitForm {
 
   // Amend only counts while there is a commit to amend.
   amending() { return this.amend && Boolean(this.host.hasHead); }
+
+  // Whether Amend is on for `repo` ({ root, on }). False for a repository the form hasn't
+  // followed to yet: the panel's read reaches a new repository before the next render's
+  // follow() turns Amend off there.
+  amendsIn(repo) { return this.amend && Boolean(repo) && place(repo) === this.where; }
 
   // Why Commit can't run now, or null when it can.
   blocked(count = this.host.included().length) {

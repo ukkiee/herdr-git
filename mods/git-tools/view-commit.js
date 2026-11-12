@@ -235,15 +235,17 @@ export default class CommitView {
         if (this.contextKey() !== context) return;
         // The Last commit group follows HEAD (a commit, an amend, a checkout, another
         // copy's write): asked on every read while Amend is on, its files read again only
-        // when HEAD moved.
+        // when HEAD moved. Not asked on a repository just arrived on: the form turns Amend
+        // off there once it follows (amendsIn).
+        const amend = this.form.amendsIn(repo);
         let last = null;
-        if (status.ok && status.hasHead && this.form.amend) {
+        if (status.ok && status.hasHead && amend) {
           last = await readLastCommit(repo.git, repo.root, { known: this.last?.hash ?? null });
           if (this.contextKey() !== context) return;
         }
         this.repo = repo; this.notRepo = false;
         this.lost = !status.ok;
-        if (!status.ok || !status.hasHead || !this.form.amend) this.last = null;
+        if (!status.ok || !status.hasHead || !amend) this.last = null;
         else if (last.ok && !last.same) this.last = last.hash ? { hash: last.hash, subject: last.subject, files: last.files } : null;
         // A failed read keeps what was read before; git's words go in the strip below.
         if (status.ok) { this.apply(status); this.error = last && !last.ok ? sentence(this.t, last.msg, last.err) : null; }

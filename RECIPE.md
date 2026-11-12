@@ -70,9 +70,8 @@ The right side panel, in place of Herdr's own Changes. A card: 10px corners, 1px
   - **Last commit group**, only while Amend is on and the repository has a commit, last
     in the list and unfolded when it appears. Its row: the fold arrow, a 14px commit
     glyph drawn in the checkbox's place (an 8px `muted` ring on a 1px line), the commit's
-    subject in semibold (at most 70% of the row; the 8-character hash when the message is
-    empty), then `N files` at 12px `dim`. The count always shows whole: a long subject
-    is cut with `…` first. Tooltip: the full hash. Its folder and file rows have an empty
+    subject in semibold (the 8-character hash when the message is empty), then `N files`
+    at 12px `dim`. The count always shows whole: a long subject is cut with `…` instead. Tooltip: the full hash. Its folder and file rows have an empty
     14px place where the checkbox would be, and are drawn like the other groups' (flat or
     grouped, Icon theme icons, status colors); a renamed file is `ansi4`, with the
     tooltip `<path> (renamed from <old>)`.
@@ -1163,7 +1162,8 @@ folder name in front when the panel has moved on), `writeFailed(text, cx)`,
 `LogBranches` (`reload`, `command`), `LogFilters`, `LogList` (`reload`, `find`, `goTo`,
 `command`, `handle`), `LogDetails` (`show(commit, cx)`, `retry(cx)`, `command`).
 Filters are made before the list. Both hosts also give `t` and `lang` (the copy's), and
-the Log panel `noteDeleted(repo, deleted)`; parts word everything with `host.t` at draw
+the Log panel `noteDeleted(repo, deleted)` and `restoredElsewhere(repo, restored)` (the
+Deleted Branches dialog brought `[{ name, hash }]` back: a notice for one of them goes); parts word everything with `host.t` at draw
 time and never keep `t` in a variable.
 
 **Language.** `main.js` gives each screen `this.t` (`t(key, args)`) and `this.lang`

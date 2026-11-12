@@ -37,13 +37,22 @@ const TREE_SHARE = 0.5;
 
 const short = (hash) => String(hash ?? "").slice(0, SHORT);
 
-// The toolbar's icons and element ids, by item (log-menus.js detailsTools).
-// An item missing here draws the settings icon: an unknown name would throw in render.
-const TOOL_ICONS = {
-  "details.showDiff": "show-diff", "details.revertSelected": "revert-selected", "details.historyUpToHere": "history",
-  "details.displayOptions": "eye", "details.expandAll": "expand-all", "details.collapseAll": "collapse-all",
+// The toolbar's buttons, by item (log-menus.js detailsTools): element id and icon. Written
+// out as calls so ui-icons.test.mjs sees every icon name. An item missing here draws the
+// settings icon: an unknown name would throw in render.
+const TOOL_BUTTONS = {
+  "details.showDiff": (t, o) => iconButton("log-detail-diff", "show-diff", t, o),
+  "details.revertSelected": (t, o) => iconButton("log-detail-revert", "revert-selected", t, o),
+  "details.historyUpToHere": (t, o) => iconButton("log-detail-history", "history", t, o),
+  "details.displayOptions": (t, o) => iconButton("log-detail-options", "eye", t, o),
+  "details.expandAll": (t, o) => iconButton("log-detail-expand", "expand-all", t, o),
+  "details.collapseAll": (t, o) => iconButton("log-detail-collapse", "collapse-all", t, o),
 };
-const TOOL_IDS = { "details.expandAll": "log-detail-expand", "details.collapseAll": "log-detail-collapse" };
+function toolButton(id, t, o) {
+  if (TOOL_BUTTONS[id]) return TOOL_BUTTONS[id](t, o);
+  const elementId = `log-${id.split(".").join("-")}`;
+  return iconButton(elementId, "settings", t, o);
+}
 const stop = (_e, cx) => cx.stop_propagation();
 
 // Always the date itself ("11/9/26, 9:05 AM" | "26. 11. 9. 오전 9:05"): the list says
@@ -483,7 +492,7 @@ export default class LogDetails {
       .child(toolbar(t)
         .child(div().px(4).flex_1().min_w(0).truncate().text_size(12).text_color(t.muted).child(loading ? "" : tr("log.files", { n: this.info.files.length })))
         .child(spacer())
-        .children(host.items("detailsTools", { loaded: n > 0 }).map((it) => iconButton(TOOL_IDS[it.id] ?? it.id.replace(".", "-"), TOOL_ICONS[it.id] ?? "settings", t, {
+        .children(host.items("detailsTools", { loaded: n > 0 }).map((it) => toolButton(it.id, t, {
           title: host.itemTitle(it) || tr(it.key, it.args), disabled: it.disabled, onClick: (_e, cx) => host.run(it.id, this.cursorRow(), cx),
         }))))
       .child(div().id("log-detail-tree").track_focus(this.handle).flex_none().w_full().h(treeHeight).border_b(1).border_color(t.border)

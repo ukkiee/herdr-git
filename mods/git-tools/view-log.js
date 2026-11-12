@@ -80,12 +80,23 @@ const ACTIONS = {
 };
 const handled = (id) => Object.prototype.hasOwnProperty.call(ACTIONS, id);
 
-// The Log toolbar's icons, by item. An item missing here draws the settings icon: an
-// unknown name would throw in render.
-const LOG_ICONS = {
-  "log.graphOptions": "graph-options", "log.refresh": "refresh", "log.fetch": "fetch", "log.cherryPick": "cherry-pick",
-  "log.displayOptions": "layout", "log.goToHash": "go-to-hash", "log.hide": "x",
+// The Log toolbar's buttons, by item (log-menus.js logTools): element id and icon. Written
+// out as calls so ui-icons.test.mjs sees every icon name. An item missing here draws the
+// settings icon: an unknown name would throw in render.
+const LOG_BUTTONS = {
+  "log.graphOptions": (t, o) => iconButton("log-graph-options", "graph-options", t, o),
+  "log.refresh": (t, o) => iconButton("log-refresh", "refresh", t, o),
+  "log.fetch": (t, o) => iconButton("log-fetch", "fetch", t, o),
+  "log.cherryPick": (t, o) => iconButton("log-cherry-pick", "cherry-pick", t, o),
+  "log.displayOptions": (t, o) => iconButton("log-display-options", "layout", t, o),
+  "log.goToHash": (t, o) => iconButton("log-go-to-hash", "go-to-hash", t, o),
+  "log.hide": (t, o) => iconButton("log-hide", "x", t, o),
 };
+function logButton(id, t, o) {
+  if (LOG_BUTTONS[id]) return LOG_BUTTONS[id](t, o);
+  const elementId = id.split(".").join("-");
+  return iconButton(elementId, "settings", t, o);
+}
 
 export default class LogView {
   init(p, cx) {
@@ -579,10 +590,10 @@ export default class LogView {
         .child(div().id("log-details").flex_none().w(c.details).h_full().min_h(0).overflow_hidden().child(this.details.render(cx))));
   }
 
-  // A Log toolbar item as a button. Element ids keep the item's name ("log-refresh").
+  // A Log toolbar item as a button (LOG_BUTTONS).
   toolButton(it, t, spinning = false) {
     const busy = spinning || (it.work !== null && this.writingHere()?.key === it.work);
-    return iconButton(it.id.replace(".", "-"), LOG_ICONS[it.id] ?? "settings", t, { title: this.itemTitle(it), disabled: it.disabled, busy, onClick: (_e, cx) => this.run(it.id, null, cx) });
+    return logButton(it.id, t, { title: this.itemTitle(it), disabled: it.disabled, busy, onClick: (_e, cx) => this.run(it.id, null, cx) });
   }
 
   // Another folder to follow, or changes that arrived while the panel was hidden: taken

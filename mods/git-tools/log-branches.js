@@ -32,14 +32,28 @@ const GROUPS = [["local", "log.local"], ["remote", "log.remote"]];
 const INDENT = 12;
 const FILTER_COMMAND = "branches-filter:";
 
-// The vertical toolbar's icons and element ids, by item (log-menus.js branchTools).
-// An item missing here draws the settings icon: an unknown name would throw in render.
-const TOOL_ICONS = {
-  "branches.hide": "hide-branches", "branches.new": "plus", "branches.updateSelected": "update", "branches.delete": "branch-delete",
-  "branches.deleted": "restore", "branches.compareWithCurrent": "compare", "branches.fetch": "fetch", "branches.favorite": "favorite",
-  "branches.navigateLog": "locate", "branches.settings": "branch-settings", "branches.expandAll": "expand-all", "branches.collapseAll": "collapse-all",
+// The vertical toolbar's buttons, by item (log-menus.js branchTools): element id and icon.
+// Written out as calls so ui-icons.test.mjs sees every icon name. An item missing here
+// draws the settings icon: an unknown name would throw in render.
+const TOOL_BUTTONS = {
+  "branches.hide": (t, o) => iconButton("log-branch-hide", "hide-branches", t, o),
+  "branches.new": (t, o) => iconButton("log-branch-new", "plus", t, o),
+  "branches.updateSelected": (t, o) => iconButton("log-branch-update", "update", t, o),
+  "branches.delete": (t, o) => iconButton("log-branch-delete", "branch-delete", t, o),
+  "branches.deleted": (t, o) => iconButton("log-branch-deleted", "restore", t, o),
+  "branches.compareWithCurrent": (t, o) => iconButton("log-branch-compare", "compare", t, o),
+  "branches.fetch": (t, o) => iconButton("log-branch-fetch", "fetch", t, o),
+  "branches.favorite": (t, o) => iconButton("log-branch-favorite", "favorite", t, o),
+  "branches.navigateLog": (t, o) => iconButton("log-branch-navigate", "locate", t, o),
+  "branches.settings": (t, o) => iconButton("log-branch-settings", "branch-settings", t, o),
+  "branches.expandAll": (t, o) => iconButton("log-branch-expand", "expand-all", t, o),
+  "branches.collapseAll": (t, o) => iconButton("log-branch-collapse", "collapse-all", t, o),
 };
-const TOOL_IDS = { "branches.new": "log-branch-new", "branches.delete": "log-branch-delete", "branches.deleted": "log-branch-deleted", "branches.fetch": "log-branch-fetch", "branches.expandAll": "log-branch-expand", "branches.collapseAll": "log-branch-collapse" };
+function toolButton(id, t, o) {
+  if (TOOL_BUTTONS[id]) return TOOL_BUTTONS[id](t, o);
+  const elementId = `log-${id.split(".").join("-")}`;
+  return iconButton(elementId, "settings", t, o);
+}
 
 export default class LogBranches {
   init(host, cx) {
@@ -437,7 +451,7 @@ export default class LogBranches {
     for (const it of items) {
       if (it.rule) bar = bar.child(div().w(16).h(1).my(3).bg(t.border));
       const title = (it.why?.text ?? (it.why ? tr(it.why.key, it.why.args) : "")) || tr(it.key, it.args);
-      bar = bar.child(iconButton(TOOL_IDS[it.id] ?? it.id.replace(".", "-"), TOOL_ICONS[it.id] ?? "settings", t, {
+      bar = bar.child(toolButton(it.id, t, {
         title, disabled: it.disabled, busy: it.work !== null && host.writingHere()?.key === it.work, onClick: (_e, cx) => host.run(it.id, b, cx),
       }));
     }

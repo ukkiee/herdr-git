@@ -34,6 +34,11 @@ const HASH = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/;
 // parent can't hold: this prefix, then the path as a JSON string (any byte a name holds
 // stays on the line).
 const CONFLICT = "Conflict: ";
+// The same for a path the index only announced (`git add -N`, intent-to-add). The index
+// lists such an entry as an empty file, which a tree can't tell from one really staged
+// empty: the second parent leaves the path out, so a Restore that doesn't read this line
+// brings the file back unstaged rather than staged empty.
+const INTENT = "Intent: ";
 
 // HEAD's commit: { ok: true, head } with null in a repository without a commit.
 async function headCommit(git, root) {
@@ -84,7 +89,7 @@ async function build(git, root, paths, env, head, copy) {
   const message = `Rollback: ${paths.length} ${paths.length === 1 ? "file" : "files"}`;
   // Without a commit there is no first parent to put the index's commit after: such a
   // snapshot holds no index, like one made before snapshots held it.
-  const index = head ? await indexCommit(git, root, paths, env, head, message, copy) : { ok: true, parents: [], conflicts: [] };
+  const index = head ? await indexCommit(git, root, paths, env, head, message, copy) : { ok: true, parents: [], conflicts: [], intents: [] };
   if (!index.ok) return fail(index);
   // The snapshot before it and the copy's id go in the message's body. Without them, a
   // rollback of the same files in the same state within the same second is the same commit
@@ -93,7 +98,8 @@ async function build(git, root, paths, env, head, copy) {
   const before = await git.read(root, ["rev-parse", "-q", "--verify", SNAPSHOTS]);
   if (!before.ok && before.code !== 1) return fail(before);
   const after = before.ok ? ["-m", `After ${before.out.trim()}`] : [];
-  const conflicts = index.conflicts.length ? ["-m", index.conflicts.map((path) => `${CONFLICT}${JSON.stringify(path)}`).join("\n")] : [];
+  const named = [...index.conflicts.map((path) => `${CONFLICT}${JSON.stringify(path)}`), ...index.intents.map((path) => `${INTENT}${JSON.stringify(path)}`)];
+  const conflicts = named.length ? ["-m", named.join("\n")] : [];
   const parents = [head, ...index.parents].filter(Boolean).flatMap((parent) => ["-p", parent]);
   const commit = await git(root, [...IDENTITY, "commit-tree", "--no-gpg-sign", tree.out.trim(), ...parents, "-m", message, ...after, "-m", `Copy ${copy}`, ...conflicts]);
   if (!commit.ok) return fail(commit);
@@ -107,18 +113,23 @@ async function build(git, root, paths, env, head, copy) {
 // indexCommit: the snapshot's second parent. A commit on `head` whose tree is HEAD's with
 // each of `paths` as the real index has it now: its staged entry, or nothing for a staged
 // deletion. A path in a conflict (stages 1 to 3) can't be in a tree: it stays HEAD's and
-// comes back in `conflicts`, for the snapshot's message. Built in the scratch index `env`
-// names, which holds the snapshot's own tree until this starts.
-// → { ok, parents: [hash], conflicts: [path] }
+// comes back in `conflicts`, for the snapshot's message. A path only announced
+// (intent-to-add) is left out of the tree and comes back in `intents`, for the message too.
+// Built in the scratch index `env` names, which holds the snapshot's own tree until this
+// starts.
+// → { ok, parents: [hash], conflicts: [path], intents: [path] }
 async function indexCommit(git, root, paths, env, head, message, copy) {
   const staged = await indexEntries(git, root, paths);
   if (!staged.ok) return staged;
+  const announced = await intentPaths(git, root, paths);
+  if (!announced.ok) return announced;
   const base = await git(root, ["read-tree", head], { env });
   if (!base.ok) return base;
-  const removed = [], conflicts = [], entries = [];
+  const removed = [], conflicts = [], entries = [], intents = [];
   for (const path of paths) {
     const list = staged.entries.get(path);
-    if (!list) removed.push(path);
+    if (announced.paths.has(path)) { intents.push(path); removed.push(path); }
+    else if (!list) removed.push(path);
     else if (list.some((entry) => entry.stage !== "0")) conflicts.push(path);
     else entries.push([path, list[0]]);
   }
@@ -136,7 +147,25 @@ async function indexCommit(git, root, paths, env, head, message, copy) {
   if (!odd.ok) return odd;
   const commit = await git(root, [...IDENTITY, "commit-tree", "--no-gpg-sign", tree.out.trim(), "-p", head, "-m", `Index of ${message}`, "-m", `Copy ${copy}`]);
   if (!commit.ok) return commit;
-  return { ok: true, parents: [commit.out.trim()], conflicts };
+  return { ok: true, parents: [commit.out.trim()], conflicts, intents };
+}
+
+// Which of `paths` the real index only announces (`git add -N`): { ok, paths: Set }.
+// Comparing the index with the working tree, git names such an entry as added ("A"),
+// which an entry it really holds never is; `ls-files -s` shows it as an empty file.
+// An announced file missing from the disk reads as deleted instead, so it isn't found.
+async function intentPaths(git, root, paths) {
+  const found = new Set(), asked = new Set(paths);
+  for (const chunk of chunks(paths)) {
+    const r = await git.read(root, ["--literal-pathspecs", "diff-files", "--raw", "--no-renames", "-z", "--", ...chunk]);
+    if (!r.ok) return r;
+    // ":<modes> <objects> <status>\0<path>\0" for each entry.
+    const words = r.out.split("\0");
+    for (let i = 0; i + 1 < words.length; i += 2) {
+      if (words[i].endsWith(" A") && asked.has(words[i + 1])) found.add(words[i + 1]);
+    }
+  }
+  return { ok: true, paths: found };
 }
 
 // The real index's entries of `paths`: { ok, entries: Map(path → [{ mode, object, stage }]) }.
@@ -244,6 +273,7 @@ const STAGING = {
 //   made on. Where something else is staged now, or the path was in a conflict (the
 //   snapshot's message names it), the index stays and the path is in stagingSkipped:
 //   [{ path, reason, msg }]; one whose index already holds the snapshot's needs nothing. A
+//   path the message names as only announced (intent-to-add) is announced again. A
 //   snapshot without a second parent (made before snapshots held the index, or in a
 //   repository without a commit) leaves the index alone: an added file comes back untracked.
 //   restored: the paths brought back. skipped: [{ path, reason, msg }] for each path that
@@ -345,7 +375,7 @@ export async function restore(git, root, { snapshot, paths = [], copy } = {}) {
   if (!fresh.ok) return failed(fresh);
 
   if (staging) {
-    const put = await putStaging(git, root, restored, { then: then.entries, now: now.entries, held: held.entries, conflicts: made.conflicts });
+    const put = await putStaging(git, root, restored, { then: then.entries, now: now.entries, held: held.entries, conflicts: made.conflicts, intents: made.intents });
     stagingSkipped.push(...put.skipped);
     if (put.wrote) touched = true;
     if (!put.ok) return failed(put);
@@ -365,46 +395,54 @@ export async function restore(git, root, { snapshot, paths = [], copy } = {}) {
   return { ok: true, code: 0, out: "", err: "", restored, skipped, stagingSkipped, changed: moved() };
 }
 
-// The parents of `snapshot` and the paths its message names as in a conflict:
-// { ok, parents: [hash], conflicts: Set }.
+// The parents of `snapshot` and the paths its message names as in a conflict or only
+// announced: { ok, parents: [hash], conflicts: Set, intents: Set }.
 async function madeOn(git, root, snapshot) {
   const r = await git.read(root, ["cat-file", "commit", snapshot]);
   if (!r.ok) return r;
   const end = r.out.indexOf("\n\n");
   const head = end < 0 ? r.out : r.out.slice(0, end), message = end < 0 ? "" : r.out.slice(end + 2);
   const parents = head.split("\n").filter((line) => line.startsWith("parent ")).map((line) => line.slice(7));
-  const conflicts = new Set();
+  const conflicts = new Set(), intents = new Set();
   for (const line of message.split("\n")) {
-    if (!line.startsWith(CONFLICT)) continue;
+    const [prefix, set] = line.startsWith(CONFLICT) ? [CONFLICT, conflicts] : line.startsWith(INTENT) ? [INTENT, intents] : [];
+    if (!prefix) continue;
     try {
-      const path = JSON.parse(line.slice(CONFLICT.length));
-      if (typeof path === "string") conflicts.add(path);
+      const path = JSON.parse(line.slice(prefix.length));
+      if (typeof path === "string") set.add(path);
     } catch { /* not a line this module wrote */ }
   }
-  return { ok: true, parents, conflicts };
+  return { ok: true, parents, conflicts, intents };
 }
 
 // Puts the staging of restored `paths` back on the real index (see restore).
 // then, now, held: "<mode> <object>" by path in the HEAD the snapshot was made on, HEAD
-// now, and the snapshot's second parent. → { ok, skipped, wrote } (on a failed git call,
-// its failure too; wrote: an index write was started).
-async function putStaging(git, root, paths, { then, now, held, conflicts }) {
-  const skipped = [], remove = [], stage = [];
-  const keep = paths.filter((path) => !conflicts.has(path) && held.get(path) !== then.get(path));
+// now, and the snapshot's second parent. intents: the paths the index only announced,
+// which go back as announced (`git add -N`). → { ok, skipped, wrote } (on a failed git
+// call, its failure too; wrote: an index write was started).
+async function putStaging(git, root, paths, { then, now, held, conflicts, intents }) {
+  const skipped = [], remove = [], stage = [], announce = [];
+  const keep = paths.filter((path) => !conflicts.has(path) && (intents.has(path) || held.get(path) !== then.get(path)));
   for (const path of paths) if (conflicts.has(path)) skipped.push({ path, ...STAGING.conflict });
-  const index = await indexEntries(git, root, keep);
-  if (!index.ok) return { ...index, skipped, wrote: false };
+  const [index, announced] = await Promise.all([indexEntries(git, root, keep), intentPaths(git, root, keep)]);
+  for (const r of [index, announced]) if (!r.ok) return { ...r, skipped, wrote: false };
   const entry = (path) => {
+    if (announced.paths.has(path)) return "intent";
     const list = index.entries.get(path);
     if (!list) return undefined;
     return list.length === 1 && list[0].stage === "0" ? `${list[0].mode} ${list[0].object}` : "conflict";
   };
   for (const path of keep) {
-    const is = entry(path), want = held.get(path);
+    const is = entry(path), want = intents.has(path) ? "intent" : held.get(path);
     if (is === want) continue;
     if (is !== now.get(path)) skipped.push({ path, ...STAGING.changed });
     else if (want === undefined) remove.push(path);
-    else stage.push(path);
+    else if (want !== "intent") stage.push(path);
+    else {
+      // `add -N` leaves an entry the index holds as it is.
+      if (is !== undefined) remove.push(path);
+      announce.push(path);
+    }
   }
   let wrote = false;
   for (const chunk of chunks(remove)) {
@@ -415,6 +453,12 @@ async function putStaging(git, root, paths, { then, now, held, conflicts }) {
   for (const chunk of chunks(stage, (path) => path.length * 3 + 120)) {
     wrote = true;
     const r = await git(root, ["update-index", "--add", ...chunk.flatMap((path) => ["--cacheinfo", ...held.get(path).split(" "), path])]);
+    if (!r.ok) return { ...r, skipped, wrote };
+  }
+  // -f: a file announced in spite of .gitignore was announced with -f too.
+  for (const chunk of chunks(announce)) {
+    wrote = true;
+    const r = await git(root, ["--literal-pathspecs", "add", "-N", "-f", "--", ...chunk]);
     if (!r.ok) return { ...r, skipped, wrote };
   }
   return { ok: true, skipped, wrote };

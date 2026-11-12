@@ -256,6 +256,28 @@ echo left > left && git add left && echo staged-other > other && git add other`)
   assert.equal(text(repo, "partly"), "head\nindex\nwork\n");
 }
 
+// A new file only announced with `git add -N` (intent-to-add) comes back announced, not
+// staged with empty content, so a plain `git commit` still leaves it out; an empty file
+// that was really staged comes back staged. Rolled back with and without deleting added
+// files, `git status` and what `git diff --cached` names are as they were before.
+for (const deleteAdded of [true, false]) {
+  const repo = init(`restore-intent-${deleteAdded}`);
+  sh(repo, "echo head > a && git add -A && git commit -q -m first");
+  sh(repo, "echo new > n && git add -N n && : > e && git add e");
+  const cached = () => sh(repo, "git diff --cached --name-only -z").split("\0").filter(Boolean).sort();
+  const before = { status: status(repo), cached: cached() };
+  const snapshot = await back(repo, [["n", "added"], ["e", "added"]], { deleteAdded });
+
+  const r = await restore(git, repo, { snapshot, paths: ["n", "e"] });
+  assert.equal(r.ok, true, r.err);
+  assert.deepEqual(r.restored.sort(), ["e", "n"]);
+  assert.deepEqual(status(repo), before.status, String(deleteAdded));
+  assert.deepEqual(cached(), before.cached, String(deleteAdded));
+  assert.equal(text(repo, "n"), "new\n");
+  sh(repo, "git commit -q -m second");
+  assert.deepEqual(sh(repo, "git show --name-only --format= HEAD").trim().split("\n"), ["e"]);
+}
+
 // The same snapshot can be restored again once its paths are back to HEAD.
 {
   const repo = init("restore-twice");

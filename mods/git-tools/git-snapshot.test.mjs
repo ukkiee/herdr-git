@@ -33,6 +33,8 @@ const init = (name) => {
 };
 const status = (repo) => sh(repo, "git status --porcelain=v1 -z --untracked-files=all").split("\0").filter(Boolean).sort();
 const entries = (repo) => sh(repo, "git ls-files -s -z");
+// The entries of an index (entries' answer) but those of `paths`, one per item.
+const without = (index, ...paths) => index.split("\0").filter((line) => line && !paths.some((path) => line.endsWith(`\t${path}`)));
 const text = (repo, path) => readFileSync(`${repo}/${path}`, "utf8");
 const files = (list) => list.map(([path, status]) => ({ path, status }));
 // The id of the copy of git-tools that rolls back and restores (its scratch index's name).
@@ -199,31 +201,59 @@ const oldSnapshot = (repo, paths) => {
 
 // ---- Restore
 
-// Each kind comes back as the working tree had it just before the rollback: a modified
-// file's content, a deleted file gone again, an added file back as an untracked file. The
-// index is as it was before Restore. Paths not chosen stay as they are. The snapshot is
-// still there afterwards and Restore adds none.
+// Each kind comes back as it was just before the rollback, in the working tree and in the
+// index: a modified file's content and what was staged of it, a deleted file gone again,
+// an added file back with its staged entry. Paths not chosen stay as they are. The
+// snapshot is still there afterwards and Restore adds none.
 {
   const repo = init("restore-kinds");
   mkdirSync(`${repo}/src`);
   sh(repo, "echo head > src/a && echo head > b && echo head > c && echo head > d && git add -A && git commit -q -m first");
   sh(repo, "echo staged > src/a && git add src/a && echo work > src/a && rm b && mkdir -p new && echo fresh > new/-n && git add new && echo work > c && echo work > d");
-  const snapshot = await back(repo, [["src/a", "modified"], ["b", "deleted"], ["new/-n", "added"], ["c", "modified"], ["d", "modified"]], { deleteAdded: true });
   const index = entries(repo);
+  const snapshot = await back(repo, [["src/a", "modified"], ["b", "deleted"], ["new/-n", "added"], ["c", "modified"], ["d", "modified"]], { deleteAdded: true });
 
   const r = await restore(git, repo, { snapshot, paths: ["src/a", "b", "new/-n", "c"] });
   assert.equal(r.ok, true, r.err);
   assert.deepEqual(r.restored.sort(), ["b", "c", "new/-n", "src/a"]);
   assert.deepEqual(r.skipped, []);
+  assert.deepEqual(r.stagingSkipped, []);
   assert.equal(text(repo, "src/a"), "work\n");
   assert.equal(text(repo, "c"), "work\n");
   assert.equal(existsSync(`${repo}/b`), false);
   assert.equal(text(repo, "new/-n"), "fresh\n");
   assert.equal(text(repo, "d"), "head\n");
   assert.equal(entries(repo), index);
-  assert.deepEqual(status(repo), [" D b", " M c", " M src/a", "?? new/-n"]);
+  assert.deepEqual(status(repo), [" D b", " M c", "A  new/-n", "MM src/a"]);
   const list = await listSnapshots(git, repo);
   assert.deepEqual(list.snapshots.map((s) => s.hash), [snapshot]);
+}
+
+// Staging comes back for each kind: a staged change, a partly staged file, an added file,
+// a staged deletion, and a file with nothing staged; `git status` and the index entries are
+// what they were just before the rollback. A rolled-back path not chosen keeps HEAD's
+// entry, and a path staged but not rolled back keeps what is staged.
+{
+  const repo = init("restore-staging");
+  sh(repo, "for f in staged partly gone plain left other; do echo head > $f; done; git add -A && git commit -q -m first");
+  sh(repo, `echo index > staged && git add staged && echo work > staged
+printf 'head\\nindex\\n' > partly && git add partly && printf 'head\\nindex\\nwork\\n' > partly
+git rm -q gone && echo plain-work > plain && echo new > fresh && git add fresh
+echo left > left && git add left && echo staged-other > other && git add other`);
+  const before = { index: entries(repo), status: status(repo) };
+  const chosen = ["staged", "partly", "gone", "plain", "fresh"];
+  const snapshot = await back(repo, [...chosen.map((path) => [path, path === "gone" ? "deleted" : path === "fresh" ? "added" : "modified"]), ["left", "modified"]], { deleteAdded: true });
+
+  const r = await restore(git, repo, { snapshot, paths: chosen });
+  assert.equal(r.ok, true, r.err);
+  assert.deepEqual(r.restored.sort(), [...chosen].sort());
+  assert.deepEqual(r.stagingSkipped, []);
+  assert.deepEqual(status(repo), before.status.filter((line) => !line.endsWith(" left")));
+  assert.deepEqual(without(entries(repo), "left"), without(before.index, "left"));
+  assert.equal(sh(repo, "git ls-files -s -- left"), sh(repo, "git ls-tree HEAD -- left").replace(" blob ", " ").replace("\t", " 0\t"));
+  assert.equal(text(repo, "left"), "head\n");
+  assert.equal(sh(repo, "git show :partly"), "head\nindex\n");
+  assert.equal(text(repo, "partly"), "head\nindex\nwork\n");
 }
 
 // The same snapshot can be restored again once its paths are back to HEAD.
@@ -255,15 +285,15 @@ const oldSnapshot = (repo, paths) => {
 const skips = (r) => Object.fromEntries(r.skipped.map((s) => [s.path, s.reason]));
 const checkKeys = (r) => { for (const s of r.skipped) assert.ok(en[s.msg?.key], `${s.path}: ${s.msg?.key}`); };
 
-// Added links come back as links, whatever they point at: a folder, a file, nothing.
-// Another copy of git-tools (another id) filling its own scratch index while this one
-// writes changes nothing here, and neither does an index named without an id.
+// Added links come back as links, whatever they point at: a folder, a file, nothing, and
+// staged as they were. Another copy of git-tools (another id) filling its own scratch index
+// while this one writes changes nothing here, and neither does an index named without an id.
 {
   const repo = init("restore-links");
   sh(repo, "echo head > a && git add -A && git commit -q -m first && mkdir folder && echo payload > file");
   sh(repo, "ln -s folder to-folder && ln -s file to-file && ln -s nowhere to-nothing && git add to-folder to-file to-nothing");
-  const snapshot = await back(repo, [["to-folder", "added"], ["to-file", "added"], ["to-nothing", "added"]], { deleteAdded: true });
   const index = entries(repo);
+  const snapshot = await back(repo, [["to-folder", "added"], ["to-file", "added"], ["to-nothing", "added"]], { deleteAdded: true });
   const dir = sh(repo, "git rev-parse --absolute-git-dir").trim();
   const wrong = sh(repo, "printf 'wrong\\n' | git hash-object -w --stdin").trim();
   const meddle = (name) => execFileSync("git", ["update-index", "--add", "--cacheinfo", `100644,${wrong},to-file`], { cwd: repo, env: { ...process.env, GIT_INDEX_FILE: `${dir}/${name}` } });
@@ -445,20 +475,23 @@ echo mine > committed && git add committed && git commit -q -m later -- committe
   });
   checkKeys(r);
   assert.deepEqual(disk(), before.disk);
-  assert.equal(entries(repo), before.index);
+  assert.deepEqual(without(entries(repo), "free"), without(before.index, "free"));
   assert.equal(text(repo, "free"), "fresh free\n");
+  assert.equal(sh(repo, "git show :free"), "fresh free\n");
 }
 
 // An added file still on disk as the rollback recorded it (rolled back without deleting
 // added files) counts as restored and is left untouched. "Same" is git's: a file whose
 // line endings git converts when it records it is the same. A file with other content,
 // one that differs only in its executable bit, and a link to a file with the recorded
-// content stay skipped. The index is as it was.
+// content stay skipped. The ones counted as restored are staged as they were; the index of
+// the skipped ones is as it was.
 {
   const repo = init("restore-same");
   sh(repo, `printf '*.crlf text eol=crlf\\n' > .gitattributes && echo head > keep && git add -A && git commit -q -m first
 echo same > same && printf 'one\\r\\ntwo\\r\\n' > lines.crlf && echo other > other && echo mode > mode && echo target > linked && git add -A`);
   const names = ["same", "lines.crlf", "other", "mode", "linked"];
+  const staged = entries(repo);
   const snapshot = await back(repo, names.map((name) => [name, "added"]));
   sh(repo, `echo changed > other && chmod +x mode && echo target > target && rm linked && ln -s target linked`);
   const stat = (path) => { const s = lstatSync(`${repo}/${path}`); return [s.ino, s.mtimeMs, s.mode]; };
@@ -472,9 +505,11 @@ echo same > same && printf 'one\\r\\ntwo\\r\\n' > lines.crlf && echo other > oth
   assert.deepEqual(stat("same"), before.same);
   assert.deepEqual(stat("lines.crlf"), before.lines);
   assert.deepEqual(["other", "mode", "linked"].map((path) => onDisk(repo, path)), before.disk);
-  assert.equal(entries(repo), before.index);
+  assert.deepEqual(without(entries(repo), "same", "lines.crlf"), without(before.index));
+  assert.deepEqual(without(entries(repo), "other", "mode", "linked"), without(staged, "other", "mode", "linked"));
 
   // All of them the same: nothing skipped, so ok.
+  sh(repo, "git rm -q --cached same lines.crlf");
   const only = await restore(git, repo, { snapshot, paths: ["same", "lines.crlf"] });
   assert.equal(only.ok, true, only.err);
   assert.deepEqual(only.skipped, []);
@@ -499,7 +534,7 @@ if ((() => { const dir = mkdtempSync(`${base}/fold-`); writeFileSync(`${dir}/F`,
 // A folder spelled otherwise on disk holds the file too, even with the recorded content:
 // "Dir/new.txt" is not back while the disk has "dir/new.txt". Two paths asked at once
 // under one such folder stay as well. Under the folder spelled as recorded, the same
-// content counts as restored.
+// content counts as restored, and is staged again (unstaged here after each round).
 if ((() => { const dir = mkdtempSync(`${base}/fold-`); writeFileSync(`${dir}/F`, ""); return existsSync(`${dir}/f`); })()) {
   const repo = init("restore-folder-spelling");
   sh(repo, "echo head > keep && git add -A && git commit -q -m first && mkdir Dir Sub Same && echo fresh > Dir/new.txt && echo a > Sub/a && echo b > Sub/b && echo same > Same/x && git add -A");
@@ -516,10 +551,15 @@ if ((() => { const dir = mkdtempSync(`${base}/fold-`); writeFileSync(`${dir}/F`,
     const r = await restore(git, repo, { snapshot, paths });
     assert.deepEqual(skips(r), Object.fromEntries(skipped.map((path) => [path, taken])), paths.join());
     assert.deepEqual(r.restored, restored, paths.join());
-    assert.equal(r.changed, false, paths.join());
+    // Only the index changed, when Same/x was staged again.
+    assert.equal(r.changed, restored.length > 0, paths.join());
     assert.deepEqual(readdirSync(repo).filter((name) => name !== ".git").sort(), ["Same", "dir", "keep", "sub"]);
     assert.equal(text(repo, "dir/new.txt"), "fresh\n");
-    assert.equal(entries(repo), index);
+    assert.deepEqual(without(entries(repo), "Same/x"), without(index));
+    if (restored.length) {
+      assert.equal(sh(repo, "git show :Same/x"), "same\n", paths.join());
+      sh(repo, "git rm -q --cached Same/x");
+    }
   }
 } else console.log("skipped: the disk under the temporary folder tells F and f apart");
 

@@ -223,13 +223,26 @@ const REASONS = {
   taken: { reason: "something is there on disk now", msg: { key: "restore.skipTaken" } },
   broken: { reason: "git failed while writing it: it is neither as HEAD has it nor as it was before the rollback", msg: { key: "restore.skipBroken" } },
 };
+// Why a restored path's staging was not brought back.
+const STAGING = {
+  changed: { reason: "something else is staged for it now", msg: { key: "restore.stagingChanged" } },
+  conflict: { reason: "it was in a conflict, and a conflict can't be brought back", msg: { key: "restore.stagingConflict" } },
+};
 
-// restore(git, root, { snapshot, paths, copy }) → { ok, code, out, err, msg?, restored, skipped, changed }
-//   Brings `paths` of `snapshot` (a hash from listSnapshots) back into the working tree as
-//   they were just before that rollback: a modified file gets that content, a deleted file
-//   is deleted again, an added file comes back untracked. The index is never changed.
+// restore(git, root, { snapshot, paths, copy })
+//   → { ok, code, out, err, msg?, restored, skipped, stagingSkipped, changed }
+//   Brings `paths` of `snapshot` (a hash from listSnapshots) back as they were just before
+//   that rollback: a modified file gets that content, a deleted file is deleted again, an
+//   added file comes back. Then each restored path's index entry goes back to what the
+//   snapshot's second parent holds (what was staged), only where the index has HEAD's entry
+//   now (none, where HEAD lacks the path) and the snapshot's differs from the HEAD it was
+//   made on. Where something else is staged now, or the path was in a conflict (the
+//   snapshot's message names it), the index stays and the path is in stagingSkipped:
+//   [{ path, reason, msg }]; one whose index already holds the snapshot's needs nothing. A
+//   snapshot without a second parent (made before snapshots held the index, or in a
+//   repository without a commit) leaves the index alone: an added file comes back untracked.
 //   restored: the paths brought back. skipped: [{ path, reason, msg }] for each path that
-//   changed in the meantime and is left exactly as it is:
+//   changed in the meantime and is left exactly as it is, its index included:
 //   - HEAD has another version of it than the HEAD the snapshot was made on;
 //   - a modified or deleted file isn't as HEAD has it in the working tree (or git doesn't
 //     track it any more);
@@ -243,8 +256,8 @@ const REASONS = {
 //   An added file's place is left to the disk: the file is written by a git command that
 //   refuses where anything is in its way, never by guessing names, from the scratch index
 //   of `copy` (the calling copy's id, as for record; without one nothing is restored).
-//   ok is false when a path was skipped (err lists them) or a git call failed (its words,
-//   and the paths restored before it in `restored`). When git fails partway through
+//   ok is false when a path or its staging was skipped (err lists them) or a git call
+//   failed (its words, and the paths restored before it in `restored`). When git fails partway through
 //   writing files, the disk is read again: those it holds as the snapshot has them are in
 //   `restored`, those git left neither as HEAD has them nor as the snapshot has them are
 //   skipped with that reason. changed: anything on disk changed or may have (a write
@@ -253,35 +266,37 @@ const REASONS = {
 //   msg comes with an err this module wrote, also around git's words (wordRestore).
 export async function restore(git, root, { snapshot, paths = [], copy } = {}) {
   // already: the restored paths that were on disk as recorded, so nothing was written.
-  const restored = [], skipped = [], already = [];
-  // touched: git changed a path on disk that is not in `restored` (a batch that failed).
+  const restored = [], skipped = [], already = [], stagingSkipped = [];
+  // touched: git changed a path on disk that is not in `restored` (a batch that failed),
+  // or the index.
   let touched = false;
   const moved = () => restored.length > already.length || touched;
   const failed = (r) => {
-    const out = { ok: false, code: r.code, out: r.out ?? "", restored, skipped, changed: moved() };
+    const out = { ok: false, code: r.code, out: r.out ?? "", restored, skipped, stagingSkipped, changed: moved() };
     if (!skipped.length) return { ...out, err: r.err, ...(r.msg ? { msg: r.msg } : {}) };
     const list = reasonList(skipped), cause = r.msg ? { cause: r.msg } : {};
     if (!r.err) return { ...out, err: notRestored(skipped), msg: { key: "restore.notRestored", args: { list } } };
     return { ...out, err: `${r.err}\n${notRestored(skipped)}`, msg: { key: "restore.failedNotAll", args: { err: r.err, list }, ...cause } };
   };
   // A hash only: anything else could be read as an option or a revision expression.
-  if (!HASH.test(String(snapshot ?? ""))) return { ok: false, code: -1, out: "", err: "No rollback to restore from.", msg: { key: "restore.noSnapshot" }, restored, skipped, changed: false };
-  if (!COPY.test(String(copy ?? ""))) return { ...noCopy, restored, skipped, changed: false };
+  if (!HASH.test(String(snapshot ?? ""))) return { ok: false, code: -1, out: "", err: "No rollback to restore from.", msg: { key: "restore.noSnapshot" }, restored, skipped, stagingSkipped, changed: false };
+  if (!COPY.test(String(copy ?? ""))) return { ...noCopy, restored, skipped, stagingSkipped, changed: false };
   const asked = [...new Set(paths)];
-  if (!asked.length) return { ok: true, code: 0, out: "", err: "", restored, skipped, changed: false };
-  const made = await git.read(root, ["rev-list", "--parents", "-n", "1", snapshot, "--"]);
+  if (!asked.length) return { ok: true, code: 0, out: "", err: "", restored, skipped, stagingSkipped, changed: false };
+  const made = await madeOn(git, root, snapshot);
   if (!made.ok) return failed(made);
-  const parent = made.out.trim().split(/\s+/)[1] ?? null;
+  const [parent = null, staging = null] = made.parents;
   const at = await headCommit(git, root);
   if (!at.ok) return failed(at);
   const none = { ok: true, entries: new Map() };
-  const [mine, then, now, index] = await Promise.all([
+  const [mine, then, now, index, held] = await Promise.all([
     inTree(git, root, snapshot, asked),
     parent ? inTree(git, root, parent, asked) : none,
     at.head ? inTree(git, root, at.head, asked) : none,
     inIndex(git, root, asked),
+    staging ? inTree(git, root, staging, asked) : none,
   ]);
-  for (const r of [mine, then, now, index]) if (!r.ok) return failed(r);
+  for (const r of [mine, then, now, index, held]) if (!r.ok) return failed(r);
 
   const skip = (path, why) => skipped.push({ path, ...REASONS[why] });
   const kind = (path) => {
@@ -323,32 +338,99 @@ export async function restore(git, root, { snapshot, paths = [], copy } = {}) {
   if (fresh.unknown) touched = true;
   for (const path of fresh.taken) skip(path, "taken");
   if (!fresh.ok) return failed(fresh);
-  if (skipped.length) {
-    const n = restored.length, list = reasonList(skipped);
-    return {
-      ok: false, code: -1, out: "", restored, skipped, changed: moved(),
-      err: `Restored ${n === 1 ? "1 file" : `${n} files`}. ${notRestored(skipped)}`,
-      // list: one "path: reason" line each; a screen words the reasons again from each
-      // skipped path's msg (restore.skip*).
-      msg: { key: "restore.notAll", args: { n, list } },
-    };
+
+  if (staging) {
+    const put = await putStaging(git, root, restored, { then: then.entries, now: now.entries, held: held.entries, conflicts: made.conflicts });
+    stagingSkipped.push(...put.skipped);
+    if (put.wrote) touched = true;
+    if (!put.ok) return failed(put);
   }
-  return { ok: true, code: 0, out: "", err: "", restored, skipped, changed: moved() };
+  if (skipped.length || stagingSkipped.length) {
+    const n = restored.length, files = `Restored ${n === 1 ? "1 file" : `${n} files`}.`;
+    // list, staged: one "path: reason" line each; a screen words the reasons again from
+    // each path's msg (restore.skip*, restore.staging*).
+    const list = reasonList(skipped), staged = reasonList(stagingSkipped);
+    const [err, msg] = !stagingSkipped.length
+      ? [`${files} ${notRestored(skipped)}`, { key: "restore.notAll", args: { n, list } }]
+      : !skipped.length
+        ? [`${files} ${notStaged(stagingSkipped)}`, { key: "restore.stagingNotAll", args: { n, staged } }]
+        : [`${files} ${notRestored(skipped)}\n${notStaged(stagingSkipped)}`, { key: "restore.notAllStaging", args: { n, list, staged } }];
+    return { ok: false, code: -1, out: "", restored, skipped, stagingSkipped, changed: moved(), err, msg };
+  }
+  return { ok: true, code: 0, out: "", err: "", restored, skipped, stagingSkipped, changed: moved() };
+}
+
+// The parents of `snapshot` and the paths its message names as in a conflict:
+// { ok, parents: [hash], conflicts: Set }.
+async function madeOn(git, root, snapshot) {
+  const r = await git.read(root, ["cat-file", "commit", snapshot]);
+  if (!r.ok) return r;
+  const end = r.out.indexOf("\n\n");
+  const head = end < 0 ? r.out : r.out.slice(0, end), message = end < 0 ? "" : r.out.slice(end + 2);
+  const parents = head.split("\n").filter((line) => line.startsWith("parent ")).map((line) => line.slice(7));
+  const conflicts = new Set();
+  for (const line of message.split("\n")) {
+    if (!line.startsWith(CONFLICT)) continue;
+    try {
+      const path = JSON.parse(line.slice(CONFLICT.length));
+      if (typeof path === "string") conflicts.add(path);
+    } catch { /* not a line this module wrote */ }
+  }
+  return { ok: true, parents, conflicts };
+}
+
+// Puts the staging of restored `paths` back on the real index (see restore).
+// then, now, held: "<mode> <object>" by path in the HEAD the snapshot was made on, HEAD
+// now, and the snapshot's second parent. → { ok, skipped, wrote } (on a failed git call,
+// its failure too; wrote: an index write was started).
+async function putStaging(git, root, paths, { then, now, held, conflicts }) {
+  const skipped = [], remove = [], stage = [];
+  const keep = paths.filter((path) => !conflicts.has(path) && held.get(path) !== then.get(path));
+  for (const path of paths) if (conflicts.has(path)) skipped.push({ path, ...STAGING.conflict });
+  const index = await indexEntries(git, root, keep);
+  if (!index.ok) return { ...index, skipped, wrote: false };
+  const entry = (path) => {
+    const list = index.entries.get(path);
+    if (!list) return undefined;
+    return list.length === 1 && list[0].stage === "0" ? `${list[0].mode} ${list[0].object}` : "conflict";
+  };
+  for (const path of keep) {
+    const is = entry(path), want = held.get(path);
+    if (is === want) continue;
+    if (is !== now.get(path)) skipped.push({ path, ...STAGING.changed });
+    else if (want === undefined) remove.push(path);
+    else stage.push(path);
+  }
+  let wrote = false;
+  for (const chunk of chunks(remove)) {
+    wrote = true;
+    const r = await git(root, ["update-index", "--force-remove", "--", ...chunk]);
+    if (!r.ok) return { ...r, skipped, wrote };
+  }
+  for (const chunk of chunks(stage, (path) => path.length * 3 + 120)) {
+    wrote = true;
+    const r = await git(root, ["update-index", "--add", ...chunk.flatMap((path) => ["--cacheinfo", ...held.get(path).split(" "), path])]);
+    if (!r.ok) return { ...r, skipped, wrote };
+  }
+  return { ok: true, skipped, wrote };
 }
 
 // reasonList(skipped, word?) → "path: reason" lines. word(skip) gives the reason (a
 // screen's, from skip.msg); without it, the English one.
 export const reasonList = (skipped, word = (skip) => skip.reason) => skipped.map((skip) => `${skip.path}: ${word(skip)}`).join("\n");
 const notRestored = (skipped) => `Not restored, to keep what is there now:\n${reasonList(skipped)}`;
+const notStaged = (skipped) => `Restored without their staging:\n${reasonList(skipped)}`;
 
 // wordRestore(t, r) → restore's r.msg with its English values worded in t's language: the
-// skipped paths' reasons, and the failure before them when this module wrote it (cause).
-// git's words and the paths stay as they are. undefined when r has no msg.
+// skipped paths' reasons (list, staged), and the failure before them when this module
+// wrote it (cause). git's words and the paths stay as they are. undefined when r has no msg.
 export function wordRestore(t, r) {
   const msg = r?.msg;
   if (!msg) return msg;
   const args = { ...msg.args };
-  if ("list" in args) args.list = reasonList(r.skipped ?? [], (skip) => sentence(t, skip.msg, skip.reason));
+  const word = (skip) => sentence(t, skip.msg, skip.reason);
+  if ("list" in args) args.list = reasonList(r.skipped ?? [], word);
+  if ("staged" in args) args.staged = reasonList(r.stagingSkipped ?? [], word);
   if (msg.cause) args.err = sentence(t, msg.cause, args.err);
   return { key: msg.key, args };
 }

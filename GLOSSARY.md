@@ -18,6 +18,14 @@ _Avoid_: Git 창, 히스토리, 로그 뷰
 탭 바의 Changes 버튼 오른쪽에서 Log panel을 보이고 숨기는 버튼. Commit panel 툴바의 Git Log 버튼과는 다른 것이다.
 _Avoid_: 로그 버튼, Git 탭
 
+**Files panel**:
+포커스된 폴더를 트리로 보여 주고 파일을 읽기 전용으로 미리 보는 사이드 패널. 우상단 Files 버튼이 연다.
+_Avoid_: 파일 창, 탐색기, 파일 트리
+
+**Deleted Branches dialog**:
+저장소에 기록된 지운 브랜치를 골라 되살리는 창.
+_Avoid_: 휴지통, 삭제 기록 창
+
 **Restore dialog**:
 Rollback snapshot을 골라 파일을 되살리는 창.
 _Avoid_: 히스토리 창, 복구 창
@@ -55,12 +63,16 @@ _Avoid_: revert, discard, reset
 **Amend**:
 새 커밋을 만드는 대신 마지막 커밋을 고쳐 쓰는 커밋 방식.
 
+**Last commit group**:
+Amend가 켜진 동안 Commit panel 맨 아래에 보이는, 마지막 커밋에 든 파일의 그룹.
+_Avoid_: 지난 커밋 목록, amend 파일
+
 **Rollback snapshot**:
-Rollback 직전에, 되돌릴 파일들의 그때 상태를 저장소 안에 남긴 기록.
+Rollback 직전에, 되돌릴 파일들의 그때 상태와 스테이징을 저장소 안에 남긴 기록.
 _Avoid_: 백업, stash, Local History, 히스토리
 
 **Restore**:
-Rollback snapshot의 파일이나 방금 지운 브랜치를 사라지기 직전 상태로 되살리는 동작.
+Rollback snapshot의 파일이나 지운 브랜치를 사라지기 직전 상태로 되살리는 동작.
 _Avoid_: undo, revert, 복구, 되돌리기(Rollback과 헷갈린다)
 
 ### 로그 창의 개념
@@ -90,4 +102,4 @@ _Avoid_: 아이콘 팩, 파일 타입 아이콘
 ### 배치
 
 **main-git**:
-Herdr의 `main` 레이아웃을 복제해 Commit panel, Log panel, Git button 자리를 넣은 레이아웃.
+Herdr의 `main` 레이아웃을 복제해 Commit panel, Files panel, Log panel, Git button 자리를 넣은 레이아웃.

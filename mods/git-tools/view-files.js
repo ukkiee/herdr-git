@@ -15,8 +15,8 @@
 // The search box under the header: typed letters put the search's results in the
 // tree's place (rankSearch over readSearchList's files, `this.ranked`, the chosen result
 // `this.hit`); an empty box brings the tree back. The file list is read when a search
-// starts and again in another folder, not on every refresh: outside a repository it is
-// a walk of up to 20,000 files.
+// starts, again in another folder, and on a refresh while searching at most once per
+// 10 s: outside a repository it is a walk of up to 20,000 files.
 //
 // Keys: ↑ ↓ ← → Enter on the tree (moveKey), ↑ ↓ Enter on the results, Esc closes the
 // preview or ends the search. A right-click opens the row menu (Show Diff for a file with
@@ -89,6 +89,7 @@ export default class FilesView {
     // The search: readSearchList's answer for this folder, whether it is being read, and
     // rankSearch's answer for what is typed (null until the list is in).
     this.listed = null; this.listing = false; this.ranked = null; this.hit = null;
+    this.listedAt = 0; // Date.now() when the last list came in
   }
 
   // The placeholder is fixed when the input is made: a copy whose language changed since
@@ -138,6 +139,10 @@ export default class FilesView {
     this.enter(cx);
     const context = this.context, root = this.root, on = this.on;
     if (!root) return;
+    // A search under way follows the folder too, but reads its list at most once per POLL:
+    // outside a repository the list is a walk of up to 20,000 files, and a watch can fire
+    // many times a second while files are written.
+    if (this.searching() && this.listed?.ok && Date.now() - this.listedAt >= POLL) this.readList(cx, { again: true });
     // A change that lands while a read is running is read once that one is done.
     if (this.loading) { this.again = true; return; }
     this.loading = true; this.again = false;
@@ -232,16 +237,20 @@ export default class FilesView {
 
   searching() { return Boolean(this.query?.value().trim()); }
 
-  // The files to search: read when a search starts, and again in another folder while
-  // one is typed. A list that failed is asked for again on the next letter.
-  readList(cx) {
-    if (!this.root || this.listed?.ok || this.listing) return;
+  // The files to search: read when a search starts, again in another folder while one is
+  // typed, and `again` on a refresh (see refresh). A list that failed is asked for again on
+  // the next letter. Read again, the old list and its results stay until the new one is
+  // in, so they don't blink to "Loading"; a failed read again keeps the old list.
+  readList(cx, { again = false } = {}) {
+    if (!this.root || this.listing || (this.listed?.ok && !again)) return;
     const context = this.context, root = this.root, on = this.on;
     this.listing = true;
     cx.spawn(async (cx) => {
       try {
         const r = await readSearchList(exec, root, { on, platform: hostWindow()?.platform ?? null });
         if (this.context !== context) return;
+        this.listedAt = Date.now();
+        if (!r.ok && this.listed?.ok) return;
         this.listed = r;
         this.rank();
       } finally {

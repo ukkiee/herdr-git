@@ -2052,8 +2052,9 @@ English forms and ⏎ is a line break.
   `rev-parse -q --verify HEAD^{commit}`; for the Files panel
   `rev-parse --show-toplevel --show-prefix`,
   `status --porcelain=v2 -z --no-renames --ignored=matching --untracked-files=normal`
-  and `ls-files -z --cached --others --exclude-standard`, `--deleted` and `--stage`
-  (submodules); for the User popup
+  and `ls-files -z --cached`, `--others --exclude-standard` and `--deleted`, with
+  `config -z -f .gitmodules --get-regexp` and `ls-files -z --stage` on the paths it
+  names (submodules); for the User popup
   `log --use-mailmap --format=%aN%x00%aE`. Every read carries `--no-optional-locks -c core.fsmonitor=false -c diff.autoRefreshIndex=false`;
   the snapshot's commits and reflog and the step-aside commit carry
   `-c user.name=git-tools -c user.email=git-tools@localhost`,
@@ -2570,9 +2571,13 @@ English forms and ⏎ is a line break.
   when the last list came in: outside a repository it is a walk of up to 20,000 files,
   which a watch event shouldn't start each time. With the 10 s timer the gap can be
   10 to 20 s.
-- Inside a repository git gives the whole list in one answer, which is then cut at
-  20,000. In one with hundreds of thousands of files, that answer may pass `exec`'s
-  8 MiB output limit or the call's time limit and fail (untested).
+- Inside a repository git gives all tracked files in one answer and all new files in
+  another, which are then cut at 20,000. Each answer takes a path's length plus one
+  byte per file, so with paths of 60 bytes on average, more than about 140,000 tracked
+  (or new) files pass `exec`'s 8 MiB output limit; that, or the call's time limit, may
+  make the list fail (untested).
+- Submodules are found from the paths `.gitmodules` names. A nested repository added
+  without `.gitmodules` isn't left out and shows in the search as a file.
 - A refresh's reads take the place of a folder's read only when the refresh read that
   folder: a folder folded and unfolded again while a refresh runs may show the
   refresh's older entries until the next refresh.

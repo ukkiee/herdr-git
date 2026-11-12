@@ -351,6 +351,14 @@ const sorted = (list) => [...list].sort();
   assert.deepEqual(sorted(r.files), sorted([".gitmodules", "top.txt", "deps/readme.txt"]));
   const inner = await readSearchList(exec, `${repo}/deps`);
   assert.deepEqual(sorted(inner.files), ["readme.txt"]);
+
+  // A submodule named apart from its path, in a folder with a space, is left out too; a
+  // .gitmodules entry whose path now holds a plain tracked file leaves that file in.
+  mkdirSync(`${repo}/deps/old lib`);
+  writeFileSync(`${repo}/deps/old lib/keep.txt`, "k");
+  sh(repo, `git -c protocol.file.allow=always submodule add -q --name other "${source}" "deps/my lib" && git add -A && git config -f .gitmodules submodule.stale.path "deps/old lib/keep.txt" && git add .gitmodules && git commit -q -m more`);
+  const more = await readSearchList(exec, `${repo}/deps`);
+  assert.deepEqual(sorted(more.files), sorted(["readme.txt", "old lib/keep.txt"]));
 }
 
 // Outside a repository the folder is walked: every file below it, links to files too,

@@ -15,7 +15,7 @@
 // ("windows" reads folders with PowerShell on this computer). Paths in results are
 // relative to `folder` and use "/". What the marks mean for a row (ignored under an
 // ignored folder, a folder's dot) is files-tree.js's job.
-import { makeGit } from "./git.js";
+import { makeGit, chunks } from "./git.js";
 
 export const PER_FOLDER = 500;
 export const TOTAL = 5000;
@@ -180,6 +180,29 @@ async function windowsWalk(exec, folder, on, count) {
   return { code: 0, files: (Array.isArray(parsed) ? parsed : [parsed]).map(String) };
 }
 
+// The submodules among the tracked paths, as paths from the folder `repo.prefix` names. A
+// submodule is an index entry of mode 160000 ("160000 <sha> 0\tpath"), but reading every
+// entry's mode reads the whole index again in a larger form, which a big repository's
+// output limit can't hold. So only the paths .gitmodules names are looked up. A nested
+// repository added without .gitmodules isn't caught and shows as a file.
+async function submodulesOf(git, { root, prefix }) {
+  // Exit 1: no .gitmodules or no path in it. Another failure (a broken .gitmodules) only
+  // costs the filter, so the search still works.
+  const named = await git.read(root, ["config", "-z", "-f", ".gitmodules", "--get-regexp", "^submodule\\..*\\.path$"]);
+  if (!named.ok) return { ok: true, paths: [] };
+  const candidates = named.out.split("\0").map((entry) => entry.slice(entry.indexOf("\n") + 1)).filter(Boolean);
+  const paths = [];
+  for (const part of chunks(candidates, (path) => path.length * 3 + 12)) {
+    const staged = await git.read(root, ["ls-files", "-z", "--stage", "--", ...part.map((path) => `:(literal)${path}`)]);
+    if (!staged.ok) return { ok: false, paths: [], err: staged.err };
+    for (const entry of staged.out.split("\0")) {
+      const path = entry.slice(entry.indexOf("\t") + 1);
+      if (entry.startsWith("160000 ") && path.startsWith(prefix)) paths.push(path.slice(prefix.length));
+    }
+  }
+  return { ok: true, paths };
+}
+
 // readSearchList: the files the search box looks through, paths from `folder`, in no
 // particular order (files-tree.js rankSearch sorts).
 //   In a repository (repo: true): tracked files and untracked ones, not ignored ones, not
@@ -203,10 +226,9 @@ export async function readSearchList(exec, folder, { on = null, platform = null,
     const deleted = await git.read(folder, ["ls-files", "-z", "--deleted"]);
     if (!deleted.ok) return { ok: false, repo: true, files: [], limited: false, err: deleted.err };
     const skip = new Set(deleted.out.split("\0"));
-    // A submodule is tracked as one entry of mode 160000 ("160000 <sha> 0\tpath"): a folder.
-    const staged = await git.read(folder, ["ls-files", "-z", "--stage"]);
-    if (!staged.ok) return { ok: false, repo: true, files: [], limited: false, err: staged.err };
-    for (const entry of staged.out.split("\0")) if (entry.startsWith("160000 ")) skip.add(entry.slice(entry.indexOf("\t") + 1));
+    const subs = await submodulesOf(git, where.repo);
+    if (!subs.ok) return { ok: false, repo: true, files: [], limited: false, err: subs.err };
+    for (const path of subs.paths) skip.add(path);
     // A conflicted path is listed once per stage; an untracked nested repository as "dir/".
     const files = [...new Set([...tracked.out.split("\0"), ...untracked.out.split("\0")])].filter((p) => p && !p.endsWith("/") && !skip.has(p));
     const keep = Math.max(limit, 0);

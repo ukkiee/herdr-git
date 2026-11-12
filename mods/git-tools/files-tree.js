@@ -159,6 +159,15 @@ export function stripFailure(failures, closed) {
   return { show: failures.find((f) => !still.has(failureKey(f))) ?? null, closed: still };
 }
 
+// pressFailure: the error strip after a folder unfolded by hand failed to read.
+//   failure: { folder, error }. closed: as for stripFailure.
+//   → { show, closed }: the failure, and `closed` without it (a new Set). Unfolding the
+//   folder asks to see it again, so the refreshes after keep it until it is closed again.
+export function pressFailure(failure, closed) {
+  const key = failureKey(failure);
+  return { show: failure, closed: new Set([...closed].filter((k) => k !== key)) };
+}
+
 // moveKey: what a key does in the tree or the search results.
 //   rows: visibleRows' rows, or rankSearch's items (rows without `folder` are files).
 //   current: the chosen row's path, or null. key: "up" | "down" | "left" | "right" | "enter".

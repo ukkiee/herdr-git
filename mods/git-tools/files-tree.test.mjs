@@ -1,7 +1,7 @@
 // node files-tree.test.mjs: the Files panel's pure decisions (search order, marks and dots,
 // visible rows, what a refresh keeps, arrow keys).
 import assert from "node:assert/strict";
-import { markLookup, rankSearch, visibleRows, keepPressed, pressLands, moveKey, stripFailure, failureKey } from "./files-tree.js";
+import { markLookup, rankSearch, visibleRows, keepPressed, pressLands, moveKey, stripFailure, pressFailure, failureKey } from "./files-tree.js";
 
 // Marks: a file's own mark, a whole ignored or untracked folder marking what's inside it,
 // the nearest such folder deciding, and dots that skip ignored files but count deletions.
@@ -279,6 +279,25 @@ const entries = new Map([
   r = shown([], bothClosed);
   assert.equal(r.show, null);
   assert.equal(r.closed.size, 0);
+}
+
+// A folder unfolded by hand shows its read failure even if that strip was closed before,
+// and the refreshes after it keep showing it until it is closed again. Other closed
+// failures stay closed.
+{
+  const denied = (folder) => ({ folder, error: { note: "files.denied", folder } });
+  const closed = new Set([failureKey(denied("a")), failureKey(denied("b"))]);
+  const pressed = pressFailure(denied("a"), closed);
+  assert.deepEqual(pressed.show, denied("a"));
+  let r = stripFailure([denied("a"), denied("b")], pressed.closed);
+  assert.deepEqual(r.show, denied("a"));
+  r = stripFailure([denied("a"), denied("b")], r.closed);
+  assert.deepEqual(r.show, denied("a"));
+  // Closed again, it stays closed; "b" never came back.
+  r = stripFailure([denied("a"), denied("b")], new Set([...r.closed, failureKey(denied("a"))]));
+  assert.equal(r.show, null);
+  // The set it was given is left as it was.
+  assert.equal(closed.size, 2);
 }
 
 console.log("ok");

@@ -27,7 +27,7 @@ import { div, svg } from "gpui-kit";
 import { h_flex, v_flex, Editor, EditorState, InputState, Input } from "gpui-base";
 import { exec, theme, settings, watchFolder, readTextFile, window as hostWindow } from "herdr";
 import { readFolder, readMarks, readSearchList, roomFor, PER_FOLDER, TOTAL, SEARCH_LIMIT } from "./files-data.js";
-import { markLookup, visibleRows, keepPressed, pressLands, stripFailure, failureKey, rankSearch, moveKey, SEARCH_SHOWN } from "./files-tree.js";
+import { markLookup, visibleRows, keepPressed, pressLands, stripFailure, pressFailure, failureKey, rankSearch, moveKey, SEARCH_SHOWN } from "./files-tree.js";
 import { location, icon, fileGlyph, folderGlyph, darkLook, panelFrame, toolbar, iconButton, row, notice, errorStrip, WindowedList, openMenu } from "./ui.js";
 import { openDiff } from "./view-diff.js";
 
@@ -230,8 +230,10 @@ export default class FilesView {
         // Failed or gone is kept too: nothing under it, not a "reading" row that never ends.
         this.folders.set(path, r);
         if (!r.ok && !r.gone && readError(r, path)) {
-          this.error = readError(r, path);
-          this.errorFailure = { folder: path, error: this.error };
+          const strip = pressFailure({ folder: path, error: readError(r, path) }, this.closedFailures);
+          this.closedFailures = strip.closed;
+          this.errorFailure = strip.show;
+          this.error = strip.show.error;
         }
         this.rebuild();
       } finally {

@@ -2585,8 +2585,10 @@ English forms and ⏎ is a line break.
   byte per file, so with paths of 60 bytes on average, more than about 140,000 tracked
   (or new) files pass `exec`'s 8 MiB output limit; that, or the call's time limit, may
   make the list fail (untested).
-- Submodules are found from the paths `.gitmodules` names. A nested repository added
-  without `.gitmodules` isn't left out and shows in the search as a file.
+- Submodules are found from the paths `.gitmodules` names. A gitlink `.gitmodules`
+  doesn't name (a nested repository added without `.gitmodules`, or a `.gitmodules` that
+  is broken or deleted from the working tree) isn't left out and shows in the search as
+  a file.
 - A refresh's reads take the place of a folder's read only when the refresh read that
   folder: a folder folded and unfolded again while a refresh runs may show the
   refresh's older entries until the next refresh.

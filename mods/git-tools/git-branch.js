@@ -366,6 +366,32 @@ export async function readDeletedBranches(git, root) {
   return { ok: true, err: "", branches };
 }
 
+// restoreBranches(git, root, branches) → { ok, code, out, err, msg?, restored, skipped }
+//   Each of `branches` ({ name, hash, upstream }: readDeletedBranches' entries) back as
+//   restoreBranch makes it: only when no branch of that name exists, with its upstream,
+//   without checking it out. One that fails doesn't stop the rest.
+//   restored: [{ name, hash }] in the order given. skipped: [{ name, hash, reason, msg? }]:
+//   reason "a branch of this name exists now" (msg branches.skipExists), or restoreBranch's
+//   own words. ok is false when any was skipped; err and msg then say how many came back
+//   and list "name: reason" lines (a screen words each reason again from its msg).
+export async function restoreBranches(git, root, branches = []) {
+  const restored = [], skipped = [];
+  for (const branch of branches) {
+    const name = String(branch?.name ?? ""), hash = branch?.hash;
+    const r = await restoreBranch(git, root, { name, hash, upstream: branch?.upstream ?? null });
+    if (r.ok) { restored.push({ name, hash }); continue; }
+    if (name && (await hasRef(git, root, HEADS + name))) skipped.push({ name, hash, reason: "a branch of this name exists now", msg: { key: "branches.skipExists", args: { name } } });
+    else skipped.push({ name, hash, reason: r.err || "git update-ref failed.", ...(r.msg ? { msg: r.msg } : {}) });
+  }
+  if (!skipped.length) return { ok: true, code: 0, out: "", err: "", restored, skipped };
+  const n = restored.length, list = skipped.map((s) => `${s.name}: ${s.reason}`).join("\n");
+  return {
+    ok: false, code: -1, out: "", restored, skipped,
+    err: `Restored ${n === 1 ? "1 branch" : `${n} branches`}. Not restored:\n${list}`,
+    msg: { key: "branches.notAllRestored", args: { n, list } },
+  };
+}
+
 // A local branch's commit and upstream: { ok, hash, upstream } or { ok: false, err, msg? }.
 async function branchState(git, root, name) {
   const at = await git.read(root, ["rev-parse", "--verify", "--quiet", `${HEADS}${name}^{commit}`]);

@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
 import { makeGit } from "./git.js";
 import { translator } from "./i18n.js";
-import { readBranches, checkout, checkoutRevision, checkBranchName, createBranch, fetchAll, deleteBranch, restoreBranch, readDeletedBranches } from "./git-branch.js";
+import { readBranches, checkout, checkoutRevision, checkBranchName, createBranch, fetchAll, deleteBranch, restoreBranch, readDeletedBranches, restoreBranches } from "./git-branch.js";
 
 const tmp = realpathSync(mkdtempSync(`${tmpdir()}/git-tools-branch-`));
 // Same shape as herdr's exec: resolves with { code, stdout, stderr }, rejects when it can't start.
@@ -901,6 +901,58 @@ for (const [days, kept] of [[29, true], [31, false]]) {
   raw(dir, ["gc", "-q", "--prune=now"]);
   assert.equal(alive(dir, tip), kept, `${days} days`);
   assert.deepEqual((await readDeletedBranches(git, dir)).branches.map((b) => b.hash), kept ? [tip] : []);
+}
+
+// ---- restoreBranches
+
+// Several back at once, each at its commit with its upstream; HEAD and the working tree
+// stay. One whose name was taken since the list was read is skipped with its reason,
+// and the rest still come back.
+{
+  const dir = placed("multi");
+  const ma = branchAt(dir, "feat/a", "a.txt", "a one", ["origin", "refs/heads/main"]);
+  const mf = branchAt(dir, "-f", "f.txt", "f one", ["origin", "refs/heads/main"]);
+  const mp = branchAt(dir, "plain", "p.txt", "p one");
+  const mt = branchAt(dir, "taken", "t.txt", "t one", [".", "refs/heads/main"]);
+  for (const name of ["feat/a", "-f", "plain", "taken"]) await deleted(dir, name);
+  const list = await readDeletedBranches(git, dir);
+  assert.deepEqual(list.branches.map((b) => [b.name, b.restorable]), [["taken", true], ["plain", true], ["-f", true], ["feat/a", true]]);
+  const later = commit(dir, "later.txt", "later");
+  raw(dir, ["branch", "--no-track", "taken", later]);
+  writeFileSync(`${dir}/base.txt`, "uncommitted\n");
+
+  const r = await restoreBranches(git, dir, list.branches);
+  assert.equal(r.ok, false);
+  assert.deepEqual(r.restored, [{ name: "plain", hash: mp }, { name: "-f", hash: mf }, { name: "feat/a", hash: ma }]);
+  assert.deepEqual(r.skipped, [{ name: "taken", hash: mt, reason: "a branch of this name exists now", msg: { key: "branches.skipExists", args: { name: "taken" } } }]);
+  assert.equal(r.err, "Restored 3 branches. Not restored:\ntaken: a branch of this name exists now");
+  assert.deepEqual(r.msg, { key: "branches.notAllRestored", args: { n: 3, list: "taken: a branch of this name exists now" } });
+  assert.equal(translator("ko")("branches.notAllRestored", { n: 1, list: "x: y" }), "브랜치 1개를 복원했습니다. 복원하지 않은 브랜치:\nx: y");
+
+  for (const [name, hash, remote, merge] of [["feat/a", ma, "origin", "refs/heads/main"], ["-f", mf, "origin", "refs/heads/main"], ["plain", mp, null, null]]) {
+    assert.equal(raw(dir, ["rev-parse", `refs/heads/${name}`]), hash);
+    assert.equal(setting(dir, `branch.${name}.remote`), remote);
+    assert.equal(setting(dir, `branch.${name}.merge`), merge);
+  }
+  assert.equal(raw(dir, ["rev-parse", "--abbrev-ref", "feat/a@{upstream}"]), "origin/main");
+  assert.equal(raw(dir, ["rev-parse", "refs/heads/taken"]), later);
+  assert.equal(setting(dir, "branch.taken.remote"), null);
+  assert.equal(current(dir), "main");
+  assert.equal(readFileSync(`${dir}/base.txt`, "utf8"), "uncommitted\n");
+  // Back now, so out of the list; the taken one stays, not restorable.
+  assert.deepEqual((await readDeletedBranches(git, dir)).branches.map((b) => [b.name, b.restorable]), [["taken", false]]);
+
+  // Nothing asked: nothing done.
+  assert.deepEqual(await restoreBranches(git, dir, []), { ok: true, code: 0, out: "", err: "", restored: [], skipped: [] });
+}
+
+// All back: ok, with nothing skipped.
+{
+  const dir = placed("multi-all");
+  const one = branchAt(dir, "one", "1.txt", "one");
+  await deleted(dir, "one");
+  const r = await restoreBranches(git, dir, (await readDeletedBranches(git, dir)).branches);
+  assert.deepEqual([r.ok, r.err, r.restored, r.skipped], [true, "", [{ name: "one", hash: one }], []]);
 }
 
 console.log("ok");

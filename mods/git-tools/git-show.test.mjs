@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
 import { makeGit } from "./git.js";
-import { readCommit, readContaining } from "./git-show.js";
+import { readCommit, readContaining, readLastCommit } from "./git-show.js";
 
 const base = realpathSync(mkdtempSync(`${tmpdir()}/git-tools-show-`));
 // Same shape as herdr's exec: resolves with { code, stdout, stderr }, rejects when it can't start.
@@ -202,6 +202,32 @@ const byPath = (files) => [...files].sort((a, b) => (a.path < b.path ? -1 : 1));
   const c = await readCommit(git, repo, head(repo));
   assert.equal(c.ok, true, c.err);
   assert.deepEqual([c.author, c.email, c.committer, c.committerEmail], ["Ada Lovelace", "ada@lovelace.example", "Ced Committer", "ced@example.com"]);
+}
+
+// The last commit, for the Commit panel's Last commit group while Amend is on: its hash,
+// its subject (the message's first line) and its files against its parent, a renamed
+// file with its old path.
+{
+  const repo = init("last-plain");
+  write(repo, "keep.txt", "one\n");
+  write(repo, "src/old-name.js", "export const a = 1;\nexport const b = 2;\nexport const c = 3;\n");
+  sh(repo, "git add -A && git commit -q -m first");
+  write(repo, "keep.txt", "one\ntwo\n");
+  write(repo, "new.txt", "new\n");
+  sh(repo, "git mv src/old-name.js src/new-name.js && git add -A");
+  writeFileSync(`${base}/last-message.txt`, "로그인 흐름을 고친다\n\n본문 줄\n");
+  sh(repo, `git commit -q -F ${base}/last-message.txt`);
+
+  const r = await readLastCommit(git, repo);
+  assert.equal(r.ok, true, r.err);
+  assert.equal(r.err, "");
+  assert.equal(r.hash, head(repo));
+  assert.equal(r.subject, "로그인 흐름을 고친다");
+  assert.deepEqual(byPath(r.files), [
+    { path: "keep.txt", status: "modified", from: null },
+    { path: "new.txt", status: "added", from: null },
+    { path: "src/new-name.js", status: "renamed", from: "src/old-name.js" },
+  ]);
 }
 
 console.log("ok");

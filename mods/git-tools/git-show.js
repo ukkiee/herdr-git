@@ -56,6 +56,27 @@ export async function readCommit(git, root, hash) {
   };
 }
 
+// readLastCommit(git, root, { known }?) → { ok, err, hash, subject, files, same }
+//   The commit HEAD is on, for the Commit panel's Last commit group.
+//   hash: its full hash; null (and ok) in a repository without commits.
+//   subject: the message's first line. files: as readCommit's, so a merge commit lists
+//     what it brought in against its first parent, a commit without a parent every file
+//     as added, a renamed file its old path.
+//   known: a hash read before. When HEAD is still there, same is true and nothing else
+//     is read (subject "", files []): the panel asks on every refresh, and the files of a
+//     big commit are not worth reading again while HEAD stays put.
+export async function readLastCommit(git, root, { known = null } = {}) {
+  const none = { hash: null, subject: "", files: [], same: false };
+  // -q --verify: an unborn HEAD is a quiet exit 1, not an error.
+  const at = await git.read(root, ["rev-parse", "-q", "--verify", "HEAD^{commit}"]);
+  const hash = at.out.trim();
+  if (!at.ok) return at.code === 1 && !hash && !at.err ? { ok: true, err: "", ...none } : { ok: false, err: at.err, ...none };
+  if (known && hash === known) return { ok: true, err: "", ...none, hash, same: true };
+  const c = await readCommit(git, root, hash);
+  if (!c.ok) return { ok: false, err: c.err, ...none };
+  return { ok: true, err: "", hash: c.hash, subject: c.message.split("\n")[0], files: c.files, same: false };
+}
+
 const HEADS = "refs/heads/", REMOTES = "refs/remotes/";
 
 // readContaining(git, root, hash) → { ok, err, branches }

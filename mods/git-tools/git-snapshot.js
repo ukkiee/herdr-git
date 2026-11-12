@@ -261,6 +261,7 @@ const REASONS = {
 const STAGING = {
   changed: { reason: "something else is staged for it now", msg: { key: "restore.stagingChanged" } },
   conflict: { reason: "it was in a conflict, and a conflict can't be brought back", msg: { key: "restore.stagingConflict" } },
+  failed: { reason: "git failed before staging it", msg: { key: "restore.stagingFailed" } },
 };
 
 // restore(git, root, { snapshot, paths, copy })
@@ -292,7 +293,10 @@ const STAGING = {
 //   refuses where anything is in its way, never by guessing names, from the scratch index
 //   of `copy` (the calling copy's id, as for record; without one nothing is restored).
 //   ok is false when a path or its staging was skipped (err lists them) or a git call
-//   failed (its words, and the paths restored before it in `restored`). When git fails partway through
+//   failed (its words, and the paths restored before it in `restored`). A failed index
+//   write comes after the files are written: each path whose staging it left is in
+//   stagingSkipped ("git failed before staging it"), and git's words end err (msg
+//   restore.stagingNotAllFailed or restore.notAllStagingFailed, with args.err). When git fails partway through
 //   writing files, the disk is read again: those it holds as the snapshot has them are in
 //   `restored`, those git left neither as HEAD has them nor as the snapshot has them are
 //   skipped with that reason. changed: anything on disk changed or may have (a write
@@ -374,23 +378,30 @@ export async function restore(git, root, { snapshot, paths = [], copy } = {}) {
   for (const path of fresh.taken) skip(path, "taken");
   if (!fresh.ok) return failed(fresh);
 
+  // A failed index write is said after the paths it left: the files are back all the same.
+  let broke = null;
   if (staging) {
     const put = await putStaging(git, root, restored, { then: then.entries, now: now.entries, held: held.entries, conflicts: made.conflicts, intents: made.intents });
     stagingSkipped.push(...put.skipped);
     if (put.wrote) touched = true;
-    if (!put.ok) return failed(put);
+    if (!put.ok) {
+      broke = put;
+      for (const path of put.left) stagingSkipped.push({ path, ...STAGING.failed });
+    }
   }
   if (skipped.length || stagingSkipped.length) {
     const n = restored.length, files = `Restored ${n === 1 ? "1 file" : `${n} files`}.`;
     // list, staged: one "path: reason" line each; a screen words the reasons again from
     // each path's msg (restore.skip*, restore.staging*).
     const list = reasonList(skipped), staged = reasonList(stagingSkipped);
-    const [err, msg] = !stagingSkipped.length
+    let [err, msg] = !stagingSkipped.length
       ? [`${files} ${notRestored(skipped)}`, { key: "restore.notAll", args: { n, list } }]
       : !skipped.length
         ? [`${files} ${notStaged(stagingSkipped)}`, { key: "restore.stagingNotAll", args: { n, staged } }]
         : [`${files} ${notRestored(skipped)}\n${notStaged(stagingSkipped)}`, { key: "restore.notAllStaging", args: { n, list, staged } }];
-    return { ok: false, code: -1, out: "", restored, skipped, stagingSkipped, changed: moved(), err, msg };
+    // git's words, as they are, on the last line (restore.*Failed).
+    if (broke) [err, msg] = [`${err}\n${broke.err}`, { key: `${msg.key}Failed`, args: { ...msg.args, err: broke.err } }];
+    return { ok: false, code: broke ? broke.code : -1, out: "", restored, skipped, stagingSkipped, changed: moved(), err, msg };
   }
   return { ok: true, code: 0, out: "", err: "", restored, skipped, stagingSkipped, changed: moved() };
 }
@@ -419,13 +430,14 @@ async function madeOn(git, root, snapshot) {
 // then, now, held: "<mode> <object>" by path in the HEAD the snapshot was made on, HEAD
 // now, and the snapshot's second parent. intents: the paths the index only announced,
 // which go back as announced (`git add -N`). → { ok, skipped, wrote } (on a failed git
-// call, its failure too; wrote: an index write was started).
+// call, its failure too, and left: the paths whose staging it didn't get to; wrote: an
+// index write was started).
 async function putStaging(git, root, paths, { then, now, held, conflicts, intents }) {
   const skipped = [], remove = [], stage = [], announce = [];
   const keep = paths.filter((path) => !conflicts.has(path) && (intents.has(path) || held.get(path) !== then.get(path)));
   for (const path of paths) if (conflicts.has(path)) skipped.push({ path, ...STAGING.conflict });
   const [index, announced] = await Promise.all([indexEntries(git, root, keep), intentPaths(git, root, keep)]);
-  for (const r of [index, announced]) if (!r.ok) return { ...r, skipped, wrote: false };
+  for (const r of [index, announced]) if (!r.ok) return { ...r, skipped, wrote: false, left: keep };
   const entry = (path) => {
     if (announced.paths.has(path)) return "intent";
     const list = index.entries.get(path);
@@ -444,24 +456,19 @@ async function putStaging(git, root, paths, { then, now, held, conflicts, intent
       announce.push(path);
     }
   }
-  let wrote = false;
-  for (const chunk of chunks(remove)) {
-    wrote = true;
-    const r = await git(root, ["update-index", "--force-remove", "--", ...chunk]);
-    if (!r.ok) return { ...r, skipped, wrote };
+  // One index write per batch; a write that fails changes nothing, so its paths and every
+  // later batch's are the ones left.
+  const batches = [
+    ...chunks(remove).map((chunk) => [chunk, ["update-index", "--force-remove", "--", ...chunk]]),
+    ...chunks(stage, (path) => path.length * 3 + 120).map((chunk) => [chunk, ["update-index", "--add", ...chunk.flatMap((path) => ["--cacheinfo", ...held.get(path).split(" "), path])]]),
+    // -f: a file announced in spite of .gitignore was announced with -f too.
+    ...chunks(announce).map((chunk) => [chunk, ["--literal-pathspecs", "add", "-N", "-f", "--", ...chunk]]),
+  ];
+  for (let i = 0; i < batches.length; i++) {
+    const r = await git(root, batches[i][1]);
+    if (!r.ok) return { ...r, skipped, wrote: true, left: [...new Set(batches.slice(i).flatMap(([chunk]) => chunk))] };
   }
-  for (const chunk of chunks(stage, (path) => path.length * 3 + 120)) {
-    wrote = true;
-    const r = await git(root, ["update-index", "--add", ...chunk.flatMap((path) => ["--cacheinfo", ...held.get(path).split(" "), path])]);
-    if (!r.ok) return { ...r, skipped, wrote };
-  }
-  // -f: a file announced in spite of .gitignore was announced with -f too.
-  for (const chunk of chunks(announce)) {
-    wrote = true;
-    const r = await git(root, ["--literal-pathspecs", "add", "-N", "-f", "--", ...chunk]);
-    if (!r.ok) return { ...r, skipped, wrote };
-  }
-  return { ok: true, skipped, wrote };
+  return { ok: true, skipped, wrote: batches.length > 0 };
 }
 
 // reasonList(skipped, word?) → "path: reason" lines. word(skip) gives the reason (a

@@ -32,6 +32,9 @@ export const en = {
   "restore.notAllStaging": { one: "Restored 1 file. Not restored, to keep what is there now:\n{list}\nRestored without their staging:\n{staged}", other: "Restored {n} files. Not restored, to keep what is there now:\n{list}\nRestored without their staging:\n{staged}" },
   "restore.stagingChanged": "something else is staged for it now",
   "restore.stagingConflict": "it was in a conflict, and a conflict can't be brought back",
+  "restore.stagingFailed": "git failed before staging it",
+  "restore.stagingNotAllFailed": { one: "Restored 1 file. Restored without their staging:\n{staged}\n{err}", other: "Restored {n} files. Restored without their staging:\n{staged}\n{err}" },
+  "restore.notAllStagingFailed": { one: "Restored 1 file. Not restored, to keep what is there now:\n{list}\nRestored without their staging:\n{staged}\n{err}", other: "Restored {n} files. Not restored, to keep what is there now:\n{list}\nRestored without their staging:\n{staged}\n{err}" },
 };
 
 export const ko = {
@@ -65,4 +68,7 @@ export const ko = {
   "restore.notAllStaging": "{n}개 파일을 복원했습니다. 지금 있는 것을 지키려고 복원하지 않은 파일:\n{list}\n스테이징은 복원하지 않은 파일:\n{staged}",
   "restore.stagingChanged": "지금 다른 내용이 스테이징되어 있습니다",
   "restore.stagingConflict": "충돌 중이던 파일이라 충돌 상태는 복원하지 못합니다",
+  "restore.stagingFailed": "스테이징하기 전에 git이 실패했습니다",
+  "restore.stagingNotAllFailed": "{n}개 파일을 복원했습니다. 스테이징은 복원하지 않은 파일:\n{staged}\n{err}",
+  "restore.notAllStagingFailed": "{n}개 파일을 복원했습니다. 지금 있는 것을 지키려고 복원하지 않은 파일:\n{list}\n스테이징은 복원하지 않은 파일:\n{staged}\n{err}",
 };

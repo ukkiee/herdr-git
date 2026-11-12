@@ -524,6 +524,43 @@ git add -A && git commit -q -m first`);
   assert.equal((() => { const t = translator("en"), msg = wordRestore(t, only); return t(msg.key, msg.args); })(), only.err);
 }
 
+// git fails while staging (an index write): the files are back, and the result says so,
+// with each path whose staging didn't come back and why (git's failure, or something else
+// staged now), and git's words. The staged deletion written before the failure stays.
+// Worded again in English it is the result; in Korean no English reason is left.
+{
+  const repo = init("restore-staging-fails");
+  sh(repo, "for f in d p q c; do echo head > $f; done; git add -A && git commit -q -m first");
+  sh(repo, "git rm -q d && for f in p q c; do echo index > $f && git add $f && echo work > $f; done");
+  const snapshot = await back(repo, [["d", "deleted"], ["p", "modified"], ["q", "modified"], ["c", "modified"]]);
+  sh(repo, "echo mine > c && git add c && echo head > c");
+  const fails = (args, options) => args.includes("--cacheinfo") && !options?.env?.GIT_INDEX_FILE;
+  const run = async (cwd, args, options) => fails(args, options) ? { ok: false, code: 128, out: "", err: "fatal: injected failure" } : git(cwd, args, options);
+  run.read = git.read;
+
+  const r = await restore(run, repo, { snapshot, paths: ["d", "p", "q", "c"] });
+  assert.equal(r.ok, false);
+  assert.equal(r.changed, true);
+  assert.deepEqual(r.restored.sort(), ["c", "d", "p", "q"]);
+  assert.deepEqual(r.skipped, []);
+  assert.deepEqual(Object.fromEntries(r.stagingSkipped.map((s) => [s.path, s.reason])), {
+    c: "something else is staged for it now",
+    p: "git failed before staging it",
+    q: "git failed before staging it",
+  });
+  for (const s of r.stagingSkipped) assert.ok(en[s.msg?.key], `${s.path}: ${s.msg?.key}`);
+  assert.deepEqual(status(repo), ["D  d", "MM c", " M p", " M q"].sort());
+  assert.match(r.err, /^Restored 4 files\./);
+  assert.match(r.err, /^p: git failed before staging it$/m);
+  assert.match(r.err, /^c: something else is staged for it now$/m);
+  assert.match(r.err, /fatal: injected failure/);
+  assert.ok(en[r.msg?.key], r.msg?.key);
+  const worded = (lang) => { const t = translator(lang), msg = wordRestore(t, r); return t(msg.key, msg.args); };
+  assert.equal(worded("en"), r.err);
+  assert.match(worded("ko"), /fatal: injected failure/);
+  assert.doesNotMatch(worded("ko"), /is staged|git failed|Restored|staging/);
+}
+
 // A snapshot with one parent (made before snapshots held the index) restores the working
 // tree only: what was staged then stays unstaged, and the index is left as it is.
 {

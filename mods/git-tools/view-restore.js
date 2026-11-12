@@ -63,8 +63,9 @@ export function serveRestore(panel, e, cx) {
 const stop = (_e, cx) => cx.stop_propagation();
 
 // A restore that went through but left some paths, or their staging, as they were: shown
-// as its result line (each path and why), not as an error.
-const PARTLY = new Set(["restore.notAll", "restore.stagingNotAll", "restore.notAllStaging"]);
+// as its result line (each path and why), not as an error. The *Failed ones end with
+// git's words: the files are back, an index write failed.
+const PARTLY = new Set(["restore.notAll", "restore.stagingNotAll", "restore.notAllStaging", "restore.stagingNotAllFailed", "restore.notAllStagingFailed"]);
 
 // Same colors as the Commit panel's rows.
 function statusColor(status, t) {

@@ -1,4 +1,4 @@
-// The words of the Files panel: its header, the states in place of the tree, the limit
+// The words of the Files panel: its header, the search, the states in place of the tree, the limit
 // note and the preview's notes. Keys start with "files.".
 
 export const en = {
@@ -19,6 +19,10 @@ export const en = {
   "files.mark.conflict": "Conflict",
   "files.mark.ignored": "Ignored",
   "files.changedInside": "Changed files inside",
+  "files.search": "Search files",
+  "files.noMatches": "No matching files",
+  "files.moreMatches": "Showing the first {n} matches",
+  "files.searchLimited": "Searched only the first {n} files in this folder",
 };
 
 export const ko = {
@@ -39,4 +43,8 @@ export const ko = {
   "files.mark.conflict": "충돌",
   "files.mark.ignored": "무시됨",
   "files.changedInside": "안에 바뀐 파일이 있음",
+  "files.search": "파일 검색",
+  "files.noMatches": "일치하는 파일 없음",
+  "files.moreMatches": "일치하는 파일 중 처음 {n}개만 보입니다",
+  "files.searchLimited": "이 폴더의 처음 {n}개 파일에서만 찾았습니다",
 };

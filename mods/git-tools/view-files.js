@@ -11,12 +11,18 @@
 // a row) files-tree.js's; this file draws. The rows as drawn are `this.rows`
 // (visibleRows) and the chosen row is `this.current` (its path): what moves the choice
 // works on these two.
+//
+// The search box under the header: typed letters put the search's results in the
+// tree's place (rankSearch over readSearchList's files, `this.ranked`, the chosen result
+// `this.hit`); an empty box brings the tree back. The file list is read when a search
+// starts and again in another folder, not on every refresh: outside a repository it is
+// a walk of up to 20,000 files.
 
 import { div, svg } from "gpui-kit";
-import { h_flex, v_flex, Editor, EditorState } from "gpui-base";
+import { h_flex, v_flex, Editor, EditorState, InputState, Input } from "gpui-base";
 import { exec, theme, settings, watchFolder, readTextFile, window as hostWindow } from "herdr";
-import { readFolder, readMarks, roomFor, PER_FOLDER, TOTAL } from "./files-data.js";
-import { markLookup, visibleRows } from "./files-tree.js";
+import { readFolder, readMarks, readSearchList, roomFor, PER_FOLDER, TOTAL, SEARCH_LIMIT } from "./files-data.js";
+import { markLookup, visibleRows, rankSearch, SEARCH_SHOWN } from "./files-tree.js";
 import { location, icon, fileGlyph, folderGlyph, darkLook, panelFrame, toolbar, row, notice, errorStrip, WindowedList } from "./ui.js";
 
 const POLL = 10000;
@@ -45,6 +51,8 @@ export default class FilesView {
     this.context = null;
     this.reset();
     this.list = new WindowedList("files-tree");
+    this.found = new WindowedList("files-found");
+    this.makeInput("");
     this.refresh(cx);
     // The watch misses things (a remote space has none at all), so the timer stays on.
     cx.timer.every(POLL, (cx) => this.refresh(cx));
@@ -66,6 +74,26 @@ export default class FilesView {
     this.watching = null;
     this.release();
     this.file = null; this.fileNote = null; this.cut = false;
+    // The search: readSearchList's answer for this folder, whether it is being read, and
+    // rankSearch's answer for what is typed (null until the list is in).
+    this.listed = null; this.listing = false; this.ranked = null; this.hit = null;
+  }
+
+  // The placeholder is fixed when the input is made: a copy whose language changed since
+  // gets a new input holding what was typed (see render).
+  makeInput(value) {
+    this.inputLang = this.lang;
+    this.query = InputState.new({ placeholder: this.t("files.search"), value });
+    this.query.on("change", (_e, cx) => {
+      this.hit = null;
+      this.found.top = 0;
+      if (this.searching()) this.readList(cx);
+      this.rank();
+      cx.notify();
+    });
+    this.query.on("submit", (_e, cx) => { this.openHit(cx); cx.notify(); });
+    this.query.on("focus", (_e, cx) => { this.typing = true; cx.notify(); });
+    this.query.on("blur", (_e, cx) => { this.typing = false; cx.notify(); });
   }
 
   // ---- reading
@@ -83,7 +111,10 @@ export default class FilesView {
     const was = this.saved.get(key);
     if (was) this.open = new Set(was.open);
     if (this.list) this.list.top = 0;
+    if (this.found) this.found.top = 0;
     if (was?.file) this.show(was.file, cx);
+    // A search still typed searches the new folder.
+    if (this.searching()) this.readList(cx);
   }
 
   refresh(cx) {
@@ -185,6 +216,51 @@ export default class FilesView {
     });
   }
 
+  // ---- the search
+
+  searching() { return Boolean(this.query?.value().trim()); }
+
+  // The files to search, read once per folder: when a search starts, and again in
+  // another folder while one is typed.
+  readList(cx) {
+    if (!this.root || this.listed || this.listing) return;
+    const context = this.context, root = this.root, on = this.on;
+    this.listing = true;
+    cx.spawn(async (cx) => {
+      try {
+        const r = await readSearchList(exec, root, { on, platform: hostWindow()?.platform ?? null });
+        if (this.context !== context) return;
+        this.listed = r;
+        this.rank();
+      } finally {
+        if (this.context === context) this.listing = false;
+        cx.notify();
+      }
+    });
+  }
+
+  // The results for what is typed, worked out when the text or the list changes, never
+  // in render. The chosen result stays while it is still there; otherwise the first is
+  // chosen, so Enter opens it.
+  rank() {
+    this.ranked = this.listed?.ok ? rankSearch(this.listed.files, this.query.value()) : null;
+    const items = this.ranked?.items ?? [];
+    if (!items.some((it) => it.path === this.hit)) this.hit = items[0]?.path ?? null;
+  }
+
+  chooseHit(path) {
+    const items = this.ranked?.items ?? [];
+    const at = items.findIndex((it) => it.path === path);
+    this.hit = at < 0 ? null : path;
+    if (at >= 0) this.found.reveal(at, items.length);
+  }
+
+  // Enter in the box and a press on a result: the result's preview. The box's submit and
+  // the panel's own Enter can both come for one press, so an open preview isn't read again.
+  openHit(cx, path = this.hit) {
+    if (path && path !== this.file) this.show(path, cx);
+  }
+
   // ---- rows
 
   // The tree as drawn, built when the data or the folding changes, never in render.
@@ -284,6 +360,44 @@ export default class FilesView {
     return this.list.render(this.rows.length, (i) => this.renderRow(i, t), t);
   }
 
+  // A result: the file's icon and name in its status color, then its folder, dim.
+  renderHit(i, t) {
+    const it = this.ranked.items[i];
+    const mark = this.marks.mark(it.path);
+    return row(`files-hit-${it.path}`, t, { selected: it.path === this.hit })
+      .cursor_pointer()
+      .on_click((_e, cx) => { this.chooseHit(it.path); this.openHit(cx, it.path); cx.notify(); })
+      .child(fileGlyph(`${this.prefix}${it.path}`, { dark: this.dark }))
+      .child(div().flex_none().max_w("70%").truncate().text_color(statusColor(mark, t))
+        .when(mark === "conflict", (el) => el.font_semibold())
+        .child(it.name))
+      .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.dim).child(it.dir));
+  }
+
+  renderFound(t) {
+    if (this.listed && !this.listed.ok) return notice(this.listed.err || "?", t);
+    if (!this.ranked) return notice(this.t("ui.loading"), t, { busy: true });
+    const n = this.ranked.items.length;
+    if (!n) return notice(this.t("files.noMatches"), t);
+    return this.found.render(n, (i) => this.renderHit(i, t), t);
+  }
+
+  // What the search left out: files past the walk's limit outside a repository, and
+  // matches past the shown ones.
+  foundNotes() {
+    const notes = [];
+    if (this.listed?.ok && this.listed.limited) notes.push(this.t("files.searchLimited", { n: grouped(SEARCH_LIMIT) }));
+    if (this.ranked?.limited) notes.push(this.t("files.moreMatches", { n: grouped(SEARCH_SHOWN) }));
+    return notes;
+  }
+
+  renderSearchBox(t) {
+    return h_flex().id("files-search").h(30).flex_none().w_full().min_w(0).px(10).gap(6).items_center().border_b(1).border_color(t.border)
+      .cursor_text().on_mouse_down("left", (_e, cx) => { this.query.focus(); cx.stop_propagation(); })
+      .child(svg(icon("search")).size(13).flex_none().text_color(this.typing ? t.accent : t.dim))
+      .child(Input.new(this.query).flex_1().min_w(0).h_full().text_size(12.5).text_color(t.foreground));
+  }
+
   renderPreview(t) {
     if (this.code) {
       return v_flex().flex_1().min_h(0)
@@ -301,10 +415,26 @@ export default class FilesView {
       this.moving = true;
       cx.timer.after(0, (cx) => { this.moving = false; if (this.contextKey() !== this.context?.key) { this.refresh(cx); cx.notify(); } });
     }
+    if (this.inputLang !== this.lang && !this.relabeling) {
+      // Not here: render may not make the redraw a new input needs.
+      this.relabeling = true;
+      cx.timer.after(1, (cx) => {
+        this.relabeling = false;
+        if (this.inputLang === this.lang) return;
+        const typing = this.typing;
+        this.makeInput(this.query.value());
+        if (typing) this.query.focus();
+        cx.notify();
+      });
+    }
     const t = theme();
     this.dark = darkLook();
     const previewing = Boolean(this.file);
     const where = previewing ? this.file : folderName(this.root);
+    const shown = Boolean(this.root) && !this.gone && !this.rootError;
+    const searching = shown && this.searching();
+    const notes = searching ? this.foundNotes()
+      : this.limited && shown ? [this.t("files.limited", { perFolder: grouped(PER_FOLDER), total: grouped(TOTAL) })] : [];
     return panelFrame("files-panel", t)
       .child(toolbar(t).px(10).gap(8)
         // The mod has no left arrow icon: the arrow is a glyph, as in Herdr's own Files.
@@ -314,11 +444,11 @@ export default class FilesView {
           .child("←")))
         .child(div().flex_none().font_semibold().child(this.t("files.title")))
         .child(div().flex_1().min_w(0).truncate().text_right().text_size(12).text_color(t.dim).child(where ?? "")))
+      .when(shown && !previewing, (el) => el.child(this.renderSearchBox(t)))
       .child(previewing ? this.renderPreview(t)
         : v_flex().flex_1().min_h(0)
-          .child(div().flex_1().min_h(0).child(this.renderTree(t)))
-          .when(this.limited && !this.gone && !this.rootError, (el) => el.child(div().flex_none().px(10).py(5).border_t(1).border_color(t.border).text_size(11).text_color(t.dim)
-            .child(this.t("files.limited", { perFolder: grouped(PER_FOLDER), total: grouped(TOTAL) })))))
+          .child(div().flex_1().min_h(0).child(searching ? this.renderFound(t) : this.renderTree(t)))
+          .children(notes.map((note, i) => div().id(`files-note-${i}`).flex_none().px(10).py(5).border_t(1).border_color(t.border).text_size(11).text_color(t.dim).child(note))))
       .when(Boolean(this.error) && !previewing, (el) => el.child(errorStrip("files-error", this.error ?? "", t, (_e, cx) => { this.error = null; cx.notify(); })));
   }
 }

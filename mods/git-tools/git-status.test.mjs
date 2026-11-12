@@ -74,7 +74,7 @@ git add -A && git commit -q -m first`);
 {
   const repo = init("empty");
   let r = await readStatus(git, repo);
-  assert.deepEqual(r, { ok: true, err: "", hasHead: false, detached: false, changes: [], unversioned: [] });
+  assert.deepEqual(r, { ok: true, err: "", hasHead: false, head: null, detached: false, changes: [], unversioned: [] });
   sh(repo, "echo 1 > first.txt && git add first.txt && echo 1 > other.txt");
   r = await readStatus(git, repo);
   assert.equal(r.ok, true);
@@ -87,7 +87,8 @@ git add -A && git commit -q -m first`);
 {
   const repo = init("clean");
   sh(repo, "echo 1 > a.txt && git add -A && git commit -q -m first");
-  assert.deepEqual(await readStatus(git, repo), { ok: true, err: "", hasHead: true, detached: false, changes: [], unversioned: [] });
+  const head = sh(repo, "git rev-parse HEAD").trim();
+  assert.deepEqual(await readStatus(git, repo), { ok: true, err: "", hasHead: true, head, detached: false, changes: [], unversioned: [] });
 }
 
 // A file both sides changed is a conflict, once (git lists it once, however many stages).

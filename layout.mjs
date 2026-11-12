@@ -1,6 +1,7 @@
 // Turns Herdr's `main` layout into `main-git`: the Changes button opens the Commit panel,
-// a Log panel sits under the work area, and a Git button beside the Changes button shows
-// and hides it. See docs/adr/0001-clone-main-layout.md.
+// the Files button the Files panel, a Log panel sits under the work area, and a Git
+// button beside the Changes button shows and hides it. See
+// docs/adr/0001-clone-main-layout.md.
 //
 //   node layout.mjs <main.json>              check only: exit 1 and the reason if it can't be done
 //   node layout.mjs <main.json> <out.json>   write the transformed layout to out.json
@@ -59,9 +60,14 @@ export function toMainGit(main, { button = true } = {}) {
   const changes = stack.children.find((c) => c.id === "changes");
   if (!changes) return fail("node `changes` (what the Changes button opens) is missing from `panel-body`");
   if (changes.type !== "block") return fail("node `changes` is not a block");
+  const files = stack.children.find((c) => c.id === "files");
+  if (!files) return fail("node `files` (what the Files button opens) is missing from `panel-body`");
+  if (files.type !== "block") return fail("node `files` is not a block");
 
-  // The tab bar's Changes button opens the node by id, so the id stays and the mod changes.
+  // The tab bar's Changes and Files buttons open the nodes by id, so the ids stay and
+  // the mod changes.
   changes.content = { mod: MOD, props: { view: "commit" } };
+  files.content = { mod: MOD, props: { view: "files" } };
 
   const log = {
     id: LOG_ID, type: "block", hidden: true, size: { px: LOG_HEIGHT }, min: 120, max: 900,

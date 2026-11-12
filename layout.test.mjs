@@ -55,9 +55,24 @@ const parentOf = (node, id) => {
   const changes = find(r.layout, "changes");
   assert.deepEqual(changes, { id: "changes", type: "block", content: { mod: MOD, props: { view: "commit" } } });
   assert.equal(parentOf(r.layout, "changes").id, "panel-body");
-  assert.deepEqual(find(r.layout, "files"), find(main(), "files"), "the Files panel is untouched");
   assert.deepEqual(find(r.layout, "sidebar"), find(main(), "sidebar"), "the sidebar is untouched");
   assert.equal(r.layout.titlebar, "none");
+}
+
+// Files button: the same, for the `files` node and the Files panel. The stack still opens
+// on the Files panel and keeps both children in their order.
+{
+  const r = toMainGit(main());
+  assert.deepEqual(find(r.layout, "files"), { id: "files", type: "block", content: { mod: MOD, props: { view: "files" } } });
+  const stack = find(r.layout, "panel-body");
+  assert.deepEqual(stack.children.map((c) => c.id), ["files", "changes"]);
+  assert.equal(stack.active, "files");
+  // Without the Git button (every OS but macOS) the Files panel is still there.
+  assert.deepEqual(find(toMainGit(main(), { button: false }).layout, "files"), find(r.layout, "files"));
+  // Fields Herdr may add to the block later are kept; only the content is the mod's.
+  const input = main();
+  Object.assign(find(input, "files"), { padding: 4, hidden: false });
+  assert.deepEqual(find(toMainGit(input).layout, "files"), { id: "files", type: "block", padding: 4, hidden: false, content: { mod: MOD, props: { view: "files" } } });
 }
 
 // Log panel: under everything right of the sidebar's work area (tab bar above, status bar
@@ -80,6 +95,7 @@ const parentOf = (node, id) => {
   // the side panel keeps its width, limits and hidden state.
   const expected = main();
   find(expected, "changes").content = { mod: MOD, props: { view: "commit" } };
+  find(expected, "files").content = { mod: MOD, props: { view: "files" } };
   assert.deepEqual(find(layout, "work-body"), find(expected, "work-body"));
 }
 
@@ -128,7 +144,7 @@ const parentOf = (node, id) => {
 }
 
 // A `main` without an expected node fails and names the node.
-for (const id of ["work", "tabs", "work-body", "panel-body", "changes"]) {
+for (const id of ["work", "tabs", "work-body", "panel-body", "changes", "files"]) {
   const input = main();
   const parent = parentOf(input, id);
   parent.children = parent.children.filter((c) => c.id !== id);
@@ -152,6 +168,21 @@ for (const id of ["work", "tabs", "work-body", "panel-body", "changes"]) {
   const changes = stack.children.pop();
   find(input, "work-body").children.push(changes);
   assert.equal(toMainGit(input).ok, false, "changes outside panel-body");
+}
+{
+  const input = main();
+  const stack = find(input, "panel-body");
+  const files = stack.children.shift();
+  find(input, "work-body").children.push(files);
+  assert.equal(toMainGit(input).ok, false, "files outside panel-body");
+}
+{
+  const input = main();
+  find(input, "files").type = "column";
+  find(input, "files").children = [];
+  const r = toMainGit(input);
+  assert.equal(r.ok, false, "files is not a block");
+  assert.match(r.error, /\bfiles\b/);
 }
 {
   const input = main();

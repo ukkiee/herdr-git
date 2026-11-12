@@ -41,6 +41,7 @@ import Menu from "./view-menu.js";
 import IconSheet from "./view-icon-sheet.js";
 import LogButton from "./view-log-button.js";
 import DeletedBranches from "./view-deleted-branches.js";
+import Files from "./view-files.js";
 
 // When the system's language isn't known yet, how long to wait before each next ask.
 const ASK_AGAIN = [1000, 3000, 10000];
@@ -58,6 +59,7 @@ export const VIEWS = {
   "menu": Menu, // popup menus (ui.js `openMenu`)
   "icon-sheet": IconSheet, // every Icon theme icon, for checking: tab.new { mod, props } only
   "deleted-branches": DeletedBranches, // Deleted Branches dialog
+  "files": Files, // Files panel: the `files` block of the main-git layout
 };
 
 // `mod.open:git-tools` (cmd-k) opens a copy with no view. No single app command both

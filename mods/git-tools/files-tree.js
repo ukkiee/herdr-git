@@ -81,10 +81,13 @@ const MAX_DEPTH = 40;
 
 // visibleRows: the tree as rows, top to bottom.
 //   entries: Map of folder path ("" for the root) → readFolder's entries. open: Set of
-//   folder paths shown open. A folder is drawn open only when it and every folder above
-//   it are open; an open folder not read yet has no rows under it.
-//   → [{ path, name, folder, depth, open }]
-export function visibleRows(entries, open) {
+//   folder paths shown open. failed: Set of open folders whose last read failed or found
+//   them gone. A folder is drawn open only when it and every folder above it are open.
+//   An open folder with no entries yet and not failed has one "reading" row under it:
+//   { path: "<folder>/", name: "", folder: false, depth, open: false, loading: true }
+//   (no real row's path ends in "/"). A failed folder has nothing under it.
+//   → [{ path, name, folder, depth, open, loading? }]
+export function visibleRows(entries, open, failed = new Set()) {
   const out = [];
   const walk = (prefix, depth) => {
     if (depth > MAX_DEPTH) return;
@@ -92,7 +95,9 @@ export function visibleRows(entries, open) {
       const path = prefix ? `${prefix}/${entry.name}` : entry.name;
       const isOpen = entry.dir && open.has(path);
       out.push({ path, name: entry.name, folder: entry.dir, depth, open: isOpen });
-      if (isOpen) walk(path, depth + 1);
+      if (!isOpen) continue;
+      if (entries.has(path)) walk(path, depth + 1);
+      else if (!failed.has(path) && depth < MAX_DEPTH) out.push({ path: `${path}/`, name: "", folder: false, depth: depth + 1, open: false, loading: true });
     }
   };
   walk("", 0);
@@ -107,8 +112,10 @@ export function visibleRows(entries, open) {
 //   at the ends. Right opens a closed folder, or goes to an open one's first child. Left
 //   closes an open folder, or goes to the parent folder; a row at the root stays. Enter
 //   opens or closes a folder and previews a file. With no chosen row (or one no longer
-//   shown) an arrow chooses the first row; another key changes nothing.
-export function moveKey(rows, current, key) {
+//   shown) an arrow chooses the first row; another key changes nothing. "Reading" rows
+//   (visibleRows) are passed over as if not there.
+export function moveKey(shown, current, key) {
+  const rows = shown.filter((r) => !r.loading);
   const result = (path, more = {}) => ({ current: path, expand: null, collapse: null, preview: null, ...more });
   const at = rows.findIndex((r) => r.path === current);
   const arrow = key === "up" || key === "down" || key === "left" || key === "right";

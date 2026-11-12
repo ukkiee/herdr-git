@@ -114,9 +114,46 @@ const entries = new Map([
     { path: "empty", name: "empty", folder: true, depth: 0, open: true },
     { path: "z.txt", name: "z.txt", folder: false, depth: 0, open: false },
   ]);
-  // An open folder not read yet shows no children.
-  assert.deepEqual(visibleRows(new Map([["", [{ name: "a", dir: true }]]]), new Set(["a"])).map((r) => r.path), ["a"]);
   assert.deepEqual(visibleRows(new Map(), new Set()), []);
+}
+
+// An open folder with nothing read for it yet (just pressed, or brought back open on
+// returning to a space) shows a "reading" row under it. A folder whose read failed or
+// that is gone shows nothing under it, not a "reading" row forever; an empty folder
+// shows nothing either.
+{
+  const tree = new Map([
+    ["", [{ name: "a", dir: true }, { name: "bad", dir: true }, { name: "empty", dir: true }, { name: "z.txt", dir: false }]],
+    ["empty", []],
+  ]);
+  const open = new Set(["a", "a/deeper", "bad", "empty"]);
+  assert.deepEqual(visibleRows(tree, open, new Set(["bad"])), [
+    { path: "a", name: "a", folder: true, depth: 0, open: true },
+    { path: "a/", name: "", folder: false, depth: 1, open: false, loading: true },
+    { path: "bad", name: "bad", folder: true, depth: 0, open: true },
+    { path: "empty", name: "empty", folder: true, depth: 0, open: true },
+    { path: "z.txt", name: "z.txt", folder: false, depth: 0, open: false },
+  ]);
+  // Read now: the row goes and what the folder holds takes its place.
+  tree.set("a", [{ name: "f.txt", dir: false }]);
+  assert.deepEqual(visibleRows(tree, open, new Set(["bad"])).map((r) => r.path), ["a", "a/f.txt", "bad", "empty", "z.txt"]);
+  // The root not read yet has no rows at all (the panel shows its own loading notice).
+  assert.deepEqual(visibleRows(new Map(), new Set(["a"])), []);
+}
+
+// The keys skip a "reading" row: it can't be chosen, and right on a folder still being
+// read stays on it.
+{
+  const rows = visibleRows(new Map([["", [{ name: "a", dir: true }, { name: "b.txt", dir: false }]]]), new Set(["a"]));
+  const stay = { expand: null, collapse: null, preview: null };
+  assert.deepEqual(rows.map((r) => r.path), ["a", "a/", "b.txt"]);
+  assert.deepEqual(moveKey(rows, "a", "down"), { current: "b.txt", ...stay });
+  assert.deepEqual(moveKey(rows, "b.txt", "up"), { current: "a", ...stay });
+  assert.deepEqual(moveKey(rows, "a", "right"), { current: "a", ...stay });
+  assert.deepEqual(moveKey(rows, "a/", "enter"), { current: null, ...stay });
+  const waiting = visibleRows(new Map([["", [{ name: "a", dir: true }]]]), new Set(["a"]));
+  assert.deepEqual(moveKey(waiting, null, "down"), { current: "a", ...stay });
+  assert.deepEqual(moveKey(waiting, "a", "down"), { current: "a", ...stay });
 }
 
 // Arrow keys: up and down walk the visible rows and stop at the ends. Right opens a closed

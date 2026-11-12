@@ -76,6 +76,7 @@ export default class FilesView {
     this.entries = new Map(); // folder path ("" for the root) → readFolder's entries
     this.open = new Set();
     this.pending = new Set(); // folders being read after a press
+    this.failed = new Set(); // open folders whose last read failed or found them gone
     this.marks = NO_LOOKUP; this.prefix = ""; this.repoRoot = null;
     this.rows = []; this.current = null;
     this.limited = false; this.gone = false; this.read = false; this.loading = false; this.again = false;
@@ -141,7 +142,7 @@ export default class FilesView {
     const platform = hostWindow()?.platform ?? null;
     cx.spawn(async (cx) => {
       try {
-        const next = new Map();
+        const next = new Map(), nextFailed = new Set();
         let limited = false, failed = null;
         const folders = ["", ...this.open];
         for (const path of folders) {
@@ -149,9 +150,10 @@ export default class FilesView {
           const r = await readFolder(exec, path ? `${root}/${path}` : root, { on, platform, room: roomFor(next, path) });
           if (this.context !== context) return;
           if (!r.ok) {
-            if (!path) { this.gone = r.gone; this.rootError = r.gone ? null : readError(r, root) || "?"; this.entries = new Map(); this.rebuild(); return; }
+            if (!path) { this.gone = r.gone; this.rootError = r.gone ? null : readError(r, root) || "?"; this.entries = new Map(); this.failed = new Set(); this.rebuild(); return; }
             // A folder deleted since it was opened just has nothing under it.
             if (!r.gone) failed = failed ?? readError(r, path);
+            nextFailed.add(path);
             continue;
           }
           next.set(path, r.entries);
@@ -159,12 +161,14 @@ export default class FilesView {
         }
         // Folders opened by a press while this read ran keep what that press read.
         for (const [path, entries] of this.entries) if (!folders.includes(path) && this.open.has(path)) next.set(path, entries);
+        for (const path of this.failed) if (!folders.includes(path) && this.open.has(path)) nextFailed.add(path);
         const m = await readMarks(exec, root, { on });
         if (this.context !== context) return;
         // Folders closed by a press while this read ran give their share back.
         for (const path of [...next.keys()]) if (path && !this.open.has(path)) next.delete(path);
+        for (const path of nextFailed) if (!this.open.has(path)) nextFailed.delete(path);
         this.gone = false; this.rootError = null;
-        this.entries = next; this.limited = limited;
+        this.entries = next; this.failed = nextFailed; this.limited = limited;
         // A failed git read keeps the marks it had and says nothing: the Commit panel
         // shows git's errors, and a machine without git would get one every 10 s.
         if (m.ok) { this.marks = markLookup(m.marks); this.prefix = m.repo?.prefix ?? ""; this.repoRoot = m.repo?.root ?? null; }
@@ -207,6 +211,7 @@ export default class FilesView {
       for (const folder of [...this.open]) if (folder === path || folder.startsWith(`${path}/`)) {
         this.open.delete(folder);
         this.entries.delete(folder);
+        this.failed.delete(folder);
       }
       this.rebuild();
       return;
@@ -220,8 +225,12 @@ export default class FilesView {
       try {
         const r = await readFolder(exec, `${root}/${path}`, { on, platform: hostWindow()?.platform ?? null, room: roomFor(this.entries, path) });
         if (this.context !== context || !this.open.has(path)) return;
-        if (r.ok) { this.entries.set(path, r.entries); this.limited = this.limited || r.limited; }
-        else if (!r.gone) this.error = readError(r, path) || null;
+        if (r.ok) { this.entries.set(path, r.entries); this.failed.delete(path); this.limited = this.limited || r.limited; }
+        else {
+          // Failed or gone: nothing under it, not a "reading" row that never ends.
+          this.failed.add(path);
+          if (!r.gone) this.error = readError(r, path) || null;
+        }
         this.rebuild();
       } finally {
         if (this.context === context) this.pending.delete(path);
@@ -284,7 +293,7 @@ export default class FilesView {
 
   // The tree as drawn, built when the data or the folding changes, never in render.
   rebuild() {
-    this.rows = visibleRows(this.entries, this.open);
+    this.rows = visibleRows(this.entries, this.open, this.failed);
     if (this.current && !this.rows.some((r) => r.path === this.current)) this.current = null;
   }
 
@@ -424,6 +433,12 @@ export default class FilesView {
 
   renderRow(i, t) {
     const r = this.rows[i];
+    if (r.loading) {
+      return row(`files-row-${r.path}`, t, { depth: r.depth })
+        .child(div().size(12).flex_none())
+        .child(svg(icon("spinner")).size(12).flex_none().text_color(t.dim).spin(900))
+        .child(div().flex_1().min_w(0).truncate().text_color(t.dim).child(this.t("ui.loading")));
+    }
     const mark = this.marks.mark(r.path);
     const ignored = mark === "ignored";
     const el = row(`files-row-${r.path}`, t, { selected: r.path === this.current, depth: r.depth })

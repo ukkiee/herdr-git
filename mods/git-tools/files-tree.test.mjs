@@ -38,6 +38,15 @@ import { markLookup, rankSearch, visibleRows, moveKey } from "./files-tree.js";
   assert.equal(m.dot("only-deleted"), true);
   assert.equal(m.dot("elsewhere"), false);
 
+  // The root inside an untracked folder: every path is added, a nearer ignored folder
+  // still wins, and folders get dots unless ignored.
+  const inside = markLookup({ "": "added", "out/": "ignored" });
+  assert.equal(inside.mark("a.txt"), "added");
+  assert.equal(inside.mark("src/deep/b.ts"), "added");
+  assert.equal(inside.mark("out/bin"), "ignored");
+  assert.equal(inside.dot("src"), true);
+  assert.equal(inside.dot("out"), false);
+
   const none = markLookup({});
   assert.equal(none.mark("a"), null);
   assert.equal(none.dot("a"), false);

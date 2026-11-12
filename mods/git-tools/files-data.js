@@ -130,7 +130,8 @@ function changeOf(xy) {
 //   marks: { [path]: "modified" | "added" | "deleted" | "conflict" | "ignored" }, paths
 //   from `folder`. Untracked files are "added". A key ending in "/" is a whole folder:
 //   an untracked folder ("added") or an ignored one ("ignored"); what's inside it isn't
-//   listed, so a node_modules costs one line. Deleted files are marked though they are
+//   listed, so a node_modules costs one line. The key "" is the folder read itself, when
+//   it sits inside an untracked or ignored folder. Deleted files are marked though they are
 //   no longer on disk (a folder's dot counts them). Paths elsewhere in the repository
 //   are left out.
 //   repo: { root, prefix }, or null outside a repository (marks is empty, ok is true).
@@ -143,7 +144,12 @@ export async function readMarks(exec, folder, { on = null } = {}) {
   const r = await git.read(folder, ["status", "--porcelain=v2", "-z", "--no-renames", "--ignored=matching", "--untracked-files=normal", "--", "."]);
   if (!r.ok) return { ok: false, repo: where.repo, marks: {}, err: r.err };
   const marks = {};
-  const put = (path, mark) => { if (path.startsWith(prefix) && path.length > prefix.length) marks[path.slice(prefix.length)] = mark; };
+  // Read from inside an untracked or ignored folder, git gives only that folder's line
+  // ("? newdir/"): it holds the folder read, so it marks all of it.
+  const put = (path, mark) => {
+    if (path.startsWith(prefix) && path.length > prefix.length) marks[path.slice(prefix.length)] = mark;
+    else if (path.endsWith("/") && prefix.startsWith(path)) marks[""] = mark;
+  };
   for (const entry of r.out.split("\0")) {
     const kind = entry[0];
     if (kind === "1") put(pathAfter(entry, 8), changeOf(entry.slice(2, 4)));

@@ -19,20 +19,21 @@ function ancestors(path) {
 //   mark(path) → "modified" | "added" | "deleted" | "conflict" | "ignored" | null. A path
 //   inside an ignored folder is "ignored", inside an untracked folder "added" (the nearest
 //   such folder decides). A folder's own mark is that of the whole folder, if git gave one.
+//   The key "" marks every path: the tree's root is inside such a folder.
 //   dot(folder) → true when a changed file sits anywhere below it. Ignored files don't
 //   count; deleted ones do.
 //   Build it once per read: it indexes every mark.
 export function markLookup(marks) {
   const changed = new Set();
   for (const [key, mark] of Object.entries(marks)) {
-    if (mark === "ignored") continue;
+    if (mark === "ignored" || !key) continue;
     const path = key.endsWith("/") ? key.slice(0, -1) : key;
     if (key.endsWith("/")) changed.add(path);
     for (const folder of ancestors(path)) changed.add(folder);
   }
   const wide = (path) => {
     for (const folder of ancestors(path)) if (marks[`${folder}/`]) return marks[`${folder}/`];
-    return null;
+    return marks[""] ?? null;
   };
   const mark = (path) => marks[path] ?? marks[`${path}/`] ?? wide(path);
   // A folder inside an untracked folder holds only new files, unless it is itself ignored.

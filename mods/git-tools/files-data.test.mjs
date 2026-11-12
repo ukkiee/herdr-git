@@ -202,6 +202,38 @@ const gitState = (repo) => {
   assert.equal(gitState(repo), before);
 }
 
+// A folder read from inside an untracked folder or an ignored one: git gives that whole
+// folder as one line, and every path under the folder read takes its mark (an added one
+// with dots, an ignored one dim without).
+{
+  const repo = init("marks-inside");
+  writeFileSync(`${repo}/.gitignore`, "node_modules/\n");
+  writeFileSync(`${repo}/t.txt`, "t");
+  sh(repo, "git add -A && git commit -q -m base");
+  mkdirSync(`${repo}/newdir/sub/deeper`, { recursive: true });
+  writeFileSync(`${repo}/newdir/sub/deeper/y.js`, "y");
+  writeFileSync(`${repo}/newdir/sub/x.js`, "x");
+  mkdirSync(`${repo}/node_modules/foo/lib`, { recursive: true });
+  writeFileSync(`${repo}/node_modules/foo/lib/i.js`, "i");
+
+  for (const at of ["newdir", "newdir/sub"]) {
+    const r = await readMarks(exec, `${repo}/${at}`);
+    assert.equal(r.ok, true);
+    const m = markLookup(r.marks);
+    const name = at === "newdir" ? "sub/x.js" : "x.js";
+    assert.equal(m.mark(name), "added", at);
+    assert.equal(m.mark(at === "newdir" ? "sub/deeper" : "deeper"), "added", at);
+    assert.equal(m.dot(at === "newdir" ? "sub" : "deeper"), true, at);
+  }
+
+  const ignored = await readMarks(exec, `${repo}/node_modules/foo`);
+  assert.equal(ignored.ok, true);
+  const mi = markLookup(ignored.marks);
+  assert.equal(mi.mark("lib"), "ignored");
+  assert.equal(mi.mark("lib/i.js"), "ignored");
+  assert.equal(mi.dot("lib"), false);
+}
+
 // Outside a repository there are no marks, and that is not a failure.
 {
   const dir = folder("plain");

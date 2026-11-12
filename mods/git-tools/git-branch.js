@@ -242,6 +242,9 @@ export async function restoreBranch(git, root, { name, hash, upstream = null } =
 // entries itself.
 const DELETED = "refs/git-tools/deleted-branches";
 const PARKED = "parked";
+// The commit the ref steps aside to is the mod's own, made whether or not the user has
+// set a name (git-snapshot.js names its snapshots the same way).
+const IDENTITY = ["-c", "user.name=git-tools", "-c", "user.email=git-tools@localhost"];
 
 // A reflog message is one line in which git squeezes every run of whitespace into one
 // space, so each field must be a single word: "%", whitespace and control characters
@@ -267,7 +270,7 @@ async function refValue(git, root, ref) {
   return { ok: false, err: r.err || `git rev-parse ${ref} failed.` };
 }
 
-// Where the ref rests between deletes: { ok, hash, head }. A commit HEAD reaches adds
+// Where the ref rests between deletes: { ok, hash }. A commit HEAD reaches adds
 // nothing to `log --all`, so the one it rests on now stays while HEAD still reaches it
 // (no walk through the history on every delete). Otherwise (the first delete, or HEAD's
 // history was rewritten under it) it is the root of HEAD's first-parent history.
@@ -278,13 +281,13 @@ async function restingCommit(git, root, now, tip) {
   const head = at.hash;
   if (head && now) {
     const reached = await git.read(root, ["merge-base", "--is-ancestor", now, head]);
-    if (reached.ok) return { ok: true, hash: now, head };
+    if (reached.ok) return { ok: true, hash: now };
     if (reached.code !== 1) return { ok: false, err: reached.err || "git merge-base failed." };
   }
   const r = await git.read(root, ["rev-list", "--first-parent", "--max-parents=0", head ?? tip, "--"]);
   const hash = r.ok ? r.out.split("\n")[0].trim() : "";
   if (!hash) return { ok: false, err: r.err || "git rev-list found no root commit." };
-  return { ok: true, hash, head };
+  return { ok: true, hash };
 }
 
 // Records a branch about to be deleted ({ name, hash, upstream }): { ok } or
@@ -297,17 +300,16 @@ async function recordDeleted(git, root, branch) {
   if (!now.ok) return now;
   const rest = await restingCommit(git, root, now.hash, branch.hash);
   if (!rest.ok) return rest;
-  // git adds no reflog entry for a move to the commit the ref is on already: step away
-  // first, to a commit HEAD reaches. With none (HEAD is on that very commit and it is
-  // the root), only `reflog write` can add the entry; an older git without it refuses,
-  // and the branch is not deleted.
+  // git adds no reflog entry for a move to the commit the ref is on already, so the ref
+  // steps aside first, to a commit made for it: the branch's tree, no parent. Only this
+  // reflog holds it ("parked", left out of the list), so no list shows it and it expires
+  // with the record. (`reflog write` could add the entry in place, but only a recent git
+  // has it.)
   if (now.hash === branch.hash) {
-    const away = [rest.hash, rest.head].find((hash) => hash && hash !== branch.hash);
-    if (!away) {
-      const r = await git(root, ["reflog", "write", DELETED, branch.hash, branch.hash, message]);
-      return r.ok ? { ok: true } : r;
-    }
-    const r = await move(away, PARKED);
+    const made = await git(root, [...IDENTITY, "commit-tree", "-m", "git-tools: deleted-branches", `${branch.hash}^{tree}`]);
+    const aside = made.ok ? made.out.trim() : "";
+    if (!aside || aside === branch.hash) return { ok: false, err: made.err || "git commit-tree failed." };
+    const r = await move(aside, PARKED);
     if (!r.ok) return r;
   }
   const r = await move(branch.hash, message);

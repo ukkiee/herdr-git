@@ -876,6 +876,49 @@ const ended = Math.floor(Date.now() / 1000);
   assert.deepEqual(r.branches.map((b) => b.name), order.slice(0, 50));
 }
 
+// A git runner like an older git without `reflog write`, for a user who has set no name
+// or email anywhere: those variables are left out, no global or system config is read,
+// and the repository refuses to guess an identity (user.useConfigOnly).
+const plainGit = makeGit((cmd, args = [], { cwd } = {}) => new Promise((resolve, reject) => {
+  const i = args.indexOf("reflog");
+  if (i >= 0 && args[i + 1] === "write") return resolve({ code: 129, stdout: "", stderr: "error: unknown subcommand: `write'" });
+  const env = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" };
+  for (const key of ["GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL", "EMAIL"]) delete env[key];
+  execFile(cmd, args, { cwd, env, maxBuffer: 64 * 1024 * 1024 }, (err, stdout, stderr) => {
+    if (err && typeof err.code !== "number") return reject(err);
+    resolve({ code: err ? err.code : 0, stdout, stderr });
+  });
+}), null);
+
+// A repository of one commit, HEAD on it, and two branches on it too: the hidden ref
+// rests on that commit, so the second Delete has to step aside to record. Both are
+// recorded and deleted, both come back, and nothing the stepping aside made shows in
+// `log --all`, in the branch or tag lists, or in the list of deleted branches.
+{
+  const dir = lone("one-commit");
+  raw(dir, ["config", "user.useConfigOnly", "true"]);
+  const c1 = raw(dir, ["rev-parse", "HEAD"]);
+  raw(dir, ["branch", "--no-track", "first", c1]);
+  raw(dir, ["branch", "--no-track", "second", c1]);
+  for (const name of ["first", "second"]) {
+    const del = await deleteBranch(plainGit, dir, name);
+    assert.equal(del.ok, true, `${name}: ${del.err}`);
+    assert.equal(exists(dir, `refs/heads/${name}`), false);
+  }
+  assert.deepEqual(logAll(dir), [c1]);
+  assert.deepEqual(refsShown(dir), [c1]);
+  assert.equal(raw(dir, ["rev-parse", DELETED]), c1);
+  const list = await readDeletedBranches(plainGit, dir);
+  assert.deepEqual(list.branches.map((b) => [b.name, b.hash, b.restorable]), [["second", c1, true], ["first", c1, true]]);
+  const back = await restoreBranches(plainGit, dir, list.branches);
+  assert.equal(back.ok, true, back.err);
+  assert.equal(raw(dir, ["rev-parse", "refs/heads/first"]), c1);
+  assert.equal(raw(dir, ["rev-parse", "refs/heads/second"]), c1);
+  assert.equal(current(dir), "main");
+  assert.deepEqual(logAll(dir), [c1]);
+  assert.deepEqual((await readDeletedBranches(plainGit, dir)).branches, []);
+}
+
 // ---- how long a deleted branch is kept: git's own reflog expiry, default settings
 
 // A git runner whose commands run `days` ago: the records it writes carry that time.

@@ -447,6 +447,78 @@ git add -A && git commit -q -m first`);
   assert.equal(text(repo, "plain"), "work\n");
 }
 
+// Staging that changed after the rollback is never overwritten. A file whose index holds
+// something else now comes back without its staging, with the reason; one already staged
+// as recorded needs nothing. A path whose file is skipped keeps its index. A path that was
+// in a conflict comes back as a file only, with the reason. Worded in Korean, no English
+// reason is left.
+{
+  const repo = init("restore-staging-kept");
+  sh(repo, "for f in restaged already edited clash plain; do echo head > $f; done; git add -A && git commit -q -m first");
+  sh(repo, "for f in restaged already edited; do echo index > $f && git add $f && echo work > $f; done");
+  const old = sh(repo, "git rev-parse HEAD:clash").trim();
+  const ours = sh(repo, "echo ours | git hash-object -w --stdin").trim(), theirs = sh(repo, "echo theirs | git hash-object -w --stdin").trim();
+  sh(repo, `printf '0 ${"0".repeat(40)}\\tclash\\n100644 ${old} 1\\tclash\\n100644 ${ours} 2\\tclash\\n100644 ${theirs} 3\\tclash\\n' | git update-index --index-info`);
+  writeFileSync(`${repo}/clash`, "<<<<<<< ours\nours\n=======\ntheirs\n>>>>>>> theirs\n");
+  writeFileSync(`${repo}/plain`, "plain-work\n");
+  const names = ["restaged", "already", "edited", "clash", "plain"];
+  const snapshot = await back(repo, names.map((name) => [name, name === "clash" ? "conflict" : "modified"]));
+  sh(repo, "echo mine > restaged && git add restaged && echo head > restaged");
+  sh(repo, "echo index > already && git add already && echo head > already");
+  sh(repo, "echo mine > edited");
+  const before = { restaged: sh(repo, "git ls-files -s -- restaged"), edited: sh(repo, "git ls-files -s -- edited"), clash: sh(repo, "git ls-files -s -- clash") };
+
+  const r = await restore(git, repo, { snapshot, paths: names });
+  assert.equal(r.ok, false);
+  assert.deepEqual(r.restored.sort(), ["already", "clash", "plain", "restaged"]);
+  assert.deepEqual(skips(r), { edited: "it was changed after the rollback" });
+  assert.deepEqual(Object.fromEntries(r.stagingSkipped.map((s) => [s.path, s.reason])), {
+    restaged: "something else is staged for it now",
+    clash: "it was in a conflict, and a conflict can't be brought back",
+  });
+  for (const s of r.stagingSkipped) assert.ok(en[s.msg?.key], `${s.path}: ${s.msg?.key}`);
+  assert.equal(text(repo, "restaged"), "work\n");
+  assert.equal(sh(repo, "git ls-files -s -- restaged"), before.restaged);
+  assert.equal(sh(repo, "git show :already"), "index\n");
+  assert.equal(text(repo, "edited"), "mine\n");
+  assert.equal(sh(repo, "git ls-files -s -- edited"), before.edited);
+  assert.match(text(repo, "clash"), /^<<<<<<< ours/);
+  assert.equal(sh(repo, "git ls-files -s -- clash"), before.clash);
+  assert.deepEqual(status(repo).filter((line) => line.endsWith(" clash") || line.endsWith(" plain")), [" M clash", " M plain"]);
+  assert.equal(r.msg?.key, "restore.notAllStaging");
+  assert.match(r.err, /^restaged: something else is staged for it now$/m);
+  assert.match(r.err, /^edited: it was changed after the rollback$/m);
+  const worded = (lang) => { const t = translator(lang), msg = wordRestore(t, r); return t(msg.key, msg.args); };
+  assert.equal(worded("en"), r.err);
+  assert.doesNotMatch(worded("ko"), /is staged|a conflict|changed after|Restored|staging/);
+
+  // Only staging left behind: its own words.
+  sh(repo, "git checkout -q HEAD -- restaged plain && echo mine > restaged && git add restaged && echo head > restaged");
+  const only = await restore(git, repo, { snapshot, paths: ["restaged", "plain"] });
+  assert.equal(only.ok, false);
+  assert.deepEqual(only.restored.sort(), ["plain", "restaged"]);
+  assert.deepEqual(only.skipped, []);
+  assert.equal(only.msg?.key, "restore.stagingNotAll");
+  assert.equal((() => { const t = translator("en"), msg = wordRestore(t, only); return t(msg.key, msg.args); })(), only.err);
+}
+
+// A snapshot with one parent (made before snapshots held the index) restores the working
+// tree only: what was staged then stays unstaged, and the index is left as it is.
+{
+  const repo = init("restore-old");
+  sh(repo, "echo head > a && echo head > b && git add -A && git commit -q -m first");
+  sh(repo, "echo index > a && git add a && echo work > a && echo work > b");
+  const snapshot = oldSnapshot(repo, ["a", "b"]);
+  const index = entries(repo);
+  const r = await restore(git, repo, { snapshot, paths: ["a", "b"] });
+  assert.equal(r.ok, true, r.err);
+  assert.deepEqual(r.restored.sort(), ["a", "b"]);
+  assert.deepEqual(r.stagingSkipped, []);
+  assert.equal(entries(repo), index);
+  assert.deepEqual(status(repo), [" M a", " M b"]);
+  assert.equal(text(repo, "a"), "work\n");
+}
+
 // An added file comes back only where nothing is: a file, a folder, an empty folder, a
 // link, or a file where a folder above it should be stays as it is, and so does a file git
 // tracks there now. A file HEAD has by now (a later commit added it) is skipped too.

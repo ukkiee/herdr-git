@@ -303,8 +303,13 @@ async function restingCommit(git, root, now, tip) {
 }
 
 // Records a branch about to be deleted ({ name, hash, upstream }): { ok } or
-// { ok: false, err }. On failure the ref may be left on the branch's own commit, which
-// the branch still has, so nothing shows that wasn't shown before.
+// { ok: false, err }. When a move of the ref fails, the ref is moved back to rest where
+// it would have rested, so `log --all` shows what it showed before. If that move fails
+// too (whatever stopped the first, say a lock another git holds), the ref stays where the
+// last move left it: on the commit made to step aside, which `log --all` then shows until
+// the next delete rests it again, or on the branch's own commit, which the branch still
+// has. A "deleted" entry already written stays in the reflog: the list leaves it out
+// while a branch of that name is at that commit.
 async function recordDeleted(git, root, branch) {
   const move = (to, message) => git(root, ["update-ref", "--create-reflog", "-m", message, DELETED, to]);
   const message = recordMessage(branch);
@@ -312,6 +317,7 @@ async function recordDeleted(git, root, branch) {
   if (!now.ok) return now;
   const rest = await restingCommit(git, root, now.hash, branch.hash);
   if (!rest.ok) return rest;
+  const back = async (failed) => { await move(rest.hash, PARKED); return failed; };
   // git adds no reflog entry for a move to the commit the ref is on already, so the ref
   // steps aside first, to a commit made for it: the branch's tree, no parent. Only this
   // reflog holds it ("parked", left out of the list), so no list shows it and it expires
@@ -322,13 +328,13 @@ async function recordDeleted(git, root, branch) {
     const aside = made.ok ? made.out.trim() : "";
     if (!aside || aside === branch.hash) return { ok: false, err: made.err || "git commit-tree failed." };
     const r = await move(aside, PARKED);
-    if (!r.ok) return r;
+    if (!r.ok) return back(r);
   }
   const r = await move(branch.hash, message);
-  if (!r.ok) return r;
+  if (!r.ok) return back(r);
   if (rest.hash === branch.hash) return { ok: true };
   const parked = await move(rest.hash, PARKED);
-  return parked.ok ? { ok: true } : parked;
+  return parked.ok ? { ok: true } : back(parked);
 }
 
 const DELETED_LIMIT = 50;

@@ -998,6 +998,34 @@ for (const [days, kept] of [[29, true], [31, false]]) {
   assert.deepEqual([r.ok, r.err, r.restored, r.skipped], [true, "", [{ name: "one", hash: one }], []]);
 }
 
+// A record that fails at any of its moves of the hidden ref deletes nothing and leaves the
+// ref where it rests, so `git log --all` shows what it showed before. A branch on the
+// commit the ref rests on takes two (stepping aside, the record, which is where it rests);
+// one elsewhere takes two too (the record, coming back to rest).
+{
+  const dir = placed("record-fails");
+  const b1 = raw(dir, ["rev-parse", "HEAD"]);
+  raw(dir, ["branch", "--no-track", "first", b1]);
+  await deleted(dir, "first");
+  raw(dir, ["branch", "--no-track", "at-rest", b1]);
+  const s1 = branchAt(dir, "elsewhere", "e.txt", "e one");
+  for (const name of ["at-rest", "elsewhere"]) {
+    for (const nth of [1, 2]) {
+      const before = { all: logAll(dir), ref: raw(dir, ["rev-parse", DELETED]) };
+      let seen = 0;
+      const run = async (cwd, args, options) => (args.includes("update-ref") && args.includes(DELETED) && ++seen === nth ? { ok: false, code: 128, out: "", err: "fatal: injected failure" } : git(cwd, args, options));
+      run.read = git.read;
+      const r = await deleteBranch(run, dir, name, { confirmed: true });
+      assert.equal(r.ok, false, `${name} ${nth}`);
+      assert.equal(r.msg?.key, "branches.notRecorded", `${name} ${nth}`);
+      assert.equal(exists(dir, `refs/heads/${name}`), true, `${name} ${nth}`);
+      assert.equal(raw(dir, ["rev-parse", DELETED]), b1, `${name} ${nth}`);
+      assert.deepEqual(logAll(dir), before.all, `${name} ${nth}`);
+    }
+  }
+  assert.equal(raw(dir, ["rev-parse", "refs/heads/elsewhere"]), s1);
+}
+
 // A branch another worktree has checked out is refused before anything is recorded, with
 // where it is checked out. After a commit there, the deleted list still doesn't have it.
 {

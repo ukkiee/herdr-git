@@ -1,8 +1,9 @@
 // Restore dialog: the repository's Rollback snapshots on the left (newest first, the
 // newest or the one asked for selected), the chosen snapshot's files as a checkbox tree on
 // the right (all checked), Close and Restore at the bottom. Double-clicking a file opens
-// the snapshot's change of it in a Diff tab. After Restore the dialog stays open with what
-// was restored and what was left, and why.
+// the snapshot's change of it in a Diff tab. Restore brings back the files and what was
+// staged of them. After Restore the dialog stays open with what was restored, what was
+// left, and whose staging was left, and why.
 //
 // The dialog doesn't write itself: it asks the Commit panel copy that opened it
 // (props.owner) to restore under the repository's write lock (serveRestore, ui.js
@@ -60,6 +61,10 @@ export function serveRestore(panel, e, cx) {
 }
 
 const stop = (_e, cx) => cx.stop_propagation();
+
+// A restore that went through but left some paths, or their staging, as they were: shown
+// as its result line (each path and why), not as an error.
+const PARTLY = new Set(["restore.notAll", "restore.stagingNotAll", "restore.notAllStaging"]);
 
 // Same colors as the Commit panel's rows.
 function statusColor(status, t) {
@@ -188,7 +193,7 @@ export default class RestoreView {
     askOwner(this, "restore", { root: this.root, on: this.on, snapshot: snapshot.hash, paths }, "ui.commitPanel", cx, (r) => {
       this.running = false;
       if (r.ok) this.result = { msg: { key: "restore.restored", args: { n: paths.length } }, err: "" };
-      else if (r.msg?.key === "restore.notAll") this.result = { msg: r.msg, err: r.err };
+      else if (PARTLY.has(r.msg?.key)) this.result = { msg: r.msg, err: r.err };
       else this.error = sentence(this.t, r.msg, r.err) || this.t("ui.gitFailed");
     });
     return true;

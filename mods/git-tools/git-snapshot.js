@@ -1,8 +1,11 @@
 // Rollback snapshots: what a Rollback threw away, kept inside the repository so Restore can
 // bring it back (docs/adr/0002-rollback-snapshots-in-a-private-ref.md).
-// A snapshot is a commit whose parent is the HEAD of that moment and whose tree is HEAD's
-// with the rolled-back paths as the working tree had them, so the snapshot against its
-// parent is the change that was rolled back. Snapshots pile up in the reflog of SNAPSHOTS,
+// A snapshot is a commit whose first parent is the HEAD of that moment and whose tree is
+// HEAD's with the rolled-back paths as the working tree had them, so the snapshot against
+// its first parent is the change that was rolled back. Its second parent is a commit on
+// that HEAD whose tree holds the same paths as the index had them (what was staged), for
+// Restore to stage again. Older snapshots have no second parent and are read the same way,
+// without staging. Snapshots pile up in the reflog of SNAPSHOTS,
 // which is not a branch or a tag: no branch list, tag list, Commit list or push sees it.
 // No `herdr` import: node tests it against real repositories (git-snapshot.test.mjs).
 
@@ -43,11 +46,13 @@ async function headCommit(git, root) {
 // record(git, root, paths, copy) → { ok, code, out, err, msg?, snapshot }
 //   Records `paths` as the working tree has them now (a file's content, a link, or its
 //   absence) on top of HEAD, as a new snapshot. snapshot: its commit hash, or null when
-//   `paths` is empty. The real index and the working tree are not touched: the tree is
-//   built in the scratch index of `copy` (the calling copy's id, lower-case hex), which
-//   goes in the message's body too. Fails without an id, or with git's words when any step
-//   fails, and then no snapshot is added. The tree is checked before it becomes a
-//   snapshot: every path it changes against HEAD must be one of `paths`.
+//   `paths` is empty. With a commit, the index of `paths` is recorded too, as the second
+//   parent (indexCommit); paths in a conflict are named in the message's body. The real
+//   index and the working tree are not touched: the trees are built in the scratch index
+//   of `copy` (the calling copy's id, lower-case hex), which goes in the message's body
+//   too. Fails without an id, or with git's words when any step fails, and then no
+//   snapshot is added. Each tree is checked before it becomes part of a snapshot: every
+//   path it changes against HEAD must be one of `paths`.
 export async function record(git, root, paths, copy) {
   if (!COPY.test(String(copy ?? ""))) return { ...noCopy, snapshot: null };
   if (!paths.length) return { ok: true, code: 0, out: "", err: "", snapshot: null };

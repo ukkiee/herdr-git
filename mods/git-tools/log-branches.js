@@ -1,5 +1,5 @@
 // Branch tree: the left column of the Log panel. A vertical toolbar (New Branch, Delete,
-// Fetch, Expand All, Collapse All), a filter input, and the tree: HEAD, then Local and
+// Deleted Branches, Fetch, Expand All, Collapse All), a filter input, and the tree: HEAD, then Local and
 // Remote with "/" in a name making folders.
 //
 // A part of the Log panel: `host` is described at the top of log-list.js. Clicking a
@@ -7,9 +7,10 @@
 // A checkout or a delete takes the repository's write lock through host.setBusy, and
 // when it ends every screen on the repository is told to read again (ui.js `broadcast`),
 // this panel included. While anyone holds the lock (a Fetch here, a commit in the Commit
-// panel) Checkout, New Branch and Delete don't start (host.writeBlock()). The New Branch
-// and Delete Branch dialogs are opened with this panel as their owner: it runs their
-// writes (view-branch-new.js serveBranch).
+// panel) Checkout, New Branch and Delete don't start (host.writeBlock()). The New Branch,
+// Delete Branch and Deleted Branches dialogs are opened with this panel as their owner:
+// it runs their writes (view-branch-new.js serveBranch, view-deleted-branches.js
+// serveDeletedBranches).
 //
 // Two rows can be marked: the one the Commit list is limited to (host.branch), and the
 // cursor, the row last clicked or reached with the arrow keys. The toolbar's Delete and
@@ -24,6 +25,7 @@ import { readBranches, checkout, deleteBranch } from "./git-branch.js";
 import { shortenMiddle } from "./git-log.js";
 import { buildRows, folderKeys, parentIndex } from "./tree.js";
 import { openBranchNew, openBranchDelete } from "./view-branch-new.js";
+import { openDeletedBranches } from "./view-deleted-branches.js";
 import { icon, row, iconButton, notice, broadcast, openMenu, sentence, WindowedList } from "./ui.js";
 
 const GROUPS = [["local", "log.local"], ["remote", "log.remote"]];
@@ -304,6 +306,15 @@ export default class LogBranches {
     }, cx);
   }
 
+  // Opens the Deleted Branches dialog on this repository. It opens while another write
+  // runs too: the list reads, and the dialog keeps Restore off until the write ends.
+  deletedBranches(cx) {
+    const { host } = this, repo = host.repo;
+    if (!repo || !this.data) return;
+    openDeletedBranches({ root: repo.root, on: repo.on, chosen: Boolean(host.fixed), owner: host.bus.id, lang: host.lang });
+    cx.notify();
+  }
+
   menu(m, cx) {
     const b = this.target(m);
     if (!b) return;
@@ -333,7 +344,8 @@ export default class LogBranches {
   //   branches-end, branches-page-down, branches-page-up: move, fold
   //   branches-toggle: what a click does (limit the Commit list, fold a folder)
   //   branches-menu, branches-checkout, branches-new-from, branches-delete: that row
-  //   branches-new (from HEAD), branches-fetch, branches-expand-all,
+  //   branches-new (from HEAD), branches-deleted (the Deleted Branches dialog),
+  //   branches-fetch, branches-expand-all,
   //   branches-collapse-all, branches-focus, branches-filter-focus,
   //   branches-filter:<text> (sets the filter input; no text clears it)
   command(name, cx) {
@@ -352,6 +364,7 @@ export default class LogBranches {
     else if (name === "branches-new-from") this.newBranch(this.target(m), cx);
     else if (name === "branches-new") this.newBranch(null, cx);
     else if (name === "branches-delete") this.remove(this.target(m), cx);
+    else if (name === "branches-deleted") this.deletedBranches(cx);
     else if (name === "branches-fetch") this.host.fetch(cx);
     else if (name === "branches-expand-all") this.expandAll(cx);
     else if (name === "branches-collapse-all") this.collapseAll(cx);
@@ -401,6 +414,7 @@ export default class LogBranches {
     return v_flex().id("log-branch-tools").flex_none().w(30).h_full().py(5).gap(2).items_center().border_r(1).border_color(t.border)
       .child(iconButton("log-branch-new", "plus", t, { title: writing ?? tr("log.newBranch"), disabled: !this.data || busy, onClick: (_e, cx) => this.newBranch(null, cx) }))
       .child(iconButton("log-branch-delete", "branch-delete", t, { title: block ?? writing ?? tr("log.deleteBranch", { name: b.name }), disabled: Boolean(block) || busy, busy: host.writingHere()?.key === "log.deleting", onClick: (_e, cx) => this.remove(b, cx) }))
+      .child(iconButton("log-branch-deleted", "restore", t, { title: tr("branches.openDeleted"), disabled: !this.data, onClick: (_e, cx) => this.deletedBranches(cx) }))
       .child(iconButton("log-branch-fetch", "fetch", t, { title: writing ?? tr("log.fetch"), disabled: busy, busy: host.writingHere()?.key === "log.fetching", onClick: (_e, cx) => host.fetch(cx) }))
       .child(div().w(16).h(1).my(3).bg(t.border))
       .child(iconButton("log-branch-expand", "expand-all", t, { title: tr("log.expandAll"), onClick: (_e, cx) => this.expandAll(cx) }))

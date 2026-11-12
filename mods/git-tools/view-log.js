@@ -20,6 +20,7 @@ import { fetchAll, restoreBranch } from "./git-branch.js";
 import { location, panelFrame, toolbar, spacer, iconButton, notice, notRepository, errorStrip, noteBar, sentence, toggleLogPanel, logPanelShown, broadcast, scriptedRepo, takeWrite, releaseWrite, writeBlock, writeName, writingOn, readBlocked, fromRepo } from "./ui.js";
 import { sameRepo } from "./lock.js";
 import { serveBranch } from "./view-branch-new.js";
+import { serveDeletedBranches } from "./view-deleted-branches.js";
 import LogBranches from "./log-branches.js";
 import LogFilters from "./log-filters.js";
 import LogList from "./log-list.js";
@@ -191,9 +192,9 @@ export default class LogView {
     else if (this.writeError) { if (this.error === this.writeError) this.fail(null, cx); this.writeError = null; }
   }
 
-  // The New Branch and Delete Branch dialogs this panel opened ask it to run their
-  // writes, so the branch and its result outlive the dialog.
-  serve(e, cx) { return serveBranch(this, e, cx); }
+  // The New Branch, Delete Branch and Deleted Branches dialogs this panel opened ask it
+  // to run their writes, so the branches and the result outlive the dialog.
+  serve(e, cx) { return serveBranch(this, e, cx) || serveDeletedBranches(this, e, cx); }
 
   // noteDeleted(repo, deleted): a Delete on `repo` deleted a branch (git-branch.js
   // deleteBranch's `deleted`); its notice replaces the one before. A refused or

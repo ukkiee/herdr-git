@@ -230,4 +230,84 @@ const byPath = (files) => [...files].sort((a, b) => (a.path < b.path ? -1 : 1));
   ]);
 }
 
+// HEAD on a merge commit: what the merge brought into the branch (against the first
+// parent), not what the merged branch was missing.
+{
+  const repo = init("last-merge");
+  write(repo, "base.txt", "base\n");
+  sh(repo, "git add -A && git commit -q -m base");
+  sh(repo, "git checkout -q -b topic");
+  write(repo, "topic.txt", "from topic\n");
+  write(repo, "base.txt", "base\nchanged on topic\n");
+  sh(repo, "git add -A && git commit -q -m 'topic work'");
+  sh(repo, "git checkout -q main");
+  write(repo, "main-only.txt", "from main\n");
+  sh(repo, "git add -A && git commit -q -m 'main work'");
+  sh(repo, "git merge -q --no-ff -m 'Merge topic' topic");
+
+  const r = await readLastCommit(git, repo);
+  assert.equal(r.ok, true, r.err);
+  assert.equal(r.hash, head(repo));
+  assert.equal(r.subject, "Merge topic");
+  assert.deepEqual(byPath(r.files), [
+    { path: "base.txt", status: "modified", from: null },
+    { path: "topic.txt", status: "added", from: null },
+  ]);
+}
+
+// HEAD on the first commit (no parent): every file in it, added.
+{
+  const repo = init("last-root");
+  write(repo, "a.txt", "a\n");
+  write(repo, "lib/b.txt", "b\n");
+  sh(repo, "git add -A && git commit -q -m 'the very first'");
+
+  const r = await readLastCommit(git, repo);
+  assert.equal(r.ok, true, r.err);
+  assert.equal(r.subject, "the very first");
+  assert.deepEqual(byPath(r.files), [
+    { path: "a.txt", status: "added", from: null },
+    { path: "lib/b.txt", status: "added", from: null },
+  ]);
+}
+
+// No commit yet: no last commit, and that is not an error. Outside a repository it is.
+{
+  const repo = init("last-unborn");
+  write(repo, "a.txt", "a\n");
+  sh(repo, "git add -A");
+  const r = await readLastCommit(git, repo);
+  assert.deepEqual(r, { ok: true, err: "", hash: null, subject: "", files: [], same: false });
+
+  const elsewhere = await readLastCommit(git, `${base}/nowhere`);
+  assert.equal(elsewhere.ok, false);
+  assert.notEqual(elsewhere.err, "");
+  assert.equal(elsewhere.hash, null);
+}
+
+// Asked again with the hash read before: while HEAD stays there it says so and reads
+// nothing more; once HEAD moves (a commit, an amend) the new commit comes back whole.
+{
+  const repo = init("last-known");
+  write(repo, "a.txt", "1\n");
+  sh(repo, "git add -A && git commit -q -m one");
+  const first = await readLastCommit(git, repo);
+
+  const again = await readLastCommit(git, repo, { known: first.hash });
+  assert.deepEqual([again.ok, again.hash, again.same], [true, first.hash, true]);
+
+  write(repo, "b.txt", "2\n");
+  sh(repo, "git add -A && git commit -q --amend -m 'one, amended'");
+  const amended = await readLastCommit(git, repo, { known: first.hash });
+  assert.equal(amended.ok, true, amended.err);
+  assert.equal(amended.same, false);
+  assert.equal(amended.hash, head(repo));
+  assert.notEqual(amended.hash, first.hash);
+  assert.equal(amended.subject, "one, amended");
+  assert.deepEqual(byPath(amended.files), [
+    { path: "a.txt", status: "added", from: null },
+    { path: "b.txt", status: "added", from: null },
+  ]);
+}
+
 console.log("ok");

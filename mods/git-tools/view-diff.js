@@ -2,8 +2,12 @@
 // and its Editor can't color a line's background, so each line is a row of plain elements
 // (no syntax highlighting, no side-by-side view).
 //
-// props: { view: "diff", root, on, path, commit, status } (see openDiff). They are saved
-// with the tab, so the tab reads its diff again after a restart.
+// props: { view: "diff", root, on, path, commit, status, oldPath } (see openDiff). They are
+// saved with the tab, so the tab reads its diff again after a restart.
+//
+// A working file's diff follows the file: it is read again when a folder watch reports a
+// change that can touch it (this computer only), every POLL, and after a git write
+// another copy announced. A commit's diff never changes and is read once.
 //
 // Commands (`git-tools.<name>`, for keys and scripts; the same as the keys while the tab
 // has the keyboard): refresh, diff-up, diff-down, diff-page-up, diff-page-down, diff-top,
@@ -11,12 +15,12 @@
 
 import { div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { exec, theme, settings } from "herdr";
+import { exec, theme, settings, watchFolder } from "herdr";
 import { openTab, notice, iconButton, errorStrip, spacer, fileGlyph, darkLook, WindowedList, sentence } from "./ui.js";
 import { makeGit } from "./git.js";
-import { readDiff, MAX_ROWS, MAX_CHARS } from "./git-diff.js";
+import { readDiff, touchesDiff, MAX_ROWS, MAX_CHARS } from "./git-diff.js";
 
-// openDiff({ root, on, path, commit?, status? })
+// openDiff({ root, on, path, commit?, status?, oldPath? })
 //   Opens a Diff tab in the shown space, titled with the file's name.
 //   root: repository root. on: the machine git runs on (null: this computer).
 //   path: the file, relative to root.
@@ -24,10 +28,16 @@ import { readDiff, MAX_ROWS, MAX_CHARS } from "./git-diff.js";
 //           a commit hash → that commit against its first parent.
 //   status: optional hint for a working file ("modified" | "added" | "deleted" |
 //           "conflict" | "unversioned"), as git-status.js reports it.
+//   oldPath: for a file the commit renamed, the path it had before (git-show.js `from`):
+//           the diff is then against that file.
 //   The tab's props are saved with the tab, so everything here is plain JSON.
-export function openDiff({ root, on = null, path, commit = null, status = null }) {
-  openTab("diff", { root, on, path, commit, status }, path.split("/").pop());
+export function openDiff({ root, on = null, path, commit = null, status = null, oldPath = null }) {
+  openTab("diff", { root, on, path, commit, status, oldPath }, path.split("/").pop());
 }
+
+// How often a working file's diff is read again without a watch saying so: a space on
+// another machine has no watch at all, and a watch can miss things.
+const POLL = 10000;
 
 const LINE = 20; // row height
 const SIZE = 12; // text size
@@ -56,6 +66,7 @@ export default class DiffView {
   init(p, cx) {
     this.root = p.root ?? null; this.on = p.on ?? null;
     this.path = p.path ?? ""; this.commit = p.commit ?? null; this.status = p.status ?? null;
+    this.oldPath = p.oldPath ?? null;
     this.result = null; // the last diff read
     this.rows = []; this.adds = 0; this.dels = 0; this.digits = 1; this.widest = 0;
     this.sides = 2; this.olds = true; this.news = true;
@@ -64,7 +75,10 @@ export default class DiffView {
     this.width = 0; this.sideways = 0;
     this.list = new WindowedList("diff-rows", { rowHeight: LINE });
     this.handle = cx.focus_handle();
+    // drawn: render ran since the last wake. stale: a wake came while it hadn't.
+    this.drawn = false; this.stale = false;
     this.load(cx);
+    this.follow(cx);
   }
 
   // ---- reading
@@ -77,7 +91,7 @@ export default class DiffView {
     this.loading = true; this.again = false;
     cx.spawn(async (cx) => {
       try {
-        const r = await readDiff(makeGit(exec, this.on), this.root, { path: this.path, commit: this.commit, status: this.status });
+        const r = await readDiff(makeGit(exec, this.on), this.root, { path: this.path, commit: this.commit, status: this.status, oldPath: this.oldPath });
         // A failed read keeps the diff that was read before; git's words go in the strip.
         if (r.ok || !this.result?.ok) this.apply(r);
         this.error = r.ok || !r.err ? null : { err: r.err, msg: r.msg };
@@ -91,6 +105,37 @@ export default class DiffView {
       }
     });
   }
+
+  // Keeps a working file's diff up to date. The timer and the watch go on while the tab
+  // is hidden (a copy stays alive behind another tab), so they only wake it.
+  follow(cx) {
+    if (this.commit || !this.root || !this.path) return;
+    cx.timer.every(POLL, (cx) => this.wake(cx));
+    // Only this computer's folders can be watched. Reads don't write under .git (git.js
+    // READ), so reading the diff never wakes its own watch.
+    if (this.on) return;
+    cx.spawn(async (cx) => {
+      try {
+        while (!this.closed) {
+          const changed = await watchFolder(this.root);
+          if (!this.closed && touchesDiff(changed, this.root, this.path)) this.wake(cx);
+        }
+      } catch {
+        // The folder can't be watched (too large on Linux, gone): the timer still reads.
+      }
+    });
+  }
+
+  // Reads again, but only a tab that was drawn since its last wake: every read ends in a
+  // redraw, so a tab on screen is drawn again and the next wake reads; a tab nobody looks
+  // at stays stale at no cost and reads when it is next drawn (render).
+  wake(cx) {
+    if (!this.drawn) { this.stale = true; return; }
+    this.drawn = false; this.stale = false;
+    this.load(cx);
+  }
+
+  close() { this.closed = true; }
 
   // Everything render needs is worked out here, once per read.
   apply(r) {
@@ -185,14 +230,21 @@ export default class DiffView {
     return r.from ? `${r.from} → ${to}` : to;
   }
 
-  render() {
+  render(cx) {
+    this.drawn = true;
+    // Nothing may start inside render: the read a hidden tab skipped starts in a timer.
+    if (this.stale && !this.waking) {
+      this.waking = true;
+      cx.timer.after(0, (cx) => { this.waking = false; this.wake(cx); });
+    }
     const t = theme(), r = this.result;
+    const renamed = Boolean(this.commit && this.oldPath && this.oldPath !== this.path);
     const parts = this.path.split("/"), name = parts.pop(), folder = parts.join("/");
     const look = { gutter: this.gutter(), columns: this.columns(), addBg: tint(t.ansi2, "24"), delBg: tint(t.ansi1, "24") };
     const body = !r ? notice(this.t("ui.loading"), t, { busy: true })
       : !r.ok ? notice(this.t("dialogs.diff.cantShow"), t)
       : r.binary ? notice(this.t("dialogs.diff.binary"), t)
-      : !this.rows.length ? notice(this.t(r.from ? "dialogs.diff.identical" : "dialogs.diff.empty"), t)
+      : !this.rows.length ? notice(this.t(renamed ? "dialogs.diff.renamedOnly" : r.from ? "dialogs.diff.identical" : "dialogs.diff.empty"), t)
       // Only the lines are in the terminal's font; notices stay in the interface's.
       : div().size_full().min_h(0).font_family(settings().font_family ?? "JetBrains Mono").text_size(SIZE)
         .child(this.list.render(this.rows.length, (i) => this.renderRow(i, t, look), t));
@@ -213,6 +265,7 @@ export default class DiffView {
         .child(fileGlyph(this.path, { dark: darkLook() }))
         .child(div().flex_none().max_w(360).truncate().font_semibold().child(name))
         .when(Boolean(folder), (el) => el.child(div().min_w(0).truncate().text_color(t.dim).child(folder)))
+        .when(renamed, (el) => el.child(div().min_w(0).truncate().text_size(12).text_color(t.dim).child(this.t("dialogs.diff.renamedFrom", { from: this.oldPath }))))
         .child(div().flex_none().text_size(12).text_color(t.muted).child(this.compared()))
         .child(spacer())
         .when(Boolean(r?.ok && this.adds), (el) => el.child(div().flex_none().text_size(12).text_color(t.ansi2).child(`+${count(this.adds)}`)))

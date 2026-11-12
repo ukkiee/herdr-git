@@ -1,11 +1,14 @@
 // Reading one file's diff as rows the Diff tab draws one by one.
 
-// readDiff(git, root, { path, commit, status })
+// readDiff(git, root, { path, commit, status, oldPath })
 //   git: from makeGit (git.js). root: the repository root. path: relative to root.
 //   commit: null → the working file against HEAD (an unversioned file is all added lines,
 //   a deleted one all removed); a hash → that commit against its first parent (no parent:
 //   all added). status: optional hint from git-status.js for a working file; "unversioned"
 //   saves asking git whether the file is tracked.
+//   oldPath: for a file the commit renamed, the path it had in the first parent
+//   (git-show.js `from`): the file is compared with that one, so a rename without a
+//   change has no rows. Ignored for a working file.
 //   → { ok, err, binary, truncated, from, to, rows }
 //   from / to: what is compared, for the header: "HEAD" and "Working Tree", or two short
 //   hashes. `from` is "" when that side doesn't exist (an unversioned file, a repository
@@ -110,19 +113,44 @@ async function readWorking(git, root, path, status) {
   return done(r.out, "HEAD", to);
 }
 
-async function readCommitted(git, root, path, commit) {
+async function readCommitted(git, root, path, commit, oldPath) {
   // "<hash> <parent> <parent>…": the full hash and whether there is anything before it.
   const info = await git.read(root, ["rev-list", "--parents", "-n", "1", String(commit), "--"]);
   const [hash, parent] = info.out.trim().split(/\s+/);
   if (!info.ok || !hash) return failed(info.err, "", short(commit));
   const from = parent ? short(parent) : "", to = short(hash);
+  if (parent && oldPath && oldPath !== path) {
+    // The two files themselves, each named by its commit and path, so nothing depends on
+    // git pairing them as a rename again. A path the parent lacks makes git fail, and the
+    // file is then read as any other file of the commit.
+    const renamed = await git.read(root, ["diff", ...PLAIN, `${parent}:${oldPath}`, `${hash}:${path}`, "--"]);
+    if (renamed.ok) return done(renamed.out, from, to);
+  }
   const r = parent
     ? await git.read(root, [LITERAL, "diff", ...PLAIN, parent, hash, "--", path])
     : await git.read(root, [LITERAL, "diff-tree", "-p", "--root", "--no-commit-id", ...PLAIN, hash, "--", path]);
   return r.ok ? done(r.out, from, to) : failed(r.err, from, to);
 }
 
-export async function readDiff(git, root, { path, commit = null, status = null } = {}) {
+// touchesDiff(changed, root, path) → whether a batch of changes on disk can change the
+// working file's diff against HEAD. changed: absolute paths, as a folder watch on `root`
+// reports them. True for the file, a folder above it, anything under its name (a folder
+// took its place), the root's own git folder (HEAD or a branch moved) except its object
+// store, and any path that isn't under `root` as written: the root itself stands for
+// "everything may have changed", and a path spelled another way can't be judged.
+export function touchesDiff(changed, root, path) {
+  const slashed = (text) => String(text ?? "").replace(/\\/g, "/");
+  const base = slashed(root).replace(/\/+$/, ""), file = `${base}/${path}`, gitDir = `${base}/.git`;
+  return (changed ?? []).some((entry) => {
+    const at = slashed(entry);
+    if (!at.startsWith(`${base}/`)) return true;
+    if (at === file || file.startsWith(`${at}/`) || at.startsWith(`${file}/`)) return true;
+    if (at === gitDir) return true;
+    return at.startsWith(`${gitDir}/`) && at !== `${gitDir}/objects` && !at.startsWith(`${gitDir}/objects/`);
+  });
+}
+
+export async function readDiff(git, root, { path, commit = null, status = null, oldPath = null } = {}) {
   if (!path) return { ...failed("No file to show."), msg: { key: "dialogs.diff.noFile", args: {} } };
-  return commit ? readCommitted(git, root, path, commit) : readWorking(git, root, path, status);
+  return commit ? readCommitted(git, root, path, commit, oldPath) : readWorking(git, root, path, status);
 }

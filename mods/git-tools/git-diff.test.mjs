@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, realpathSync, stat
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
 import { makeGit } from "./git.js";
-import { readDiff } from "./git-diff.js";
+import { readDiff, touchesDiff } from "./git-diff.js";
 import { translator } from "./i18n.js";
 
 const base = realpathSync(mkdtempSync(`${tmpdir()}/git-tools-diff-`));
@@ -253,6 +253,89 @@ git checkout -q main && git merge -q --no-ff -m merge side`);
   const merged = await readDiff(git, repo, { path: "side.txt", commit: merge });
   assert.deepEqual(body(merged), [["add", null, 1, "side"]]);
   assert.deepEqual([merged.from, merged.to], [third.slice(0, 7), merge.slice(0, 7)]);
+}
+
+// A file a commit renamed, asked about with the path it had before: it is compared with
+// that file, so only the lines the commit changed are rows.
+{
+  const repo = init("renamed");
+  mkdirSync(`${repo}/src`);
+  writeFileSync(`${repo}/src/old name.txt`, file(lines(1, 8)));
+  writeFileSync(`${repo}/same.txt`, file(lines(1, 3)));
+  sh(repo, "git add -A && git commit -q -m first");
+  const first = sh(repo, "git rev-parse HEAD").trim();
+  const next = lines(1, 8);
+  next[2] = "line three";
+  sh(repo, `git mv "src/old name.txt" "new*name.txt" && git mv same.txt moved.txt`);
+  writeFileSync(`${repo}/new*name.txt`, file(next));
+  sh(repo, "git add -A && git commit -q -m rename");
+  const second = sh(repo, "git rev-parse HEAD").trim();
+
+  const r = await readDiff(git, repo, { path: "new*name.txt", commit: second, oldPath: "src/old name.txt" });
+  assert.equal(r.ok, true, r.err);
+  assert.deepEqual(body(r), [
+    ["context", 1, 1, "line 1"],
+    ["context", 2, 2, "line 2"],
+    ["del", 3, null, "line 3"],
+    ["add", null, 3, "line three"],
+    ["context", 4, 4, "line 4"],
+    ["context", 5, 5, "line 5"],
+    ["context", 6, 6, "line 6"],
+  ]);
+  assert.deepEqual([r.from, r.to], [first.slice(0, 7), second.slice(0, 7)]);
+
+  // Asked about without the old path, the same file is all added lines.
+  const alone = await readDiff(git, repo, { path: "new*name.txt", commit: second });
+  assert.deepEqual(body(alone), next.map((text, i) => ["add", null, i + 1, text]));
+
+  // Renamed and nothing else: no rows, and not an error.
+  const moved = await readDiff(git, repo, { path: "moved.txt", commit: second, oldPath: "same.txt" });
+  assert.equal(moved.ok, true, moved.err);
+  assert.deepEqual(moved.rows, []);
+  assert.deepEqual([moved.binary, moved.from, moved.to], [false, first.slice(0, 7), second.slice(0, 7)]);
+
+  // An old path the parent never had, or a commit with nothing before it: the file as
+  // the commit has it, all added.
+  const wrong = await readDiff(git, repo, { path: "new*name.txt", commit: second, oldPath: "nowhere.txt" });
+  assert.equal(wrong.ok, true, wrong.err);
+  assert.deepEqual(body(wrong), body(alone));
+  const root = await readDiff(git, repo, { path: "same.txt", commit: first, oldPath: "nowhere.txt" });
+  assert.deepEqual(body(root), lines(1, 3).map((text, i) => ["add", null, i + 1, text]));
+
+  // A working file has no old path to compare with: the hint is ignored.
+  writeFileSync(`${repo}/moved.txt`, file(["line 1", "line 2", "line 3", "line 4"]));
+  const working = await readDiff(git, repo, { path: "moved.txt", oldPath: "same.txt", status: "modified" });
+  assert.deepEqual(body(working).filter(([kind]) => kind !== "context"), [["add", null, 4, "line 4"]]);
+}
+
+// Which changes on disk can change a working file's diff, out of what a folder watch
+// reports (absolute paths): the file, a folder above it, something where the file was,
+// git's own folder (HEAD moved), and whatever can't be placed under the root.
+{
+  const yes = (changed, root = "/repo", path = "src/app/a.ts") => assert.equal(touchesDiff(changed, root, path), true, JSON.stringify(changed));
+  const no = (changed, root = "/repo", path = "src/app/a.ts") => assert.equal(touchesDiff(changed, root, path), false, JSON.stringify(changed));
+  yes(["/repo/src/app/a.ts"]);
+  yes(["/repo/other.txt", "/repo/src/app/a.ts"]);
+  yes(["/repo/src/app"]);
+  yes(["/repo/src"]);
+  yes(["/repo/src/app/a.ts/inner"]);
+  yes(["/repo"]);
+  yes(["/elsewhere/x"]);
+  yes(["/repo/.git"]);
+  yes(["/repo/.git/HEAD"]);
+  yes(["/repo/.git/refs/heads/main"]);
+  no([]);
+  no(["/repo/other.txt"]);
+  no(["/repo/src/app/a.tsx"]);
+  no(["/repo/src/app/b.ts", "/repo/src/application/a.ts"]);
+  no(["/repo/.git/objects/ab/cdef", "/repo/.git/objects"]);
+  no(["/repo/.gitignore"]);
+  no(["/repo/sub/.git/HEAD"]);
+  // The root as some callers write it, and Windows' separators.
+  yes(["/repo/x"], "/repo/", "x");
+  no(["/repo/y"], "/repo/", "x");
+  yes(["C:\\repo\\src\\a.ts"], "C:/repo", "src/a.ts");
+  no(["C:\\repo\\other.txt"], "C:/repo", "src/a.ts");
 }
 
 // Line endings and a missing last newline: \r isn't shown as text, git's remark is a row.

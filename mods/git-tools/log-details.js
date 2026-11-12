@@ -254,11 +254,12 @@ export default class LogDetails {
   }
 
   // Show Diff: the commit's change to that file, in a Diff tab (view-diff.js compares
-  // the commit with its first parent; the first commit shows as all added).
+  // the commit with its first parent; the first commit shows as all added; a renamed
+  // file is compared with the file it was).
   showDiff(m) {
     const repo = this.host.repo;
     if (!repo || !this.info?.ok || !m || m.folder) return false;
-    openDiff({ root: repo.root, on: repo.on, path: m.path, commit: this.info.hash, status: m.item.status });
+    openDiff({ root: repo.root, on: repo.on, path: m.path, commit: this.info.hash, status: m.item.status, oldPath: m.item.from ?? null });
     return true;
   }
 

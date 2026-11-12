@@ -238,7 +238,8 @@ repository) and the `x`.
 A tab in the shown space, titled with the file name, `background`:
 
 - Header, 34px, line under it: the file's Icon theme icon (14px), the file name semibold (up to
-  360px), its folder in `dim`, what is compared at 12px `muted` (`HEAD → Working Tree`,
+  360px), its folder in `dim`, for a file its commit renamed `renamed from <old path>` at
+  12px `dim`, what is compared at 12px `muted` (`HEAD → Working Tree`,
   `9d3f6d7 → b7aabca`, or only the right side when there is no left one), then on the
   right `+N` in `ansi2` and `−N` in `ansi1` (12px) and Refresh.
 - When cut short, a band under the header: `raised`, 12px `ansi3`,
@@ -616,12 +617,18 @@ another machine runs every git command on that machine. A panel opened with
 
 - A working file is compared with HEAD; an unversioned file shows all added, a deleted
   one all removed. A commit's file is compared with the commit's first parent; a first
-  commit shows all added.
+  commit shows all added. A file the commit renamed (opened from Commit details) is
+  compared with the file it was under its old path, so only the changed lines show;
+  renamed and nothing else, the body reads `Renamed only: contents are identical`.
 - Keys (after a click): ↑ ↓ one line, PageUp PageDown (and Space, Shift-Space) a page,
   Home End, ← → 8 columns sideways. Mouse wheel scrolls; a sideways swipe or
   shift-wheel scrolls sideways.
-- A working file's tab reads again when another screen reports a change to its
-  repository, and on Refresh. It doesn't watch the file.
+- A working file's tab follows the file. It reads again when the folder watch on the
+  repository root reports the file, a folder above it, or the root's `.git` folder
+  outside `objects` (this computer only); every 10 s; when another screen reports a
+  change to its repository; and on Refresh. The watch and the 10 s timer only read a tab
+  that was drawn since its last read: a tab behind another one reads once when it is
+  shown again. A commit's tab reads once.
 
 ### Push dialog
 
@@ -869,7 +876,7 @@ language) or `{ since, until }`) and `filterOpen`
 `owner` is the opening panel copy's bus id (`bus.id`): that copy runs the dialog's
 write. `chosen` is true when a Log tab opened with `props.folder` opened the dialog.
 
-Screen openers: `openDiff({ root, on, path, commit, status })`,
+Screen openers: `openDiff({ root, on, path, commit, status, oldPath })`,
 `openRollback({ root, on, files, checked, owner, lang })`,
 `openPush({ root, on, owner, lang })`,
 `openRestore({ root, on, owner, select, chosen, lang })`,
@@ -1062,7 +1069,7 @@ the git ones run against real temporary repositories):
 | `git-commit.js` | `commit`, `lastMessage`, `headIsPushed` |
 | `git-rollback.js` | `rollback` (→ `{ ok, code, out, err, msg?, snapshot, skipped: [{ path, reason, msg }] }`; `snapshot`: the Rollback snapshot's hash or null), `wordRollback(t, r)` (`r.msg` with its list of reasons worded again in `t`'s language) |
 | `git-snapshot.js` | `SNAPSHOTS` (`"refs/git-tools/rollback"`), `LIST_LIMIT` (50), `record(git, root, paths)` → `{ ok, code, out, err, snapshot }` (only Rollback calls it), `listSnapshots(git, root)` → `{ ok, code, err, snapshots: [{ hash, time, files: [{ path, status }] }] }` (newest first, `status` `modified` / `added` / `deleted`), `restore(git, root, { snapshot, paths })` → `{ ok, code, out, err, msg?, restored: [path], skipped: [{ path, reason, msg }], changed }` (`changed`: anything on disk changed, also when git failed partway), `reasonList(skipped, word?)`, `wordRestore(t, r)` (r.msg with the skipped reasons and a worded cause in t's language) |
-| `git-diff.js` | `MAX_ROWS` (5000), `MAX_CHARS` (400000), `parseDiff`, `readDiff` |
+| `git-diff.js` | `MAX_ROWS` (5000), `MAX_CHARS` (400000), `parseDiff`, `readDiff` (`oldPath`: a renamed file's path before its commit), `touchesDiff(changed, root, path)` (whether watched changes can change a working file's diff) |
 | `git-push.js` | `PROTECTED` (`["main", "master"]`), `readPushPlan`, `readPushFiles`, `push` |
 | `git-log.js` | `readLog`, `readRefsState`, `readGitDir`, `refsChanged`, `resolveCommit`, `shortenMiddle`, `labelRefs`, `formatCommitTime` |
 | `git-branch.js` | `readBranches`, `checkout`, `checkoutRevision`, `checkBranchName`, `createBranch`, `fetchAll`, `deleteBranch` (a branch it removed comes back as `deleted: { name, hash, upstream }`, `upstream` `{ remote, merge }` or null, read before `branch -D`), `restoreBranch(git, root, { name, hash, upstream })` |
@@ -1531,6 +1538,8 @@ English forms and ⏎ is a line break.
 | `dialogs.diff.cantShow` | `Can't show this diff.` | `이 Diff를 표시할 수 없습니다.` |
 | `dialogs.diff.binary` | `Binary file` | `바이너리 파일` |
 | `dialogs.diff.identical` | `Contents are identical` | `내용이 동일합니다` |
+| `dialogs.diff.renamedFrom` | `renamed from {from}` | `{from}에서 이름 변경됨` |
+| `dialogs.diff.renamedOnly` | `Renamed only: contents are identical` | `이름만 바뀌었습니다. 내용은 동일합니다` |
 | `dialogs.diff.empty` | `Empty file` | `빈 파일` |
 | `dialogs.diff.cutLines` | `This diff is too large to show in full: it stops after {n} lines.` | `Diff가 너무 커서 전부 표시할 수 없습니다. {n}줄까지만 표시합니다.` |
 | `dialogs.diff.cutChars` | `This diff is too large to show in full: it stops after {n} characters.` | `Diff가 너무 커서 전부 표시할 수 없습니다. {n}자까지만 표시합니다.` |
@@ -1813,8 +1822,10 @@ English forms and ⏎ is a line break.
   `symbolic-ref --short` answers `heads/main` when a tag `main` also exists, which
   would push the wrong ref and miss that `main` is Protected.
 - `git status` runs with `--no-renames`, so a staged rename lists as a delete and an add.
-  Commit details uses rename detection; a renamed file's diff (which asks about one path
-  with `--no-renames`) shows the whole file as added.
+  Commit details uses rename detection and hands the old path to the Diff tab, which
+  compares the two files themselves (`git diff <parent>:<old path> <commit>:<path>`):
+  nothing depends on git pairing them again. A working file's diff asks about one path
+  with `--no-renames`, so the added half of a rename there is the whole file.
 - Rollback decides untrack-or-restore from HEAD at the time of the rollback (`ls-tree`),
   not from the list the dialog was opened with.
 - `checkout HEAD -- f` removes a folder `f` (its files staged or not), overwrites an
@@ -1922,8 +1933,12 @@ English forms and ⏎ is a line break.
 - Commit details hides below 930px of panel width with the default columns. In a
   1024px-wide window with the sidebar open the Log panel is about 735px, so it isn't
   shown.
-- The Diff tab doesn't watch its file: it reads again on a `changed` event, on
-  `git-tools.refresh` and on Refresh.
+- A copy behind another tab stays alive, timers and watch included. The Diff tab's watch
+  and 10 s timer only mark such a tab stale: `render` sets `drawn`, a wake without it
+  reads nothing, and the next `render` starts the read in a timer. Every read ends in
+  `cx.notify()`, so a tab on screen is drawn again and its next wake reads.
+- A watch batch names absolute paths. One that isn't under the root as git spells it
+  (the root itself, another spelling) can't be judged and counts as a change.
 - `localStorage` is per copy and kept across restarts; copies of the same mod with the
   same props share it.
 - `watchFolder` only works on this computer: spaces on other machines rely on the 10 s
@@ -2398,3 +2413,16 @@ two emails, and one author reached only by a tag)
 99. In a folder outside a repository, a Commit panel tab says
     `<folder>은(는) git 저장소 안에 있지 않습니다.`; the app home's `shared.json` has
     `"git-tools.lang": "ko"`.
+
+**Diff tab follows the file**
+
+100. Open a modified file's Diff tab from the Commit panel, then change the file from a
+     terminal (`echo more >> <file>`): the tab shows the new line within a few seconds,
+     without Refresh. `git checkout -- <file>` there turns it to
+     `Contents are identical`.
+101. Select another tab, change the file several times, and select the Diff tab again:
+     it shows every change.
+102. Commit a rename with an edit (`git mv a.txt b.txt`, change one line, commit). Commit
+     details lists `b.txt` as renamed; its Diff tab's header reads `renamed from a.txt`
+     and the body shows only the changed line with its context. A file the commit only
+     renamed reads `Renamed only: contents are identical`.

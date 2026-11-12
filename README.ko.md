@@ -16,7 +16,7 @@ Changes 버튼으로 여는 Commit panel과 작업 영역 아래의 Git Log pane
   함께 보는 모든 커밋, 글자나 해시로 찾기, Branch / User / Date / Path 필터, 고른 커밋의
   파일과 메시지.
 - **Diff tab**: 파일 하나의 통합 diff를 줄 번호와 함께 보여 줍니다. 두 패널 어디서든
-  엽니다.
+  엽니다. 작업 파일의 탭은 파일이 바뀌면 따라서 바뀝니다.
 
 ### 롤백과 브랜치 삭제 되살리기
 
@@ -163,11 +163,11 @@ cd herdr-git && ./install.sh
 - 한 번에 저장소 하나, 포커스된 pane의 저장소만 보여 줍니다. 서브모듈은 따로 보여 주지
   않습니다.
 - stash·shelve, merge, rebase, pull, cherry-pick, revert, reset이 없습니다.
-- diff는 통합 보기뿐입니다. 좌우 나란히 보기와 구문 색이 없습니다. 커밋에서 이름이 바뀐
-  파일의 diff는 파일 전체가 추가로 보입니다.
+- diff는 통합 보기뿐입니다. 좌우 나란히 보기와 구문 색이 없습니다. Commit panel에서 이름이
+  바뀐 파일은 삭제된 파일과 추가된 파일로 따로 보이고, 추가된 파일의 diff는 파일 전체입니다.
 - Amend는 마지막 커밋만 고치고, 커밋은 줄 단위가 아니라 파일 단위입니다.
-- 작업 파일의 Diff tab은 git-tools가 저장소를 바꾸거나 Refresh를 누를 때 다시 읽습니다.
-  편집기에서 파일을 저장해도 저절로 바뀌지 않습니다.
+- 다른 머신의 space에서는 파일을 감시하지 못합니다. 작업 파일의 Diff tab은 화면에 보이는
+  동안 10초마다 다시 읽습니다.
 - Log panel 폭이 약 930px보다 좁으면 Commit details가 숨습니다.
 - Commit details는 커밋을 포함한 브랜치를 12개까지 적고, 나머지는 `and N more`로 줄입니다.
 - 화면 언어는 영어와 한국어뿐이고, 시스템 설정으로만 정해집니다. Windows는 언제나

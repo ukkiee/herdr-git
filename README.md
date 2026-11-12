@@ -15,7 +15,8 @@ and browse branches and history with a commit graph, search and filters.
 - **Log panel** (`cmd-shift-g`): Branch tree (checkout, new branch, delete, fetch), every
   commit with a graph, search by text or hash, Branch / User / Date / Path filters, and
   the selected commit's files and message.
-- **Diff tab**: one file's unified diff with line numbers, opened from either panel.
+- **Diff tab**: one file's unified diff with line numbers, opened from either panel. A
+  working file's tab follows the file as it changes.
 
 ### Undo a rollback or a branch delete
 
@@ -169,11 +170,12 @@ drops them at once (they can't be restored after that).
 
 - One repository at a time, the focused pane's; submodules aren't shown on their own.
 - No stash or shelve, merge, rebase, pull, cherry-pick, revert or reset.
-- Diffs are unified only: no side-by-side view, no syntax colors. A renamed file's diff
-  in a commit shows the whole file as added.
+- Diffs are unified only: no side-by-side view, no syntax colors. In the Commit panel a
+  renamed file lists as a deleted file and an added file, and the added file's diff is
+  the whole file.
 - Commit amends only the last commit and commits whole files, not lines.
-- A Diff tab of a working file reads again when git-tools changes the repository or you
-  press Refresh, not when you save the file in an editor.
+- In a space on another machine nothing watches the files: a working file's Diff tab
+  reads again every 10 seconds while it is on screen.
 - Commit details hides when the Log panel is narrower than about 930px.
 - Commit details names at most 12 branches that contain the commit, then `and N more`.
 - English and Korean only, picked from the system with no switch. Windows always gets

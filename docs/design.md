@@ -23,7 +23,8 @@ space가 다른 머신에 있으면 git 명령을 모두 그 머신에서 실행
     Ref label, 작성자, 시각.
   - **Commit details** (`log-details.js`): 고른 커밋의 파일 트리, 전체 메시지, 그 커밋을 담은
     브랜치, 커밋 줄의 우클릭 메뉴.
-- **Diff tab** (`view-diff.js`): 파일 하나의 통합 diff를 줄마다 그리는 space의 탭.
+- **Diff tab** (`view-diff.js`): 파일 하나의 통합 diff를 줄마다 그리는 space의 탭. 작업 파일의
+  탭은 파일을 따라간다.
 - **창**: Rollback dialog (`view-rollback.js`), Restore dialog (`view-restore.js`), Push dialog
   (`view-push.js`), New Branch와 Delete Branch (`view-branch-new.js`, 지울 때는 `mode: "delete"`).
   우클릭 팝업 메뉴는 `view-menu.js` 파일이 그린다.
@@ -200,6 +201,24 @@ Rollback은 Rollback dialog의 버튼으로만 실행되고, 쓰기 전에 버�
 - 작성자 목록은 팝업을 열 때 읽고, 저장소마다 마지막 목록을 8개 저장소까지 Log panel 사본의
   인스턴스에 둔다.
 
+### Diff tab
+
+- **이름이 바뀐 파일.** Commit details는 이름 변경을 감지해(`diff-tree -M`) 옛 경로를 Diff tab에
+  넘긴다. Diff tab은 경로로 묻지 않고 두 파일 자체를 비교한다
+  (`git diff <부모>:<옛 경로> <커밋>:<경로>`). git이 둘을 다시 짝짓는지에 기대지 않으려는
+  것이다. 부모에 그 경로가 없으면 보통의 커밋 파일처럼 읽는다. 이름만 바뀐 파일은 줄이 없다.
+- **작업 파일은 파일을 따라간다.** 다시 읽는 때는 넷이다: 저장소 루트의 폴더 감시가 이 diff를
+  바꿀 수 있는 변경을 알릴 때(이 컴퓨터만), 10초마다, 다른 사본이 git 쓰기를 알릴 때, Refresh.
+  커밋의 diff는 바뀌지 않으므로 한 번만 읽는다.
+- **어떤 변경이 이 diff를 바꾸는가**는 `git-diff.js`의 `touchesDiff`가 정한다. 그 파일, 그 위의
+  폴더, 그 이름 아래의 경로(폴더가 그 자리를 차지함), 루트의 `.git` 아래(`objects` 제외. HEAD나
+  브랜치가 움직였다)다. 루트 아래로 볼 수 없는 경로는 변경으로 친다. 감시가 "모두 다시 읽으라"는
+  뜻으로 루트를 보내고, 다르게 적힌 경로는 판단할 수 없기 때문이다.
+- **가려진 탭은 읽지 않는다.** 사본은 다른 탭 뒤에서도 살아 있고 타이머와 감시도 계속 돈다.
+  그래서 감시와 타이머는 "마지막으로 읽은 뒤 그려진 탭"만 다시 읽는다. 읽기는 언제나 다시
+  그리기로 끝나므로 화면에 있는 탭은 다음에도 읽고, 가려진 탭은 표시만 해 두었다가 다시 보일
+  때 한 번 읽는다.
+
 ### Icon theme
 
 - 출처는 Atom Material Icons(`AtomMaterialUI/iconGenerator`, MIT)의 커밋
@@ -321,6 +340,8 @@ Herdr는 mod를 QuickJS로 돌린다. JIT가 없고, 한 호출이 너무 오래
 - Commit은 체크한 경로를 한 호출로 넘기므로, 아주 많은 파일을 체크하면 시스템의 인자 길이 한도에
   걸릴 수 있다.
 - 자격 증명과 GPG 입력 창이 없다. 입력을 요구하는 원격에서는 푸시와 fetch가 실패한다.
-- diff는 통합 보기뿐이고 구문 색이 없다. 이름이 바뀐 파일의 diff는 파일 전체가 추가로 보인다.
-  작업 파일의 Diff tab은 파일을 감시하지 않고, git-tools의 쓰기 알림이나 Refresh로 다시 읽는다.
+- diff는 통합 보기뿐이고 구문 색이 없다. Commit panel은 이름 변경을 감지하지 않아서, 이름이
+  바뀐 작업 파일은 삭제된 파일과 추가된 파일로 따로 보이고 추가된 쪽의 diff는 파일 전체다.
 - 원격 space는 폴더 감시가 안 되어 10초 타이머로만 새로 읽는다. 저장소는 한 번에 하나다.
+- 다른 worktree의 git 폴더는 저장소 루트 밖에 있어 감시되지 않는다. 그런 worktree에서 터미널로
+  커밋하면 작업 파일의 Diff tab은 다음 10초 읽기에 따라온다.

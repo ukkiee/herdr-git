@@ -483,7 +483,7 @@ export default class FilesView {
     return this.found.render(n, (i) => this.renderHit(i, t), t);
   }
 
-  // What the search left out: files past the walk's limit outside a repository, and
+  // What the search left out: files past the list's limit, and
   // matches past the shown ones.
   foundNotes() {
     const notes = [];

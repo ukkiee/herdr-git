@@ -293,6 +293,26 @@ const sorted = (list) => [...list].sort();
   assert.equal(gitState(repo), before);
 }
 
+// The search list inside a repository stops at the limit too and says so; files deleted
+// from disk don't take a place.
+{
+  const repo = init("search-repo-limit");
+  for (const f of ["a.txt", "b.txt", "c.txt", "d.txt", "gone.txt"]) writeFileSync(`${repo}/${f}`, f);
+  sh(repo, "git add -A && git commit -q -m base && rm gone.txt");
+  writeFileSync(`${repo}/new.txt`, "n");
+  const all = ["a.txt", "b.txt", "c.txt", "d.txt", "new.txt"];
+
+  const cut = await readSearchList(exec, repo, { limit: 3 });
+  assert.equal(cut.ok, true);
+  assert.equal(cut.limited, true);
+  assert.equal(cut.files.length, 3);
+  for (const f of cut.files) assert.equal(all.includes(f), true, f);
+
+  const exact = await readSearchList(exec, repo, { limit: all.length });
+  assert.equal(exact.limited, false);
+  assert.deepEqual(sorted(exact.files), all);
+}
+
 // A submodule is a folder, not a file: it stays out of the search list, from the root and
 // from a folder above it.
 {

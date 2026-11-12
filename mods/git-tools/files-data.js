@@ -183,10 +183,12 @@ async function windowsWalk(exec, folder, on, count) {
 // readSearchList: the files the search box looks through, paths from `folder`, in no
 // particular order (files-tree.js rankSearch sorts).
 //   In a repository (repo: true): tracked files and untracked ones, not ignored ones, not
-//   tracked files already deleted from disk and not submodules. Not limited.
-//   Outside one (repo: false): the folder walked, .git skipped, at most `limit` files
-//   (SEARCH_LIMIT); limited says there were more. A folder with hundreds of thousands of
-//   files takes as long as the walk, up to the limit.
+//   tracked files already deleted from disk and not submodules.
+//   Outside one (repo: false): the folder walked, .git skipped.
+//   Either way at most `limit` files (SEARCH_LIMIT); limited says there were more. In a
+//   repository git's whole list is still read and then cut (tracked files in path order
+//   first); outside one the walk stops at the limit, so a folder with hundreds of
+//   thousands of files takes as long as the walk up to it.
 //   Reads only: nothing under .git is written.
 export async function readSearchList(exec, folder, { on = null, platform = null, limit = SEARCH_LIMIT } = {}) {
   const git = makeGit(exec, on);
@@ -203,7 +205,8 @@ export async function readSearchList(exec, folder, { on = null, platform = null,
     for (const entry of staged.out.split("\0")) if (entry.startsWith("160000 ")) skip.add(entry.slice(entry.indexOf("\t") + 1));
     // A conflicted path is listed once per stage; an untracked nested repository as "dir/".
     const files = [...new Set(listed.out.split("\0"))].filter((p) => p && !p.endsWith("/") && !skip.has(p));
-    return { ok: true, repo: true, files, limited: false, err: "" };
+    const keep = Math.max(limit, 0);
+    return { ok: true, repo: true, files: files.slice(0, keep), limited: files.length > keep, err: "" };
   }
   const count = Math.max(limit, 0) + 1;
   const r = await readWith(on, platform, () => shWalk(exec, folder, on, count), () => windowsWalk(exec, folder, on, count));

@@ -96,6 +96,11 @@ export default class FilesView {
     this.query.on("change", (_e, cx) => {
       this.hit = null;
       this.found.top = 0;
+      // A search starting (the box was empty) reads the list again: files made since the
+      // last search show up.
+      const started = this.searching() && !this.searchOn;
+      this.searchOn = this.searching();
+      if (started && !this.listing) this.listed = null;
       if (this.searching()) this.readList(cx);
       this.rank();
       cx.notify();
@@ -229,10 +234,10 @@ export default class FilesView {
 
   searching() { return Boolean(this.query?.value().trim()); }
 
-  // The files to search, read once per folder: when a search starts, and again in
-  // another folder while one is typed.
+  // The files to search: read when a search starts, and again in another folder while
+  // one is typed. A list that failed is asked for again on the next letter.
   readList(cx) {
-    if (!this.root || this.listed || this.listing) return;
+    if (!this.root || this.listed?.ok || this.listing) return;
     const context = this.context, root = this.root, on = this.on;
     this.listing = true;
     cx.spawn(async (cx) => {
@@ -307,7 +312,7 @@ export default class FilesView {
     if (this.searching()) {
       if (name === "escape") {
         this.query.set_value("");
-        this.hit = null; this.rank();
+        this.searchOn = false; this.hit = null; this.rank();
         return true;
       }
       if (name !== "up" && name !== "down" && name !== "enter") return false;

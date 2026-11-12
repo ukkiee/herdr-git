@@ -717,4 +717,23 @@ const alive = (cwd, hash) => ask(cwd, ["cat-file", "-e", `${hash}^{commit}`]) !=
   assert.equal(alive(dir, k2), true);
 }
 
+// When the branch can't be recorded it is not deleted. Here the record's name is taken
+// by a folder of refs, so git can't make the ref.
+{
+  const dir = placed("unrecorded");
+  const b1 = raw(dir, ["rev-parse", "HEAD"]);
+  raw(dir, ["update-ref", `${DELETED}/in-the-way`, b1]);
+  raw(dir, ["checkout", "-q", "-b", "stays"]);
+  const s1 = commit(dir, "s.txt", "s1");
+  raw(dir, ["checkout", "-q", "main"]);
+  const del = await deleteBranch(git, dir, "stays", { confirmed: true });
+  assert.equal(del.ok, false);
+  assert.equal(del.deleted, undefined);
+  assert.equal(del.msg.key, "branches.notRecorded");
+  assert.equal(del.msg.args.name, "stays");
+  assert.ok(del.msg.args.err, "git's words come along");
+  assert.equal(raw(dir, ["rev-parse", "refs/heads/stays"]), s1);
+  assert.equal(translator("en")("branches.notRecorded", { name: "x", err: "fatal: y" }), "Branch 'x' was not deleted: it couldn't be recorded to restore later. fatal: y");
+}
+
 console.log("ok");

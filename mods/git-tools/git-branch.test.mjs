@@ -986,7 +986,7 @@ for (const [days, kept] of [[29, true], [31, false]]) {
   assert.deepEqual((await readDeletedBranches(git, dir)).branches.map((b) => [b.name, b.restorable]), [["taken", false]]);
 
   // Nothing asked: nothing done.
-  assert.deepEqual(await restoreBranches(git, dir, []), { ok: true, code: 0, out: "", err: "", restored: [], skipped: [] });
+  assert.deepEqual(await restoreBranches(git, dir, []), { ok: true, code: 0, out: "", err: "", restored: [], skipped: [], untracked: [] });
 }
 
 // All back: ok, with nothing skipped.
@@ -996,6 +996,29 @@ for (const [days, kept] of [[29, true], [31, false]]) {
   await deleted(dir, "one");
   const r = await restoreBranches(git, dir, (await readDeletedBranches(git, dir)).branches);
   assert.deepEqual([r.ok, r.err, r.restored, r.skipped], [true, "", [{ name: "one", hash: one }], []]);
+}
+
+// A branch made again whose upstream git couldn't set back (its config write fails) is
+// restored, and listed apart with git's words; it isn't said to be skipped.
+{
+  const dir = placed("multi-upstream-fails");
+  const u = branchAt(dir, "u", "u.txt", "u one", ["origin", "refs/heads/main"]);
+  const p = branchAt(dir, "p", "p.txt", "p one");
+  for (const name of ["u", "p"]) await deleted(dir, name);
+  const run = async (cwd, args, options) => (args[0] === "config" && !args.includes("--get") ? { ok: false, code: 255, out: "", err: "error: could not lock config file" } : git(cwd, args, options));
+  run.read = git.read;
+
+  const r = await restoreBranches(run, dir, (await readDeletedBranches(git, dir)).branches);
+  assert.equal(r.ok, false);
+  assert.deepEqual(r.restored, [{ name: "p", hash: p }, { name: "u", hash: u }]);
+  assert.deepEqual(r.skipped, []);
+  assert.deepEqual(r.untracked, [{ name: "u", hash: u, err: "error: could not lock config file" }]);
+  assert.equal(raw(dir, ["rev-parse", "refs/heads/u"]), u);
+  assert.equal(r.err, "Restored 2 branches. Restored without their upstream:\nu: error: could not lock config file");
+  assert.deepEqual(r.msg, { key: "branches.notAllUpstream", args: { n: 2, untracked: "u: error: could not lock config file" } });
+  assert.equal(translator("en")(r.msg.key, r.msg.args), r.err);
+  assert.doesNotMatch(translator("ko")(r.msg.key, r.msg.args), /Restored/);
+  assert.equal(translator("ko")("branches.notAllRestoredUpstream", { n: 1, list: "x: y", untracked: "u: z" }), "브랜치 1개를 복원했습니다. 복원하지 않은 브랜치:\nx: y\n추적 브랜치는 되돌리지 못한 브랜치:\nu: z");
 }
 
 console.log("ok");

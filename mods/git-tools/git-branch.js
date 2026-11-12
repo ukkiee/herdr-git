@@ -217,21 +217,28 @@ export async function deleteBranch(git, root, name, { confirmed = false } = {}) 
 //   ({ remote, merge }: deleteBranch's `deleted`). HEAD and the working tree stay as
 //   they are. A branch of that name that exists now is left alone: git's refusal comes
 //   back as it is, and no upstream is set. Nothing is forced.
-export async function restoreBranch(git, root, { name, hash, upstream = null } = {}) {
+export async function restoreBranch(git, root, branch = {}) {
+  const r = await remakeBranch(git, root, branch);
+  return r.tracking && !r.tracking.ok ? r.tracking : r.made;
+}
+
+// restoreBranch's two steps apart: { made, tracking }. made: the branch's own result;
+// tracking: the failed config write, or null when the upstream was set or there was none.
+async function remakeBranch(git, root, { name, hash, upstream = null } = {}) {
   const label = String(name ?? "");
   if (!label || typeof hash !== "string" || !/^([0-9a-f]{40}|[0-9a-f]{64})$/.test(hash)) {
-    return refused(`Branch '${label}' can't be restored: its commit isn't known.`, { msg: { key: "branches.unknownCommit", args: { name: label } } });
+    return { made: refused(`Branch '${label}' can't be restored: its commit isn't known.`, { msg: { key: "branches.unknownCommit", args: { name: label } } }), tracking: null };
   }
   // The full ref with an empty old value: git makes it only if it doesn't exist. Not
   // `git branch`: it refuses a name like "-f" that deleteBranch can delete, and the
   // name never reaches git as an option.
   const made = await git(root, ["update-ref", "-m", "branch: restored", `${HEADS}${label}`, hash, ""]);
-  if (!made.ok || !upstream) return made;
+  if (!made.ok || !upstream) return { made, tracking: null };
   for (const [part, value] of [["remote", upstream.remote], ["merge", upstream.merge]]) {
     const set = await git(root, ["config", "--", `branch.${label}.${part}`, String(value)]);
-    if (!set.ok) return set;
+    if (!set.ok) return { made, tracking: set };
   }
-  return made;
+  return { made, tracking: null };
 }
 
 // Deleted branches are kept in the reflog of one hidden ref. Each delete moves the ref
@@ -372,30 +379,42 @@ export async function readDeletedBranches(git, root) {
   return { ok: true, err: "", branches };
 }
 
-// restoreBranches(git, root, branches) → { ok, code, out, err, msg?, restored, skipped }
+// restoreBranches(git, root, branches) → { ok, code, out, err, msg?, restored, skipped, untracked }
 //   Each of `branches` ({ name, hash, upstream }: readDeletedBranches' entries) back as
 //   restoreBranch makes it: only when no branch of that name exists, with its upstream,
 //   without checking it out. One that fails doesn't stop the rest.
-//   restored: [{ name, hash }] in the order given. skipped: [{ name, hash, reason, msg? }]:
-//   reason "a branch of this name exists now" (msg branches.skipExists), or restoreBranch's
-//   own words. ok is false when any was skipped; err and msg then say how many came back
-//   and list "name: reason" lines (a screen words each reason again from its msg).
+//   restored: [{ name, hash }] in the order given, each branch git made again.
+//   skipped: [{ name, hash, reason, msg? }]: reason "a branch of this name exists now"
+//   (msg branches.skipExists), or restoreBranch's own words. untracked: [{ name, hash, err }]
+//   for a restored branch whose upstream git couldn't set back (err: git's words). ok is
+//   false when any was skipped or untracked; err and msg then say how many came back and
+//   list "name: reason" lines (list; a screen words each reason again from its msg) and
+//   "name: git's words" lines (untracked): msg branches.notAllRestored,
+//   branches.notAllUpstream or branches.notAllRestoredUpstream.
 export async function restoreBranches(git, root, branches = []) {
-  const restored = [], skipped = [];
+  const restored = [], skipped = [], untracked = [];
   for (const branch of branches) {
     const name = String(branch?.name ?? ""), hash = branch?.hash;
-    const r = await restoreBranch(git, root, { name, hash, upstream: branch?.upstream ?? null });
-    if (r.ok) { restored.push({ name, hash }); continue; }
+    const { made: r, tracking } = await remakeBranch(git, root, { name, hash, upstream: branch?.upstream ?? null });
+    if (r.ok) {
+      restored.push({ name, hash });
+      if (tracking) untracked.push({ name, hash, err: tracking.err || "git config failed." });
+      continue;
+    }
     if (name && (await hasRef(git, root, HEADS + name))) skipped.push({ name, hash, reason: "a branch of this name exists now", msg: { key: "branches.skipExists", args: { name } } });
     else skipped.push({ name, hash, reason: r.err || "git update-ref failed.", ...(r.msg ? { msg: r.msg } : {}) });
   }
-  if (!skipped.length) return { ok: true, code: 0, out: "", err: "", restored, skipped };
-  const n = restored.length, list = skipped.map((s) => `${s.name}: ${s.reason}`).join("\n");
-  return {
-    ok: false, code: -1, out: "", restored, skipped,
-    err: `Restored ${n === 1 ? "1 branch" : `${n} branches`}. Not restored:\n${list}`,
-    msg: { key: "branches.notAllRestored", args: { n, list } },
-  };
+  if (!skipped.length && !untracked.length) return { ok: true, code: 0, out: "", err: "", restored, skipped, untracked };
+  const n = restored.length, branchesWord = `Restored ${n === 1 ? "1 branch" : `${n} branches`}.`;
+  const list = skipped.map((s) => `${s.name}: ${s.reason}`).join("\n");
+  const lines = untracked.map((u) => `${u.name}: ${u.err}`).join("\n");
+  const notRestored = `Not restored:\n${list}`, noUpstream = `Restored without their upstream:\n${lines}`;
+  const [err, msg] = !untracked.length
+    ? [`${branchesWord} ${notRestored}`, { key: "branches.notAllRestored", args: { n, list } }]
+    : !skipped.length
+      ? [`${branchesWord} ${noUpstream}`, { key: "branches.notAllUpstream", args: { n, untracked: lines } }]
+      : [`${branchesWord} ${notRestored}\n${noUpstream}`, { key: "branches.notAllRestoredUpstream", args: { n, list, untracked: lines } }];
+  return { ok: false, code: -1, out: "", restored, skipped, untracked, err, msg };
 }
 
 // A local branch's commit and upstream: { ok, hash, upstream } or { ok: false, err, msg? }.

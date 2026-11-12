@@ -12,7 +12,7 @@ and browse branches and history with a commit graph, search and filters.
 - **Commit panel** (Changes button, `cmd-k`): changed and unversioned files as a
   checkbox tree. Only the checked files are committed, whatever git has staged.
   Amend, Commit and Push…, Rollback…, Restore Rolled-Back Changes…, Show Diff.
-- **Log panel** (`cmd-shift-g`): Branch tree (checkout, new branch, delete, fetch), every
+- **Log panel** (the Git button beside Changes, `cmd-shift-g`): Branch tree (checkout, new branch, delete, fetch), every
   commit with a graph, search by text or hash, Branch / User / Date / Path filters, and
   the selected commit's files and message.
 - **Diff tab**: one file's unified diff with line numbers, opened from either panel. A
@@ -176,6 +176,8 @@ drops them at once (they can't be restored after that).
 - Commit amends only the last commit and commits whole files, not lines.
 - In a space on another machine nothing watches the files: a working file's Diff tab
   reads again every 10 seconds while it is on screen.
+- The Git button is on macOS only. On Windows and Linux, show the Log panel with
+  `cmd-shift-g` or the Commit panel's Git Log button.
 - Commit details hides when the Log panel is narrower than about 930px.
 - Commit details names at most 12 branches that contain the commit, then `and N more`.
 - English and Korean only, picked from the system with no switch. Windows always gets

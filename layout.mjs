@@ -1,5 +1,6 @@
-// Turns Herdr's `main` layout into `main-git`: the Changes button opens the Commit panel
-// and a Log panel sits under the work area. See docs/adr/0001-clone-main-layout.md.
+// Turns Herdr's `main` layout into `main-git`: the Changes button opens the Commit panel,
+// a Log panel sits under the work area, and a Git button beside the Changes button shows
+// and hides it. See docs/adr/0001-clone-main-layout.md.
 //
 //   node layout.mjs <main.json>              check only: exit 1 and the reason if it can't be done
 //   node layout.mjs <main.json> <out.json>   write the transformed layout to out.json
@@ -10,6 +11,11 @@ export const LOG_ID = "git-log";
 // `work` is not resizable, so the Log panel's boundary needs a column of its own.
 export const WRAP_ID = "git-work";
 export const LOG_HEIGHT = 320;
+// The tab bar draws the Files and Changes buttons itself and takes no others, so the Git
+// button is a block of its own right of it, in a row that takes the tab bar's place.
+export const TABS_ROW_ID = "git-tabs";
+export const BUTTON_ID = "git-log-button";
+export const BUTTON_WIDTH = 64;
 
 const find = (node, id) => {
   if (node?.id === id) return node;
@@ -25,13 +31,21 @@ const fail = (error) => ({ ok: false, error });
 // Pure: returns { ok: true, layout } or { ok: false, error }, never touches its input.
 // It fails rather than guesses when `main` isn't shaped as expected: a Herdr update that
 // moves these nodes must be noticed, not papered over.
-export function toMainGit(main) {
+// button: whether the Git button goes beside the tab bar. Without it the tab bar is left
+// (or put back) as Herdr has it.
+export function toMainGit(main, { button = true } = {}) {
   if (!main || typeof main !== "object" || !Array.isArray(main.children)) return fail("the layout has no node tree");
   const layout = structuredClone(main);
 
   const work = find(layout, "work");
   if (!work) return fail("node `work` (the column right of the sidebar) is missing");
   if (work.type !== "column" || !Array.isArray(work.children)) return fail("node `work` is not a column");
+
+  // On our own output, the tab bar already sits inside its row.
+  const oldRow = work.children.find((c) => c.id === TABS_ROW_ID);
+  const tabs = (oldRow?.children ?? work.children).find((c) => c.id === "tabs");
+  if (!tabs) return fail("node `tabs` (the tab bar) is missing from `work`");
+  if (tabs.type !== "block") return fail("node `tabs` is not a block");
 
   // On our own output, work-body already sits inside the wrapper.
   const oldWrap = work.children.find((c) => c.id === WRAP_ID);
@@ -57,6 +71,20 @@ export function toMainGit(main) {
   };
   const wrap = { id: WRAP_ID, type: "column", children: [body, log] };
   work.children[work.children.indexOf(oldWrap ?? body)] = wrap;
+
+  // The row is as tall as the tab bar was; inside it the tab bar takes the width left
+  // over, so its own size (a height) goes to the row. No boundary to drag between them.
+  const height = oldRow ? oldRow.size : tabs.size;
+  const { size: _height, ...bar } = tabs;
+  // The button's block is the window's top right corner, which was the tab bar's: around
+  // the button it moves the window when the tab bar does.
+  const gitButton = {
+    id: BUTTON_ID, type: "block", size: { px: BUTTON_WIDTH },
+    ...(tabs.window_drag === undefined ? {} : { window_drag: tabs.window_drag }),
+    content: { mod: MOD, props: { view: "log-button" } },
+  };
+  const row = { id: TABS_ROW_ID, type: "row", ...(height ? { size: height } : {}), resizable: false, children: [bar, gitButton] };
+  work.children[work.children.indexOf(oldRow ?? tabs)] = button ? row : { ...bar, ...(height ? { size: height } : {}) };
   return { ok: true, layout };
 }
 
@@ -134,7 +162,9 @@ if (invoked) {
   let main;
   try { main = JSON.parse(fs.readFileSync(from, "utf8")); }
   catch (e) { console.error(`Cannot read ${from}: ${e.message}`); process.exit(1); }
-  const r = toMainGit(main);
+  // Only on macOS: elsewhere the tab bar ends with the window's own buttons (minimize,
+  // maximize, close), and a block right of it would sit outside them.
+  const r = toMainGit(main, { button: process.platform === "darwin" });
   if (!r.ok) {
     console.error(`${from} is not shaped like the Herdr main layout this was built for: ${r.error}.`);
     process.exit(1);

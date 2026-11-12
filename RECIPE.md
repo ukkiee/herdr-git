@@ -4,7 +4,8 @@ Git tools inside the Herdr desktop app, in a layout called `main-git`.
 The tab bar's Changes button opens a **Commit panel**: the changed files as a checkbox
 tree, a message box, Commit and Commit and Push…. Under the work area a **Log panel**
 shows the branches, every commit with a colored graph, and the selected commit's files
-and message. Diffs open as tabs; Push, Rollback, Restore and New Branch are dialogs;
+and message; a **Git button** beside the Changes button shows and hides it. Diffs open
+as tabs; Push, Rollback, Restore and New Branch are dialogs;
 right-click opens small popup menus. A rollback is recorded first and can be restored; a
 deleted branch can be restored from a notice under the Log panel. Files and folders show
 Atom Material Icons. The words are Korean when the computer's first preferred language
@@ -103,6 +104,18 @@ The right side panel, in place of Herdr's own Changes. A card: 10px corners, 1px
 - **States** in place of the list, centered in `dim`: `Loading…` with a 14px spinner
   (first read of a folder), `No changes`, `<folder> is not in a git repository.` (then there is no
   form).
+
+### Git button
+
+On macOS only. A 64px block right of the tab bar, in the tab bar's row and as tall as
+it, drawn as a continuation of it: `chrome` background, the 1px `border` line under it,
+no line between the two. In it, 10px from the right edge, one button drawn like the tab
+bar's own Files and Changes buttons: 26px tall, 8px side padding, 6px corners, the
+`branch-item` icon at 14px, a 5px gap, `Git` at 12px. `muted` on `chrome`; `foreground`
+on `selected` while the Log panel shows; `hover` under the pointer. Tooltip `Git Log`.
+It stands 13px from the Changes button (the tab bar's own 10px right padding and 3px);
+Files and Changes are 3px apart. Dragging the block around the button moves the window,
+as dragging the tab bar does.
 
 ### Log panel
 
@@ -425,9 +438,9 @@ another machine runs every git command on that machine. A panel opened with
 - **Changes** button (Herdr's tab bar): shows and hides the Commit panel.
 - **`cmd-k`**: opens the Commit panel when the side panel is hidden or shows Files.
   Pressing it again leaves it open.
-- **`cmd-shift-g`**, the Commit panel's Git Log button and the Log panel's Hide: show and
-  hide the Log panel. Drag its top edge to resize it (120 to 900px); Herdr keeps the
-  height.
+- **Git** button (right of Changes, macOS only), **`cmd-shift-g`**, the Commit panel's
+  Git Log button and the Log panel's Hide: show and hide the Log panel. Drag its top
+  edge to resize it (120 to 900px); Herdr keeps the height.
 - Both keys work only while the `main-git` layout shows.
 
 ### Commit panel
@@ -781,19 +794,32 @@ the menu closes it with nothing picked.
 ### Layout: `layouts/main-git.json`
 
 `install.sh` builds it from the person's current `layouts/main.json` with `layout.mjs`.
-`toMainGit(main)` is pure and returns `{ ok: true, layout }` or `{ ok: false, error }`.
-Two changes, nothing else:
+`toMainGit(main, { button })` is pure and returns `{ ok: true, layout }` or
+`{ ok: false, error }`. Three changes, nothing else:
 
 - `panel-body` (stack) > `changes`: same id (the tab bar's Changes button opens it by
   id), content `{ "mod": "git-tools", "props": { "view": "commit" } }`.
 - `work` (column, `resizable: false`): its child `work-body` is replaced by a column
-  `git-work` = `[work-body, git-log]`, so `work` = `[tabs, git-work, status]`. `git-log`:
+  `git-work` = `[work-body, git-log]`. `git-log`:
   `{ "id": "git-log", "type": "block", "hidden": true, "size": { "px": 320 }, "min": 120, "max": 900, "padding": [0, 8], "content": { "mod": "git-tools", "props": { "view": "log" } } }`.
   The Log panel's own view adds 8px at its bottom; `work-body` pads the top.
+- `work` > `tabs` (the tab bar's block) is replaced by a row `git-tabs` =
+  `[tabs, git-log-button]`, so `work` = `[git-tabs, git-work, status]`. The row takes the
+  tab bar's `size` (its height) and is `resizable: false`; `tabs` keeps everything else
+  it had. `git-log-button`:
+  `{ "id": "git-log-button", "type": "block", "size": { "px": 64 }, "window_drag": true, "content": { "mod": "git-tools", "props": { "view": "log-button" } } }`,
+  where `window_drag` is the tab bar's own and is left out when the tab bar has none.
+  The tab bar's mod draws the Files and Changes buttons itself and takes no others,
+  which is why the Git button is a block beside it. With `button: false` the tab bar is
+  left as Herdr has it (and put back on a layout that has the row), so `work` =
+  `[tabs, git-work, status]`. The command line passes `button: true` only on macOS
+  (`process.platform === "darwin"`): elsewhere the tab bar ends with the window's
+  minimize, maximize and close buttons, and a block right of it would sit outside them.
 
-It refuses, writing nothing and naming the node, unless `work` is a column holding
-`work-body`, which holds the stack `panel-body`, which holds the block `changes`. On its
-own output it finds `work-body` inside `git-work` and rebuilds the same thing.
+It refuses, writing nothing and naming the node, unless `work` is a column holding the
+block `tabs` and `work-body`, which holds the stack `panel-body`, which holds the block
+`changes`. On its own output it finds `work-body` inside `git-work` and `tabs` inside
+`git-tabs` and rebuilds the same thing.
 `node layout.mjs <main.json>` only checks; `node layout.mjs <main.json> <out.json>`
 writes, keeping `cloned_from` of an existing file. It writes with
 `writeWhole(fs, path, text)`: the whole text goes to a temporary file in the same folder,
@@ -852,6 +878,7 @@ copy's locks (`locks.releaseAll()`) before the screen's own `close`:
 |---|---|---|
 | `commit` | `view-commit.js` (+ `commit-form.js`) | layout block `changes` |
 | `log` | `view-log.js` (+ `log-branches.js`, `log-filters.js`, `log-list.js`, `log-details.js`) | layout block `git-log` |
+| `log-button` | `view-log-button.js` | layout block `git-log-button` |
 | `diff` | `view-diff.js` | `tab.new { name, mod, props }` |
 | `push` | `view-push.js` | modal dialog 760×480 |
 | `rollback` | `view-rollback.js` | modal dialog 520×460 |
@@ -2437,3 +2464,12 @@ two emails, and one author reached only by a tag)
      details lists `b.txt` as renamed; its Diff tab's header reads `renamed from a.txt`
      and the body shows only the changed line with its context. A file the commit only
      renamed reads `Renamed only: contents are identical`.
+
+**Git button** (macOS)
+
+103. A `Git` button stands right of Changes, in a strip that continues the tab bar (same
+     height, color and line under it, no line between them). Click it: the Log panel
+     shows and the button is lit like Changes. Click it again: the panel hides and the
+     button reads like Files. The Commit panel's Git Log button is lit with it.
+104. Drag the tab bar where it is empty, then the strip beside the Git button: each
+     moves the window.

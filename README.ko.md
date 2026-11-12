@@ -12,7 +12,7 @@ Changes 버튼으로 여는 Commit panel과 작업 영역 아래의 Git Log pane
 - **Commit panel**(Changes 버튼, `cmd-k`): 바뀐 파일과 추적하지 않는 파일을 체크박스
   트리로 보여 줍니다. git에 스테이징된 것과 상관없이 체크한 파일만 커밋합니다. Amend,
   Commit and Push…, Rollback…, Restore Rolled-Back Changes…, Show Diff가 있습니다.
-- **Log panel**(`cmd-shift-g`): Branch tree(체크아웃, 새 브랜치, 삭제, fetch), 그래프와
+- **Log panel**(Changes 옆의 Git 버튼, `cmd-shift-g`): Branch tree(체크아웃, 새 브랜치, 삭제, fetch), 그래프와
   함께 보는 모든 커밋, 글자나 해시로 찾기, Branch / User / Date / Path 필터, 고른 커밋의
   파일과 메시지.
 - **Diff tab**: 파일 하나의 통합 diff를 줄 번호와 함께 보여 줍니다. 두 패널 어디서든
@@ -168,6 +168,8 @@ cd herdr-git && ./install.sh
 - Amend는 마지막 커밋만 고치고, 커밋은 줄 단위가 아니라 파일 단위입니다.
 - 다른 머신의 space에서는 파일을 감시하지 못합니다. 작업 파일의 Diff tab은 화면에 보이는
   동안 10초마다 다시 읽습니다.
+- Git 버튼은 macOS에만 있습니다. Windows와 Linux에서는 `cmd-shift-g`나 Commit panel의 Git
+  Log 버튼으로 Log panel을 엽니다.
 - Log panel 폭이 약 930px보다 좁으면 Commit details가 숨습니다.
 - Commit details는 커밋을 포함한 브랜치를 12개까지 적고, 나머지는 `and N more`로 줄입니다.
 - 화면 언어는 영어와 한국어뿐이고, 시스템 설정으로만 정해집니다. Windows는 언제나

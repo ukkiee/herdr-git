@@ -6,7 +6,7 @@ import { mkdtempSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
-import { toMainGit, writeWhole, copyChanged, LOG_ID, MOD } from "./layout.mjs";
+import { toMainGit, writeWhole, copyChanged, LOG_ID, MOD, TABS_ROW_ID, BUTTON_ID, BUTTON_WIDTH } from "./layout.mjs";
 
 // The parts of Herdr's shipped `main` the transform touches, plus a field of each
 // kind it must leave alone.
@@ -17,7 +17,7 @@ const main = () => ({
       { id: "spaces", type: "block", content: { mod: "spaces" } },
     ] },
     { id: "work", type: "column", resizable: false, children: [
-      { id: "tabs", type: "block", size: { px: 42 }, content: { mod: "tabs" } },
+      { id: "tabs", type: "block", size: { px: 42 }, window_drag: true, content: { mod: "tabs" } },
       { id: "work-body", type: "row", padding: 8, gap: 8, children: [
         { id: "main", type: "block", content: { tab: "active" } },
         { id: "panel", type: "column", hidden: true, size: { px: 368 }, min: 280, max: 900, children: [
@@ -75,12 +75,48 @@ const parentOf = (node, id) => {
   assert.deepEqual(wrap.children.map((c) => c.id), ["work-body", LOG_ID], "below the work area and the side panel");
   const work = find(layout, "work");
   assert.equal(work.resizable, false, "the work column itself stays as it was");
-  assert.deepEqual(work.children.map((c) => c.id), ["tabs", wrap.id, "status"], "below the tab bar, above the status bar");
+  assert.deepEqual(work.children.map((c) => c.id), [TABS_ROW_ID, wrap.id, "status"], "below the tab bar, above the status bar");
   // Expected from a fresh copy of the input, with the one allowed change made by hand:
   // the side panel keeps its width, limits and hidden state.
   const expected = main();
   find(expected, "changes").content = { mod: MOD, props: { view: "commit" } };
   assert.deepEqual(find(layout, "work-body"), find(expected, "work-body"));
+}
+
+// Git button: a block right of the tab bar, so it sits beside the Changes button. The two
+// share a row that takes the tab bar's place and height; the tab bar keeps the rest of
+// what it had (dragging it still moves the window).
+{
+  const { layout } = toMainGit(main());
+  const row = find(layout, TABS_ROW_ID);
+  assert.equal(row.type, "row");
+  assert.deepEqual(row.size, { px: 42 }, "as tall as the tab bar was");
+  assert.equal(row.resizable, false, "no boundary to drag between the tab bar and the button");
+  assert.deepEqual(row.children.map((c) => c.id), ["tabs", BUTTON_ID]);
+  assert.deepEqual(find(layout, "tabs"), { id: "tabs", type: "block", window_drag: true, content: { mod: "tabs" } });
+  assert.deepEqual(find(layout, BUTTON_ID), { id: BUTTON_ID, type: "block", size: { px: BUTTON_WIDTH }, window_drag: true, content: { mod: MOD, props: { view: "log-button" } } });
+}
+
+// The strip around the button moves the window exactly when the tab bar does: the block
+// is the window's top right corner, which was the tab bar's.
+{
+  const input = main();
+  delete find(input, "tabs").window_drag;
+  const { layout } = toMainGit(input);
+  assert.deepEqual(find(layout, BUTTON_ID), { id: BUTTON_ID, type: "block", size: { px: BUTTON_WIDTH }, content: { mod: MOD, props: { view: "log-button" } } });
+}
+
+// Without the button, the tab bar is as Herdr has it; asked for on a layout that has the
+// button, the tab bar goes back to that.
+{
+  const plain = toMainGit(main(), { button: false });
+  assert.equal(plain.ok, true);
+  assert.deepEqual(find(plain.layout, "tabs"), find(main(), "tabs"));
+  assert.equal(find(plain.layout, TABS_ROW_ID), null);
+  assert.equal(find(plain.layout, BUTTON_ID), null);
+  assert.deepEqual(find(plain.layout, "work").children.map((c) => c.id), ["tabs", parentOf(plain.layout, LOG_ID).id, "status"]);
+  assert.deepEqual(toMainGit(toMainGit(main()).layout, { button: false }).layout, plain.layout);
+  assert.deepEqual(toMainGit(plain.layout).layout, toMainGit(main()).layout);
 }
 
 // Running it on its own output changes nothing.
@@ -92,7 +128,7 @@ const parentOf = (node, id) => {
 }
 
 // A `main` without an expected node fails and names the node.
-for (const id of ["work", "work-body", "panel-body", "changes"]) {
+for (const id of ["work", "tabs", "work-body", "panel-body", "changes"]) {
   const input = main();
   const parent = parentOf(input, id);
   parent.children = parent.children.filter((c) => c.id !== id);

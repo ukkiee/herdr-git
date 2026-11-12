@@ -38,11 +38,13 @@ import Restore from "./view-restore.js";
 import BranchNew from "./view-branch-new.js";
 import Menu from "./view-menu.js";
 import IconSheet from "./view-icon-sheet.js";
+import LogButton from "./view-log-button.js";
 
 // The screen table: props.view → the screen's class.
 export const VIEWS = {
   "commit": Commit, // Commit panel: the `changes` block of the main-git layout
   "log": Log, // Log panel: the `git-log` block of the main-git layout
+  "log-button": LogButton, // Git button: the `git-log-button` block right of the tab bar
   "diff": Diff, // Diff tab: tab.new { mod, props }
   "push": Push, // Push dialog
   "rollback": Rollback, // Rollback dialog

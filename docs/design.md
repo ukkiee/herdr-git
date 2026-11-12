@@ -23,6 +23,8 @@ space가 다른 머신에 있으면 git 명령을 모두 그 머신에서 실행
     Ref label, 작성자, 시각.
   - **Commit details** (`log-details.js`): 고른 커밋의 파일 트리, 전체 메시지, 그 커밋을 담은
     브랜치, 커밋 줄의 우클릭 메뉴.
+- **Git 버튼** (`view-log-button.js`): 탭 바의 Changes 버튼 오른쪽 블록 `git-log-button`. Log
+  panel을 보이고 숨긴다. macOS에서만 놓인다.
 - **Diff tab** (`view-diff.js`): 파일 하나의 통합 diff를 줄마다 그리는 space의 탭. 작업 파일의
   탭은 파일을 따라간다.
 - **창**: Rollback dialog (`view-rollback.js`), Restore dialog (`view-restore.js`), Push dialog
@@ -92,15 +94,22 @@ git 모듈과 순수 계산 모듈은 `herdr`를 import하지 않는다. 그래�
 ### 설치와 레이아웃
 
 Herdr의 내장 `main` 레이아웃은 구조 변경을 받지 않는다. 그래서 `install.sh`가 `main`을 복제한
-`main-git`을 만들고 두 곳만 바꾼다([ADR 0001](adr/0001-clone-main-layout.md)).
+`main-git`을 만들고 세 곳만 바꾼다([ADR 0001](adr/0001-clone-main-layout.md)).
 
 - `panel-body`의 `changes` 블록은 id를 그대로 두고 내용만 Commit panel로 바꾼다. 탭 바의
   Changes 버튼이 이 id를 열기 때문이다.
 - `work` column은 크기를 조절할 수 없으므로, `work-body`를 새 column `git-work`로 감싸고 그
   아래에 Log panel 블록 `git-log`(기본 320px, 숨김, 120~900px)를 넣는다.
-- 변환은 `layout.mjs`의 순수 함수 `toMainGit`이다. 기대하는 노드(`work`, `work-body`,
-  `panel-body`, `changes`)가 없으면 아무것도 쓰지 않고 없는 노드를 알린다. 짐작해서 고치지
-  않는 것은, Herdr 업데이트로 `main`의 구조가 바뀐 것을 알아채야 하기 때문이다.
+- 탭 바 블록 `tabs`를 새 row `git-tabs`로 감싸고 오른쪽에 64px 블록 `git-log-button`(Git
+  버튼)을 둔다. 탭 바의 mod는 Files와 Changes 버튼을 직접 그리고 다른 버튼을 받지 않기
+  때문이다. row가 탭 바의 높이를 받고 둘 사이에는 끌 수 있는 경계가 없다. 버튼 블록은 창의
+  오른쪽 위 모서리라서 탭 바의 `window_drag`를 따른다(버튼 둘레를 끌면 창이 움직인다).
+  macOS에서만 넣는다. 다른 OS에서는 탭 바의 오른쪽 끝에 창 버튼(최소화, 최대화, 닫기)이
+  있어서 블록이 그 바깥에 놓이기 때문이다.
+- 변환은 `layout.mjs`의 순수 함수 `toMainGit`이다. 기대하는 노드(`work`, `tabs`,
+  `work-body`, `panel-body`, `changes`)가 없으면 아무것도 쓰지 않고 없는 노드를 알린다.
+  짐작해서 고치지 않는 것은, Herdr 업데이트로 `main`의 구조가 바뀐 것을 알아채야 하기
+  때문이다.
 - `install.sh`는 앞의 네 검사(node, `main.json`, 변환 가능, Herdr 실행 중) 가운데 하나라도
   실패하면 `Nothing was changed.`로 멈춘다. `main-git.json`과 `keys.json`은 임시 파일에 다
   쓴 뒤 이름을 바꿔 덮는다. `keys.json`에는 비어 있는 키만 더한다.
@@ -342,6 +351,9 @@ Herdr는 mod를 QuickJS로 돌린다. JIT가 없고, 한 호출이 너무 오래
 - 가장 최근 Rollback snapshot 하나는 `git log --all`처럼 모든 ref를 보는 명령에 커밋으로 보인다.
 - 지운 브랜치는 마지막 하나만, 그 알림 줄에서만 되살린다.
 - 언어를 mod 안에서 바꾸는 방법이 없다. Windows는 언제나 영어다.
+- Git 버튼은 macOS에만 있다. 다른 OS에서는 `cmd-shift-g`와 Commit panel의 Git Log 버튼으로
+  Log panel을 연다. 버튼은 탭 바 밖의 블록이어서 Changes 버튼과의 간격이 13px로, 탭 바 안의
+  버튼 사이(3px)보다 넓다.
 - User 필터에서 고른 이름은 대소문자까지 같은 작성자만 건다. 다만 Match Case를 끈 검색이나 직접
   친 글자가 함께 걸린 동안에는 대소문자만 다른 작성자(`bob`과 `Bob`)도 걸린다.
 - 영어 시스템과 Windows·Linux에서는 화면을 확인하지 못했다. 한국어 macOS에서만 확인했다.

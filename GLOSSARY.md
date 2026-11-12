@@ -14,6 +14,10 @@ _Avoid_: Changes 창, 변경 창, 커밋 뷰
 브랜치와 커밋 기록을 보여 주는 하단 패널.
 _Avoid_: Git 창, 히스토리, 로그 뷰
 
+**Git button**:
+탭 바의 Changes 버튼 오른쪽에서 Log panel을 보이고 숨기는 버튼. Commit panel 툴바의 Git Log 버튼과는 다른 것이다.
+_Avoid_: 로그 버튼, Git 탭
+
 **Restore dialog**:
 Rollback snapshot을 골라 파일을 되살리는 창.
 _Avoid_: 히스토리 창, 복구 창
@@ -86,4 +90,4 @@ _Avoid_: 아이콘 팩, 파일 타입 아이콘
 ### 배치
 
 **main-git**:
-Herdr의 `main` 레이아웃을 복제해 Commit panel과 Log panel 자리를 넣은 레이아웃.
+Herdr의 `main` 레이아웃을 복제해 Commit panel, Log panel, Git button 자리를 넣은 레이아웃.

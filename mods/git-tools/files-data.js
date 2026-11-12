@@ -194,8 +194,12 @@ export async function readSearchList(exec, folder, { on = null, platform = null,
   const git = makeGit(exec, on);
   const where = await repoOf(git, folder);
   if (where.ok && where.repo) {
-    const listed = await git.read(folder, ["ls-files", "-z", "--cached", "--others", "--exclude-standard"]);
-    if (!listed.ok) return { ok: false, repo: true, files: [], limited: false, err: listed.err };
+    // Read apart, not as one `--cached --others` call: that one prints the new files first,
+    // so a cut would keep them and drop tracked files.
+    const tracked = await git.read(folder, ["ls-files", "-z", "--cached"]);
+    if (!tracked.ok) return { ok: false, repo: true, files: [], limited: false, err: tracked.err };
+    const untracked = await git.read(folder, ["ls-files", "-z", "--others", "--exclude-standard"]);
+    if (!untracked.ok) return { ok: false, repo: true, files: [], limited: false, err: untracked.err };
     const deleted = await git.read(folder, ["ls-files", "-z", "--deleted"]);
     if (!deleted.ok) return { ok: false, repo: true, files: [], limited: false, err: deleted.err };
     const skip = new Set(deleted.out.split("\0"));
@@ -204,7 +208,7 @@ export async function readSearchList(exec, folder, { on = null, platform = null,
     if (!staged.ok) return { ok: false, repo: true, files: [], limited: false, err: staged.err };
     for (const entry of staged.out.split("\0")) if (entry.startsWith("160000 ")) skip.add(entry.slice(entry.indexOf("\t") + 1));
     // A conflicted path is listed once per stage; an untracked nested repository as "dir/".
-    const files = [...new Set(listed.out.split("\0"))].filter((p) => p && !p.endsWith("/") && !skip.has(p));
+    const files = [...new Set([...tracked.out.split("\0"), ...untracked.out.split("\0")])].filter((p) => p && !p.endsWith("/") && !skip.has(p));
     const keep = Math.max(limit, 0);
     return { ok: true, repo: true, files: files.slice(0, keep), limited: files.length > keep, err: "" };
   }

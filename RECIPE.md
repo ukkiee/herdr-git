@@ -659,8 +659,9 @@ another machine runs every git command on that machine. A panel opened with
 - **Search**: typing part of a path (any case) shows the matching files under the
   folder: files whose name holds the text first, then those matching only through their
   folders, each by path, at most 200. Inside a repository it looks through the tracked
-  files and the new ones not ignored (not those deleted from disk, not submodules), in
-  git's order (tracked files by path, then new ones); outside one, through the folder's
+  files and the new ones not ignored (not those deleted from disk, not submodules),
+  tracked files by path first and the new ones after them, so a cut keeps the tracked
+  files; outside one, through the folder's
   files (no `.git`, not following folder links). Either way the first 20,000, with the
   note when there were more. The list is read when a search starts and again when the
   folder changes while one is typed. A refresh while searching (the folder changing on

@@ -313,6 +313,27 @@ const sorted = (list) => [...list].sort();
   assert.deepEqual(sorted(exact.files), all);
 }
 
+// When the list is cut, tracked files keep their places before new ones: a folder of
+// generated files left out of .gitignore can't push the tracked files out.
+{
+  const repo = init("search-repo-tracked-first");
+  mkdirSync(`${repo}/src`);
+  for (const f of ["src/m.txt", "src/z.txt", "y.txt", "z.txt"]) writeFileSync(`${repo}/${f}`, f);
+  sh(repo, "git add -A && git commit -q -m base");
+  mkdirSync(`${repo}/build`);
+  for (const f of ["a.txt", "build/a.out", "src/a.txt"]) writeFileSync(`${repo}/${f}`, f);
+  const tracked = sh(repo, "git ls-files").split("\n").filter(Boolean);
+  assert.equal(tracked.length, 4);
+
+  const cut = await readSearchList(exec, repo, { limit: 4 });
+  assert.equal(cut.limited, true);
+  assert.deepEqual(sorted(cut.files), sorted(tracked));
+
+  const inner = await readSearchList(exec, `${repo}/src`, { limit: 2 });
+  assert.equal(inner.limited, true);
+  assert.deepEqual(sorted(inner.files), ["m.txt", "z.txt"]);
+}
+
 // A submodule is a folder, not a file: it stays out of the search list, from the root and
 // from a folder above it.
 {

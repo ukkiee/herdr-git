@@ -33,6 +33,7 @@ import CommitForm from "./commit-form.js";
 import { openRollback, serveRollback } from "./view-rollback.js";
 import { openRestore, serveRestore } from "./view-restore.js";
 import { servePush } from "./view-push.js";
+import { serveAction } from "./serve-actions.js";
 import { openDiff } from "./view-diff.js";
 
 // The groups' names are worded when drawn (groupName): rows outlive a change of language.
@@ -150,7 +151,7 @@ export default class CommitView {
     if (e.action === "push") servePush(this, e, cx);
     else if (e.action === "rollback") serveRollback(this, e, cx);
     else if (e.action === "restore") serveRestore(this, e, cx);
-    else return false;
+    else return serveAction(this, e, cx);
     return true;
   }
 

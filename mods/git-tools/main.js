@@ -42,6 +42,9 @@ import IconSheet from "./view-icon-sheet.js";
 import LogButton from "./view-log-button.js";
 import DeletedBranches from "./view-deleted-branches.js";
 import Files from "./view-files.js";
+import { recordWith } from "./git.js";
+import { recordGit } from "./app-files.js";
+import Console from "./view-console.js";
 
 // When the system's language isn't known yet, how long to wait before each next ask.
 const ASK_AGAIN = [1000, 3000, 10000];
@@ -60,6 +63,7 @@ export const VIEWS = {
   "icon-sheet": IconSheet, // every Icon theme icon, for checking: tab.new { mod, props } only
   "deleted-branches": DeletedBranches, // Deleted Branches dialog
   "files": Files, // Files panel: the `files` block of the main-git layout
+  "console": Console, // Git console tab: tab.new { mod, props } (view-console.js openConsole)
 };
 
 // `mod.open:git-tools` (cmd-k) opens a copy with no view. No single app command both
@@ -90,6 +94,9 @@ export default class GitTools extends View {
     // Here, not in a screen's first render: the copies share the module, so only the
     // first copy pays for it.
     warmIcons();
+    // Every runner records its writes in the Git console (git.js). Each copy installs the
+    // same function, before its screen can run git.
+    recordWith(recordGit);
     this.say(() => this.screen.init(p, cx));
     if (!fixed) this.askLang(cx, 0);
     // A lock this copy holds stays alive only while it beats (lock.js STALE). Writes

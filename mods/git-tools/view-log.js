@@ -21,6 +21,7 @@ import { location, panelFrame, toolbar, spacer, iconButton, notice, notRepositor
 import { sameRepo } from "./lock.js";
 import { serveBranch } from "./view-branch-new.js";
 import { serveDeletedBranches } from "./view-deleted-branches.js";
+import { serveAction } from "./serve-actions.js";
 import LogBranches from "./log-branches.js";
 import LogFilters from "./log-filters.js";
 import LogList from "./log-list.js";
@@ -302,7 +303,7 @@ export default class LogView {
 
   // The New Branch, Delete Branch and Deleted Branches dialogs this panel opened ask it
   // to run their writes, so the branches and the result outlive the dialog.
-  serve(e, cx) { return serveBranch(this, e, cx) || serveDeletedBranches(this, e, cx); }
+  serve(e, cx) { return serveBranch(this, e, cx) || serveDeletedBranches(this, e, cx) || serveAction(this, e, cx); }
 
   // noteDeleted(repo, deleted): a Delete on `repo` deleted a branch (git-branch.js
   // deleteBranch's `deleted`); its notice replaces the one before. A refused or

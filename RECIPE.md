@@ -2,12 +2,15 @@
 
 Git tools inside the Herdr desktop app, in a layout called `main-git`.
 The tab bar's Changes button opens a **Commit panel**: the changed files as a checkbox
-tree, a message box, Commit and Commit and Push…. Under the work area a **Log panel**
+tree, a message box, Commit and Commit and Push…, and while Amend is on the files of the
+last commit. The Files button opens a **Files panel**: the focused folder as a tree with
+git marks, a search box and a read-only preview. Under the work area a **Log panel**
 shows the branches, every commit with a colored graph, and the selected commit's files
 and message; a **Git button** beside the Changes button shows and hides it. Diffs open
-as tabs; Push, Rollback, Restore and New Branch are dialogs;
-right-click opens small popup menus. A rollback is recorded first and can be restored; a
-deleted branch can be restored from a notice under the Log panel. Files and folders show
+as tabs; Push, Rollback, Restore, New Branch and Deleted Branches are dialogs;
+right-click opens small popup menus. A rollback is recorded first and can be restored,
+staging included; a deleted branch is recorded first and can be restored from a notice
+under the Log panel or, later, from the Deleted Branches dialog. Files and folders show
 Atom Material Icons. The words are Korean when the computer's first preferred language
 is Korean, English otherwise. Spaces on another machine run git there.
 
@@ -25,8 +28,8 @@ paths, hashes, commit messages, author names and git's own output are never tran
 nor are `HEAD`, `Diff` and `Git`.
 
 **File and folder icons** (the Icon theme): every file row and folder row of a changed-file
-tree (Commit panel, Commit details, Push, Rollback and Restore dialogs) and the Diff tab's
-header draws the Atom Material Icons icon its name picks, in the icon's own colors (an
+tree (Commit panel, Commit details, Push, Rollback and Restore dialogs), of the Files
+panel's tree and search results, and the Diff tab's header draws the Atom Material Icons icon its name picks, in the icon's own colors (an
 `image`, not tinted). A file's icon is picked from its path, a folder's from its name (a
 compact row `src/app` by `app`); an unfolded folder shows the open icon. 48 file icons
 have a dark variant (`_dark`), used while Herdr's look is dark. A name no rule matches
@@ -46,7 +49,8 @@ The right side panel, in place of Herdr's own Changes. A card: 10px corners, 1px
   (`panel-bottom`, lit while the Log panel shows; absent in a layout without it).
   Disabled buttons are `dim` at half opacity; a lit one has the `selected` background.
 - **File list**, the rest of the height. Two groups, **Changes** and **Unversioned
-  Files**, each a row with the name in semibold and `N files` at 12px `dim`. A group
+  Files**, each a row with the name in semibold and `N files` at 12px `dim`, and while
+  Amend is on a third, the **Last commit group** (below). A group
   with no files is left out. Unversioned Files starts folded. Each row: a 14px fold
   arrow (`chevron-right` / `chevron-down`, `muted`; an empty 14px place on file rows so
   checkboxes line up), a 14px checkbox, then:
@@ -63,6 +67,15 @@ The right side panel, in place of Herdr's own Changes. A card: 10px corners, 1px
     pointer.
   - Checkbox: 14px, 3px corners. Off: 1px `input` border. On: `accent` fill with a
     `check` (all) or `minus` (some) at 11px in `accent_foreground`.
+  - **Last commit group**, only while Amend is on and the repository has a commit, last
+    in the list and unfolded when it appears. Its row: the fold arrow, a 14px commit
+    glyph drawn in the checkbox's place (an 8px `muted` ring on a 1px line), the commit's
+    subject in semibold (at most 70% of the row; the 8-character hash when the message is
+    empty), then `N files` at 12px `dim`. The count always shows whole: a long subject
+    is cut with `…` first. Tooltip: the full hash. Its folder and file rows have an empty
+    14px place where the checkbox would be, and are drawn like the other groups' (flat or
+    grouped, Icon theme icons, status colors); a renamed file is `ansi4`, with the
+    tooltip `<path> (renamed from <old>)`.
 - **Commit form**, line above it, 8px padding, 6px gaps:
   - An **Amend** checkbox and the word `Amend` (`dim` and with a tooltip when it can't
     be used: `No commits to amend yet`, or why no write can start, as below).
@@ -76,12 +89,14 @@ The right side panel, in place of Herdr's own Changes. A card: 10px corners, 1px
     (`accent` while typing), `background`.
   - Two 28px buttons, 12.5px text, 6px corners: **Commit** (primary: `solid` fill,
     `solid_foreground` text) and **Commit and Push…** (plain: `raised` fill, `input`
-    border). With Amend on the labels stay `Commit` and `Commit and Push…`. Disabled,
+    border). With Amend on the labels are `Amend Commit` and `Amend Commit and Push…`;
+    when the two don't fit side by side, the second goes to a line under the first. Disabled,
     both are `raised` with `dim` text and the tooltip says why: `Select files to commit`,
     `Specify a commit message`, or why no write can start (the panel's own running
     write's label, or `Another git operation is running: <label>`). Enabled, the
-    tooltips are `Commit (⌘Enter)` and `Commit, then review and push`. The button that
-    started a commit shows a 12px spinner.
+    tooltips are `Commit (⌘Enter)` and `Commit, then review and push` (with Amend on,
+    `Amend Commit (⌘Enter)` and `Amend the last commit, then review and push`). The
+    button that started a commit shows a 12px spinner.
   - Under the buttons, at 12px `muted`, while a write the buttons don't show runs: another
     screen's write on this repository, `Another git operation is running: Committing…`
     (the label is that write's: `Amending…`, `Pushing…`, `Force Pushing…`,
@@ -104,6 +119,56 @@ The right side panel, in place of Herdr's own Changes. A card: 10px corners, 1px
 - **States** in place of the list, centered in `dim`: `Loading…` with a 14px spinner
   (first read of a folder), `No changes`, `<folder> is not in a git repository.` (then there is no
   form).
+
+### Files panel
+
+The right side panel under the Files button, in place of Herdr's own Files, on every
+OS. The same card as the Commit panel. Top to bottom:
+
+- **Header**, 34px, line under it, 10px side padding, 8px gaps: while a file is
+  previewed a 24px Back button (`←`, `muted`, 5px corners, `hover` under the pointer,
+  tooltip `Back`); `Files` in semibold; on the right at 12px `dim` the folder's name, or
+  the previewed file's path (cut from the end); while the previewed file has a git mark,
+  a Show Diff button (`diff`, tooltip `Show Diff`).
+- **Search box**, 30px, line under it, 10px side padding: the `search` icon (13px,
+  `dim`, `accent` while typing) and an input at 12.5px, placeholder `Search files`. Not
+  shown while a file is previewed, nor in place of the states below.
+- **Tree**, the rest of the height. 24px rows, indent 8px plus 16px per level. Folders
+  before files, each by name, case-insensitive first; `.git` isn't listed. A folder: a
+  12px fold arrow (`chevron-right` / `chevron-down`, `muted`), its Icon theme folder icon
+  (14px, open while unfolded), its name (at most 85% of the row) and, when a changed file
+  sits anywhere below it (deleted ones too, ignored ones not), a 6px `ansi4` dot right
+  after the name (tooltip `Changed files inside`). A file: an empty 12px place, its
+  Icon theme icon (14px), its name in its status color, and on the right its letter at
+  11px in the same color: modified `M` `ansi4`, added (untracked too) `A` `ansi2`,
+  deleted `D` `muted`, conflict `U` `ansi9` (`ansi1` if the theme lacks it) with the
+  name in semibold; the letter's tooltip is `Modified`, `Added`, `Deleted` or
+  `Conflict`. Ignored files and folders, and everything under an ignored folder: the
+  name `dim`, the icon at half opacity, no letter. The selected row has the `selected`
+  background.
+- **Search results**, in the tree's place while the box holds text: one 24px row per
+  file, its Icon theme icon, its name in its status color (at most 70% of the row), then
+  its folder at 11px `dim`. The chosen result has the `selected` background.
+- **Notes** under the tree or the results, each a line above it, 10px by 5px padding,
+  11px `dim`: `File list limited to 500 entries per folder and 5,000 total` (the tree);
+  `Searched only the first 20,000 files in this folder` and
+  `Showing the first 200 matches` (the results).
+- **Error strip** at the bottom (not while previewing): a folder below the top one that
+  can't be read, with the command's words; Reveal in Finder failing,
+  `Finder could not show this file.` or `open`'s words.
+- **States** in place of the tree, centered in `dim`: `No folder`,
+  `<folder> no longer exists.`, the words of a top folder that can't be read, `Loading…`
+  with a 14px spinner, `No files`. In place of the results: `Loading…`,
+  `No matching files`, or the words of a file list that can't be read.
+- **Preview**, in place of the search box, the tree and the notes: the file in a
+  read-only editor at 12px in the terminal font (`settings().font_family`), with syntax
+  colors (keywords `ansi5`, strings `ansi2`, comments `dim`, functions `ansi4`, types
+  `ansi3`, numbers `ansi1`, constants `ansi6`). A file past 400,000 characters has a
+  line over the editor (line under it, 12px by 4px padding, 11px `dim`):
+  `Showing the first 400,000 characters of this file`. In the editor's place, centered:
+  `Loading file…` with a spinner, `This file is no longer available`,
+  `Binary file · no text preview`, or
+  `Cannot preview this file (binary, too large, or unreadable)`.
 
 ### Git button
 
@@ -137,8 +202,9 @@ toolbar (`Git` semibold, `Log` 12px `muted`, Refresh, Hide) and the notice.
 **Branch tree** (12.5px text):
 
 - A vertical toolbar on the left, 30px wide, line on its right: New Branch… (`plus`),
-  Delete (`branch-delete`, tooltip `Delete '<name>'` or why not), Fetch (`fetch`, spins
-  while fetching), a 16×1px line, Expand All, Collapse All.
+  Delete (`branch-delete`, tooltip `Delete '<name>'` or why not), Deleted Branches…
+  (`restore`, off only until the branches have been read; on while a write runs), Fetch (`fetch`,
+  spins while fetching), a 16×1px line, Expand All, Collapse All.
 - A 34px filter row (as tall as the Commit list's toolbar): `search` icon (13px, `dim`,
   `accent` while typing) and an input, placeholder `Filter branches`.
 - The tree: `HEAD (Current Branch)` (or `HEAD (<7-char hash>)` when detached), then
@@ -353,6 +419,10 @@ Modal, 760×480, title `Restore Rolled-Back Changes`.
   `HEAD has another version of it now`, `git tracks a file at this path now`,
   `something is there on disk now`, `it isn't in this rollback`, or
   `git is told not to watch this file (assume-unchanged or skip-worktree); clear that flag to restore it`.
+  Paths whose file came back but whose staging didn't follow under
+  `Restored without their staging:`, one `<path>: <reason>` line each:
+  `something else is staged for it now` or
+  `it was in a conflict, and a conflict can't be brought back`.
   Any other failure shows in an error strip.
 - Footer note `Files changed since the rollback are left as they are.` (`Restoring…`
   while it runs; `Another git operation is running: <label>` while another screen writes
@@ -387,6 +457,32 @@ path as the tooltip. Only the rows in view are drawn. Its words are English only
   in `ansi1` if it fails, or `Another git operation is running: <label>` in `muted`,
   **Cancel** and **Delete** (primary, a spinner while the Log panel deletes).
 
+### Deleted Branches dialog
+
+Modal, 760×480, title `Deleted Branches`.
+
+- A 28px row, line under it: a checkbox for every branch that can be restored, then
+  `N branches checked` (`No branches checked` when none) at 12px `dim`.
+- One 24px row per branch deleted in this repository and still kept, newest first, at
+  most 50, 8px gaps: a checkbox, the `branch-item` icon (13px, `ansi2`), the name (up to
+  40% of the row, cut with `…`), the 7-character hash at 12px `dim`, the commit's subject
+  at 12px `muted` (cut with `…`), and when it was deleted at 12px `dim` (the Commit
+  list's time format: `Moments ago`, `Today 2:30 PM`, …). The keyboard's row has the
+  `selected` background. A row that can't be restored is at 60% opacity with its icon
+  and name `dim`, its checkbox off and disabled, and in the subject's place, at 12px
+  `ansi3`, `a branch of this name exists now at another commit`; its tooltip is the
+  subject.
+- In place of the list: `Loading…` with a spinner,
+  `No deleted branches are kept in this repository.`, or git's words in `ansi1`.
+- After a Restore, a row above the footer (line above, `raised`, scrolling past 108px):
+  `Restored N branches.`, or `Restored N branches. Not restored:` and one
+  `<name>: <reason>` line per branch left alone (`a branch of this name exists now`, or
+  git's words). Any other failure shows in an error strip.
+- Footer note `Deleted branches are kept for about 30 days.` (`Restoring branches…`
+  while it runs; `Another git operation is running: <label>` while another screen writes
+  to the repository), **Cancel** (off while it runs), **Restore** (primary; off with
+  nothing checked or while another write runs; a spinner while it runs).
+
 ### Popup menus
 
 A popup at the pointer (the Push dialog's ▾ menu: where the ▾ was pressed), `popover`,
@@ -403,6 +499,7 @@ line can sit above an item. Width 220px unless said.
 | Branch tree, a branch or HEAD (300px) | `Checkout`, `New Branch from '<name>'…`, line, `Delete` |
 | Commit list, a commit (260px) | `Copy Revision Number` (hint: 7-char hash), line, `Checkout Revision`, `New Branch…` |
 | Commit details, a file | `Show Diff` |
+| Files panel, a row or a search result | `Show Diff` (files with a git mark other than ignored), line, `Copy Path`, `Copy Relative Path`, `Reveal in Finder` (in a macOS window, for a space on this computer) |
 | Push dialog, ▾ (250px) | `Force Push` |
 
 ## How it behaves
@@ -421,7 +518,9 @@ another machine runs every git command on that machine. A panel opened with
   Korean when its first preferred language starts with `ko` (`ko`, `ko-KR`,
   `ko_KR.UTF-8`), English for anything else or an empty list. macOS: the system's
   preferred languages. Linux: the first set of `LC_ALL`, `LC_MESSAGES`, `LANG`. Windows:
-  always English. There is no switch in the mod.
+  the display language (PowerShell's `(Get-UICulture).Name`, such as `ko-KR`); an empty
+  answer there is not known (not checked on a real Windows machine). There is no switch
+  in the mod.
 - The language last read is kept in Herdr's shared state, so a screen opened later
   starts in it at once. A screen starts in that (English the very first time), reads
   the system's again, and changes over when it differs. When one screen reads another
@@ -475,10 +574,22 @@ another machine runs every git command on that machine. A panel opened with
   unfolds (or goes to the first child), Space checks, Enter opens the Diff tab or folds.
 - **Right-click** a row: selects it and opens its menu.
 - **View Options**: the menu toggles Group By: Directory. The choice is kept.
-- **Expand All / Collapse All**: both groups and every folder.
+- **Expand All / Collapse All**: every group (the Last commit group too) and every folder.
 - **Rollback…**: opens the Rollback dialog with the selected file, or every file under
-  the selected folder, checked; with nothing in Changes selected, every file. Disabled
-  when Changes is empty or a write runs.
+  the selected folder, checked; with nothing in Changes selected (a row of the Last
+  commit group included), every file. Disabled when Changes is empty or a write runs.
+- **Last commit group**: turning Amend on reads the commit HEAD is on and shows its
+  files at the bottom, unfolded; turning it off drops the group at once. Every read
+  while Amend is on asks where HEAD is and reads the files again only when it moved (a
+  commit, an amend, a checkout, another screen's write). A commit or an amend that
+  succeeds turns Amend off and the group goes; turned on again, it shows the new commit.
+  Moving to another repository turns Amend off, and the group goes with it. Its rows are
+  never checked and never rolled back: Space does nothing on them. Double-click, Enter,
+  Show Diff and the row menu's Show Diff on one of its files open that commit's Diff tab
+  (`<parent> → <commit>`, as Commit details opens it, a renamed file against its old
+  path); on its group row or a folder they fold. A commit with no parent lists every
+  file as added; a merge lists what it brought in against its first parent. When
+  reading the last commit fails, git's words show in the read strip.
 - **Rollback notice**: shows when a rollback this panel ran recorded a snapshot. `N` is
   the files sent to roll back less the ones skipped. **Restore…** opens the Restore
   dialog with that snapshot selected. The notice goes on `x`, when this panel starts its
@@ -510,6 +621,46 @@ another machine runs every git command on that machine. A panel opened with
   their push or rollback; it runs them as its own writes (see "One git write at a time").
 - The message is kept per repository: moving to another repository puts it away and
   brings back that one's.
+
+### Files panel
+
+- **What it shows**: the focused pane's folder (else the space's), on the space's
+  machine. Folders open one by one: the top folder and each unfolded folder are read,
+  at most 500 entries per folder and 5,000 in all; past that the note shows, and the
+  entries kept are the first the system listed, then sorted. Folding a folder drops
+  what was read inside it.
+- **Reads**: when the folder changes on disk (this computer only), every 10 s (also
+  while the panel is hidden), and when the focused folder changes. A read asked for
+  during a read runs once that ends. Coming back to a folder shows its unfolded folders
+  and its previewed file as they were left.
+- **git marks** come from one `git status` of the repository the folder is in; outside a
+  repository there are none. A failed git read keeps the marks shown and says nothing
+  (the Commit panel shows git's words); only a folder that can't be read shows an
+  error. No read writes anything under `.git`.
+- **Click** a folder: folds or unfolds it. Click a file: its preview, in the panel's
+  place; Back or Esc returns to the tree.
+- **Keys** (after a click on a row or in the search box): ↑ ↓ move, → unfolds (or goes
+  to the first child), ← folds (or goes to the parent), Enter folds a folder or previews
+  a file, Esc closes the preview or ends the search. While the search box has the
+  keyboard and is empty, only ↑ ↓ go to the tree. On the results: ↑ ↓ move, Enter
+  previews.
+- **Search**: typing part of a path (any case) shows the matching files under the
+  folder: files whose name holds the text first, then those matching only through their
+  folders, each by path, at most 200. Inside a repository it looks through the tracked
+  files and the new ones not ignored (not those deleted from disk), with no limit;
+  outside one, through the folder's files (no `.git`, not following folder links), the
+  first 20,000. The list is read when a search starts and again when the folder changes
+  while one is typed, not on each refresh: a file made while searching shows from the
+  next search. The first result is chosen, so Enter previews it. Emptying the box
+  brings the tree back.
+- **Preview**: read-only, the whole file up to 400,000 characters. A file over 1 MiB,
+  or one that can't be read, can't be previewed; a file with a NUL byte is binary.
+- **Right-click** a row or a result: selects it and opens its menu. **Show Diff** (and
+  the preview header's Show Diff) opens the file's Diff tab against HEAD, as the Commit
+  panel opens a working file. **Copy Path** puts the absolute path on the clipboard
+  (with `\` when the folder is written with `\` only). **Copy Relative Path** puts the
+  path from the repository root with `/`, or from the panel's folder outside a
+  repository. **Reveal in Finder** runs `open -R` on the file or folder.
 
 ### Log panel
 
@@ -548,10 +699,17 @@ another machine runs every git command on that machine. A panel opened with
     on another branch, a remote branch, a tag or HEAD is deleted at once (a pushed branch
     too). Otherwise the Delete Branch dialog says how many commits would be lost and
     deletes only on Delete. Remote branches and the current branch can't be deleted.
+    Every Delete first records the branch in the repository (see "Deleted branches"
+    under Built from); when that fails nothing is deleted and the error strip says
+    `Branch '<name>' was not deleted: it couldn't be recorded to restore later.` and
+    git's words.
+  - **Deleted Branches…** (toolbar): opens the Deleted Branches dialog on this
+    repository, owned by this panel.
   - **Deleted-branch notice**: every Delete that removes a branch (toolbar, menu, or the
-    Delete Branch dialog) shows it, merged branches too, replacing the one before; only
-    the last one is kept. Cancel in the dialog, a Delete git refuses, and the first try
-    on an unmerged branch (which opens the dialog) leave the notice as it was.
+    Delete Branch dialog) shows it, merged branches too, replacing the one before; the
+    notice names the last one only. Cancel in the dialog, a Delete git refuses, and the first try
+    on an unmerged branch (which opens the dialog) leave the notice as it was. Restoring
+    the notice's branch from the Deleted Branches dialog removes the notice.
     **Restore** makes the branch again under the same name at the same commit, with the
     upstream it tracked (`branch.<name>.remote` and `.merge`), without checking it out;
     the notice then goes, every screen reads again and the branch is back in the tree.
@@ -716,8 +874,8 @@ another machine runs every git command on that machine. A panel opened with
 - Success: every screen reads again and the dialog closes. Failure: git's words stay,
   the files already rolled back stay rolled back, and the list reads again to show what
   is left.
-- The footer names the way back: the files' working-tree content comes back with
-  Restore Rolled-Back Changes…; what was staged does not.
+- The footer names the way back: the files, and what was staged of them, come back with
+  Restore Rolled-Back Changes….
 
 ### Restore dialog
 
@@ -727,14 +885,21 @@ another machine runs every git command on that machine. A panel opened with
   while it runs). A click on a file selects it, a double-click opens that file's change
   in the snapshot in a Diff tab (`<parent> → <snapshot>`, as a commit's file); a
   double-click or the arrow folds a folder; the checkboxes check.
-- **Restore** brings back the checked files as they were right before the rollback, in
-  the working tree only: a modified file gets that content, a deleted one is deleted
-  again, an added one comes back as an untracked file. The index is not touched. A path
+- **Restore** brings back the checked files as they were right before the rollback: a
+  modified file gets that content, a deleted one is deleted again, an added one comes
+  back. Then what was staged of each restored file comes back too, so `git status` reads
+  as it did right before the rollback: the index entry the snapshot recorded goes back,
+  only where the index holds HEAD's entry now (none where HEAD lacks the path). A path
+  staged otherwise since, or one that was in a conflict, keeps its index as it is now
+  and is listed under `Restored without their staging:` with its reason; its file is
+  restored all the same. A snapshot made before snapshots held the staging, or in a
+  repository without a commit, leaves the index alone: an added file then comes back
+  untracked. A path
   is restored only when nothing changed it since: HEAD has the same version of it as
   when the rollback ran, the working tree matches HEAD there (for an added file: nothing
   at all is at the path, under any spelling the disk takes as the same name), and it
-  isn't flagged `assume-unchanged` or `skip-worktree`. Others are left as they are and
-  listed with their reason. An added file that is still there under that very name,
+  isn't flagged `assume-unchanged` or `skip-worktree`. Others are left as they are, their
+  index included, and listed with their reason. An added file that is still there under that very name,
   with the content and mode git would record for it (after line-ending conversion and
   filters), counts as restored and is left untouched: what a rollback with
   `Delete local copies of added files` off leaves behind.
@@ -761,6 +926,30 @@ another machine runs every git command on that machine. A panel opened with
   within 3 s: nothing happens.
 - Both close after success and every screen reads again.
 
+### Deleted Branches dialog
+
+- Lists what the repository's record keeps (every worktree of it shows the same list):
+  one row per name and hash, the newest delete first. A branch whose name is a local
+  branch at that same commit now is left out (it is back already); one whose name is a
+  local branch at another commit is shown but can't be checked.
+- Click a row or its checkbox: checks or unchecks it. ↓ ↑ move the keyboard's row,
+  Space checks it. The top row's checkbox checks every row that can be restored, or
+  none when all are. Esc, × and Cancel close it (not × and Cancel while it runs).
+- **Restore** makes each checked branch again under its name at its commit, with the
+  upstream it tracked, without checking it out; a name taken meanwhile is left alone and
+  listed, and one that fails doesn't stop the rest. The Log panel that opened the dialog
+  runs it under the name `Restoring branches…`: Esc closes the dialog even while it runs
+  and the branches still come back, a failure also shows in the Log panel's error strip
+  (with the sentence of how many came back when only some did), and when the panel
+  doesn't take the request within 3 s nothing happens. Afterwards every screen reads
+  again, and the dialog stays open with the result and reads its list again: restored
+  branches leave it.
+- It opens while another write runs on the repository (Restore stays off until that
+  ends), and reads its list again when any screen reports a change there (a Delete adds
+  a row).
+- Kept: what git's reflog expiry keeps, about 30 days by default (see "Deleted
+  branches" under Built from).
+
 ### Popup menus
 
 ↑ ↓ move (skipping disabled items), Enter picks, a click picks, Esc or a click beside
@@ -776,11 +965,12 @@ the menu closes it with nothing picked.
 
 - **Per repository**: while any screen runs a git write on a repository (Commit, Amend,
   Push, Force Push, Rollback, Restore, Checkout, Checkout Revision, New Branch, Delete,
-  a deleted branch's Restore, Fetch),
+  a deleted branch's Restore, the Deleted Branches dialog's Restore, Fetch),
   no other write starts there, from any screen: a Commit panel tab, the side panel,
   the Log panel, a dialog. Every screen showing that repository turns its write
   buttons and menu items off (Commit, Commit and Push…, Amend, Rollback…, Push ▾,
-  Rollback, Create, Delete, Fetch, New Branch…, Checkout, Checkout Revision) and says
+  Rollback, Create, Delete, Fetch, New Branch…, Checkout, Checkout Revision, the
+  Deleted Branches dialog's Restore) and says
   `Another git operation is running: <label>`: under the Commit panel's buttons, in a
   dialog's footer or reason line, in the tooltips. The Log panel's toolbar shows
   `<label>` alone, with that sentence as its tooltip. The screen
@@ -800,10 +990,13 @@ the menu closes it with nothing picked.
 
 `install.sh` builds it from the person's current `layouts/main.json` with `layout.mjs`.
 `toMainGit(main, { button })` is pure and returns `{ ok: true, layout }` or
-`{ ok: false, error }`. Three changes, nothing else:
+`{ ok: false, error }`. Four changes, nothing else:
 
 - `panel-body` (stack) > `changes`: same id (the tab bar's Changes button opens it by
   id), content `{ "mod": "git-tools", "props": { "view": "commit" } }`.
+- `panel-body` (stack) > `files`: same id (the tab bar's Files button opens it by id),
+  content `{ "mod": "git-tools", "props": { "view": "files" } }`. On every OS, also with
+  `button: false`; the stack's `active` and its children's order stay.
 - `work` (column, `resizable: false`): its child `work-body` is replaced by a column
   `git-work` = `[work-body, git-log]`. `git-log`:
   `{ "id": "git-log", "type": "block", "hidden": true, "size": { "px": 320 }, "min": 120, "max": 900, "padding": [0, 8], "content": { "mod": "git-tools", "props": { "view": "log" } } }`.
@@ -822,8 +1015,8 @@ the menu closes it with nothing picked.
   minimize, maximize and close buttons, and a block right of it would sit outside them.
 
 It refuses, writing nothing and naming the node, unless `work` is a column holding the
-block `tabs` and `work-body`, which holds the stack `panel-body`, which holds the block
-`changes`. On its own output it finds `work-body` inside `git-work` and `tabs` inside
+block `tabs` and `work-body`, which holds the stack `panel-body`, which holds the blocks
+`changes` and `files`. On its own output it finds `work-body` inside `git-work` and `tabs` inside
 `git-tabs` and rebuilds the same thing.
 `node layout.mjs <main.json>` only checks; `node layout.mjs <main.json> <out.json>`
 writes, keeping `cloned_from` of an existing file. It writes with
@@ -882,6 +1075,7 @@ copy's locks (`locks.releaseAll()`) before the screen's own `close`:
 | `view` | file | opened as |
 |---|---|---|
 | `commit` | `view-commit.js` (+ `commit-form.js`) | layout block `changes` |
+| `files` | `view-files.js` | layout block `files` |
 | `log` | `view-log.js` (+ `log-branches.js`, `log-filters.js`, `log-list.js`, `log-details.js`) | layout block `git-log` |
 | `log-button` | `view-log-button.js` | layout block `git-log-button` |
 | `diff` | `view-diff.js` | `tab.new { name, mod, props }` |
@@ -889,6 +1083,7 @@ copy's locks (`locks.releaseAll()`) before the screen's own `close`:
 | `rollback` | `view-rollback.js` | modal dialog 520×460 |
 | `restore` | `view-restore.js` | modal dialog 760×480 |
 | `branch-new` | `view-branch-new.js` (`mode: "delete"`: Delete Branch) | modal dialog 420×214 (delete 420×190) |
+| `deleted-branches` | `view-deleted-branches.js` | modal dialog 760×480 |
 | `menu` | `view-menu.js` | popup at the pointer |
 | `icon-sheet` | `view-icon-sheet.js` | `tab.new { name, mod, props }` only (a check screen) |
 | none, with `overlay` | `OpenCommitPanel` in `main.js` | `mod.open`: runs `layout.select {stack: "panel-body", child: "changes"}` and `layout.show {id: "panel"}`, closes itself in `init` |
@@ -909,7 +1104,8 @@ language) or `{ since, until }`) and `filterOpen`
 `push`: `root, on, owner`. `rollback`: `root, on, files, checked, owner`. `restore`:
 `root, on, owner, select, chosen` (`select`: a snapshot's hash to select first).
 `branch-new`: `root, on, from, label, name, chosen, owner` or
-`mode: "delete", root, on, name, unmerged, chosen, owner`. `menu`: `key, items`.
+`mode: "delete", root, on, name, unmerged, chosen, owner`. `deleted-branches`:
+`root, on, owner, chosen`. `files`: only `view` (it follows the focused folder). `menu`: `key, items`.
 `icon-sheet`: `look` (`"light" | "dark"`: a fixed background).
 `owner` is the opening panel copy's bus id (`bus.id`): that copy runs the dialog's
 write. `chosen` is true when a Log tab opened with `props.folder` opened the dialog.
@@ -919,7 +1115,8 @@ Screen openers: `openDiff({ root, on, path, commit, status, oldPath })`,
 `openPush({ root, on, owner, lang })`,
 `openRestore({ root, on, owner, select, chosen, lang })`,
 `openBranchNew({ root, on, from, label, name, chosen, owner, lang })`,
-`openBranchDelete({ root, on, name, unmerged, chosen, owner, lang })` (every caller
+`openBranchDelete({ root, on, name, unmerged, chosen, owner, lang })`,
+`openDeletedBranches({ root, on, owner, chosen, lang })` (every caller
 passes `lang: this.lang`, or `host.lang` in a part), and in `log-details.js`
 `openCommitMenu(host, commit, cx)`, `copyRevision(commit, cx)`,
 `checkoutCommit(host, commit, cx)`, `newBranchAt(host, commit)`.
@@ -934,8 +1131,11 @@ Rollback notice), `serveRestore(panel, e, cx)` (`view-restore.js`, action `resto
 `{ root, on, snapshot, paths }`), `serveBranch(panel, e, cx)`
 (`view-branch-new.js`, actions `branch-create` `{ root, on, name, from, checkout }` and
 `branch-delete` `{ root, on, name }`; a delete that removed a branch calls the Log
-panel's `noteDeleted(repo, deleted)`). The Commit panel serves `push`, `rollback` and
-`restore`, the Log panel the two branch actions. A result whose words hold other
+panel's `noteDeleted(repo, deleted)`), `serveDeletedBranches(panel, e, cx)`
+(`view-deleted-branches.js`, action `branches-restore`, args
+`{ root, on, branches: [{ name, hash, upstream }] }`; the answer's list of branches not
+restored is worded by the panel). The Commit panel serves `push`, `rollback` and
+`restore`, the Log panel the three branch actions. A result whose words hold other
 sentences (Rollback's and Restore's lists of skipped paths, Push's "the plan moved") is
 worded again by the panel in its language before it goes back (`wordRollback`,
 `wordRestore`).
@@ -945,7 +1145,8 @@ or null), `hasHead`, `included()`, `busy`, `held` (the repository `busy` runs on
 may no longer be `repo`), `setBusy(work, cx)` (work: `{ key, args? }`, a message key
 naming the write) → false when the lock can't be taken,
 `writeBlock()`, `bus`, `committed(cx, repo)` (clears Included and reads again only while
-the panel still shows `repo`), `refresh(cx)`. For
+the panel still shows `repo`), `refresh(cx)`, `amendChanged(cx)` (Amend was turned on or
+off: the panel reads or drops the Last commit group). For
 `serveRequest` the Commit panel also has `setBusy(work, cx, repo)` and
 `writeFailed(text, cx)`. The Log panel gives its parts: `repo`, `branch` (the one ref
 the Commit list is limited to, shared by the Branch tree and the Branch filter),
@@ -1110,17 +1311,19 @@ the git ones run against real temporary repositories):
 | `git-status.js` | `readStatus` |
 | `git-commit.js` | `commit`, `lastMessage`, `headIsPushed` |
 | `git-rollback.js` | `rollback` (→ `{ ok, code, out, err, msg?, snapshot, skipped: [{ path, reason, msg }] }`; `snapshot`: the Rollback snapshot's hash or null), `wordRollback(t, r)` (`r.msg` with its list of reasons worded again in `t`'s language) |
-| `git-snapshot.js` | `SNAPSHOTS` (`"refs/git-tools/rollback"`), `LIST_LIMIT` (50), `record(git, root, paths)` → `{ ok, code, out, err, snapshot }` (only Rollback calls it), `listSnapshots(git, root)` → `{ ok, code, err, snapshots: [{ hash, time, files: [{ path, status }] }] }` (newest first, `status` `modified` / `added` / `deleted`), `restore(git, root, { snapshot, paths })` → `{ ok, code, out, err, msg?, restored: [path], skipped: [{ path, reason, msg }], changed }` (`changed`: anything on disk changed, also when git failed partway), `reasonList(skipped, word?)`, `wordRestore(t, r)` (r.msg with the skipped reasons and a worded cause in t's language) |
+| `git-snapshot.js` | `SNAPSHOTS` (`"refs/git-tools/rollback"`), `LIST_LIMIT` (50), `record(git, root, paths, copy)` → `{ ok, code, out, err, snapshot }` (only Rollback calls it), `listSnapshots(git, root)` → `{ ok, code, err, snapshots: [{ hash, time, files: [{ path, status }] }] }` (newest first, `status` `modified` / `added` / `deleted`), `restore(git, root, { snapshot, paths, copy })` → `{ ok, code, out, err, msg?, restored: [path], skipped: [{ path, reason, msg }], stagingSkipped: [{ path, reason, msg }], changed }` (`stagingSkipped`: restored paths whose staging stayed as it is now; `changed`: anything on disk changed, also when git failed partway), `reasonList(skipped, word?)`, `wordRestore(t, r)` (r.msg with the skipped reasons, the staging reasons and a worded cause in t's language) |
 | `git-diff.js` | `MAX_ROWS` (5000), `MAX_CHARS` (400000), `parseDiff`, `readDiff` (`oldPath`: a renamed file's path before its commit), `touchesDiff(changed, root, path)` (whether watched changes can change a working file's diff) |
 | `git-push.js` | `PROTECTED` (`["main", "master"]`), `readPushPlan`, `readPushFiles`, `push` |
 | `git-log.js` | `readLog`, `readRefsState`, `readGitDir`, `refsChanged`, `resolveCommit`, `shortenMiddle`, `labelRefs`, `formatCommitTime` |
-| `git-branch.js` | `readBranches`, `checkout`, `checkoutRevision`, `checkBranchName`, `createBranch`, `fetchAll`, `deleteBranch` (a branch it removed comes back as `deleted: { name, hash, upstream }`, `upstream` `{ remote, merge }` or null, read before `branch -D`), `restoreBranch(git, root, { name, hash, upstream })` |
+| `git-branch.js` | `readBranches`, `checkout`, `checkoutRevision`, `checkBranchName`, `createBranch`, `fetchAll`, `deleteBranch` (records the branch first and deletes nothing when that fails; a branch it removed comes back as `deleted: { name, hash, upstream }`, `upstream` `{ remote, merge }` or null, read before `branch -D`), `restoreBranch(git, root, { name, hash, upstream })`, `readDeletedBranches(git, root)` → `{ ok, err, branches: [{ name, hash, subject, time, upstream, restorable, reason, msg? }] }` (newest first, at most 50), `restoreBranches(git, root, branches)` → `{ ok, code, out, err, msg?, restored: [{ name, hash }], skipped: [{ name, hash, reason, msg? }] }` |
 | `git-log-filter.js` | `DATE_PRESETS` (`{ label, key, since }`: `label` is the saved English name, `key` the words), `datePreset(label)`, `dateText(t, { dateLabel, since, until })`, `isDate`, `filterArgs` (`users: [{ name } \| { text }]` besides `user`), `isHash`, `readMe`, `userOf`, `readAuthors(git, root)` → `{ ok, err, authors: [{ name, emails }] }`, `matchAuthors(authors, query)`, `readBranchNames` |
-| `i18n.js` | `LANGS` (`["en", "ko"]`), `pickLang(tags)`, `readAppleLanguages(stdout)`, `readLocaleEnv(stdout)`, `systemLang(platform, read)` (→ `"ko" | "en"`, or null when it isn't known), `TABLES`, `translator(lang, tables?)` → `t(key, args)` (`t.lang`), `sentence(t, msg, text)`, `formatTime(seconds, lang, now?)`, `formatDateTime(seconds, lang)` |
-| `messages-<area>.js` | `en` and `ko`, one per area: `ui`, `commit`, `log`, `filters`, `branches`, `dialogs`, `restore` (see "Words") |
+| `i18n.js` | `LANGS` (`["en", "ko"]`), `pickLang(tags)`, `readAppleLanguages(stdout)`, `readLocaleEnv(stdout)`, `systemLang(platform, read)` (→ `"ko" | "en"`, or null when it isn't known; `platform` `"macos"`, `"linux"` or `"windows"`, where an empty answer is not known), `TABLES`, `translator(lang, tables?)` → `t(key, args)` (`t.lang`), `sentence(t, msg, text)`, `formatTime(seconds, lang, now?)`, `formatDateTime(seconds, lang)` |
+| `messages-<area>.js` | `en` and `ko`, one per area: `ui`, `commit`, `log`, `filters`, `branches`, `dialogs`, `restore`, `files` (see "Words") |
+| `files-data.js` | `PER_FOLDER` (500), `TOTAL` (5000), `SEARCH_LIMIT` (20000), `readFolder(exec, folder, { on, platform, limit, room })` → `{ ok, entries: [{ name, dir }], limited, gone, err }`, `readMarks(exec, folder, { on })` → `{ ok, repo: { root, prefix } \| null, marks: { [path]: mark }, err }`, `readSearchList(exec, folder, { on, platform, limit })` → `{ ok, repo, files: [path], limited, err }`, `roomFor(loaded, path, total?)` (a folder's share of `TOTAL`) |
+| `files-tree.js` | `markLookup(marks)` → `{ mark(path), dot(folder) }`, `SEARCH_SHOWN` (200), `rankSearch(files, query, { limit })` → `{ items: [{ path, name, dir }], limited }`, `visibleRows(entries, open)` → `[{ path, name, folder, depth, open }]`, `moveKey(rows, current, key)` → `{ current, expand, collapse, preview }` |
 | `icon-theme.js` | `THEME_ROOT` (`"mods/git-tools/icons/theme"`), `DEFAULT_FILE_ICON` (`"file"`), `DEFAULT_FOLDER_ICON` (`"folder"`), `DEFAULT_DISABLED_PACKS` (`["ANGULAR"]`), `DEFAULT_EXCLUDE` (`["Zeit Now Ignore"]`), `makeIconTheme({ fileRules, folderRules, disabledPacks, exclude, root })` → `{ fileIcon, folderIcon, warm, stats }`, and the shared `fileIcon(path, { dark })`, `folderIcon(name, { open })` → the icon's path, `warmIcons()` (compiles the shared rules; `main.js` init) |
 | `icon-theme-data.js` | generated: `SOURCE`, `FILE_RULES`, `FOLDER_RULES` (`{ name, pattern, priority, icon, pack? }`, in source order), `DARK_FILE_ICONS`, `CLOSED_ONLY_FOLDER_ICONS`, `SKIPPED_RULES` |
-| `git-show.js` | `readCommit`, `readContaining` |
+| `git-show.js` | `readCommit`, `readLastCommit(git, root, { known })` → `{ ok, err, hash, subject, files, same }` (`hash` null without a commit; `same`: HEAD is still `known`, nothing else read), `readContaining` |
 | `graph.js` | `layoutGraph(commits, carry)`, `graphWindow({ widest, listWidth, left })` → `{ room, left, max }`, `indexSegments(segments)`, `segmentsIn(index, from, to)`, `fitLabels(labels, room, { char, pad, gap, most })` → `{ shown, rest }` |
 | `tree.js` | `buildRows(items, { grouped, collapsed, compact })`, `folderKeys`, `parentIndex`, `checkState`, `toggleIncluded`, `keepIncluded` |
 | `bus.js` | `KEEP`, `latest`, `era`, `append`, `take`, `post`, `makeCopy` |
@@ -1170,7 +1373,8 @@ filter or read run everywhere.
 - Branch tree: `branches-next`, `branches-prev`, `branches-page-down`,
   `branches-page-up`, `branches-top`, `branches-end`, `branches-left`, `branches-right`,
   `branches-toggle`, `branches-menu`, `branches-checkout`, `branches-new-from`,
-  `branches-new`, `branches-delete`, `branches-fetch`, `branches-expand-all`,
+  `branches-new`, `branches-delete`, `branches-deleted` (opens the Deleted Branches
+  dialog), `branches-fetch`, `branches-expand-all`,
   `branches-collapse-all`, `branches-focus`, `branches-filter-focus`,
   `branches-filter:<text>`. `branches-checkout` and `branches-delete` need the guard
   above, and so does `details-checkout-revision`.
@@ -1181,19 +1385,25 @@ filter or read run everywhere.
 - New Branch and Delete Branch dialogs: `branch-new-toggle-checkout` and
   `branch-dialog-cancel` anywhere; `branch-new-create`, `branch-new-name:<text>` and
   `branch-delete-confirm` with the guard above.
+- Deleted Branches dialog: `refresh`, `deleted-branches-toggle-all`,
+  `deleted-branches-cancel` anywhere; `deleted-branches-run` with the guard above.
+- The Files panel takes no commands.
 
 **Herdr and UI functions used.** `herdr`: `exec`, `run` (`layout.toggle`,
 `layout.select`, `layout.show`, `tab.new`), `props`, `nextCommand`, `theme`, `settings`,
-`layout`, `spaces`, `panes`, `focused`, `watchFolder`, `openOverlay` (with `at` for the
+`layout`, `spaces`, `panes`, `focused`, `watchFolder`, `readTextFile` (the Files panel's
+preview), `openOverlay` (with `at` for the
 Push dialog's ▾ menu), `closeOverlay`, `shared`, `setShared` (keys `git-tools.bus`,
 `git-tools.lock` and `git-tools.lang`), `window` (its `platform`, for reading the system
-language) and `settings().dark` (Herdr's look, for the dark icon variants only when the
+language, the Files panel's folder reads and Reveal in Finder) and `settings().dark` (Herdr's look, for the dark icon variants only when the
 theme's color can't be read). Also
 `localStorage` (keys `commit.grouped`, `commit.copy`, `log.branches`,
-`log.details`), `cx.timer.after`, `cx.timer.every` and `cx.write_to_clipboard`.
+`log.details`), `cx.timer.after`, `cx.timer.every`, `cx.focus_handle` and
+`cx.write_to_clipboard`.
 `gpui-kit`: `View`, `div`, `svg`, `image` (the Icon theme), `list`, `PathBuilder`
 (`PathBuilder.stroke`), `window.paint_path`. `gpui-base`: `h_flex`, `v_flex`, `Textarea`,
-`TextareaState`, `Input`, `InputState`, `Popover`, `Scrollbar`. No shipped mod is used.
+`TextareaState`, `Input`, `InputState`, `Popover`, `Scrollbar`, `Editor` and
+`EditorState` (the Files panel's read-only preview). No shipped mod is used.
 
 **Art.** `mods/git-tools/icons/`, Lucide style (24px viewBox, `currentColor` strokes):
 `branch-delete`, `branch-item`, `case-sensitive`, `check`, `chevron-down`,
@@ -1238,20 +1448,29 @@ before its first write, under the Rollback's write lock:
    `ls-tree -r --name-only` without a commit). Otherwise nothing is recorded or rolled
    back:
    `The recorded files changed while they were being recorded (<path>); another rollback may be running on this repository. Try again.`
-4. `commit-tree --no-gpg-sign <tree> -p HEAD -m "Rollback: N files" -m "After <hash>" -m "Copy <copy>"`
-   (`<hash>`: the snapshot the ref points at, none for the first; no parent without a
+4. With a commit, the staging, in the same temporary index: `ls-files -s -z -- <paths>`
+   on the real index, then `read-tree HEAD`, `update-index --force-remove` for the paths
+   the index lacks (a staged deletion), `update-index --add --cacheinfo` for each staged
+   entry, `write-tree`, the same check as step 3, and
+   `commit-tree --no-gpg-sign <tree> -p HEAD -m "Index of Rollback: N files" -m "Copy <copy>"`.
+   A path in a conflict (stages 1 to 3) stays as HEAD has it here and is named in the
+   snapshot's message as a line `Conflict: <path as a JSON string>`.
+5. `commit-tree --no-gpg-sign <tree> -p HEAD -p <staging commit> -m "Rollback: N files" -m "After <hash>" -m "Copy <copy>"`
+   (`<hash>`: the snapshot the ref points at, none for the first; then the `Conflict:`
+   lines; no parent and no staging without a
    commit), then `update-ref --create-reflog -m … refs/git-tools/rollback <commit>`. The
    body makes a rollback of the same state in the same second another commit (one after
    another in a copy, or two apps' copies that read the same snapshot before theirs), so
    the reflog gains an entry for each. Both with
    `-c user.name=git-tools -c user.email=git-tools@localhost`, so a repository with no
    user set still rolls back; no config is written.
-5. The temporary index is emptied (`read-tree --empty`: 65 bytes in a SHA-1 repository,
+6. The temporary index is emptied (`read-tree --empty`: 65 bytes in a SHA-1 repository,
    89 in a SHA-256 one), also after a failure.
 
-So a snapshot's diff against its parent is what the rollback threw away. The list is
-`log -g --max-count=50 --format=%x01%H %ct --name-status --no-renames --root -z refs/git-tools/rollback --`
-(one call; when it fails, `rev-parse -q --verify` tells a missing ref, an empty list,
+So a snapshot's diff against its first parent is what the rollback threw away, and its
+second parent holds what was staged. The list is
+`log -g --max-count=50 --format=%x01%H %ct --name-status --no-renames --root --diff-merges=first-parent -z refs/git-tools/rollback --`
+(git 2.31 or later: with two parents `--name-status` lists nothing otherwise; one call; when it fails, `rev-parse -q --verify` tells a missing ref, an empty list,
 from git failing). It is read word by word between NULs: a status is always followed by
 its path, so a path holding `\x01`, a tab or a line break is one path. A type change
 counts as `modified`.
@@ -1270,7 +1489,7 @@ counts as `modified`.
 
 Modified and deleted files are written with
 `--literal-pathspecs restore -q --worktree --source=<snapshot> -- <paths>` (the index
-untouched). When that call fails, its paths are read again (`diff --name-only <snapshot>`
+untouched here; the staging follows, below). When that call fails, its paths are read again (`diff --name-only <snapshot>`
 and against HEAD): those the disk holds as the snapshot has them count as restored, the
 ones git left half-way are listed with their reason, and the result says the repository
 changed. Added files are written one path per call with `checkout-index -- <path>`
@@ -1294,9 +1513,59 @@ working tree matches HEAD is `diff --name-only HEAD` with `-c diff.autoRefreshIn
 (not a read: it may rewrite the index's timestamps, never its entries). The snapshot
 argument must be 40 or 64 hex digits, or git is not called (`No rollback to restore from.`).
 
+Then the staging of the restored paths: `cat-file commit <snapshot>` gives its parents and
+its `Conflict:` lines; `ls-tree` of the first parent, of HEAD and of the second parent
+give each path's entry then, now and as staged; `ls-files -s` gives the index now. A path
+that was in a conflict is listed `it was in a conflict, and a conflict can't be brought back`.
+A path whose staged entry equals the first parent's needs nothing. Otherwise, when the
+index holds the snapshot's staged entry already nothing is written; when it holds HEAD's
+entry now (none where HEAD lacks the path), `update-index --force-remove` (staged as
+deleted or not at all) or `update-index --add --cacheinfo` puts the staged entry back;
+anything else is listed `something else is staged for it now` and left. These lists come
+after the skipped paths, under `Restored without their staging:` (`restore.stagingNotAll`,
+or `restore.notAllStaging` with both lists). A snapshot with one parent leaves the index
+alone.
+
 Retention is git's reflog expiry. A snapshot the ref no longer points at goes 30 days
 later, when `gc` runs (the default of `gc.reflogExpireUnreachable`). The newest snapshot
 stays as long as the ref points at it. The mod deletes none and has no setting for it.
+
+### Deleted branches
+
+Every Delete records the branch before `branch -D`, in the reflog of the private ref
+`refs/git-tools/deleted-branches` (`git-branch.js`, under the Delete's write lock; see
+`docs/adr/0003-deleted-branches-in-a-reflog.md`):
+
+1. Where the ref rests: the commit it is on while `merge-base --is-ancestor <it> HEAD`
+   says HEAD still reaches it; otherwise the root of HEAD's first-parent history
+   (`rev-list --first-parent --max-parents=0 HEAD`), or of the branch's own history when
+   HEAD has no commit.
+2. `update-ref --create-reflog -m "deleted <name>" refs/git-tools/deleted-branches <hash>`
+   (`deleted <name> <remote> <merge>` when it tracks a branch; `%`, spaces and control
+   characters in each field written `%XX`), then the same back to the resting commit
+   with `-m parked`. git adds no entry for a move to the commit the ref is already on, so
+   when the branch is on that very commit, the ref first steps aside to a commit with no
+   parent made from the branch's tree (`commit-tree -m "git-tools: deleted-branches"`,
+   made with `-c user.name=git-tools -c user.email=git-tools@localhost`), also
+   `parked`. No config is written.
+3. When recording fails, the branch is not deleted
+   (`Branch '<name>' was not deleted: it couldn't be recorded to restore later. <git's words>`).
+
+The deleted commit is then in that reflog only: `git log --all`, the branch list and the
+tag list don't show it, and `gc --prune=now` keeps it. The ref is outside `refs/heads/`,
+so every worktree shares it, and `push --all` and clone don't carry it (`push --mirror`
+carries the ref, not its reflog). The list is
+`log -g --date=unix --format=%H%x00%gd%x00%gs%x00%s refs/git-tools/deleted-branches --`
+and `for-each-ref refs/heads/`: the `deleted …` entries, newest first, one per name and
+hash, at most 50; a name that is a local branch at the same hash now is left out, one at
+another hash is listed with `restorable: false` and
+`a branch of this name exists now at another commit`. Restore makes each branch with
+`update-ref refs/heads/<name> <hash> ""` and its upstream config, as the notice's Restore
+does; a name taken by then is skipped (`a branch of this name exists now`).
+
+Retention is git's reflog expiry: a deleted commit is one the ref no longer reaches, so
+it goes 30 days later when `gc` runs (`gc.reflogExpireUnreachable`). The mod expires
+nothing and has no setting for it.
 
 ### Icon theme
 
@@ -1396,6 +1665,10 @@ English forms and ⏎ is a line break.
 | `commit.commitTitle` | `Commit (⌘Enter)` | `커밋(⌘Enter)` |
 | `commit.commitAndPush` | `Commit and Push…` | `커밋 및 푸시…` |
 | `commit.commitAndPushTitle` | `Commit, then review and push` | `커밋한 뒤 검토하고 푸시` |
+| `commit.amendCommit` | `Amend Commit` | `커밋 수정` |
+| `commit.amendCommitTitle` | `Amend Commit (⌘Enter)` | `커밋 수정(⌘Enter)` |
+| `commit.amendCommitAndPush` | `Amend Commit and Push…` | `커밋 수정 및 푸시…` |
+| `commit.amendCommitAndPushTitle` | `Amend the last commit, then review and push` | `마지막 커밋을 수정한 뒤 검토하고 푸시` |
 | `commit.committing` | `Committing…` | `커밋 중…` |
 | `commit.amending` | `Amending…` | `수정 중…` |
 | `commit.notRepository` | `Not in a git repository` | `git 저장소 안에 있지 않습니다` |
@@ -1520,6 +1793,18 @@ English forms and ⏎ is a line break.
 | `branches.deleted` | `Deleted branch '{name}' ({hash}).` | `삭제된 브랜치: '{name}' ({hash})` |
 | `branches.restore` | `Restore` | `복원` |
 | `branches.unknownCommit` | `Branch '{name}' can't be restored: its commit isn't known.` | `브랜치 '{name}'을(를) 복원할 수 없습니다: 커밋을 알 수 없습니다.` |
+| `branches.notRecorded` | `Branch '{name}' was not deleted: it couldn't be recorded to restore later. {err}` | `브랜치 '{name}'을(를) 삭제하지 않았습니다: 나중에 복원할 수 있게 기록하지 못했습니다. {err}` |
+| `branches.nameTaken` | `a branch of this name exists now at another commit` | `같은 이름의 브랜치가 지금 다른 커밋에 있습니다` |
+| `branches.skipExists` | `a branch of this name exists now` | `같은 이름의 브랜치가 지금 있습니다` |
+| `branches.notAllRestored` | `Restored 1 branch. Not restored:⏎{list} / Restored {n} branches. Not restored:⏎{list}` | `브랜치 {n}개를 복원했습니다. 복원하지 않은 브랜치:⏎{list}` |
+| `branches.openDeleted` | `Deleted Branches…` | `삭제된 브랜치…` |
+| `branches.dialogTitle` | `Deleted Branches` | `삭제된 브랜치` |
+| `branches.keptNote` | `Deleted branches are kept for about 30 days.` | `삭제된 브랜치는 약 30일 동안 보관됩니다.` |
+| `branches.noneKept` | `No deleted branches are kept in this repository.` | `이 저장소에 보관된 삭제된 브랜치가 없습니다.` |
+| `branches.checked` | `1 branch checked / {n} branches checked` | `브랜치 {n}개 선택됨` |
+| `branches.noneChecked` | `No branches checked` | `선택한 브랜치 없음` |
+| `branches.restoring` | `Restoring branches…` | `브랜치 복원 중…` |
+| `branches.restored` | `Restored 1 branch. / Restored {n} branches.` | `브랜치 {n}개를 복원했습니다.` |
 
 `messages-dialogs.js`
 
@@ -1646,6 +1931,41 @@ English forms and ⏎ is a line break.
 | `restore.skipBroken` | `git failed while writing it: it is neither as HEAD has it nor as it was before the rollback` | `쓰는 도중 git이 실패했습니다. 지금은 HEAD의 내용도, 롤백하기 전의 내용도 아닙니다` |
 | `restore.failedNotAll` | `{err}⏎Not restored, to keep what is there now:⏎{list}` | `{err}⏎지금 있는 것을 지키려고 복원하지 않은 파일:⏎{list}` |
 | `restore.notRestored` | `Not restored, to keep what is there now:⏎{list}` | `지금 있는 것을 지키려고 복원하지 않은 파일:⏎{list}` |
+| `restore.stagingNotAll` | `Restored 1 file. Restored without their staging:⏎{staged} / Restored {n} files. Restored without their staging:⏎{staged}` | `{n}개 파일을 복원했습니다. 스테이징은 복원하지 않은 파일:⏎{staged}` |
+| `restore.notAllStaging` | `Restored 1 file. Not restored, to keep what is there now:⏎{list}⏎Restored without their staging:⏎{staged} / Restored {n} files. Not restored, to keep what is there now:⏎{list}⏎Restored without their staging:⏎{staged}` | `{n}개 파일을 복원했습니다. 지금 있는 것을 지키려고 복원하지 않은 파일:⏎{list}⏎스테이징은 복원하지 않은 파일:⏎{staged}` |
+| `restore.stagingChanged` | `something else is staged for it now` | `지금 다른 내용이 스테이징되어 있습니다` |
+| `restore.stagingConflict` | `it was in a conflict, and a conflict can't be brought back` | `충돌 중이던 파일이라 충돌 상태는 복원하지 못합니다` |
+
+`messages-files.js`
+
+| key | English | Korean |
+|---|---|---|
+| `files.title` | `Files` | `파일` |
+| `files.back` | `Back` | `뒤로` |
+| `files.noFolder` | `No folder` | `폴더 없음` |
+| `files.empty` | `No files` | `파일 없음` |
+| `files.gone` | `{folder} no longer exists.` | `{folder} 폴더가 더 이상 없습니다.` |
+| `files.limited` | `File list limited to {perFolder} entries per folder and {total} total` | `파일 목록은 폴더당 {perFolder}개, 전체 {total}개까지만 보입니다` |
+| `files.loadingFile` | `Loading file…` | `파일 로드 중…` |
+| `files.unavailable` | `This file is no longer available` | `이 파일을 더 이상 열 수 없습니다` |
+| `files.binary` | `Binary file · no text preview` | `이진 파일 · 텍스트 미리보기 없음` |
+| `files.unreadable` | `Cannot preview this file (binary, too large, or unreadable)` | `이 파일을 미리 볼 수 없습니다(이진 파일이거나 너무 크거나 읽을 수 없음)` |
+| `files.truncated` | `Showing the first {n} characters of this file` | `이 파일의 처음 {n}자만 보입니다` |
+| `files.mark.modified` | `Modified` | `수정됨` |
+| `files.mark.added` | `Added` | `추가됨` |
+| `files.mark.deleted` | `Deleted` | `삭제됨` |
+| `files.mark.conflict` | `Conflict` | `충돌` |
+| `files.mark.ignored` | `Ignored` | `무시됨` |
+| `files.changedInside` | `Changed files inside` | `안에 바뀐 파일이 있음` |
+| `files.search` | `Search files` | `파일 검색` |
+| `files.noMatches` | `No matching files` | `일치하는 파일 없음` |
+| `files.moreMatches` | `Showing the first {n} matches` | `일치하는 파일 중 처음 {n}개만 보입니다` |
+| `files.searchLimited` | `Searched only the first {n} files in this folder` | `이 폴더의 처음 {n}개 파일에서만 찾았습니다` |
+| `files.showDiff` | `Show Diff` | `Diff 표시` |
+| `files.copyPath` | `Copy Path` | `경로 복사` |
+| `files.copyRelativePath` | `Copy Relative Path` | `상대 경로 복사` |
+| `files.revealInFinder` | `Reveal in Finder` | `Finder에서 보기` |
+| `files.revealFailed` | `Finder could not show this file.` | `Finder에서 이 파일을 보이지 못했습니다.` |
 
 ### Programs, network and files outside the mod folder
 
@@ -1665,15 +1985,31 @@ English forms and ⏎ is a line break.
   `commit-tree --no-gpg-sign`, `update-ref --create-reflog refs/git-tools/rollback`,
   `restore -q --worktree --source=<snapshot>`, `log -g`, `rev-list --parents`; for a
   deleted branch's Restore `update-ref refs/heads/<name> <hash> ""` and
-  `config -- branch.<name>.remote|merge <value>`; for the User popup
+  `config -- branch.<name>.remote|merge <value>`; for a snapshot's staging
+  `ls-files -s`, and for putting it back `cat-file commit`, `ls-tree` and, on the real
+  index, `update-index --force-remove` and `--add --cacheinfo`; for deleted-branch
+  records `merge-base --is-ancestor`, `rev-list --first-parent --max-parents=0`,
+  `update-ref --create-reflog refs/git-tools/deleted-branches`, `commit-tree` (the
+  step-aside commit) and `log -g` on that ref; for the Last commit group
+  `rev-parse -q --verify HEAD^{commit}`; for the Files panel
+  `rev-parse --show-toplevel --show-prefix`,
+  `status --porcelain=v2 -z --no-renames --ignored=matching --untracked-files=normal`
+  and `ls-files -z --cached --others --exclude-standard` and `--deleted`; for the User popup
   `log --use-mailmap --format=%aN%x00%aE`. Every read carries `--no-optional-locks -c core.fsmonitor=false -c diff.autoRefreshIndex=false`;
-  the snapshot's commit and reflog carry `-c user.name=git-tools -c user.email=git-tools@localhost`,
+  the snapshot's commits and reflog and the step-aside commit carry
+  `-c user.name=git-tools -c user.email=git-tools@localhost`,
   and Restore's one comparison with HEAD `-c diff.autoRefreshIndex=true`.
+- **For the Files panel**, on the space's machine: `sh -c` with a short script that lists
+  one folder (stopping one past the limit) and one that walks a folder outside a
+  repository for the search (stopping past 20,000 files). For a folder on a Windows
+  computer, `powershell -NoProfile -Command` with `Get-ChildItem` instead (also when a
+  space's machine has no `sh`). Reveal in Finder runs `open -R <path>` on this computer.
 - **To read the system language**, on the computer the window is on (never a space's
   machine): `defaults read -g AppleLanguages` on macOS, and on Linux
-  `sh -c 'printf "%s\n%s\n%s\n" "$LC_ALL" "$LC_MESSAGES" "$LANG"'`. Once per screen when
+  `sh -c 'printf "%s\n%s\n%s\n" "$LC_ALL" "$LC_MESSAGES" "$LANG"'`, and on Windows
+  `powershell -NoProfile -Command "(Get-UICulture).Name"`. Once per screen when
   it opens, and again after 1, 3 and 10 seconds while the answer isn't known; 5 s
-  timeout. Nothing on Windows.
+  timeout.
   Branch and remote names go after `--end-of-options` (or as full `refs/heads/…` names),
   so a branch called `-f` or a remote called `--force` stays a name.
 - **git 2.37 or later** (`--since-as-filter` for the Date filter; `--end-of-options`
@@ -1686,18 +2022,24 @@ English forms and ⏎ is a line break.
   Nothing else reaches the network; a bare `--force`, `-f` or `+refspec` is never passed.
 - **Writes to repositories**: only through the buttons above (commit, rollback, restore,
   checkout, branch create, delete and restore, fetch, push). Each Rollback adds a
-  snapshot commit and a reflog entry under `refs/git-tools/rollback`, and leaves the
+  snapshot commit (and, with a commit, its staging commit) and a reflog entry under
+  `refs/git-tools/rollback`; each Delete adds a `deleted …` and a `parked` entry (and,
+  when the branch is on the ref's commit, a step-aside commit) under
+  `refs/git-tools/deleted-branches`. Each Rollback leaves the
   emptied file `<git dir>/git-tools-rollback-index-<copy>` (65 bytes in a SHA-1
   repository, 89 in a SHA-256 one) in the git folder, one for each Commit panel copy that
   rolled back or restored there. Restore
-  writes working-tree files only. git config is written only by a deleted branch's
-  Restore, putting back that branch's `branch.<name>.remote` and `.merge`.
-- **Outside the mod folder**: the clipboard (Copy Revision Number), three keys of the app
+  writes working-tree files and the index entries of the paths it restored. git config
+  is written only by a deleted branch's Restore, putting back that branch's
+  `branch.<name>.remote` and `.merge`. The Files panel writes nothing.
+- **Outside the mod folder**: the clipboard (Copy Revision Number, Copy Path, Copy
+  Relative Path), three keys of the app
   home's `shared.json` (through `setShared`): `git-tools.bus` (the last 8 events),
   `git-tools.lock` (`{}` when nothing writes) and `git-tools.lang` (`"en"` or `"ko"`), and
   `localStorage`.
-  The mod reads no file directly; `watchFolder` watches the repository root and its git
-  folder.
+  The mod reads a file directly only for the Files panel's preview (`readTextFile`, up to
+  1 MiB); `watchFolder` watches the repository root and its git folder, and the Files
+  panel's folder.
 - **`install.sh`** runs `node`, `herdr-app status`, `herdr-app check`,
   `herdr-app do layout.clone` (first time) and `herdr-app do layout.switch`, and writes in
   the app home: `mods/git-tools/` (only the files that differ), `layouts/main-git.json`,
@@ -2055,7 +2397,13 @@ English forms and ⏎ is a line break.
 - The Rollback notice's `N` is the files sent less the ones skipped; when git fails
   halfway it can be larger than what was rolled back.
 - The Rollback dialog's footer says files can be brought back with Restore
-  Rolled-Back Changes…: their working-tree content comes back, their staging doesn't.
+  Rolled-Back Changes…: their content and their staging come back, except the staging
+  of a path staged otherwise since or one that was in a conflict.
+- A file only announced with `git add -N` is recorded as an empty file staged, so after
+  a Restore it may show as an empty content staged (`AM`) rather than ` A`. Restoring the
+  staging of a submodule path is untested.
+- The newest snapshot's second parent (its staging) shows in `git log --all` too, as a
+  commit `Index of Rollback: N files`.
 
 **Deleted branch**
 
@@ -2065,7 +2413,16 @@ English forms and ⏎ is a line break.
   drops the branch's config section.
 - If setting the upstream fails after the branch was made, the branch stays and git's
   words show; it isn't deleted again.
-- Only the last deleted branch is kept, and only on that Log panel copy.
+- The notice under the Log panel names only the last deleted branch, and only on that
+  Log panel copy; every one is in the Deleted Branches dialog.
+- `git log --all --decorate` shows `refs/git-tools/deleted-branches` on the first commit
+  of HEAD's history; no deleted commit shows. In a repository whose HEAD has no commit
+  yet the ref rests on the deleted branch's first commit, which `git log --all` can show.
+- Records live in that clone and are dropped by git's reflog expiry (about 30 days); the
+  list shows the newest 50. A repository missing a recorded commit object (damaged) can
+  make the whole list fail with git's words.
+- A branch git refuses to delete (checked out in another worktree) is still recorded;
+  the list leaves it out, since a branch of that name is at that commit.
 
 **User filter**
 
@@ -2116,10 +2473,34 @@ English forms and ⏎ is a line break.
 - Commit details' text is made again when the language changes in the screen's
   `spoke(cx)`, which `main.js` calls right after replacing `t`; the Icon theme's rules
   are compiled in `main.js` init (`warmIcons`), not in the first row's render.
-- The system language is read on the window's computer only. English on Windows; Linux
-  and an English macOS were not checked on a real machine (the Korean macOS was).
+- The system language is read on the window's computer only. Windows, Linux and an
+  English macOS were not checked on a real machine (the Korean macOS was). On Windows
+  it is unchecked whether `exec` finds `powershell` on the PATH, what the output's form
+  and encoding are (`ko-KR` and a line break is assumed), whether PowerShell answers
+  within the 5 s timeout (a later ask tries again), and whether the display language,
+  not the region format, is the one a person expects.
 - No `Intl` in the app's runtime and `toLocale*` ignore the language: `formatTime` and
   `formatDateTime` write both forms by hand.
+
+**Files panel**
+
+- The mod isn't `focusable`, so Herdr never hands it the keyboard: the panel takes it
+  when a row or the search box is pressed, and takes it back after a row menu closes.
+- A failed git read keeps the marks it had and shows nothing: the Commit panel shows
+  git's words, and a machine without git would show an error every 10 s.
+- The search list is read when a search starts, not on the 10 s refresh: outside a
+  repository it is a walk of up to 20,000 files. A file made while searching shows from
+  the next search.
+- Inside a repository the search list has no limit. In one with hundreds of thousands
+  of files, the list may pass `exec`'s 8 MiB output limit and fail or come back cut
+  (untested).
+- When a folder is cut at 500 entries, the ones kept are the first the system listed,
+  not the first by name.
+- The preview reads through `readTextFile`, which stops at 1 MiB: a bigger file says it
+  can't be previewed.
+- On Windows the folder lists and the search walk go through PowerShell and were not
+  checked on a real machine; whether the walk follows folder links there is unknown, and
+  Copy Path uses `\` only when the folder is written with `\` alone.
 
 **Icon theme**
 
@@ -2164,7 +2545,7 @@ Each line is one check: do what it says, see what follows.
 **Offline**
 
 1. Run `node layout.test.mjs` at the root, `node <file>` for every `*.test.mjs` in
-   `mods/git-tools` (17 files) and `node tools/gen-icon-theme.test.mjs`: each prints
+   `mods/git-tools` (19 files) and `node tools/gen-icon-theme.test.mjs`: each prints
    `ok` (the last one after `skip: …` unless `ICON_THEME_SOURCE` is set).
 2. Run `herdr-app check mods/git-tools`: it passes.
 
@@ -2253,7 +2634,8 @@ Each line is one check: do what it says, see what follows.
     Enter work; `cmd-enter` in the message commits; Esc closes the Rollback and Push
     dialogs; ↑ ↓ Enter work in a popup menu and in the Branch tree.
 38. Press `cmd-shift-l` until `main` shows (it moves to the next layout each time):
-    Herdr's own Changes shows under the Changes button and there is no Log panel.
+    Herdr's own Changes shows under the Changes button, Herdr's own Files under the
+    Files button, and there is no Log panel.
 
 **Push and Rollback edge cases**
 
@@ -2369,8 +2751,9 @@ pre-push 20 s, reference-transaction 12 s, each made to fail when a check says s
 71. Double-click `m` there: a Diff tab opens comparing `<parent> → <snapshot>` with the
     modification.
 72. Press **Restore**: the dialog stays open and says `Restored 3 files.`; `m` has its
-    modification, `d` is gone, `n` is back as an unversioned file, the Commit panel lists
-    the three without Refresh, and `git diff --cached` is as empty as before.
+    modification, `d` is gone, `n` is back and staged as it was, the Commit panel lists
+    the three without Refresh, and `git status --short` reads as it did before the
+    rollback.
 73. Roll back `m` again, edit `m` once more, then Restore that snapshot: the dialog and
     the Commit panel's error strip say
     `Restored 0 files. Not restored, to keep what is there now:` and
@@ -2447,7 +2830,7 @@ two emails, and one author reached only by a tag)
 
 **Korean**
 
-95. On a computer whose first preferred language is Korean, both panels, the five
+95. On a computer whose first preferred language is Korean, the three panels, the six
     dialogs, the Diff tab, the popup menus and the tooltips are Korean as in "Words";
     the Commit list's times read like `25분 전`; git's own error words stay as git wrote
     them.
@@ -2489,3 +2872,108 @@ two emails, and one author reached only by a tag)
 105. On a Korean computer, with the Commit panel and the Log panel showing, quit Herdr
      and start it: within about 15 seconds both panels are Korean, and the app home's
      `shared.json` has `"git-tools.lang": "ko"`.
+
+**Restore brings back staging** (a practice repository with committed files `a`, `b`,
+`c`, `d`)
+
+106. Stage a change to `a`; stage a change to `b`, then change `b` again; `git rm c`;
+     change `d` without staging; create and `git add` a new file `n`
+     (`git status --short`: `M  a`, `MM b`, `D  c`, ` M d`, `A  n`). Roll back all five
+     with `Delete local copies of added files` on: `git status --short` is empty and
+     `git log -g -1 --format=%P refs/git-tools/rollback` names two parents.
+107. Restore that snapshot with all five checked: `git status --short` reads as in 106,
+     and `git diff --cached b` and `git diff b` show what they showed before the
+     rollback.
+108. Roll back `a` and `b` again. Stage another content for `a` (its file left as HEAD
+     has it), then Restore: `a`'s file comes back and its staging stays the new one,
+     `b` is `MM` again, and the dialog and the Commit panel's error strip say
+     `Restored 2 files. Restored without their staging:` and
+     `a: something else is staged for it now`.
+109. Run `git log --oneline --all`: the newest snapshot and one `Index of Rollback: …`
+     commit show; the Commit list and the Branch tree show neither.
+
+**Deleted Branches dialog** (a practice repository with a remote and several branches)
+
+110. In a repository nothing was ever deleted from, press Deleted Branches… in the Branch
+     tree's toolbar: the dialog says `No deleted branches are kept in this repository.`,
+     the footer `Deleted branches are kept for about 30 days.`, and Restore is off.
+111. Delete four branches, one of them through the Delete Branch dialog (an unpushed
+     commit): `git log -g --format=%gs refs/git-tools/deleted-branches` lists a
+     `deleted <name>` and a `parked` entry for each; `git log --all --oneline` shows no
+     commit it didn't show before. Open the dialog: the four, newest first, each with its
+     name, 7-character hash, subject and `Moments ago`; a long name is cut.
+112. From a terminal, create a branch of the first name at another commit and one of the
+     second name at its own commit, then open the dialog again: the second is gone; the
+     first is dim, says `a branch of this name exists now at another commit` (its
+     subject as the tooltip) and can't be checked.
+113. Check the other two (↓ and Space check one too): `2 branches checked`. Press
+     Restore: `Restored 2 branches.`, the dialog reads its list again without them, both
+     are back in the Branch tree at their commits (`git rev-parse <name>` as before the
+     delete) with the upstreams they tracked, and the current branch and the working
+     files haven't changed.
+114. Delete a branch, open the dialog, check it, press Restore and Esc at once: the
+     branch still comes back and the Branch tree shows it.
+115. Delete `x` (the notice under the Log panel names it), then restore `x` from the
+     dialog: the notice is gone.
+116. Point a Log tab at another worktree of the same repository and open the dialog
+     there: it lists the same branches.
+
+**Last commit group** (a practice repository whose last commit changed a file `b` and
+renamed `docs/guide.md` to `manual.md`)
+
+117. Turn Amend on: at the bottom of the Commit panel's list a group appears unfolded:
+     the commit glyph, the last commit's subject, `2 files` (`2개 파일` in Korean),
+     then its files without checkboxes; its tooltip is the full hash. The buttons read
+     `Amend Commit` and `Amend Commit and Push…`. Turn Amend off: the group goes and the
+     buttons read `Commit` and `Commit and Push…`.
+118. Double-click `manual.md` in the group: a Diff tab `<parent> → <commit>` reading
+     `renamed from docs/guide.md`. Select `b`, press Show Diff: its Diff tab of that
+     commit.
+119. With the keyboard, ↓ from the changed files goes into the group; Space on its rows
+     does nothing. With the group row selected, Rollback… opens with every changed file
+     checked and none of the group's.
+120. Amend with only the message changed: the hash changes, the staging is unchanged,
+     Amend goes off and the group with it. Turn Amend on again: the group shows the new
+     commit.
+121. With Amend on, move the focus to a terminal in another repository: Amend is off
+     there and no group shows, at once.
+122. At the side panel's 280px, in English and in Korean, with a long subject: the group
+     row shows the whole file count and cuts the subject; the two Amend buttons don't
+     overlap.
+
+**Files panel** (a practice repository with a modified, a new, an ignored and a
+conflicting file, and an ignored folder `node_modules`)
+
+123. Press the Files button: the Files panel shows the folder as a tree, folders first.
+     The modified file is `ansi4` with `M`, the new one `ansi2` with `A`, the conflicting
+     one semibold with `U`; `node_modules` and the ignored file are dim with half-opacity
+     icons and no letter; a folder holding a changed file has the `ansi4` dot, and
+     `node_modules` has none.
+124. Change a file from a terminal: within about 2 s it shows its mark without a click.
+     Delete the folder shown: `<folder> no longer exists.`
+125. Press a file: its preview with syntax colors, its path in the header and, for a
+     changed file, Show Diff there; Back returns to the tree with the same folders open.
+     A file with a NUL byte says `Binary file · no text preview`; a file over 1 MiB
+     says `Cannot preview this file (binary, too large, or unreadable)`.
+126. Type part of a file name: matching files show, those whose name holds the text
+     first, each with its folder; Enter previews the first; Esc empties the box and the
+     tree is back. A text nothing matches: `No matching files`.
+127. In a folder outside a repository holding more than 20,000 files, search: the note
+     `Searched only the first 20,000 files in this folder`. In a folder with more than
+     500 entries: `File list limited to 500 entries per folder and 5,000 total`.
+128. Click a row, then ↑ ↓ move, → unfolds a folder or goes to its first child, ← folds
+     or goes to the parent, Enter folds or previews; Esc closes the preview.
+129. Right-click the modified file: Show Diff opens its Diff tab `HEAD → Working Tree`;
+     Copy Path puts its absolute path on the clipboard, Copy Relative Path its path from
+     the repository root; Reveal in Finder shows it selected in Finder. An ignored
+     file's menu has no Show Diff.
+130. In a space on another machine the Files panel shows that machine's folder and marks
+     (within 10 s of a change), and its menu has no Reveal in Finder.
+131. Point `HERDR_APP_HOME` at a copy whose `layouts/main.json` lacks the `files` block,
+     run `./install.sh`: it names `files`, prints `Nothing was changed.` and writes
+     nothing.
+
+**Windows** (not run yet: no Windows machine was at hand)
+
+132. On a Windows computer whose display language is Korean, the screens are Korean; on
+     one in English, English. The Files panel lists folders and searches there.

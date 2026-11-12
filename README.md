@@ -42,7 +42,8 @@ and filters.
   the same commit, tracking the same remote branch, without checking it out. Any time
   later, the Branch tree's **Deleted Branches…** button lists the branches deleted in
   this repository, newest first; check several and press Restore. git keeps them for
-  about 30 days. A branch of that name made meanwhile is left alone.
+  about 30 days. A branch of that name made meanwhile is left alone. A branch checked
+  out in another worktree isn't deleted, and the error names that worktree.
 
 ### User filter
 
@@ -212,9 +213,12 @@ restored after that).
   the rollback, or of a file that was in a conflict; the file itself comes back.
 - Deleted branches are kept for about 30 days (git's default reflog expiry), the
   Deleted Branches list shows the newest 50, and the records stay in that clone.
-- The Files panel reads its search list when a search starts: a file made while you
-  search shows from the next search. Outside a repository it searches the first 20,000
-  files. Its tree shows at most 500 entries per folder and 5,000 in all.
+- The Files panel reads its search list again at most every 10 s while you search: a
+  file made meanwhile shows within about 20 s. Inside or outside a repository it
+  searches the first 20,000 files, and submodules aren't in the results. Its tree shows
+  at most 500 entries per folder and 5,000 in all.
+- Rolling back a submodule takes back only its staged commit, not its checkout, so
+  Restore skips it as changed since the rollback.
 - Restore checks for changes when it starts. A file another program edits in the moment
   between that check and the write (tens of ms to about 100 ms for a few files) is
   overwritten; git's own checkout has the same gap.

@@ -11,10 +11,15 @@ import { makeCopy, post } from "./bus.js";
 import { makeLocks, BEAT, sameRepo, repoName } from "./lock.js";
 import { LANGS, translator, systemLang, sentence } from "./i18n.js";
 import { fileIcon, folderIcon, darkColor } from "./icon-theme.js";
+import { iconShape, iconDraw } from "./ui-icons.js";
 
 export const MOD = "git-tools";
 export const ROW = 24;
-export const icon = (name) => `mods/${MOD}/icons/${name}.svg`;
+// The shape of a named icon (ui-icons.js), for svg(): drawn in the text color. A colored
+// icon goes through uiGlyph or iconButton instead.
+export const icon = (name) => iconShape(name);
+// The size buttons and menus draw their icons at: the icons' own 16-pixel grid.
+export const ICON = 16;
 
 // ---- language
 
@@ -469,14 +474,24 @@ export function folderGlyph(name, { open = false, size = 14 } = {}) {
   return image(folderIcon(name.slice(name.lastIndexOf("/") + 1), { open })).size(size).flex_none();
 }
 
-// A square toolbar button drawing icons/<name>.svg. The press stops here so a row or a
-// draggable bar underneath doesn't also get it.
+// A named icon (ui-icons.js) as an element: in the file's colors, or its shape in the
+// surrounding text color for the gray ones and for `disabled` (one gray, like a turned-off
+// button). `dark`: the background is dark, so a _dark file shows where there is one; pass
+// darkLook() of what the icon sits on.
+export function uiGlyph(name, { dark = false, disabled = false, size = ICON } = {}) {
+  const { path, tint } = iconDraw(name, { dark, disabled });
+  return (tint ? svg(path) : image(path)).size(size).flex_none();
+}
+
+// A square toolbar button drawing a named icon (ui-icons.js) at 16 pixels. The press stops
+// here so a row or a draggable bar underneath doesn't also get it. The button sits on the
+// panel's background (t.background), which picks the dark files.
 export function iconButton(id, name, t, { title, disabled = false, active = false, busy = false, size = 24, onClick } = {}) {
   let el = div().id(id).size(size).flex_none().flex().items_center().justify_center().rounded(5)
     .text_color(disabled ? t.dim : active ? t.foreground : t.muted)
     .when(active, (el) => el.bg(t.selected))
     .when(disabled, (el) => el.opacity(0.5))
-    .child(busy ? svg(icon("spinner")).size(15).spin(900) : svg(icon(name)).size(15));
+    .child(busy ? svg(icon("spinner")).size(15).spin(900) : uiGlyph(name, { dark: darkLook(t.background), disabled, size: Math.min(ICON, size - 2) }));
   if (title) el = el.tooltip(title);
   if (disabled) return el;
   return el.cursor_pointer().hover((s) => s.bg(t.hover).text_color(t.foreground))
@@ -491,7 +506,7 @@ export function checkbox(id, state, t, { disabled = false, onClick } = {}) {
     .border_color(s === "none" ? t.input : t.accent)
     .when(s !== "none", (el) => el.bg(t.accent))
     .when(disabled, (el) => el.opacity(0.5))
-    .when(s !== "none", (el) => el.child(svg(icon(s === "all" ? "check" : "minus")).size(11).text_color(t.accent_foreground)));
+    .when(s !== "none", (el) => el.child(svg(icon(s === "all" ? "checkbox-all" : "checkbox-some")).size(11).text_color(t.accent_foreground)));
   if (disabled) return el;
   return el.cursor_pointer().on_mouse_down("left", stop)
     .on_click((e, cx) => { cx.stop_propagation(); onClick?.(e, cx); });

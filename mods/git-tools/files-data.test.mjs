@@ -293,6 +293,25 @@ const sorted = (list) => [...list].sort();
   assert.equal(gitState(repo), before);
 }
 
+// A submodule is a folder, not a file: it stays out of the search list, from the root and
+// from a folder above it.
+{
+  const source = init("search-sub-source");
+  writeFileSync(`${source}/lib.c`, "l");
+  sh(source, "git add -A && git commit -q -m lib");
+  const repo = init("search-sub");
+  mkdirSync(`${repo}/deps`);
+  writeFileSync(`${repo}/deps/readme.txt`, "r");
+  writeFileSync(`${repo}/top.txt`, "t");
+  sh(repo, `git add -A && git commit -q -m base && git -c protocol.file.allow=always submodule add -q "${source}" deps/vendor && git commit -q -m sub`);
+
+  const r = await readSearchList(exec, repo);
+  assert.equal(r.ok, true);
+  assert.deepEqual(sorted(r.files), sorted([".gitmodules", "top.txt", "deps/readme.txt"]));
+  const inner = await readSearchList(exec, `${repo}/deps`);
+  assert.deepEqual(sorted(inner.files), ["readme.txt"]);
+}
+
 // Outside a repository the folder is walked: every file below it, links to files too,
 // nothing under a .git, and the walk stops at the limit and says so.
 {

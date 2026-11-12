@@ -182,8 +182,8 @@ async function windowsWalk(exec, folder, on, count) {
 
 // readSearchList: the files the search box looks through, paths from `folder`, in no
 // particular order (files-tree.js rankSearch sorts).
-//   In a repository (repo: true): tracked files and untracked ones, not ignored ones and
-//   not tracked files already deleted from disk. Not limited.
+//   In a repository (repo: true): tracked files and untracked ones, not ignored ones, not
+//   tracked files already deleted from disk and not submodules. Not limited.
 //   Outside one (repo: false): the folder walked, .git skipped, at most `limit` files
 //   (SEARCH_LIMIT); limited says there were more. A folder with hundreds of thousands of
 //   files takes as long as the walk, up to the limit.
@@ -196,9 +196,13 @@ export async function readSearchList(exec, folder, { on = null, platform = null,
     if (!listed.ok) return { ok: false, repo: true, files: [], limited: false, err: listed.err };
     const deleted = await git.read(folder, ["ls-files", "-z", "--deleted"]);
     if (!deleted.ok) return { ok: false, repo: true, files: [], limited: false, err: deleted.err };
-    const gone = new Set(deleted.out.split("\0"));
+    const skip = new Set(deleted.out.split("\0"));
+    // A submodule is tracked as one entry of mode 160000 ("160000 <sha> 0\tpath"): a folder.
+    const staged = await git.read(folder, ["ls-files", "-z", "--stage"]);
+    if (!staged.ok) return { ok: false, repo: true, files: [], limited: false, err: staged.err };
+    for (const entry of staged.out.split("\0")) if (entry.startsWith("160000 ")) skip.add(entry.slice(entry.indexOf("\t") + 1));
     // A conflicted path is listed once per stage; an untracked nested repository as "dir/".
-    const files = [...new Set(listed.out.split("\0"))].filter((p) => p && !p.endsWith("/") && !gone.has(p));
+    const files = [...new Set(listed.out.split("\0"))].filter((p) => p && !p.endsWith("/") && !skip.has(p));
     return { ok: true, repo: true, files, limited: false, err: "" };
   }
   const count = Math.max(limit, 0) + 1;

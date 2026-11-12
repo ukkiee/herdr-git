@@ -1,6 +1,6 @@
 // The Log panel's menus and toolbars as one model: the commit row's menu, Commit details'
 // file menu and toolbar, the Branch tree's row menus and vertical toolbar, and the Log
-// toolbar. Each lists its items in the reference product's order, with the separators
+// toolbar. Each lists every item it will have, in the order shown, with the separators
 // between groups. No `herdr` import: node tests it (log-menus.test.mjs).
 //
 // An item is an action id. The screen keeps the table of what each id does (view-log.js
@@ -100,7 +100,7 @@ const ITEMS = {
   "branches.new": { key: "log.newBranch", write: true, when: unread },
   "branches.updateSelected": { key: "branches.updateSelected" },
   "branches.delete": { key: "log.deleteBranch", args: name, write: true, when: deleteBlock, work: "log.deleting" },
-  // Not in the reference product: the branches deleted here, kept to restore.
+  // The branches deleted here, kept to restore: after Delete Branch, its neighbor.
   "branches.deleted": { key: "branches.openDeleted", when: unread },
   "branches.compareWithCurrent": { key: "branches.compareWithCurrent" },
   "branches.showMine": { key: "branches.showMine" },
@@ -160,8 +160,8 @@ export const MENUS = {
     "branches.showMine", "branches.fetch", "branches.favorite", "branches.navigateLog", "branches.settings", RULE,
     "branches.expandAll", "branches.collapseAll",
   ],
-  // Right of the filter row. Regex and Match Case come first in the reference product's
-  // toolbar; here they sit inside the search box, which draws them (logSearch).
+  // Right of the filter row. Regex and Match Case sit inside the search box, which draws
+  // them (log-filters.js): logSearch.
   logTools: ["log.graphOptions", "log.refresh", "log.fetch", "log.cherryPick", "log.displayOptions", "log.goToHash", "log.hide"],
   logSearch: ["log.regex", "log.matchCase"],
 };

@@ -10,7 +10,7 @@ const everything = () => true;
 const look = (items, t = ko) => items.flatMap((it) => [...(it.rule ? ["─"] : []), t(it.key, it.args)]);
 const all = (name, ctx = {}, t = ko) => look(menuItems(name, everything, ctx), t);
 
-// The commit row's menu, every item handled: the reference product's Korean names and order
+// The commit row's menu, every item handled: the Korean names and their order
 // (one commit picked, the current branch main).
 {
   assert.deepEqual(all("commit", { count: 1, current: "main" }), [

@@ -3,7 +3,8 @@
 //
 //   markLookup(marks) → { mark(path), dot(folder) }
 //   rankSearch(files, query, { limit }) → { items: [{ path, name, dir }], limited }
-//   visibleRows(entries, open) → [{ path, name, folder, depth, open }]
+//   visibleRows(entries, open, failed) → [{ path, name, folder, depth, open, loading? }]
+//   keepPressed(read, now, open) → Map of folder path → readFolder's result
 //   moveKey(rows, current, key) → { current, expand, collapse, preview }
 //
 // Paths are from the tree's root and use "/".
@@ -101,6 +102,22 @@ export function visibleRows(entries, open, failed = new Set()) {
     }
   };
   walk("", 0);
+  return out;
+}
+
+// keepPressed: what a finished refresh leaves, per folder.
+//   read: Map of folder path → readFolder's result, for the folders the refresh read.
+//   now: Map of folder path → readFolder's result the panel holds as the refresh ends;
+//   a press may have read a folder into it while the refresh ran. open: the folders open
+//   now.
+//   → Map: the refresh's reads, plus what `now` has for folders the refresh didn't read,
+//   keeping only open folders and the root (""). Taken with no wait between it and
+//   putting the result in place, so no press lands in between and is lost.
+export function keepPressed(read, now, open) {
+  const out = new Map();
+  const kept = (path) => !path || open.has(path);
+  for (const [path, folder] of read) if (kept(path)) out.set(path, folder);
+  for (const [path, folder] of now) if (!read.has(path) && kept(path)) out.set(path, folder);
   return out;
 }
 

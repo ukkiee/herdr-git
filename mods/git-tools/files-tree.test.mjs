@@ -1,7 +1,7 @@
 // node files-tree.test.mjs: the Files panel's pure decisions (search order, marks and dots,
-// visible rows, arrow keys).
+// visible rows, what a refresh keeps, arrow keys).
 import assert from "node:assert/strict";
-import { markLookup, rankSearch, visibleRows, moveKey } from "./files-tree.js";
+import { markLookup, rankSearch, visibleRows, keepPressed, moveKey } from "./files-tree.js";
 
 // Marks: a file's own mark, a whole ignored or untracked folder marking what's inside it,
 // the nearest such folder deciding, and dots that skip ignored files but count deletions.
@@ -139,6 +139,25 @@ const entries = new Map([
   assert.deepEqual(visibleRows(tree, open, new Set(["bad"])).map((r) => r.path), ["a", "a/f.txt", "bad", "empty", "z.txt"]);
   // The root not read yet has no rows at all (the panel shows its own loading notice).
   assert.deepEqual(visibleRows(new Map(), new Set(["a"])), []);
+}
+
+// A refresh ending: the folders it read take their new reads; a folder a press read while
+// it ran (the refresh never asked for it) keeps that read, with its cut and its failure;
+// folders closed meanwhile give their place up. The root always stays.
+{
+  const fresh = (name) => ({ ok: true, entries: [{ name, dir: false }], limited: false });
+  const read = new Map([["", fresh("new-root")], ["a", fresh("new-a")], ["closed", fresh("x")]]);
+  const pressed = { ok: true, entries: [{ name: "p", dir: false }], limited: true };
+  const pressedFailed = { ok: false, entries: [], limited: false, gone: false, denied: true };
+  const now = new Map([["", fresh("old-root")], ["a", fresh("old-a")], ["b", pressed], ["bad", pressedFailed], ["c", fresh("c")]]);
+  const kept = keepPressed(read, now, new Set(["a", "b", "bad"]));
+  assert.deepEqual([...kept.keys()].sort(), ["", "a", "b", "bad"]);
+  assert.deepEqual(kept.get(""), fresh("new-root"));
+  assert.deepEqual(kept.get("a"), fresh("new-a"));
+  assert.equal(kept.get("b"), pressed);
+  assert.equal(kept.get("bad"), pressedFailed);
+  // Nothing pressed meanwhile: just what the refresh read, less what was closed.
+  assert.deepEqual([...keepPressed(read, new Map(), new Set(["a"])).keys()].sort(), ["", "a"]);
 }
 
 // The keys skip a "reading" row: it can't be chosen, and right on a folder still being

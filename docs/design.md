@@ -16,7 +16,12 @@ space가 다른 머신에 있으면 git 명령을 모두 그 머신에서 실행
 
 - **Commit panel** (`view-commit.js`, 아래쪽 커밋 양식은 `commit-form.js`): Changes와
   Unversioned Files를 체크박스 트리로 보여 주고, 체크한 파일만 커밋한다. 레이아웃 블록
-  `changes` 자리에 들어간다.
+  `changes` 자리에 들어간다. Amend가 켜진 동안에는 맨 아래에 Last commit group이 붙는다.
+- **Files panel** (`view-files.js`): 포커스된 pane의 폴더를 폴더마다 펼쳐 읽는 트리로 보여 주고,
+  파일을 누르면 읽기 전용 미리보기로 바뀐다. 레이아웃 블록 `files` 자리에 들어간다. 이름의 git
+  표시, 바뀐 파일이 든 폴더의 점, 이름의 일부로 찾는 찾기 칸, 화살표·Enter·Esc 키, 줄의 우클릭
+  메뉴(Show Diff, 경로 복사, Finder에서 보기)가 있다. 읽기는 `files-data.js`, 판단은
+  `files-tree.js`가 한다.
 - **Log panel** (`view-log.js`): 작업 영역 아래 블록 `git-log`. 세 열은 각자의 파일이 그린다.
   - **Branch tree** (`log-branches.js`): HEAD, Local, Remote. 체크아웃, 새 브랜치, 삭제, Fetch.
   - **Commit list** (`log-list.js`, 위의 검색과 필터는 `log-filters.js`): 그래프, 제목,
@@ -28,8 +33,8 @@ space가 다른 머신에 있으면 git 명령을 모두 그 머신에서 실행
 - **Diff tab** (`view-diff.js`): 파일 하나의 통합 diff를 줄마다 그리는 space의 탭. 작업 파일의
   탭은 파일을 따라간다.
 - **창**: Rollback dialog (`view-rollback.js`), Restore dialog (`view-restore.js`), Push dialog
-  (`view-push.js`), New Branch와 Delete Branch (`view-branch-new.js`, 지울 때는 `mode: "delete"`).
-  우클릭 팝업 메뉴는 `view-menu.js` 파일이 그린다.
+  (`view-push.js`), New Branch와 Delete Branch (`view-branch-new.js`, 지울 때는 `mode: "delete"`),
+  Deleted Branches dialog (`view-deleted-branches.js`, Branch tree 툴바에서 연다). 우클릭 팝업 메뉴는 `view-menu.js` 파일이 그린다.
 - **점검 화면** (`view-icon-sheet.js`): Icon theme이 돌려줄 수 있는 아이콘 전부를 격자로 그리고
   앱 안에서 조회 속도를 잰다. 어느 화면에서도 열리지 않고 `tab.new` 명령으로만 연다. 글자는 영어다.
 
@@ -41,10 +46,10 @@ space가 다른 머신에 있으면 git 명령을 모두 그 머신에서 실행
 |---|---|---|
 | 길잡이 | `main.js` | 사본을 만들고 화면에 버스·잠금·언어를 넘긴 뒤 `props.view`로 화면을 고른다 |
 | 공용 부품 | `ui.js` | 저장소 찾기, 행·버튼·체크박스, 보이는 행만 그리는 `WindowedList`, 창과 메뉴 열기, 쓰기 잠금과 창 요청의 화면 쪽 |
-| 화면 | `view-*.js`, `commit-form.js`, `log-*.js` | 그리기와 사람의 입력 |
-| git | `git.js`, `git-status.js`, `git-commit.js`, `git-rollback.js`, `git-snapshot.js`, `git-diff.js`, `git-push.js`, `git-log.js`, `git-log-filter.js`, `git-branch.js`, `git-show.js` | git을 부르고 결과를 해석한다 |
-| 순수 계산 | `graph.js`, `tree.js`, `bus.js`, `lock.js`, `i18n.js`, `icon-theme.js` | 그래프 배치, 경로 트리와 3상태 체크, 버스와 잠금 값, 언어와 문장, 아이콘 고르기 |
-| 데이터 | `messages-*.js`, `icon-theme-data.js`, `icons/` | 문구 표, 생성한 아이콘 규칙, 아이콘 파일 |
+| 화면 | `view-*.js`(`view-files.js`, `view-deleted-branches.js` 포함), `commit-form.js`, `log-*.js` | 그리기와 사람의 입력 |
+| git | `git.js`, `git-status.js`, `git-commit.js`, `git-rollback.js`, `git-snapshot.js`, `git-diff.js`, `git-push.js`, `git-log.js`, `git-log-filter.js`, `git-branch.js`, `git-show.js`(`readLastCommit` 포함), `files-data.js` | git과 폴더 읽기 명령을 부르고 결과를 해석한다 |
+| 순수 계산 | `graph.js`, `tree.js`, `bus.js`, `lock.js`, `i18n.js`, `icon-theme.js`, `files-tree.js` | 그래프 배치, 경로 트리와 3상태 체크, 버스와 잠금 값, 언어와 문장, 아이콘 고르기, Files panel의 줄·표시·찾기 순위·키 |
+| 데이터 | `messages-*.js`(`messages-files.js` 포함), `icon-theme-data.js`, `icons/` | 문구 표, 생성한 아이콘 규칙, 아이콘 파일 |
 
 저장소 루트에는 레이아웃 변환 `layout.mjs`, 설치 `install.sh`, 키 `keys.json`, 아이콘 생성기
 `tools/gen-icon-theme.mjs`가 있다. 각 모듈의 책임과 함정은 그 파일의 머리 주석에 있다.
@@ -85,7 +90,7 @@ git 모듈과 순수 계산 모듈은 `herdr`를 import하지 않는다. 그래�
   쪽이 시작한 일은 그 호출을 돌린 사본의 것이어서, 그 사본이 닫히면 끝나지도 실패하지도 않고
   버려진다. 그래서 사건은 공유 값에 쓰고, 각 사본이 자기 `render`에서 새 번호를 보고 자기
   타이머에서 받는다. 8개보다 많이 놓친 사본은 모두 다시 읽으라는 사건을 받는다.
-- **창의 쓰기**: Push, Rollback, Restore, New Branch, Delete Branch 창은 git 쓰기를 직접 하지
+- **창의 쓰기**: Push, Rollback, Restore, New Branch, Delete Branch, Deleted Branches 창은 git 쓰기를 직접 하지
   않는다. 창을 연 패널 사본(`props.owner`)에 요청하고, 그 패널이 잠금을 잡고 실행한다.
   Herdr는 Esc로 창을 닫는 것을 막지 못하게 하고, 닫힌 사본의 다음 `await` 뒤는 실행되지 않는다.
   패널이 실행하면 창이 닫혀도 쓰기, 다시 읽기, 실패 표시가 끝까지 간다. 3초 남짓 안에 패널이
@@ -94,10 +99,12 @@ git 모듈과 순수 계산 모듈은 `herdr`를 import하지 않는다. 그래�
 ### 설치와 레이아웃
 
 Herdr의 내장 `main` 레이아웃은 구조 변경을 받지 않는다. 그래서 `install.sh`가 `main`을 복제한
-`main-git`을 만들고 세 곳만 바꾼다([ADR 0001](adr/0001-clone-main-layout.md)).
+`main-git`을 만들고 네 곳만 바꾼다([ADR 0001](adr/0001-clone-main-layout.md)).
 
 - `panel-body`의 `changes` 블록은 id를 그대로 두고 내용만 Commit panel로 바꾼다. 탭 바의
   Changes 버튼이 이 id를 열기 때문이다.
+- 같은 이유로 `panel-body`의 `files` 블록도 id를 두고 내용만 Files panel로 바꾼다. Git 버튼과
+  달리 모든 OS에서 바꾼다.
 - `work` column은 크기를 조절할 수 없으므로, `work-body`를 새 column `git-work`로 감싸고 그
   아래에 Log panel 블록 `git-log`(기본 320px, 숨김, 120~900px)를 넣는다.
 - 탭 바 블록 `tabs`를 새 row `git-tabs`로 감싸고 오른쪽에 64px 블록 `git-log-button`(Git
@@ -107,7 +114,7 @@ Herdr의 내장 `main` 레이아웃은 구조 변경을 받지 않는다. 그래
   macOS에서만 넣는다. 다른 OS에서는 탭 바의 오른쪽 끝에 창 버튼(최소화, 최대화, 닫기)이
   있어서 블록이 그 바깥에 놓이기 때문이다.
 - 변환은 `layout.mjs`의 순수 함수 `toMainGit`이다. 기대하는 노드(`work`, `tabs`,
-  `work-body`, `panel-body`, `changes`)가 없으면 아무것도 쓰지 않고 없는 노드를 알린다.
+  `work-body`, `panel-body`, `changes`, `files`)가 없으면 아무것도 쓰지 않고 없는 노드를 알린다.
   짐작해서 고치지 않는 것은, Herdr 업데이트로 `main`의 구조가 바뀐 것을 알아채야 하기
   때문이다.
 - `install.sh`는 앞의 네 검사(node, `main.json`, 변환 가능, Herdr 실행 중) 가운데 하나라도
@@ -136,7 +143,12 @@ Herdr의 내장 `main` 레이아웃은 구조 변경을 받지 않는다. 그래
   10분이다. git이 커밋을 거부하면 이번 커밋이 더한 `--intent-to-add`만 되돌린다.
 - **Amend**는 마지막 커밋만 고친다. 켜면 빈 입력란에 마지막 메시지를 채우고, 마지막 커밋이
   이미 원격에 있으면 다음 푸시가 강제 푸시가 된다고 알린다. 체크한 파일이 없으면 메시지만
-  고친다. 커밋이 없는 저장소에서는 꺼져 있다.
+  고친다. 커밋이 없는 저장소에서는 꺼져 있다. 켜진 동안 버튼은 `Amend Commit`과
+  `Amend Commit and Push…`이고, 목록 맨 아래에 HEAD 커밋의 파일 묶음(Last commit group)이 붙는다.
+  묶음은 `git-show.js`의 `readLastCommit`으로 읽는다. 읽기마다 HEAD의 해시만 묻고, HEAD가
+  움직였을 때만 파일을 다시 읽는다. 묶음의 파일에는 체크박스가 없어서 커밋과 Rollback의 대상이
+  아니고, Diff는 그 커밋과 첫 부모의 차이다. Amend가 꺼지면(끄기, 커밋 성공, 패널이 다른
+  저장소로 옮겨 감) 묶음도 사라진다.
 - **Commit and Push…**는 커밋이 성공했을 때만 Push dialog를 연다.
 - **푸시**는 창이 보여 준 계획대로만 나간다. 패널이 `git push` 직전에 계획을 다시 읽고,
   브랜치·원격·대상·맨 위 커밋 중 하나라도 다르면 푸시하지 않고 새 계획을 보여 준다.
@@ -154,10 +166,15 @@ Herdr의 내장 `main` 레이아웃은 구조 변경을 받지 않는다. 그래
 Rollback은 Rollback dialog의 버튼으로만 실행되고, 쓰기 전에 버릴 파일들을 Rollback snapshot으로
 남긴다([ADR 0002](adr/0002-rollback-snapshots-in-a-private-ref.md)).
 
-- **숨은 ref.** 기록은 커밋 객체다. 부모는 그때의 HEAD이고, 트리는 HEAD에 되돌릴 경로들의 작업
-  트리 상태를 얹은 것이다. 그래서 기록과 부모의 차이가 곧 버린 변경이다. 기록은
+- **숨은 ref.** 기록은 커밋 객체다. 첫 부모는 그때의 HEAD이고, 트리는 HEAD에 되돌릴 경로들의
+  작업 트리 상태를 얹은 것이다. 그래서 기록과 첫 부모의 차이가 곧 버린 변경이다. 기록은
   `refs/git-tools/rollback`의 reflog에 쌓인다. 브랜치나 태그가 아니어서 Commit list, Branch
-  tree, push에 나오지 않는다. 목록은 최근 50개를 읽는다.
+  tree, push에 나오지 않는다. 목록은 최근 50개를 첫 부모와의 차이로 읽는다
+  (`--diff-merges=first-parent`, git 2.31 이상).
+- **두 번째 부모는 스테이징이다.** 같은 HEAD 위의 커밋이고, 트리는 HEAD에 되돌릴 경로들의 인덱스
+  항목(stage 0)을 얹은 것이다. 스테이징된 삭제는 그 트리에도 없다. 충돌 중이던 경로(stage 1~3)는
+  트리에 담을 수 없어 HEAD의 것으로 두고, 기록 메시지 끝에 `Conflict: <경로의 JSON 문자열>` 줄로
+  싣는다. 커밋이 없는 저장소의 기록에는 부모가 없고 인덱스도 담지 않는다.
 - **기록을 만들지 못하면 Rollback하지 않는다.** 되돌릴 것이 없으면 기록도 만들지 않는다.
 - **임시 인덱스는 사본마다 따로다.** 기록은 `GIT_INDEX_FILE`을 `<git 폴더>/git-tools-rollback-index-<id>`로
   두고 만들어서 실제 인덱스와 작업 트리를 건드리지 않는다. `<id>`는 Commit panel 사본이
@@ -167,13 +184,22 @@ Rollback은 Rollback dialog의 버튼으로만 실행되고, 쓰기 전에 버�
 - 임시 인덱스는 끝나면 비운다. git만으로는 파일을 지울 수 없으므로, 그 저장소에서 Rollback이나
   Restore를 한 식별자마다 작은 파일 하나가 남는다.
 - 만든 트리는 되돌릴 경로 밖이 HEAD와 같아야 한다. 다르면 기록도 Rollback도 하지 않는다.
-- **Restore는 작업 트리만 되살린다.** 수정됐던 파일은 그 내용으로, 삭제됐던 파일은 다시 없는
-  상태로, 추가됐던 파일은 추적하지 않는 파일로 돌아온다. 인덱스는 바꾸지 않는다. 기록은 Restore
-  뒤에도 남고, Restore는 새 기록을 만들지 않는다.
+- **Restore는 파일과 스테이징을 되살린다.** 수정됐던 파일은 그 내용으로, 삭제됐던 파일은 다시
+  없는 상태로, 추가됐던 파일은 다시 있는 상태로 돌아온다. 그다음 되살린 경로의 인덱스 항목을 두
+  번째 부모의 것으로 돌린다. 스테이징을 되살리는 것은 Rollback이 파일과 함께 스테이징도 HEAD로
+  돌리기 때문이고, 되살린 뒤 `git status`가 Rollback 직전과 같아야 다음 커밋이 사람이 고른 그대로
+  나가기 때문이다. 인덱스는 지금 HEAD의 항목(HEAD에 없는 경로는 항목 없음)일 때만, 그리고 기록의
+  스테이징이 그때의 HEAD와 다를 때만 쓴다. 그사이 다른 내용을 스테이징했거나 충돌 중이던
+  경로는 파일만 되살리고 인덱스를 그대로 둔 채 "스테이징만 못 되살린 경로"로 이유와 함께 알린다.
+  두 번째 부모가 없는 기록(스테이징을 담기 전의 꼴, 커밋 없는 저장소의 기록)은 인덱스를 바꾸지
+  않아서, 추가됐던 파일은 추적하지 않는 파일로 돌아온다. 기록은 Restore 뒤에도 남고, Restore는
+  새 기록을 만들지 않는다.
 - **그사이 바뀐 것은 덮지 않는다.** 경로마다 처음 맞는 이유로 건너뛰고 그 이유를 알린다: 이
   기록에 없는 경로, `assume-unchanged`나 `skip-worktree` 표시, 지금 HEAD의 내용이 기록의 부모와
   다름, 추가됐던 파일을 git이 지금 추적함, 수정·삭제됐던 파일의 작업 트리가 HEAD와 다름, 추가됐던
-  파일 자리에 무언가 있음, git이 쓰다 실패해 파일이 HEAD와도 기록과도 다름.
+  파일 자리에 무언가 있음, git이 쓰다 실패해 파일이 HEAD와도 기록과도 다름. 건너뛴 경로는
+  인덱스도 그대로다. 이와 따로, 파일은 되살렸지만 스테이징만 못 되살린 경로(지금 다른 내용이
+  스테이징됨, 충돌 중이던 경로)를 결과의 다른 단락에 적는다.
 - **되살린 것으로 세는 경우.** 추가됐던 파일 자리에 git이 기록과 같게 기록할 파일이 이미 있으면
   쓰지 않고 되살린 것으로 센다. "Delete local copies of added files"를 끄고 롤백하면 새 파일이
   디스크에 그대로 남기 때문이다.
@@ -186,12 +212,23 @@ Rollback은 Rollback dialog의 버튼으로만 실행되고, 쓰기 전에 버�
 
 - Delete는 로컬 브랜치만 한다. 다른 로컬 브랜치, 원격 브랜치, 태그, HEAD 어디에도 없는 커밋이
   있으면 그 수를 알리고 확인을 받은 뒤에 지운다.
-- 지운 뒤 Log panel 아래 알림 줄의 Restore가 같은 이름의 브랜치를 그 커밋에 다시 만든다.
-  `update-ref refs/heads/<이름> <해시> ""`를 쓴다. 빈 옛 값은 "없을 때만"을 뜻하므로 같은 이름이
-  생겼으면 덮지 않는다. `git branch`는 `-f` 같은 이름을 거부하므로 쓰지 않는다.
+- **지우기 전에 저장소에 기록한다**([ADR 0003](adr/0003-deleted-branches-in-a-reflog.md)). 숨은 ref
+  `refs/git-tools/deleted-branches`를 그 브랜치의 커밋으로 옮겨 reflog에 이름과 추적 정보를 남기고,
+  곧바로 HEAD 역사의 뿌리 커밋으로 되돌려 세운다. 지운 커밋은 그 reflog에만 남아서
+  `git log --all`, 브랜치 목록, 태그 목록에 나오지 않는다. 기록하지 못하면 지우지 않는다. 기록은
+  저장소 안에 있으므로 다른 worktree와 그 저장소를 연 다른 Herdr에서도 같은 목록이 보인다.
+- 되살리는 길은 둘이다. 지운 직후 Log panel 아래 알림 줄의 Restore는 그 Log panel 사본이
+  마지막으로 지운 하나를 되살린다. Branch tree 툴바의 Deleted Branches dialog는 reflog를 최신순으로
+  50개까지 읽어 여러 개를 골라 되살린다. 같은 이름·같은 해시는 한 줄이고, 같은 이름의 브랜치가
+  지금 같은 커밋에 있으면 목록에서 빠지며, 다른 커밋에 있으면 고를 수 없게 이유와 함께 보인다.
+  창에서 되살린 브랜치가 알림 줄의 브랜치면 알림 줄도 지운다.
+- 되살리기는 `update-ref refs/heads/<이름> <해시> ""`를 쓴다. 빈 옛 값은 "없을 때만"을 뜻하므로
+  같은 이름이 생겼으면 덮지 않는다. `git branch`는 `-f` 같은 이름을 거부하므로 쓰지 않는다. 여러
+  개를 되살릴 때 하나가 실패해도 나머지는 계속한다.
 - 추적 브랜치는 `branch -D` 전에 읽어 두었다가 `branch.<이름>.remote`와 `.merge`로 되돌린다.
   체크아웃은 하지 않는다.
-- 마지막으로 지운 하나만, 그 Log panel 사본에서, 알림이 사라지기 전까지 기억한다.
+- 보관은 git의 reflog 정리를 따른다. ref가 더 닿지 않는 커밋이라 `gc.reflogExpireUnreachable`(기본
+  30일) 뒤 gc가 돌 때 사라진다. mod는 기록을 지우지 않고 저장소 설정을 바꾸지 않는다.
 
 ### Log의 읽기와 필터
 
@@ -233,6 +270,32 @@ Rollback은 Rollback dialog의 버튼으로만 실행되고, 쓰기 전에 버�
   그리기로 끝나므로 화면에 있는 탭은 다음에도 읽고, 가려진 탭은 표시만 해 두었다가 다시 보일
   때 한 번 읽는다.
 
+### Files panel
+
+- **폴더는 펼칠 때 읽는다.** 뿌리와 펼친 폴더만 `sh`(Windows의 이 컴퓨터는 PowerShell)로 읽고,
+  폴더당 500개, 전체 5,000개까지 둔다. 아주 큰 폴더도 한도에서 읽기를 멈추므로, 잘릴 때 남는
+  항목은 정렬 전 읽은 순서다. 폴더를 닫으면 그 아래 읽은 것을 버려 전체 한도의 자리를 돌려준다.
+  `.git`은 보이지 않는다.
+- **git 표시는 한 번의 `status`로 읽는다**(`--ignored=matching --untracked-files=normal`). 무시된
+  폴더와 추적하지 않는 폴더가 한 줄로 와서 출력이 바뀐 파일 수 정도로 작다. 그 아래 경로의 표시는
+  `files-tree.js`의 `markLookup`이 가장 가까운 조상 폴더로 정한다. 폴더의 점은 아래에 바뀐
+  파일(삭제 포함, 무시 제외)이 있다는 뜻이다.
+- **git 읽기 실패는 보이지 않는다.** 지난 표시를 그대로 둔다. git의 오류는 Commit panel이
+  보이고, git이 없는 머신에서 10초마다 오류가 뜨지 않게 하기 위해서다. 폴더 읽기 실패만 보인다.
+- **읽기는 `.git` 아래를 고치지 않는다**(`READ`). 감시가 자기 읽기에 다시 깨지 않게 하기
+  위해서다. 감시(이 컴퓨터만)와 10초 타이머로 다시 읽고, 패널이 가려진 동안에도 읽는다.
+- **찾기 목록은 찾기를 시작할 때 읽는다**(찾는 중 폴더가 바뀌면 다시). 10초 새로고침으로는 읽지
+  않는다. 저장소 안은 추적 파일과 새 파일(`ls-files --cached --others --exclude-standard`에서
+  디스크에서 지운 것을 뺀다, 한도 없음), 저장소 밖은 폴더를 직접 훑는다(`.git` 제외, 폴더 링크를
+  따라가지 않음, 20,000개에서 멈춤). 순위는 경로의 일부를 대소문자 없이 찾고, 파일 이름에 든 것이
+  먼저, 각각 경로순, 200개까지다.
+- **미리보기는 `readTextFile`로 읽는다.** 1 MiB보다 큰 파일과 읽을 수 없는 파일은 미리 볼 수 없다고
+  하고, NUL이 든 파일은 이진 파일로 본다. 400,000자에서 자른다.
+- **Show Diff**는 git 표시가 있는 파일에만 있고, Commit panel의 작업 파일과 같은 Diff tab(HEAD →
+  작업 트리)을 연다. Reveal in Finder는 macOS 창이고 space가 이 컴퓨터일 때만 있다(`open -R`).
+- 키보드는 줄이나 찾기 칸을 누른 뒤에 받는다. mod가 `focusable`이 아니어서 Herdr가 키보드를
+  넘겨주지 않기 때문이다.
+
 ### Icon theme
 
 - 출처는 Atom Material Icons(`AtomMaterialUI/iconGenerator`, MIT)의 커밋
@@ -255,14 +318,16 @@ Rollback은 Rollback dialog의 버튼으로만 실행되고, 쓰기 전에 버�
   있는 파일 아이콘은 행이 칠해진 배경색이 어두울 때 쓴다. 배경의 상대 휘도가 약 0.179 아래면
   어둡다고 본다. Herdr의 밝음·어두움 설정은 그 색을 읽지 못할 때만 쓴다. 설정과 실제 배경색이
   다를 수 있기 때문이다.
-- 변경 파일 트리와 Diff tab의 머리줄에 쓴다. Branch tree의 폴더와 툴바는 mod의 선 아이콘이다.
+- 변경 파일 트리, Files panel의 트리와 찾기 결과, Diff tab의 머리줄에 쓴다. Branch tree의 폴더와 툴바는 mod의 선 아이콘이다.
 
 ### 언어
 
 - **판정.** 창이 있는 컴퓨터의 첫 번째 선호 언어가 `ko`로 시작하면 한국어, 그 밖은 영어다
   (`i18n.js`의 `pickLang`). macOS는 `defaults read -g AppleLanguages`, Linux는 `LC_ALL`,
-  `LC_MESSAGES`, `LANG` 가운데 처음 설정된 값을 읽는다. Windows는 읽지 않고 영어다. space가
-  다른 머신이어도 창의 컴퓨터를 읽는다. 플랫폼에 언어를 알려 주는 API가 없어서 명령으로 읽는다.
+  `LC_MESSAGES`, `LANG` 가운데 처음 설정된 값을 읽는다. Windows는
+  `powershell -NoProfile -Command "(Get-UICulture).Name"`의 출력(표시 언어, `ko-KR` 꼴)을 읽고,
+  빈 출력은 모름(null)이다. space가 다른 머신이어도 창의 컴퓨터를 읽는다. 플랫폼에 언어를 알려
+  주는 API가 없어서 명령으로 읽는다. Windows의 판정은 실제 기기에서 확인하지 못했다.
 - **모르는 것은 영어가 아니다.** 앱이 막 시작해 창 정보가 아직 없거나 명령이 실패하면
   `i18n.js`의 `systemLang`은 null을 돌려준다. 그때 사본은 쓰던 언어를 그대로 두고 1초, 3초,
   10초 뒤에 다시 묻는다. 이것을 영어로 확정하면 한국어 컴퓨터에서 앱을 켠 직후의 화면이
@@ -322,9 +387,14 @@ Herdr는 mod를 QuickJS로 돌린다. JIT가 없고, 한 호출이 너무 오래
   규칙으로, 실행 인자를 기록해 확인한다. 푸시는 로컬 bare 저장소를 원격으로 쓴다.
   잡는 실패: 엉뚱한 파일이 커밋됨, 스테이징이 망가짐, Protected branch에 강제 푸시가 나감, 롤백이
   다른 파일을 건드림, 기록에 틀린 내용이 들어가거나 브랜치·태그에 섞임, Restore가 그사이 고친
-  파일을 덮음, 지운 브랜치가 다른 커밋이나 추적으로 돌아옴, 필터가 틀린 커밋을 돌려줌.
+  파일이나 스테이징을 덮음, Restore 뒤 `git status`가 Rollback 직전과 다름, 지운 브랜치가 다른
+  커밋이나 추적으로 돌아옴, 지운 브랜치가 기록되지 않았는데 지워짐, 지운 커밋이 `git log --all`에
+  보임, 필터가 틀린 커밋을 돌려줌, 지난 커밋 묶음의 파일이 틀림, Files panel의 git 표시·폴더
+  읽기·찾기 목록이 틀리거나 읽기가 `.git` 아래를 고침.
+  지운 브랜치의 보관은 `GIT_COMMITTER_DATE`를 넣어 29일·31일 전 기록을 만들고 git의 기본 정리를
+  돌려 본다. Files panel의 폴더 읽기와 찾기 훑기는 node가 도는 컴퓨터의 `sh` 길만 테스트한다.
 - **순수 계산.** 그래프 레인, 트리와 3상태 체크, 버스와 잠금 값, 레이아웃 변환, 아이콘 조회, 언어
-  판정과 문구. `i18n.test.mjs`는 문구 표를 모두 찾아 두 언어의 키·자리표시자·빈 값을 대조하고,
+  판정과 문구, Files panel의 보이는 줄·무시와 점 판정·찾기 순위·키 이동(`files-tree.test.mjs`). `i18n.test.mjs`는 문구 표를 모두 찾아 두 언어의 키·자리표시자·빈 값을 대조하고,
   소스의 글자 그대로의 키가 표에 있는지 본다. `icon-theme.test.mjs`는 mod 안의 생성물을 읽는다.
   잡는 실패: 레인이 끊기거나 엉킴, 폴더 체크가 자식과 어긋남, 구조가 다른 `main`을 조용히 통과함,
   틀린 아이콘이나 없는 아이콘 파일, 두 언어의 키가 어긋남.
@@ -333,7 +403,7 @@ Herdr는 mod를 QuickJS로 돌린다. JIT가 없고, 한 호출이 너무 오래
   바꿀 때마다 사람이 다시 본다. 확인 절차는 RECIPE의 "Done when"에 있다.
 
 **전체 오프라인 검사:** `node tools/check.mjs`가 한 번에 돌린다. 루트의 `node layout.test.mjs`,
-`mods/git-tools`의 `*.test.mjs` 17개 각각, `node tools/gen-icon-theme.test.mjs`가 모두 `ok`를 찍고,
+`mods/git-tools`의 `*.test.mjs` 19개 각각, `node tools/gen-icon-theme.test.mjs`가 모두 `ok`를 찍고,
 `herdr-app check mods/git-tools`가 통과한다. 테스트는 node 내장 모듈(`node:assert/strict` 등)만 쓴다.
 
 **느린 엔진의 예산:** `icon-theme.test.mjs`가 JIT를 끈 node로 규칙을 꽂는 시간을 재서, 규칙을
@@ -347,21 +417,41 @@ Herdr는 mod를 QuickJS로 돌린다. JIT가 없고, 한 호출이 너무 오래
 
 ## 7. 알려진 한계
 
-- Restore는 스테이징 상태를 되살리지 않는다. 작업 트리의 파일만 돌아온다.
+- Restore는 그사이 다른 내용을 스테이징한 경로와 충돌 중이던 경로의 스테이징을 되살리지 않는다
+  (파일은 되살리고 결과에 알린다). 스테이징을 담기 전의 기록과 커밋 없는 저장소의 기록은 파일만
+  되살린다.
+- `git add -N`으로 알리기만 한 새 파일은 기록에 빈 파일을 스테이징한 것으로 담겨서, Restore 뒤
+  빈 내용이 스테이징된 파일로 보일 수 있다. submodule 경로의 스테이징 되살리기는 테스트하지 않았다.
 - Restore의 "그사이 바뀐 것"은 시작할 때의 디스크다. 확인과 쓰기 사이(파일 몇 개면 수십~100 ms)에
   다른 프로그램이 같은 파일을 고치면 그 내용이 덮일 수 있다. 확인과 쓰기를 한 번에 하는 git
   호출이 없다. Rollback의 확인과 쓰기 사이에도 같은 종류의 틈이 있다.
 - Herdr 앱 홈을 다른 컴퓨터로 복사하거나 동기화하면 두 앱의 사본 식별자가 같아질 수 있다. 그런
   두 앱이 같은 순간에 같은 저장소를 롤백하면 기록이 섞일 수 있다.
-- 가장 최근 Rollback snapshot 하나는 `git log --all`처럼 모든 ref를 보는 명령에 커밋으로 보인다.
-- 지운 브랜치는 마지막 하나만, 그 알림 줄에서만 되살린다.
-- 언어를 mod 안에서 바꾸는 방법이 없다. Windows는 언제나 영어다.
+- 가장 최근 Rollback snapshot과 그 두 번째 부모는 `git log --all`처럼 모든 ref를 보는 명령에
+  커밋으로 보인다. `git log --all --decorate`에는 HEAD 역사의 뿌리 커밋에
+  `refs/git-tools/deleted-branches` 장식이 붙는다(새 커밋이 보이지는 않는다).
+- 지운 브랜치는 약 30일(git의 reflog 정리 기본값) 동안만 남고 mod가 늘리지 않는다. 목록은 최근
+  50개까지다. 기록은 그 저장소(그 머신의 그 클론)에만 있다: `push --all`과 clone은 옮기지 않고,
+  `push --mirror`는 ref만 옮기고 reflog는 옮기지 않는다.
+- 지운 브랜치의 reflog가 가리키는 커밋 객체가 사라진 저장소(손상)에서는 목록 전체가 git의 오류가
+  될 수 있다. 다른 worktree에서 체크아웃 중이라 git이 지우기를 거부한 브랜치도 기록은 남는다
+  (목록에서는 같은 이름·같은 해시로 빠진다).
+- 언어를 mod 안에서 바꾸는 방법이 없다.
+- Windows에서는 실제 기기로 확인하지 못했다. 언어 판정(PowerShell을 PATH로 찾는지, 출력의 꼴과
+  인코딩, 5초 안에 답하는지, 표시 언어와 지역 형식이 다른 기기에서 어느 쪽을 바라는지), Files
+  panel의 폴더 읽기와 찾기 훑기(PowerShell, 폴더 링크를 따라가는지), Copy Path의 구분자가 모두
+  미확인이다.
+- Files panel의 찾기 목록은 찾기를 시작할 때 읽으므로, 찾는 동안 새로 생긴 파일은 다음 찾기부터
+  나온다. 파일이 수십만 개인 저장소에서 찾기 목록이 `exec`의 출력 한도(8 MiB)를 넘으면 목록을
+  읽지 못하거나 잘릴 수 있다. 저장소 밖 큰 폴더를 훑는 시간은 재 보지 않았다.
 - Git 버튼은 macOS에만 있다. 다른 OS에서는 `cmd-shift-g`와 Commit panel의 Git Log 버튼으로
   Log panel을 연다. 버튼은 탭 바 밖의 블록이어서 Changes 버튼과의 간격이 13px로, 탭 바 안의
   버튼 사이(3px)보다 넓다.
 - User 필터에서 고른 이름은 대소문자까지 같은 작성자만 건다. 다만 Match Case를 끈 검색이나 직접
   친 글자가 함께 걸린 동안에는 대소문자만 다른 작성자(`bob`과 `Bob`)도 걸린다.
 - 영어 시스템과 Windows·Linux에서는 화면을 확인하지 못했다. 한국어 macOS에서만 확인했다.
+- 원격 space에서 Files panel, Deleted Branches dialog, Last commit group은 화면으로 확인하지
+  못했다.
 - Commit은 체크한 경로를 한 호출로 넘기므로, 아주 많은 파일을 체크하면 시스템의 인자 길이 한도에
   걸릴 수 있다.
 - 자격 증명과 GPG 입력 창이 없다. 입력을 요구하는 원격에서는 푸시와 fetch가 실패한다.

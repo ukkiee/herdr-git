@@ -3,10 +3,9 @@
 // buttons so the three read as one row. The tab bar's mod draws those two itself and
 // takes no others, which is why this one is a block of its own.
 
-import { svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { theme } from "herdr";
-import { icon, logPanelShown, toggleLogPanel } from "./ui.js";
+import { uiGlyph, darkLook, logPanelShown, toggleLogPanel } from "./ui.js";
 
 export default class LogButton {
   init() {}
@@ -21,7 +20,7 @@ export default class LogButton {
         .tooltip(this.t("commit.gitLog"))
         .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
         .on_click(() => toggleLogPanel())
-        .child(svg(icon("branch-item")).size(14))
+        .child(uiGlyph("branch-item", { dark: darkLook(t.chrome) }))
         .child("Git"));
   }
 }

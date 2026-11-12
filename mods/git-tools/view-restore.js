@@ -18,14 +18,14 @@
 // obeyed for a repository that opted in (`git config --local gittools.scripted true`) or
 // a dialog opened from a Commit panel tab on a chosen folder (`chosen`).
 
-import { div, svg } from "gpui-kit";
+import { div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { exec, theme } from "herdr";
 import { makeGit } from "./git.js";
 import { listSnapshots, restore, wordRestore } from "./git-snapshot.js";
 import { formatTime } from "./i18n.js";
 import { buildRows, checkState, toggleIncluded } from "./tree.js";
-import { openDialog, dialogFrame, button, checkbox, row, notice, errorStrip, scrollText, icon, fileGlyph, folderGlyph, darkLook, close, scriptedRepo, sentence, WindowedList, askOwner, serveRequest, writeBlock } from "./ui.js";
+import { openDialog, dialogFrame, button, checkbox, row, notice, errorStrip, scrollText, uiGlyph, ICON, fileGlyph, folderGlyph, darkLook, close, scriptedRepo, sentence, WindowedList, askOwner, serveRequest, writeBlock } from "./ui.js";
 import { openDiff } from "./view-diff.js";
 
 // openRestore({ root, on, owner, select, chosen, lang })
@@ -227,7 +227,7 @@ export default class RestoreView {
     return row(`restore-snapshot-${i}`, t, { selected: i === this.at })
       .cursor_pointer()
       .on_click((_e, cx) => { this.handle.focus(); this.pick(i); cx.notify(); })
-      .child(svg(icon("rollback")).size(14).flex_none().text_color(t.muted))
+      .child(uiGlyph("rollback", { dark: darkLook(t.background) }))
       .child(div().flex_1().min_w(0).truncate().child(formatTime(s.time, this.lang)))
       .child(div().flex_none().text_size(12).text_color(t.dim).whitespace_nowrap().child(this.t("restore.files", { n: s.files.length })));
   }
@@ -243,12 +243,12 @@ export default class RestoreView {
       })
       // The arrow's place is kept on file rows so checkboxes line up under their folder's.
       .child(r.folder
-        ? div().id(`restore-fold-${r.key}`).size(14).flex_none().flex().items_center().justify_center().rounded(3).text_color(t.muted)
+        ? div().id(`restore-fold-${r.key}`).size(ICON).flex_none().flex().items_center().justify_center().rounded(3).text_color(t.muted)
           .cursor_pointer().hover((s) => s.bg(t.hover).text_color(t.foreground))
           .on_mouse_down("left", stop)
           .on_click((_e, cx) => { cx.stop_propagation(); this.toggleFold(r); cx.notify(); })
-          .child(svg(icon(r.open ? "chevron-down" : "chevron-right")).size(12))
-        : div().size(14).flex_none())
+          .child(uiGlyph(r.open ? "chevron-down" : "chevron-right"))
+        : div().size(ICON).flex_none())
       .child(checkbox(`restore-check-${r.key}`, checkState(r.paths, this.picked), t, {
         disabled: this.running, onClick: (_e, cx) => { this.toggleCheck(r.paths); cx.notify(); },
       }));

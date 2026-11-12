@@ -46,7 +46,29 @@ function walk(dir, out = []) {
 // The mod's own spinner and checkbox marks stay tinted.
 {
   const tinted = Object.keys(UI_ICONS).filter((n) => iconDraw(n).tint).sort();
-  assert.deepEqual(tinted, ["checkbox-all", "checkbox-some", "chevron-down", "chevron-right", "folder", "search", "spinner"]);
+  assert.deepEqual(tinted, ["check", "checkbox-all", "checkbox-some", "chevron-down", "chevron-right", "folder", "search", "spinner"]);
+}
+
+// A filter button's dropdown arrow is colored in the reference screen, a tree arrow is gray:
+// the same file under two names. A menu's check mark follows the item's text color.
+{
+  assert.deepEqual(iconDraw("dropdown"), { path: `${UI}/icons/expui/general/chevronDown.svg`, tint: false });
+  assert.deepEqual(iconDraw("chevron-down"), { path: `${UI}/icons/expui/general/chevronDown.svg`, tint: true });
+  assert.deepEqual(iconDraw("current-branch", { dark: true }), { path: `${UI}/icons/expui/vcs/new/currentBranchLabel.svg`, tint: false });
+  assert.deepEqual(iconDraw("check"), { path: `${UI}/icons/expui/actions/checked.svg`, tint: true });
+}
+
+// Screens draw a named icon through uiGlyph or iconButton, which pick colors, the dark file and
+// the gray of a turned-off icon. svg(icon(…)) is left only for the mod's own tinted marks.
+{
+  const direct = [];
+  for (const f of readdirSync(here).filter((f) => f.endsWith(".js") && f !== "ui-icons.js")) {
+    const src = readFileSync(join(here, f), "utf8");
+    for (const m of src.matchAll(/\bsvg\(\s*icon\(([^)]*)\)/g)) {
+      if (!/^"(spinner|checkbox-all|checkbox-some)"$/.test(m[1].trim()) && !/"checkbox-all"\s*:\s*"checkbox-some"/.test(m[1])) direct.push(`${f}: ${m[1]}`);
+    }
+  }
+  assert.deepEqual(direct, []);
 }
 
 // Every name a screen asks for is in the table: icon("…") and iconButton(id, "…", …) literals.
@@ -57,10 +79,12 @@ function walk(dir, out = []) {
     for (const m of src.matchAll(/\bicon\(\s*"([^"]+)"/g)) used.add(m[1]);
     for (const m of src.matchAll(/\bicon\([^)]*\?\s*"([^"]+)"\s*:\s*"([^"]+)"\s*\)/g)) { used.add(m[1]); used.add(m[2]); }
     for (const m of src.matchAll(/\biconButton\([^,]+,\s*"([^"]+)"/g)) used.add(m[1]);
+    for (const m of src.matchAll(/\buiGlyph\(\s*"([^"]+)"/g)) used.add(m[1]);
+    for (const m of src.matchAll(/\buiGlyph\(\s*[^,)]*\?\s*"([^"]+)"\s*:\s*"([^"]+)"/g)) { used.add(m[1]); used.add(m[2]); }
   }
   for (const name of ["refresh", "fetch", "plus", "branch-delete", "restore", "rollback", "diff", "eye", "panel-bottom",
     "expand-all", "collapse-all", "regex", "case-sensitive", "filter-x", "x", "search", "chevron-down", "chevron-right",
-    "folder", "branch-item", "check", "spinner"]) assert.ok(used.has(name), `the scan should see ${name}`);
+    "folder", "branch-item", "current-branch", "dropdown", "check", "spinner"]) assert.ok(used.has(name), `the scan should see ${name}`);
   for (const name of used) assert.ok(name in UI_ICONS, `no icon for "${name}"`);
 }
 

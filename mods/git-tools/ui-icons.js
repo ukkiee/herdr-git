@@ -42,11 +42,14 @@ export const UI_ICONS = {
   // Clear all filters: no reference icon, the filter funnel is the nearest.
   "filter-x": color("icons/expui/general/filter.svg"),
   "x": color("icons/expui/general/closeSmall.svg"),
-  "check": color("icons/expui/actions/checked.svg"),
+  // A menu item's check mark: in the item's text color, like the reference menus.
+  "check": tint("icons/expui/actions/checked.svg"),
   "branch-item": color("icons/expui/general/vcs.svg"),
   "search": tint("icons/expui/general/search.svg"),
   "chevron-down": tint("icons/expui/general/chevronDown.svg"),
   "chevron-right": tint("icons/expui/general/chevronRight.svg"),
+  // A filter button's dropdown arrow: the tree arrow's file, in its colors.
+  "dropdown": color("icons/expui/general/chevronDown.svg"),
   "folder": tint("glyphs/expui/nodes/folder.svg"),
   "spinner": own("spinner.svg"),
   "checkbox-all": own("checkbox-all.svg"),

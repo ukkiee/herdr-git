@@ -18,7 +18,7 @@
 //
 // command(name, cx) takes `branches-*` names (listed there) for keys and scripts.
 
-import { div, svg } from "gpui-kit";
+import { div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { theme } from "herdr";
 import { readBranches, checkout, deleteBranch } from "./git-branch.js";
@@ -26,7 +26,7 @@ import { shortenMiddle } from "./git-log.js";
 import { buildRows, folderKeys, parentIndex } from "./tree.js";
 import { openBranchNew, openBranchDelete } from "./view-branch-new.js";
 import { openDeletedBranches } from "./view-deleted-branches.js";
-import { icon, row, iconButton, notice, broadcast, openMenu, sentence, WindowedList } from "./ui.js";
+import { uiGlyph, darkLook, ICON, row, iconButton, notice, broadcast, openMenu, sentence, WindowedList } from "./ui.js";
 
 const GROUPS = [["local", "log.local"], ["remote", "log.remote"]];
 const INDENT = 12;
@@ -410,7 +410,7 @@ export default class LogBranches {
   // ---- drawing
 
   chevron(m, t) {
-    return svg(icon(m.open ? "chevron-down" : "chevron-right")).size(12).flex_none().text_color(t.muted);
+    return uiGlyph(m.open ? "chevron-down" : "chevron-right").text_color(t.muted);
   }
 
   treeRow(i, t, limited) {
@@ -424,19 +424,20 @@ export default class LogBranches {
         .child(div().flex_none().text_size(11).text_color(t.dim).child(String(m.count)));
     }
     if (m.kind === "folder") {
-      return el.child(this.chevron(m, t)).child(svg(icon("folder")).size(13).flex_none().text_color(t.muted))
+      return el.child(this.chevron(m, t)).child(uiGlyph("folder").text_color(t.muted))
         .child(div().flex_1().min_w(0).truncate().child(m.label))
         .when(!m.open, (el) => el.child(div().flex_none().text_size(11).text_color(t.dim).child(String(m.count))));
     }
     if (m.kind === "head") {
-      return el.child(svg(icon("branch-item")).size(13).flex_none().text_color(t.ansi3))
+      // No icon on the HEAD row: the empty arrow-wide place lines its label up with the groups'.
+      return el.child(div().size(ICON).flex_none())
         .child(div().flex_1().min_w(0).truncate().child(m.label));
     }
     const b = m.branch, here = m.scope === "local" && b.current;
     // No tooltip while this row's menu is open.
     if (this.menuRow !== m.key) el = el.tooltip(m.scope === "local" && b.upstream ? `${b.name} → ${b.upstream}` : b.name);
     return el
-      .child(svg(icon("branch-item")).size(13).flex_none().text_color(here ? t.ansi3 : m.scope === "remote" ? t.ansi5 : t.ansi2))
+      .child(uiGlyph(here ? "current-branch" : "branch-item", { dark: darkLook(t.background) }))
       .child(div().flex_1().min_w(0).truncate().when(here, (el) => el.font_semibold()).child(m.label))
       // Commits not pushed yet (ahead) and not pulled yet (behind), against its upstream.
       .when(b.ahead > 0, (el) => el.child(div().flex_none().text_size(11).text_color(t.ansi2).child(`↑${b.ahead}`)))
@@ -476,7 +477,7 @@ export default class LogBranches {
         // As tall as the Commit list's toolbar, so the two bottom lines meet.
         .child(h_flex().id("log-branch-filter").h(34).flex_none().w_full().min_w(0).px(8).gap(6).items_center().border_b(1).border_color(t.border)
           .cursor_text().on_mouse_down("left", (_e, cx) => { this.input.focus(); cx.stop_propagation(); })
-          .child(svg(icon("search")).size(13).flex_none().text_color(this.typing ? t.accent : t.dim))
+          .child(uiGlyph("search").text_color(this.typing ? t.accent : t.dim))
           .child(Input.new(this.input).flex_1().min_w(0).h_full().text_size(12.5).text_color(t.foreground)))
         .child(div().id("log-branch-list").track_focus(this.handle).flex_1().min_h(0).w_full()
           .on_key_down((e, cx) => {

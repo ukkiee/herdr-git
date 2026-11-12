@@ -28,7 +28,7 @@ import { h_flex, v_flex, Editor, EditorState, InputState, Input } from "gpui-bas
 import { exec, theme, settings, watchFolder, readTextFile, window as hostWindow } from "herdr";
 import { readFolder, readMarks, readSearchList, roomFor, PER_FOLDER, TOTAL, SEARCH_LIMIT } from "./files-data.js";
 import { markLookup, visibleRows, keepPressed, pressLands, stripFailure, pressFailure, failureKey, rankSearch, moveKey, SEARCH_SHOWN } from "./files-tree.js";
-import { location, icon, fileGlyph, folderGlyph, darkLook, panelFrame, toolbar, iconButton, row, notice, errorStrip, WindowedList, openMenu } from "./ui.js";
+import { location, ICON, icon, uiGlyph, fileGlyph, folderGlyph, darkLook, panelFrame, toolbar, iconButton, row, notice, errorStrip, WindowedList, openMenu } from "./ui.js";
 import { openDiff } from "./view-diff.js";
 import { editorLanguage } from "./editor-language.js";
 
@@ -455,7 +455,7 @@ export default class FilesView {
     const r = this.rows[i];
     if (r.loading) {
       return row(`files-row-${r.path}`, t, { depth: r.depth })
-        .child(div().size(12).flex_none())
+        .child(div().size(ICON).flex_none())
         .child(svg(icon("spinner")).size(12).flex_none().text_color(t.dim).spin(900))
         .child(div().flex_1().min_w(0).truncate().text_color(t.dim).child(this.t("ui.loading")));
     }
@@ -466,8 +466,8 @@ export default class FilesView {
       .on_click((_e, cx) => { this.handle.focus(); this.press(r, cx); cx.notify(); })
       .on_mouse_down("right", (_e, cx) => { this.handle.focus(); this.select(r.path); this.rowMenu(r.path, r.folder, cx); cx.notify(); })
       .child(r.folder
-        ? svg(icon(r.open ? "chevron-down" : "chevron-right")).size(12).flex_none().text_color(t.muted)
-        : div().size(12).flex_none());
+        ? uiGlyph(r.open ? "chevron-down" : "chevron-right").text_color(t.muted)
+        : div().size(ICON).flex_none());
     if (r.folder) {
       const dot = this.marks.dot(r.path);
       return el
@@ -530,7 +530,7 @@ export default class FilesView {
   renderSearchBox(t) {
     return h_flex().id("files-search").h(30).flex_none().w_full().min_w(0).px(10).gap(6).items_center().border_b(1).border_color(t.border)
       .cursor_text().on_mouse_down("left", (_e, cx) => { this.query.focus(); cx.stop_propagation(); })
-      .child(svg(icon("search")).size(13).flex_none().text_color(this.typing ? t.accent : t.dim))
+      .child(uiGlyph("search").text_color(this.typing ? t.accent : t.dim))
       .child(Input.new(this.query).flex_1().min_w(0).h_full().text_size(12.5).text_color(t.foreground));
   }
 

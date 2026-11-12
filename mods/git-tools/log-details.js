@@ -26,7 +26,7 @@ import { buildRows, folderKeys, parentIndex } from "./tree.js";
 import { combineChanges } from "./log-select.js";
 import { openDiff } from "./view-diff.js";
 import { openBranchNew } from "./view-branch-new.js";
-import { ROW, icon, fileGlyph, folderGlyph, darkLook, row, toolbar, spacer, iconButton, notice, broadcast, openMenu, WindowedList, runningText, workName } from "./ui.js";
+import { ROW, ICON, icon, uiGlyph, fileGlyph, folderGlyph, darkLook, row, toolbar, spacer, iconButton, notice, broadcast, openMenu, WindowedList, runningText, workName } from "./ui.js";
 import { formatDateTime } from "./i18n.js";
 
 const INDENT = 14;
@@ -425,11 +425,11 @@ export default class LogDetails {
       .on_mouse_down("right", (_e, cx) => { this.handle.focus(); this.cursor = m.key; this.menu(m, cx); cx.notify(); });
     if (m.folder) {
       return el
-        .child(div().id(`log-detail-fold-${i}`).size(14).flex_none().flex().items_center().justify_center().rounded(3).text_color(t.muted)
+        .child(div().id(`log-detail-fold-${i}`).size(ICON).flex_none().flex().items_center().justify_center().rounded(3).text_color(t.muted)
           .cursor_pointer().hover((s) => s.bg(t.hover).text_color(t.foreground))
           .on_mouse_down("left", stop)
           .on_click((_e, cx) => { cx.stop_propagation(); this.cursor = m.key; this.setFold(m, m.open, cx); })
-          .child(svg(icon(m.open ? "chevron-down" : "chevron-right")).size(12)))
+          .child(uiGlyph(m.open ? "chevron-down" : "chevron-right")))
         .child(folderGlyph(m.name, { open: m.open, size: 13 }))
         .child(div().flex_none().max_w("70%").truncate().child(m.name))
         .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.dim).child(this.host.t("log.files", { n: m.count })));
@@ -437,7 +437,7 @@ export default class LogDetails {
     const { status, from } = m.item;
     return el.when(this.menuRow !== m.key, (el) => el.tooltip(status === "renamed" && from ? this.host.t("log.renamedFrom", { path: m.path, from }) : m.path))
       // The arrow's place is kept so a file lines up with the folders beside it.
-      .child(div().size(14).flex_none())
+      .child(div().size(ICON).flex_none())
       .child(fileGlyph(m.path, { dark: this.dark, size: 13 }))
       .child(div().flex_1().min_w(0).truncate().text_color(statusColor(status, t)).when(status === "deleted", (el) => el.line_through()).child(m.name));
   }

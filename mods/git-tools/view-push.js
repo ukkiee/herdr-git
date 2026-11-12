@@ -32,7 +32,7 @@ import { makeGit } from "./git.js";
 import { PROTECTED, readPushPlan, readPushFiles, push } from "./git-push.js";
 import { formatTime } from "./i18n.js";
 import { buildRows } from "./tree.js";
-import { openDialog, openMenu, dialogFrame, button, notice, errorStrip, row, icon, fileGlyph, folderGlyph, darkLook, close, scriptedRepo, WindowedList, askOwner, serveRequest, writeBlock, sentence } from "./ui.js";
+import { openDialog, openMenu, dialogFrame, button, notice, errorStrip, row, icon, uiGlyph, ICON, fileGlyph, folderGlyph, darkLook, close, scriptedRepo, WindowedList, askOwner, serveRequest, writeBlock, sentence } from "./ui.js";
 
 // openPush({ root, on, owner, lang })
 //   Opens the Push dialog for the repository's current branch. commit-form.js calls it
@@ -319,7 +319,7 @@ export default class PushView {
           this.rebuild();
           cx.notify();
         })
-        .child(svg(icon(r.open ? "chevron-down" : "chevron-right")).size(12).flex_none().text_color(t.muted))
+        .child(uiGlyph(r.open ? "chevron-down" : "chevron-right").text_color(t.muted))
         .child(folderGlyph(r.name, { open: r.open }))
         .child(div().flex_none().max_w("70%").truncate().child(r.name))
         .child(div().flex_1().min_w(0).truncate().text_size(12).text_color(t.dim).child(countOf(this.t, "dialogs.files", r.count)));
@@ -327,7 +327,7 @@ export default class PushView {
     const status = r.item.status;
     return row(`push-file-${r.key}`, t, { depth: r.depth })
       // The arrow's place is kept so files line up under their folder's name.
-      .child(div().size(12).flex_none())
+      .child(div().size(ICON).flex_none())
       .child(fileGlyph(r.path, { dark: this.dark }))
       .child(div().flex_1().min_w(0).truncate().text_color(statusColor(status, t))
         .when(status === "deleted", (el) => el.line_through())
@@ -371,7 +371,7 @@ export default class PushView {
       .when(busy, (el) => el.child(svg(icon("spinner")).size(12).spin(900)))
       .child(this.t(this.pushing === "force" ? "dialogs.push.forcePushing" : busy ? "dialogs.push.pushing" : "dialogs.push.push"))
       .tooltip(why ?? this.t("dialogs.push.pushTo", { branch: this.plan.branch, remote: this.plan.remote, target: this.plan.target }));
-    let more = half("push-more").w(24).child(svg(icon("chevron-down")).size(12));
+    let more = half("push-more").w(24).child(uiGlyph("chevron-down"));
     if (!this.menuOpen) more = more.tooltip(why ?? this.t("dialogs.push.more"));
     if (on) {
       main = live(main, (_e, cx) => this.run(false, cx));

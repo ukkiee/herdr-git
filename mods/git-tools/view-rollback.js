@@ -17,14 +17,14 @@
 //   The Rollback button has no command on purpose: a command reaches every shown copy of
 //   the mod and can't say which dialog it means, and this one overwrites files.
 
-import { div, svg } from "gpui-kit";
+import { div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { exec, theme } from "herdr";
 import { makeGit } from "./git.js";
 import { readStatus } from "./git-status.js";
 import { rollback, wordRollback } from "./git-rollback.js";
 import { buildRows, checkState, toggleIncluded, keepIncluded, folderKeys, parentIndex } from "./tree.js";
-import { openDialog, dialogFrame, button, iconButton, checkbox, row, notice, errorStrip, icon, fileGlyph, folderGlyph, darkLook, close, WindowedList, askOwner, serveRequest, writeBlock, sentence } from "./ui.js";
+import { openDialog, dialogFrame, button, iconButton, checkbox, row, notice, errorStrip, uiGlyph, ICON, fileGlyph, folderGlyph, darkLook, close, WindowedList, askOwner, serveRequest, writeBlock, sentence } from "./ui.js";
 
 // openRollback({ root, on, files, checked, owner, lang })
 //   Opens the Rollback dialog. Nothing is rolled back without it.
@@ -256,12 +256,12 @@ export default class RollbackView {
       })
       // The arrow's place is kept on file rows so checkboxes line up under their folder's.
       .child(folds
-        ? div().id(`rollback-fold-${r.id}`).size(14).flex_none().flex().items_center().justify_center().rounded(3).text_color(t.muted)
+        ? div().id(`rollback-fold-${r.id}`).size(ICON).flex_none().flex().items_center().justify_center().rounded(3).text_color(t.muted)
           .cursor_pointer().hover((s) => s.bg(t.hover).text_color(t.foreground))
           .on_mouse_down("left", stop)
           .on_click((_e, cx) => { cx.stop_propagation(); this.toggleOpen(r); cx.notify(); })
-          .child(svg(icon(r.open ? "chevron-down" : "chevron-right")).size(12))
-        : div().size(14).flex_none())
+          .child(uiGlyph(r.open ? "chevron-down" : "chevron-right"))
+        : div().size(ICON).flex_none())
       .child(checkbox(`rollback-check-${r.id}`, checkState(r.paths, this.picked), t, {
         disabled: this.running, onClick: (_e, cx) => { this.toggleCheck(r); cx.notify(); },
       }));

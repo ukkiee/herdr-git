@@ -20,14 +20,14 @@
 //   commit-show-diff, commit-rollback, commit-restore (opens the Restore dialog).
 //   Anything else is passed on to the commit form.
 
-import { div, svg } from "gpui-kit";
+import { div } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { exec, theme, watchFolder } from "herdr";
 import { makeGit, repoRoot } from "./git.js";
 import { readStatus } from "./git-status.js";
 import { readLastCommit } from "./git-show.js";
 import { buildRows, checkState, toggleIncluded, keepIncluded, folderKeys, parentIndex } from "./tree.js";
-import { location, icon, fileGlyph, folderGlyph, darkLook, panelFrame, toolbar, spacer, iconButton, checkbox, row, notice, notRepository, errorStrip, noteBar, WindowedList, logPanelShown, toggleLogPanel, gitButtonPlaced, openMenu, takeWrite, releaseWrite, writeBlock, readBlocked, sentence, copyId } from "./ui.js";
+import { location, uiGlyph, ICON, fileGlyph, folderGlyph, darkLook, panelFrame, toolbar, spacer, iconButton, checkbox, row, notice, notRepository, errorStrip, noteBar, WindowedList, logPanelShown, toggleLogPanel, gitButtonPlaced, openMenu, takeWrite, releaseWrite, writeBlock, readBlocked, sentence, copyId } from "./ui.js";
 import { sameRepo } from "./lock.js";
 import CommitForm from "./commit-form.js";
 import { openRollback, serveRollback } from "./view-rollback.js";
@@ -511,12 +511,12 @@ export default class CommitView {
       })
       // The arrow's place is kept on file rows so checkboxes line up under their folder's.
       .child(folds
-        ? div().id(`commit-fold-${r.id}`).size(14).flex_none().flex().items_center().justify_center().rounded(3).text_color(t.muted)
+        ? div().id(`commit-fold-${r.id}`).size(ICON).flex_none().flex().items_center().justify_center().rounded(3).text_color(t.muted)
           .cursor_pointer().hover((s) => s.bg(t.hover).text_color(t.foreground))
           .on_mouse_down("left", stop)
           .on_click((_e, cx) => { cx.stop_propagation(); this.toggleOpen(r); cx.notify(); })
-          .child(svg(icon(r.open ? "chevron-down" : "chevron-right")).size(12))
-        : div().size(14).flex_none())
+          .child(uiGlyph(r.open ? "chevron-down" : "chevron-right"))
+        : div().size(ICON).flex_none())
       // The Last commit group has no checkboxes: its group row shows the commit glyph in the
       // checkbox's place and its files keep the place empty, so icons line up with the
       // other groups'.

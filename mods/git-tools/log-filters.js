@@ -21,12 +21,12 @@
 // configured user, { name } for an author checked in the popup, { text } for letters
 // typed and entered. A commit by any of them stays (git-log-filter.js filterArgs).
 
-import { div, svg } from "gpui-kit";
+import { div } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input, Popover } from "gpui-base";
 import { theme, props } from "herdr";
 import { resolveCommit } from "./git-log.js";
 import { filterArgs, isHash, isDate, readMe, userOf, readBranchNames, readAuthors, matchAuthors, DATE_PRESETS, datePreset, dateText } from "./git-log-filter.js";
-import { icon, iconButton, sentence, WindowedList } from "./ui.js";
+import { uiGlyph, darkLook, ICON, iconButton, sentence, WindowedList } from "./ui.js";
 
 const EMPTY = { text: "", regex: false, matchCase: false, users: [], since: "", until: "", dateLabel: "", path: "" };
 const POPUP_W = 260, ITEM = 26, BRANCH_ROWS = 10, USER_ROWS = 10;
@@ -522,7 +522,7 @@ export default class LogFilters {
       .text_color(disabled ? t.dim : t.foreground)
       .when(active, (el) => el.bg(t.hover))
       .when(!disabled, (el) => el.cursor_pointer().hover((s) => s.bg(t.hover)).on_click((_e, cx) => { cx.stop_propagation(); onClick(cx); }))
-      .child(div().size(12).flex_none().when(checked, (el) => el.child(svg(icon("check")).size(12).text_color(t.accent))))
+      .child(div().size(ICON).flex_none().when(checked, (el) => el.child(uiGlyph("check"))))
       .child(div().flex_1().min_w(0).truncate().child(label))
       .when(Boolean(hint), (el) => el.child(div().flex_none().max_w(110).truncate().text_size(11).text_color(t.dim).child(hint ?? "")));
   }
@@ -630,7 +630,7 @@ export default class LogFilters {
       .hover((s) => s.bg(t.hover).text_color(t.foreground))
       .when(set && !narrow, (el) => el.child(div().flex_none().text_color(t.muted).child(`${label}:`)))
       .child(div().max_w(narrow ? 84 : 150).truncate().child(set ? value : label))
-      .when(!set, (el) => el.child(svg(icon("chevron-down")).size(12).flex_none()));
+      .when(!set, (el) => el.child(uiGlyph("dropdown", { dark: darkLook(t.background) })));
     return h_flex().flex_none().items_center()
       .child(Popover.new(`log-filter-${name}-popup`).open(open)
         .on_open_change((opened, cx) => {
@@ -658,7 +658,7 @@ export default class LogFilters {
       .child(h_flex().id("log-search").flex_1().min_w(96).max_w(300).h(24).pl(6).pr(2).gap(4).items_center().rounded(5).border_1()
         .border_color(this.focused === "search" ? t.accent : t.input).bg(t.background)
         .cursor_text().on_mouse_down("left", stop)
-        .child(svg(icon("search")).size(13).flex_none().text_color(t.dim))
+        .child(uiGlyph("search").text_color(t.dim))
         .child(Input.new(this.search).flex_1().min_w(0).h_full().text_size(12).text_color(t.foreground))
         .child(iconButton("log-search-regex", "regex", t, { title: tr("log.regex"), size: 20, active: v.regex, onClick: (_e, cx) => this.toggle("regex", cx) }))
         .child(iconButton("log-search-case", "case-sensitive", t, { title: tr("log.matchCase"), size: 20, active: v.matchCase, onClick: (_e, cx) => this.toggle("matchCase", cx) })))

@@ -114,7 +114,8 @@ async function readStateFiles(git, root) {
   const wanted = [];
   NAMES.forEach((name, i) => {
     const path = paths[i] ?? "";
-    const full = path.startsWith("/") ? path : `${root}/${path}`;
+    // Relative to root unless absolute ("/…", or "C:/…" from git for Windows).
+    const full = /^(\/|[A-Za-z]:[\\/])/.test(path) ? path : `${root}/${path}`;
     // Every state file is the worktree's own; one found elsewhere is not looked at.
     if (!full.startsWith(`${dir}/`)) return;
     const rel = full.slice(dir.length + 1);

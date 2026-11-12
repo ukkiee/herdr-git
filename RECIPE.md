@@ -46,7 +46,8 @@ The right side panel, in place of Herdr's own Changes. A card: 10px corners, 1px
   (`restore`, a bent arrow pointing right; off only outside a repository), Show Diff
   (`diff`, only with a file selected), View Options (`eye`, lit while grouped by directory), Expand All
   (`expand-all`), Collapse All (`collapse-all`); then on the right Git Log
-  (`panel-bottom`, lit while the Log panel shows; absent in a layout without it).
+  (`panel-bottom`, lit while the Log panel shows; absent in a layout without the Log panel,
+  and where the tab bar's Git button stands, which does the same).
   Disabled buttons are `dim` at half opacity; a lit one has the `selected` background.
 - **File list**, the rest of the height. Two groups, **Changes** and **Unversioned
   Files**, each a row with the name in semibold and `N files` at 12px `dim`, and while
@@ -553,7 +554,8 @@ another machine runs every git command on that machine. A panel opened with
 - **`cmd-k`**: opens the Commit panel when the side panel is hidden or shows Files.
   Pressing it again leaves it open.
 - **Git** button (right of Changes, macOS only), **`cmd-shift-g`**, the Commit panel's
-  Git Log button and the Log panel's Hide: show and hide the Log panel. Drag its top
+  Git Log button (only where the Git button isn't) and the Log panel's Hide: show and hide
+  the Log panel. Drag its top
   edge to resize it (120 to 900px); Herdr keeps the height.
 - Both keys work only while the `main-git` layout shows.
 
@@ -2964,7 +2966,7 @@ two emails, and one author reached only by a tag)
 103. A `Git` button stands right of Changes, in a strip that continues the tab bar (same
      height, color and line under it, no line between them). Click it: the Log panel
      shows and the button is lit like Changes. Click it again: the panel hides and the
-     button reads like Files. The Commit panel's Git Log button is lit with it.
+     button reads like Files. The Commit panel's toolbar has no Git Log button.
 104. Drag the tab bar where it is empty, then the strip beside the Git button: each
      moves the window.
 

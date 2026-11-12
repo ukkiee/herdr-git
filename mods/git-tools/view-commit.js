@@ -27,7 +27,7 @@ import { makeGit, repoRoot } from "./git.js";
 import { readStatus } from "./git-status.js";
 import { readLastCommit } from "./git-show.js";
 import { buildRows, checkState, toggleIncluded, keepIncluded, folderKeys, parentIndex } from "./tree.js";
-import { location, icon, fileGlyph, folderGlyph, darkLook, panelFrame, toolbar, spacer, iconButton, checkbox, row, notice, notRepository, errorStrip, noteBar, WindowedList, logPanelShown, toggleLogPanel, openMenu, takeWrite, releaseWrite, writeBlock, readBlocked, sentence, copyId } from "./ui.js";
+import { location, icon, fileGlyph, folderGlyph, darkLook, panelFrame, toolbar, spacer, iconButton, checkbox, row, notice, notRepository, errorStrip, noteBar, WindowedList, logPanelShown, toggleLogPanel, gitButtonPlaced, openMenu, takeWrite, releaseWrite, writeBlock, readBlocked, sentence, copyId } from "./ui.js";
 import { sameRepo } from "./lock.js";
 import CommitForm from "./commit-form.js";
 import { openRollback, serveRollback } from "./view-rollback.js";
@@ -590,7 +590,8 @@ export default class CommitView {
         .child(iconButton("commit-expand", "expand-all", t, { title: this.t("commit.expandAll"), disabled: !this.rows.length, onClick: redraw(() => this.expandAll()) }))
         .child(iconButton("commit-collapse", "collapse-all", t, { title: this.t("commit.collapseAll"), disabled: !this.rows.length, onClick: redraw(() => this.collapseAll()) }))
         .child(spacer())
-        .when(shown !== null, (el) => el.child(iconButton("commit-log", "panel-bottom", t, { title: this.t("commit.gitLog"), active: shown === true, onClick: () => toggleLogPanel() }))))
+        // The tab bar's Git button does the same where it is placed (macOS).
+        .when(shown !== null && !gitButtonPlaced(), (el) => el.child(iconButton("commit-log", "panel-bottom", t, { title: this.t("commit.gitLog"), active: shown === true, onClick: () => toggleLogPanel() }))))
       .child(div().id("commit-list").flex_1().min_h(0).track_focus(this.handle)
         .on_key_down((e, cx) => {
           const name = { up: "up", down: "down", left: "left", right: "right", space: "space", enter: "enter" }[e.keystroke];

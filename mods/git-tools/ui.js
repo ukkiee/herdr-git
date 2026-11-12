@@ -118,6 +118,9 @@ export function logPanelShown() {
 
 export const toggleLogPanel = () => { run("layout.toggle", { id: LOG_NODE }); };
 
+// Whether the shown layout has the tab bar's Git button (main-git on macOS).
+export const gitButtonPlaced = () => findNode(layout(), "git-log-button") !== null;
+
 export function openCommitPanel() {
   run("layout.select", { stack: "panel-body", child: "changes" });
   run("layout.show", { id: "panel" });

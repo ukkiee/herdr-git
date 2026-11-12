@@ -1,7 +1,7 @@
 // node files-tree.test.mjs: the Files panel's pure decisions (search order, marks and dots,
 // visible rows, what a refresh keeps, arrow keys).
 import assert from "node:assert/strict";
-import { markLookup, rankSearch, visibleRows, keepPressed, moveKey, stripFailure, failureKey } from "./files-tree.js";
+import { markLookup, rankSearch, visibleRows, keepPressed, pressLands, moveKey, stripFailure, failureKey } from "./files-tree.js";
 
 // Marks: a file's own mark, a whole ignored or untracked folder marking what's inside it,
 // the nearest such folder deciding, and dots that skip ignored files but count deletions.
@@ -171,6 +171,23 @@ const entries = new Map([
   const kept = keepPressed(read, now, new Set(["p", "p/c", "p/c/d", "p/x", "q", "q/r"]));
   assert.deepEqual([...kept.keys()].sort(), ["", "p", "q", "q/r"]);
   assert.equal(kept.get("p"), denied);
+}
+
+// A press's read that arrives after a refresh put its folders in place lands only where it
+// can be shown: the folder still open and every folder above it read fine now. Under a
+// folder the refresh failed to read, or once the root failed, it is dropped.
+{
+  const fresh = (name) => ({ ok: true, entries: [{ name, dir: true }], limited: false });
+  const denied = { ok: false, entries: [], limited: false, gone: false, denied: true };
+  const folders = new Map([["", fresh("p")], ["p", denied], ["q", fresh("r")], ["q/r", fresh("s")]]);
+  const open = new Set(["p", "p/c", "q", "q/r", "q/r/s"]);
+  assert.equal(pressLands(folders, open, "p/c"), false);
+  assert.equal(pressLands(folders, open, "q/r/s"), true);
+  assert.equal(pressLands(folders, open, "q"), true);
+  // Closed while it was read.
+  assert.equal(pressLands(folders, new Set(["q"]), "q/r/s"), false);
+  // The root failed: the panel holds no folders.
+  assert.equal(pressLands(new Map(), open, "q"), false);
 }
 
 // The keys skip a "reading" row: it can't be chosen, and right on a folder still being

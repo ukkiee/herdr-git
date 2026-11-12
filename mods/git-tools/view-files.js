@@ -27,7 +27,7 @@ import { div, svg } from "gpui-kit";
 import { h_flex, v_flex, Editor, EditorState, InputState, Input } from "gpui-base";
 import { exec, theme, settings, watchFolder, readTextFile, window as hostWindow } from "herdr";
 import { readFolder, readMarks, readSearchList, roomFor, PER_FOLDER, TOTAL, SEARCH_LIMIT } from "./files-data.js";
-import { markLookup, visibleRows, keepPressed, stripFailure, failureKey, rankSearch, moveKey, SEARCH_SHOWN } from "./files-tree.js";
+import { markLookup, visibleRows, keepPressed, pressLands, stripFailure, failureKey, rankSearch, moveKey, SEARCH_SHOWN } from "./files-tree.js";
 import { location, icon, fileGlyph, folderGlyph, darkLook, panelFrame, toolbar, iconButton, row, notice, errorStrip, WindowedList, openMenu } from "./ui.js";
 import { openDiff } from "./view-diff.js";
 
@@ -226,7 +226,7 @@ export default class FilesView {
     cx.spawn(async (cx) => {
       try {
         const r = await readFolder(exec, `${root}/${path}`, { on, platform: hostWindow()?.platform ?? null, room: roomFor(this.entries, path) });
-        if (this.context !== context || !this.open.has(path)) return;
+        if (this.context !== context || !pressLands(this.folders, this.open, path)) return;
         // Failed or gone is kept too: nothing under it, not a "reading" row that never ends.
         this.folders.set(path, r);
         if (!r.ok && !r.gone && readError(r, path)) {

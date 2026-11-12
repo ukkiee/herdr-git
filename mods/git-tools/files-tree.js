@@ -120,13 +120,24 @@ export function keepPressed(read, now, open) {
   const kept = (path) => !path || open.has(path);
   for (const [path, folder] of read) if (kept(path)) out.set(path, folder);
   for (const [path, folder] of now) if (!read.has(path) && kept(path)) out.set(path, folder);
-  const reachable = (path) => {
-    if (!path) return true;
-    const parent = path.slice(0, Math.max(0, path.lastIndexOf("/")));
-    return out.get(parent)?.ok === true && reachable(parent);
-  };
-  for (const path of [...out.keys()]) if (!reachable(path)) out.delete(path);
+  for (const path of [...out.keys()]) if (!parentsRead(out, path)) out.delete(path);
   return out;
+}
+
+// parentsRead: every folder above `path` (the root included) is in `folders` and read fine.
+function parentsRead(folders, path) {
+  if (!path) return true;
+  const parent = path.slice(0, Math.max(0, path.lastIndexOf("/")));
+  return folders.get(parent)?.ok === true && parentsRead(folders, parent);
+}
+
+// pressLands: whether a press's read of `path`, arriving now, goes into `folders` (the
+//   panel's Map of folder path → readFolder's result) with `open` the folders open now.
+//   → true only while `path` is open and every folder above it is read fine: a refresh
+//   that ended while the press read may have failed a folder above it (or the root), and
+//   a read put there would count toward the cut and the room left without being shown.
+export function pressLands(folders, open, path) {
+  return open.has(path) && parentsRead(folders, path);
 }
 
 // failureKey: one folder read failure as a string, the same for the same folder failing

@@ -85,6 +85,11 @@ const O = (name) => `mods/git-tools/icons/theme/foldersOpen/${name}.svg`;
   assert.equal(makeIconTheme({ disabledPacks: [] }).fileIcon("app.component.ts"), F("angularcomponent"));
   assert.equal(makeIconTheme({ disabledPacks: ["ANGULAR", "ANGULAR2"] }).fileIcon("app.component.ts"), F("typeScript"));
   assert.equal(makeIconTheme({ exclude: ["NPM"] }).fileIcon("package.json"), F("json"));
+  // Off unless a theme asks for it: its icon is near black and has no twin for a dark
+  // background, where it can't be seen.
+  assert.equal(fileIcon("zeitignore"), F("file"));
+  assert.equal(fileIcon("zeitignore", { dark: true }), F("file"));
+  assert.equal(makeIconTheme({ exclude: [] }).fileIcon("zeitignore"), F("zeitignore"));
   assert.equal(makeIconTheme({ disabledPacks: ["ANGULAR", "TESTS"] }).fileIcon("a.test.ts"), F("typeScript"));
 }
 
@@ -167,7 +172,7 @@ const O = (name) => `mods/git-tools/icons/theme/foldersOpen/${name}.svg`;
 // The plain way, as the plugin does it: every rule on its own, best rank first (higher
 // priority, then earlier in the source), the first whose pattern matches the whole name (the
 // path, for a pattern with "/") gives the icon.
-function plainTheme({ disabledPacks = ["ANGULAR"], exclude = [] } = {}) {
+function plainTheme({ disabledPacks = ["ANGULAR"], exclude = ["Zeit Now Ignore"] } = {}) {
   const ranked = (rules) => rules
     .map((rule, order) => ({ ...rule, order, re: new RegExp(`^(?:${rule.pattern})$`) }))
     .filter((rule) => !(rule.pack && disabledPacks.includes(rule.pack)) && !exclude.includes(rule.name))

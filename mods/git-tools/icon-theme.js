@@ -19,6 +19,9 @@ export const DEFAULT_FILE_ICON = "file";
 export const DEFAULT_FOLDER_ICON = "folder";
 // AtomSettingsConfig.isUseAngularIcons defaults to false; every other pack defaults to on.
 export const DEFAULT_DISABLED_PACKS = ["ANGULAR"];
+// Rules whose icon can't be seen where it is drawn: these files get the default icon.
+// "Zeit Now Ignore": a near-black shape with no twin for a dark background.
+export const DEFAULT_EXCLUDE = ["Zeit Now Ignore"];
 
 // The relative luminance at which white and black ink have the same contrast with a
 // background ((1 + 0.05) / (L + 0.05) = (L + 0.05) / (0 + 0.05)), about 0.179. The _dark
@@ -124,7 +127,7 @@ export function makeIconTheme({
   fileRules = FILE_RULES,
   folderRules = FOLDER_RULES,
   disabledPacks = DEFAULT_DISABLED_PACKS,
-  exclude = [],
+  exclude = DEFAULT_EXCLUDE,
   root = THEME_ROOT,
 } = {}) {
   const packs = new Set(disabledPacks);

@@ -1069,7 +1069,7 @@ the git ones run against real temporary repositories):
 | `git-log-filter.js` | `DATE_PRESETS` (`{ label, key, since }`: `label` is the saved English name, `key` the words), `datePreset(label)`, `dateText(t, { dateLabel, since, until })`, `isDate`, `filterArgs` (`users: [{ name } \| { text }]` besides `user`), `isHash`, `readMe`, `userOf`, `readAuthors(git, root)` → `{ ok, err, authors: [{ name, emails }] }`, `matchAuthors(authors, query)`, `readBranchNames` |
 | `i18n.js` | `LANGS` (`["en", "ko"]`), `pickLang(tags)`, `readAppleLanguages(stdout)`, `readLocaleEnv(stdout)`, `TABLES`, `translator(lang, tables?)` → `t(key, args)` (`t.lang`), `sentence(t, msg, text)`, `formatTime(seconds, lang, now?)`, `formatDateTime(seconds, lang)` |
 | `messages-<area>.js` | `en` and `ko`, one per area: `ui`, `commit`, `log`, `filters`, `branches`, `dialogs`, `restore` (see "Words") |
-| `icon-theme.js` | `THEME_ROOT` (`"mods/git-tools/icons/theme"`), `DEFAULT_FILE_ICON` (`"file"`), `DEFAULT_FOLDER_ICON` (`"folder"`), `DEFAULT_DISABLED_PACKS` (`["ANGULAR"]`), `makeIconTheme({ fileRules, folderRules, disabledPacks, exclude, root })` → `{ fileIcon, folderIcon, warm, stats }`, and the shared `fileIcon(path, { dark })`, `folderIcon(name, { open })` → the icon's path, `warmIcons()` (compiles the shared rules; `main.js` init) |
+| `icon-theme.js` | `THEME_ROOT` (`"mods/git-tools/icons/theme"`), `DEFAULT_FILE_ICON` (`"file"`), `DEFAULT_FOLDER_ICON` (`"folder"`), `DEFAULT_DISABLED_PACKS` (`["ANGULAR"]`), `DEFAULT_EXCLUDE` (`["Zeit Now Ignore"]`), `makeIconTheme({ fileRules, folderRules, disabledPacks, exclude, root })` → `{ fileIcon, folderIcon, warm, stats }`, and the shared `fileIcon(path, { dark })`, `folderIcon(name, { open })` → the icon's path, `warmIcons()` (compiles the shared rules; `main.js` init) |
 | `icon-theme-data.js` | generated: `SOURCE`, `FILE_RULES`, `FOLDER_RULES` (`{ name, pattern, priority, icon, pack? }`, in source order), `DARK_FILE_ICONS`, `CLOSED_ONLY_FOLDER_ICONS`, `SKIPPED_RULES` |
 | `git-show.js` | `readCommit`, `readContaining` |
 | `graph.js` | `layoutGraph(commits, carry)`, `graphWindow({ widest, listWidth, left })` → `{ room, left, max }`, `indexSegments(segments)`, `segmentsIn(index, from, to)`, `fitLabels(labels, room, { char, pad, gap, most })` → `{ shown, rest }` |
@@ -1271,7 +1271,9 @@ average, 7 at most. Every path (file) and name (folder) is remembered, so only t
 draw of a name runs the rules. `dark` and `open` pick from the remembered
 icon: `<icon>_dark.svg` where the theme has one, `foldersOpen/<icon>.svg` (closed for
 `plastic`, which has no open one). `makeIconTheme({ exclude })` makes a copy without the
-named rules, the place for an icon that draws wrong.
+named rules, the place for an icon that draws wrong; left out, it is `DEFAULT_EXCLUDE`,
+the rules the shared theme goes without (`Zeit Now Ignore`: a near-black icon with no
+`_dark` twin, unseen on a dark background).
 
 `tools/gen-icon-theme.mjs <iconGenerator folder> [mod folder]` (node, no dependencies,
 never downloads) builds `icons/theme/` and `icon-theme-data.js` from the source unpacked
@@ -2090,7 +2092,7 @@ English forms and ⏎ is a line break.
   `_dark` icons (light grey), which disappeared. Only a color it can't read (not `#hex`
   or `rgb()`) falls back to `settings().dark`.
 - An icon that draws wrong goes back to the plain icon by naming its rule in
-  `makeIconTheme({ exclude })`; the generated files are never edited by hand.
+  `DEFAULT_EXCLUDE` (`icon-theme.js`); the generated files are never edited by hand.
 
 ## Done when
 

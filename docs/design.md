@@ -212,7 +212,8 @@ Rollback은 Rollback dialog의 버튼으로만 실행되고, 쓰기 전에 버�
 - **생성물.** `tools/gen-icon-theme.mjs`가 고정 커밋의 압축을 푼 폴더를 받아 `icons/theme/`과
   `icon-theme-data.js`를 만든다. 내려받지 않고, 규칙 파일 둘의 SHA-256이 다르면 거부하며, 같은
   입력에는 같은 바이트를 쓴다. 생성물은 커밋하고 손으로 고치지 않는다. 잘못 그려지는 아이콘은
-  `makeIconTheme({ exclude })`로 그 규칙을 빼서 기본 아이콘으로 돌린다.
+  `icon-theme.js`의 `DEFAULT_EXCLUDE`에 그 규칙의 이름을 넣어 기본 아이콘으로 돌린다. 지금은
+  `Zeit Now Ignore` 하나다. 거의 검은 아이콘인데 어두운 배경용 변형이 없다.
 - **조회 힌트.** 생성기가 규칙의 패턴을 읽어 규칙마다 `names`(맞을 수 있는 이름 전부),
   `exts`(끝 확장자), `sure`, `needles`, `path`, `rank`를 싣는다. mod는 패턴을 해석하지 않고
   규칙을 이름과 확장자 아래에 순위대로 꽂아 둘 뿐이다. 조회는 그 이름과 끝 확장자 아래의 규칙과

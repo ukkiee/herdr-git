@@ -144,7 +144,8 @@ OS. The same card as the Commit panel. Top to bottom:
   name in semibold; the letter's tooltip is `Modified`, `Added`, `Deleted` or
   `Conflict`. Ignored files and folders, and everything under an ignored folder: the
   name `dim`, the icon at half opacity, no letter. The selected row has the `selected`
-  background.
+  background. Under a folder unfolded but not read yet, one row one level deeper: a
+  12px spinner and `Loading…` in `dim`.
 - **Search results**, in the tree's place while the box holds text: one 24px row per
   file, its Icon theme icon, its name in its status color (at most 70% of the row), then
   its folder at 11px `dim`. The chosen result has the `selected` background.
@@ -153,10 +154,11 @@ OS. The same card as the Commit panel. Top to bottom:
   `Searched only the first 20,000 files in this folder` and
   `Showing the first 200 matches` (the results).
 - **Error strip** at the bottom (not while previewing): a folder below the top one that
-  can't be read, with the command's words; Reveal in Finder failing,
-  `Finder could not show this file.` or `open`'s words.
+  can't be read, with the command's words, or `<folder> can't be read: no permission.`;
+  Reveal in Finder failing, `Finder could not show this file.` or `open`'s words.
 - **States** in place of the tree, centered in `dim`: `No folder`,
-  `<folder> no longer exists.`, the words of a top folder that can't be read, `Loading…`
+  `<folder> no longer exists.`, `<folder> can't be read: no permission.`, the words of a
+  top folder that can't be read otherwise, `Loading…`
   with a 14px spinner, `No files`. In place of the results: `Loading…`,
   `No matching files`, or the words of a file list that can't be read.
 - **Preview**, in place of the search box, the tree and the notes: the file in a
@@ -420,8 +422,9 @@ Modal, 760×480, title `Restore Rolled-Back Changes`.
   `git is told not to watch this file (assume-unchanged or skip-worktree); clear that flag to restore it`.
   Paths whose file came back but whose staging didn't follow under
   `Restored without their staging:`, one `<path>: <reason>` line each:
-  `something else is staged for it now` or
-  `it was in a conflict, and a conflict can't be brought back`.
+  `something else is staged for it now`,
+  `it was in a conflict, and a conflict can't be brought back`, or
+  `git failed before staging it`; in that last case git's words follow as the last line.
   Any other failure shows in an error strip.
 - Footer note `Files changed since the rollback are left as they are.` (`Restoring…`
   while it runs; `Another git operation is running: <label>` while another screen writes
@@ -476,7 +479,9 @@ Modal, 760×480, title `Deleted Branches`.
 - After a Restore, a row above the footer (line above, `raised`, scrolling past 108px):
   `Restored N branches.`, or `Restored N branches. Not restored:` and one
   `<name>: <reason>` line per branch left alone (`a branch of this name exists now`, or
-  git's words). Any other failure shows in an error strip.
+  git's words). Branches made again whose upstream couldn't be set are counted as
+  restored and listed under `Restored without their upstream:`, one `<name>: <git's words>`
+  line each. Any other failure shows in an error strip.
 - Footer note `Deleted branches are kept for about 30 days.` (`Restoring branches…`
   while it runs; `Another git operation is running: <label>` while another screen writes
   to the repository), **Cancel** (off while it runs), **Restore** (primary; off with
@@ -627,15 +632,23 @@ another machine runs every git command on that machine. A panel opened with
   machine. Folders open one by one: the top folder and each unfolded folder are read,
   at most 500 entries per folder and 5,000 in all; past that the note shows, and the
   entries kept are the first the system listed, then sorted. Folding a folder drops
-  what was read inside it.
+  what was read inside it. An unfolded folder not read yet shows the `Loading…` row,
+  which the keys skip; one whose read failed or that is gone shows nothing under it.
+  A folder that exists but can't be listed or entered (no read or no execute
+  permission) is an error, not an empty folder: `<folder> can't be read: no permission.`
+  in the states' place for the top folder, in the error strip for an unfolded one.
 - **Reads**: when the folder changes on disk (this computer only), every 10 s (also
   while the panel is hidden), and when the focused folder changes. A read asked for
-  during a read runs once that ends. Coming back to a folder shows its unfolded folders
-  and its previewed file as they were left.
+  during a read runs once that ends. A folder unfolded while a read runs keeps what its
+  own read found: the read's result is merged with it, not put over it. Coming back to
+  a folder shows its unfolded folders and its previewed file as they were left.
 - **git marks** come from one `git status` of the repository the folder is in; outside a
-  repository there are none. A failed git read keeps the marks shown and says nothing
-  (the Commit panel shows git's words); only a folder that can't be read shows an
-  error. No read writes anything under `.git`.
+  repository there are none. When the panel's folder is itself inside an untracked or
+  an ignored folder, git names only that folder, and every path in the panel takes its
+  mark (added in `ansi2` with `A` and the folder dot, or ignored and dim); a nearer
+  folder's or file's own mark wins. A failed git read keeps the marks shown and says
+  nothing (the Commit panel shows git's words); only a folder that can't be read shows
+  an error. No read writes anything under `.git`.
 - **Click** a folder: folds or unfolds it. Click a file: its preview, in the panel's
   place; Back or Esc returns to the tree.
 - **Keys** (after a click on a row or in the search box): ↑ ↓ move, → unfolds (or goes
@@ -646,12 +659,15 @@ another machine runs every git command on that machine. A panel opened with
 - **Search**: typing part of a path (any case) shows the matching files under the
   folder: files whose name holds the text first, then those matching only through their
   folders, each by path, at most 200. Inside a repository it looks through the tracked
-  files and the new ones not ignored (not those deleted from disk), with no limit;
-  outside one, through the folder's files (no `.git`, not following folder links), the
-  first 20,000. The list is read when a search starts and again when the folder changes
-  while one is typed, not on each refresh: a file made while searching shows from the
-  next search. The first result is chosen, so Enter previews it. Emptying the box
-  brings the tree back.
+  files and the new ones not ignored (not those deleted from disk, not submodules), in
+  git's order (tracked files by path, then new ones); outside one, through the folder's
+  files (no `.git`, not following folder links). Either way the first 20,000, with the
+  note when there were more. The list is read when a search starts and again when the
+  folder changes while one is typed. A refresh while searching (the folder changing on
+  disk, the 10 s timer) reads it again at most once per 10 s, keeping the results
+  shown until the new list is in, so a file made while searching shows within about
+  10 to 20 s and the results don't blink; a failed read again keeps the old list. The
+  first result is chosen, so Enter previews it. Emptying the box brings the tree back.
 - **Preview**: read-only, the whole file up to 400,000 characters. A file over 1 MiB,
   or one that can't be read, can't be previewed; a file with a NUL byte is binary.
 - **Right-click** a row or a result: selects it and opens its menu. **Show Diff** (and
@@ -701,7 +717,9 @@ another machine runs every git command on that machine. A panel opened with
     Every Delete first records the branch in the repository (see "Deleted branches"
     under Built from); when that fails nothing is deleted and the error strip says
     `Branch '<name>' was not deleted: it couldn't be recorded to restore later.` and
-    git's words.
+    git's words. A branch checked out in another worktree of the repository is refused
+    before anything is recorded:
+    `Cannot delete branch '<name>': it is checked out in the worktree at <path>.`
   - **Deleted Branches…** (toolbar): opens the Deleted Branches dialog on this
     repository, owned by this panel.
   - **Deleted-branch notice**: every Delete that removes a branch (toolbar, menu, or the
@@ -891,9 +909,14 @@ another machine runs every git command on that machine. A panel opened with
   only where the index holds HEAD's entry now (none where HEAD lacks the path). A path
   staged otherwise since, or one that was in a conflict, keeps its index as it is now
   and is listed under `Restored without their staging:` with its reason; its file is
-  restored all the same. A snapshot made before snapshots held the staging, or in a
-  repository without a commit, leaves the index alone: an added file then comes back
-  untracked. A path
+  restored all the same. A new file that was only announced with `git add -N` comes back
+  announced the same way (not as an empty file staged). When git fails writing the
+  index after the files are written (another git took the index in between), the files
+  stay restored, the
+  paths whose staging wasn't written are listed with `git failed before staging it`,
+  and git's words end the result. A snapshot made before snapshots held the staging, or
+  in a repository without a commit, leaves the index alone: an added file then comes
+  back untracked. A path
   is restored only when nothing changed it since: HEAD has the same version of it as
   when the rollback ran, the working tree matches HEAD there (for an added file: nothing
   at all is at the path, under any spelling the disk takes as the same name), and it
@@ -936,7 +959,9 @@ another machine runs every git command on that machine. A panel opened with
   none when all are. Esc, × and Cancel close it (not × and Cancel while it runs).
 - **Restore** makes each checked branch again under its name at its commit, with the
   upstream it tracked, without checking it out; a name taken meanwhile is left alone and
-  listed, and one that fails doesn't stop the rest. The Log panel that opened the dialog
+  listed, and one that fails doesn't stop the rest. A branch made again whose upstream
+  can't be set (git can't write its config) stays, counts as restored and is listed
+  under `Restored without their upstream:` with git's words. The Log panel that opened the dialog
   runs it under the name `Restoring branches…`: Esc closes the dialog even while it runs
   and the branches still come back, a failure also shows in the Log panel's error strip
   (with the sentence of how many came back when only some did), and when the panel
@@ -1315,12 +1340,13 @@ the git ones run against real temporary repositories):
 | `git-diff.js` | `MAX_ROWS` (5000), `MAX_CHARS` (400000), `parseDiff`, `readDiff` (`oldPath`: a renamed file's path before its commit), `touchesDiff(changed, root, path)` (whether watched changes can change a working file's diff) |
 | `git-push.js` | `PROTECTED` (`["main", "master"]`), `readPushPlan`, `readPushFiles`, `push` |
 | `git-log.js` | `readLog`, `readRefsState`, `readGitDir`, `refsChanged`, `resolveCommit`, `shortenMiddle`, `labelRefs`, `formatCommitTime` |
-| `git-branch.js` | `readBranches`, `checkout`, `checkoutRevision`, `checkBranchName`, `createBranch`, `fetchAll`, `deleteBranch` (records the branch first and deletes nothing when that fails; a branch it removed comes back as `deleted: { name, hash, upstream }`, `upstream` `{ remote, merge }` or null, read before `branch -D`), `restoreBranch(git, root, { name, hash, upstream })`, `readDeletedBranches(git, root)` → `{ ok, err, branches: [{ name, hash, subject, time, upstream, restorable, reason, msg? }] }` (newest first, at most 50), `restoreBranches(git, root, branches)` → `{ ok, code, out, err, msg?, restored: [{ name, hash }], skipped: [{ name, hash, reason, msg? }] }` |
+| `git-branch.js` | `readBranches`, `checkout`, `checkoutRevision`, `checkBranchName`, `createBranch`, `fetchAll`, `deleteBranch` (refuses a branch checked out in another worktree before recording,
+`branches.checkedOutElsewhere`; records the branch first and deletes nothing when that fails; a branch it removed comes back as `deleted: { name, hash, upstream }`, `upstream` `{ remote, merge }` or null, read before `branch -D`), `restoreBranch(git, root, { name, hash, upstream })`, `readDeletedBranches(git, root)` → `{ ok, err, branches: [{ name, hash, subject, time, upstream, restorable, reason, msg? }] }` (newest first, at most 50), `restoreBranches(git, root, branches)` → `{ ok, code, out, err, msg?, restored: [{ name, hash }], skipped: [{ name, hash, reason, msg? }], untracked: [{ name, hash, err }] }` (`untracked`: restored branches whose upstream config failed, with git's words) |
 | `git-log-filter.js` | `DATE_PRESETS` (`{ label, key, since }`: `label` is the saved English name, `key` the words), `datePreset(label)`, `dateText(t, { dateLabel, since, until })`, `isDate`, `filterArgs` (`users: [{ name } \| { text }]` besides `user`), `isHash`, `readMe`, `userOf`, `readAuthors(git, root)` → `{ ok, err, authors: [{ name, emails }] }`, `matchAuthors(authors, query)`, `readBranchNames` |
 | `i18n.js` | `LANGS` (`["en", "ko"]`), `pickLang(tags)`, `readAppleLanguages(stdout)`, `readLocaleEnv(stdout)`, `systemLang(platform, read)` (→ `"ko" | "en"`, or null when it isn't known; `platform` `"macos"`, `"linux"` or `"windows"`, where an empty answer is not known), `TABLES`, `translator(lang, tables?)` → `t(key, args)` (`t.lang`), `sentence(t, msg, text)`, `formatTime(seconds, lang, now?)`, `formatDateTime(seconds, lang)` |
 | `messages-<area>.js` | `en` and `ko`, one per area: `ui`, `commit`, `log`, `filters`, `branches`, `dialogs`, `restore`, `files` (see "Words") |
-| `files-data.js` | `PER_FOLDER` (500), `TOTAL` (5000), `SEARCH_LIMIT` (20000), `readFolder(exec, folder, { on, platform, limit, room })` → `{ ok, entries: [{ name, dir }], limited, gone, err }`, `readMarks(exec, folder, { on })` → `{ ok, repo: { root, prefix } \| null, marks: { [path]: mark }, err }`, `readSearchList(exec, folder, { on, platform, limit })` → `{ ok, repo, files: [path], limited, err }`, `roomFor(loaded, path, total?)` (a folder's share of `TOTAL`) |
-| `files-tree.js` | `markLookup(marks)` → `{ mark(path), dot(folder) }`, `SEARCH_SHOWN` (200), `rankSearch(files, query, { limit })` → `{ items: [{ path, name, dir }], limited }`, `visibleRows(entries, open)` → `[{ path, name, folder, depth, open }]`, `moveKey(rows, current, key)` → `{ current, expand, collapse, preview }` |
+| `files-data.js` | `PER_FOLDER` (500), `TOTAL` (5000), `SEARCH_LIMIT` (20000), `readFolder(exec, folder, { on, platform, limit, room })` → `{ ok, entries: [{ name, dir }], limited, gone, denied, err }` (`denied`: there but without permission to list or enter it; `sh` only), `readMarks(exec, folder, { on })` → `{ ok, repo: { root, prefix } \| null, marks: { [path]: mark }, err }` (key `""`: the folder itself is inside an untracked or ignored folder), `readSearchList(exec, folder, { on, platform, limit })` → `{ ok, repo, files: [path], limited, err }` (at most `limit` files, inside a repository or not; no submodules), `roomFor(loaded, path, total?)` (a folder's share of `TOTAL`) |
+| `files-tree.js` | `markLookup(marks)` → `{ mark(path), dot(folder) }`, `SEARCH_SHOWN` (200), `rankSearch(files, query, { limit })` → `{ items: [{ path, name, dir }], limited }`, `visibleRows(entries, open, failed?)` → `[{ path, name, folder, depth, open, loading? }]` (a `loading` row under an open folder neither read nor in `failed`), `keepPressed(read, now, open)` → Map (a refresh's folder reads with the unfolded folders read meanwhile), `moveKey(rows, current, key)` → `{ current, expand, collapse, preview }` (skips `loading` rows) |
 | `icon-theme.js` | `THEME_ROOT` (`"mods/git-tools/icons/theme"`), `DEFAULT_FILE_ICON` (`"file"`), `DEFAULT_FOLDER_ICON` (`"folder"`), `DEFAULT_DISABLED_PACKS` (`["ANGULAR"]`), `DEFAULT_EXCLUDE` (`["Zeit Now Ignore"]`), `makeIconTheme({ fileRules, folderRules, disabledPacks, exclude, root })` → `{ fileIcon, folderIcon, warm, stats }`, and the shared `fileIcon(path, { dark })`, `folderIcon(name, { open })` → the icon's path, `warmIcons()` (compiles the shared rules; `main.js` init) |
 | `icon-theme-data.js` | generated: `SOURCE`, `FILE_RULES`, `FOLDER_RULES` (`{ name, pattern, priority, icon, pack? }`, in source order), `DARK_FILE_ICONS`, `CLOSED_ONLY_FOLDER_ICONS`, `SKIPPED_RULES` |
 | `git-show.js` | `readCommit`, `readLastCommit(git, root, { known })` → `{ ok, err, hash, subject, files, same }` (`hash` null without a commit; `same`: HEAD is still `known`, nothing else read), `readContaining` |
@@ -1454,10 +1480,14 @@ before its first write, under the Rollback's write lock:
    entry, `write-tree`, the same check as step 3, and
    `commit-tree --no-gpg-sign <tree> -p HEAD -m "Index of Rollback: N files" -m "Copy <copy>"`.
    A path in a conflict (stages 1 to 3) stays as HEAD has it here and is named in the
-   snapshot's message as a line `Conflict: <path as a JSON string>`.
+   snapshot's message as a line `Conflict: <path as a JSON string>`. A path the index
+   only announces (`git add -N`, intent-to-add) looks like an empty file staged in
+   `ls-files -s`; `diff-files --raw -z` on the real index tells it apart (status `A`,
+   which no entry git really holds can have). It is left out of this tree, as if the
+   index lacked it, and named after the conflict lines as `Intent: <path as a JSON string>`.
 5. `commit-tree --no-gpg-sign <tree> -p HEAD -p <staging commit> -m "Rollback: N files" -m "After <hash>" -m "Copy <copy>"`
    (`<hash>`: the snapshot the ref points at, none for the first; then the `Conflict:`
-   lines; no parent and no staging without a
+   and `Intent:` lines; no parent and no staging without a
    commit), then `update-ref --create-reflog -m … refs/git-tools/rollback <commit>`. The
    body makes a rollback of the same state in the same second another commit (one after
    another in a copy, or two apps' copies that read the same snapshot before theirs), so
@@ -1514,17 +1544,26 @@ working tree matches HEAD is `diff --name-only HEAD` with `-c diff.autoRefreshIn
 argument must be 40 or 64 hex digits, or git is not called (`No rollback to restore from.`).
 
 Then the staging of the restored paths: `cat-file commit <snapshot>` gives its parents and
-its `Conflict:` lines; `ls-tree` of the first parent, of HEAD and of the second parent
-give each path's entry then, now and as staged; `ls-files -s` gives the index now. A path
-that was in a conflict is listed `it was in a conflict, and a conflict can't be brought back`.
-A path whose staged entry equals the first parent's needs nothing. Otherwise, when the
-index holds the snapshot's staged entry already nothing is written; when it holds HEAD's
-entry now (none where HEAD lacks the path), `update-index --force-remove` (staged as
-deleted or not at all) or `update-index --add --cacheinfo` puts the staged entry back;
-anything else is listed `something else is staged for it now` and left. These lists come
-after the skipped paths, under `Restored without their staging:` (`restore.stagingNotAll`,
-or `restore.notAllStaging` with both lists). A snapshot with one parent leaves the index
-alone.
+its `Conflict:` and `Intent:` lines; `ls-tree` of the first parent, of HEAD and of the
+second parent give each path's entry then, now and as staged; `ls-files -s` and
+`diff-files --raw` give the index now. A path that was in a conflict is listed
+`it was in a conflict, and a conflict can't be brought back`. A path whose staged entry
+equals the first parent's needs nothing. A path named `Intent:` is announced again with
+`--literal-pathspecs add -N -f -- <path>` (`-f` for a file announced past `.gitignore`)
+where the index holds nothing for it now, or HEAD's entry (removed first); one announced
+already needs nothing. Otherwise, when the index holds the snapshot's staged entry
+already nothing is written; when it holds HEAD's entry now (none where HEAD lacks the
+path), `update-index --force-remove` (staged as deleted or not at all) or
+`update-index --add --cacheinfo` puts the staged entry back; anything else is listed
+`something else is staged for it now` and left. These lists come after the skipped
+paths, under `Restored without their staging:` (`restore.stagingNotAll`, or
+`restore.notAllStaging` with both lists). The index is written in batches, each one
+call that writes all of it or nothing; when reading the index or a write fails, the
+paths of that batch and the ones after it are listed `git failed before staging it`, the
+result is a failure with git's code, and its sentence ends with git's words
+(`restore.stagingNotAllFailed`, or `restore.notAllStagingFailed` with both lists); the
+files stay restored and batches written before stay written. A snapshot with one parent
+leaves the index alone.
 
 Retention is git's reflog expiry. A snapshot the ref no longer points at goes 30 days
 later, when `gc` runs (the default of `gc.reflogExpireUnreachable`). The newest snapshot
@@ -1534,7 +1573,10 @@ stays as long as the ref points at it. The mod deletes none and has no setting f
 
 Every Delete records the branch before `branch -D`, in the reflog of the private ref
 `refs/git-tools/deleted-branches` (`git-branch.js`, under the Delete's write lock; see
-`docs/adr/0003-deleted-branches-in-a-reflog.md`):
+`docs/adr/0003-deleted-branches-in-a-reflog.md`). First, a branch another worktree has
+checked out (`for-each-ref --format=%(refname)%00%(worktreepath) refs/heads/`, git 2.23
+or later) is refused with nothing recorded:
+`Cannot delete branch '<name>': it is checked out in the worktree at <path>.` Then:
 
 1. Where the ref rests: the commit it is on while `merge-base --is-ancestor <it> HEAD`
    says HEAD still reaches it; otherwise the root of HEAD's first-parent history
@@ -1550,6 +1592,8 @@ Every Delete records the branch before `branch -D`, in the reflog of the private
    `parked`. No config is written.
 3. When recording fails, the branch is not deleted
    (`Branch '<name>' was not deleted: it couldn't be recorded to restore later. <git's words>`).
+   When a move fails after the ref has moved, the ref is moved back to the resting
+   commit (`parked`) first, so the step-aside commit doesn't stay in `git log --all`.
 
 The deleted commit is then in that reflog only: `git log --all`, the branch list and the
 tag list don't show it, and `gc --prune=now` keeps it. The ref is outside `refs/heads/`,
@@ -1561,7 +1605,12 @@ hash, at most 50; a name that is a local branch at the same hash now is left out
 another hash is listed with `restorable: false` and
 `a branch of this name exists now at another commit`. Restore makes each branch with
 `update-ref refs/heads/<name> <hash> ""` and its upstream config, as the notice's Restore
-does; a name taken by then is skipped (`a branch of this name exists now`).
+does; a name taken by then is skipped (`a branch of this name exists now`). Whether a
+branch was made is what `update-ref` answered: a branch made whose `git config` then
+fails counts as restored and is listed with git's words under
+`Restored without their upstream:` (`branches.notAllUpstream`, or
+`branches.notAllRestoredUpstream` with skipped ones too). The notice's Restore of one
+branch shows such a config failure as git's words in the error strip.
 
 Retention is git's reflog expiry: a deleted commit is one the ref no longer reaches, so
 it goes 30 days later when `gc` runs (`gc.reflogExpireUnreachable`). The mod expires
@@ -1794,9 +1843,12 @@ English forms and ⏎ is a line break.
 | `branches.restore` | `Restore` | `복원` |
 | `branches.unknownCommit` | `Branch '{name}' can't be restored: its commit isn't known.` | `브랜치 '{name}'을(를) 복원할 수 없습니다: 커밋을 알 수 없습니다.` |
 | `branches.notRecorded` | `Branch '{name}' was not deleted: it couldn't be recorded to restore later. {err}` | `브랜치 '{name}'을(를) 삭제하지 않았습니다: 나중에 복원할 수 있게 기록하지 못했습니다. {err}` |
+| `branches.checkedOutElsewhere` | `Cannot delete branch '{name}': it is checked out in the worktree at {path}.` | `브랜치 '{name}'을(를) 삭제할 수 없습니다: {path}의 worktree에서 체크아웃되어 있습니다.` |
 | `branches.nameTaken` | `a branch of this name exists now at another commit` | `같은 이름의 브랜치가 지금 다른 커밋에 있습니다` |
 | `branches.skipExists` | `a branch of this name exists now` | `같은 이름의 브랜치가 지금 있습니다` |
 | `branches.notAllRestored` | `Restored 1 branch. Not restored:⏎{list} / Restored {n} branches. Not restored:⏎{list}` | `브랜치 {n}개를 복원했습니다. 복원하지 않은 브랜치:⏎{list}` |
+| `branches.notAllUpstream` | `Restored 1 branch. Restored without their upstream:⏎{untracked} / Restored {n} branches. Restored without their upstream:⏎{untracked}` | `브랜치 {n}개를 복원했습니다. 추적 브랜치는 되돌리지 못한 브랜치:⏎{untracked}` |
+| `branches.notAllRestoredUpstream` | `Restored 1 branch. Not restored:⏎{list}⏎Restored without their upstream:⏎{untracked} / Restored {n} branches. Not restored:⏎{list}⏎Restored without their upstream:⏎{untracked}` | `브랜치 {n}개를 복원했습니다. 복원하지 않은 브랜치:⏎{list}⏎추적 브랜치는 되돌리지 못한 브랜치:⏎{untracked}` |
 | `branches.openDeleted` | `Deleted Branches…` | `삭제된 브랜치…` |
 | `branches.dialogTitle` | `Deleted Branches` | `삭제된 브랜치` |
 | `branches.keptNote` | `Deleted branches are kept for about 30 days.` | `삭제된 브랜치는 약 30일 동안 보관됩니다.` |
@@ -1935,6 +1987,9 @@ English forms and ⏎ is a line break.
 | `restore.notAllStaging` | `Restored 1 file. Not restored, to keep what is there now:⏎{list}⏎Restored without their staging:⏎{staged} / Restored {n} files. Not restored, to keep what is there now:⏎{list}⏎Restored without their staging:⏎{staged}` | `{n}개 파일을 복원했습니다. 지금 있는 것을 지키려고 복원하지 않은 파일:⏎{list}⏎스테이징은 복원하지 않은 파일:⏎{staged}` |
 | `restore.stagingChanged` | `something else is staged for it now` | `지금 다른 내용이 스테이징되어 있습니다` |
 | `restore.stagingConflict` | `it was in a conflict, and a conflict can't be brought back` | `충돌 중이던 파일이라 충돌 상태는 복원하지 못합니다` |
+| `restore.stagingFailed` | `git failed before staging it` | `스테이징하기 전에 git이 실패했습니다` |
+| `restore.stagingNotAllFailed` | `Restored 1 file. Restored without their staging:⏎{staged}⏎{err} / Restored {n} files. Restored without their staging:⏎{staged}⏎{err}` | `{n}개 파일을 복원했습니다. 스테이징은 복원하지 않은 파일:⏎{staged}⏎{err}` |
+| `restore.notAllStagingFailed` | `Restored 1 file. Not restored, to keep what is there now:⏎{list}⏎Restored without their staging:⏎{staged}⏎{err} / Restored {n} files. Not restored, to keep what is there now:⏎{list}⏎Restored without their staging:⏎{staged}⏎{err}` | `{n}개 파일을 복원했습니다. 지금 있는 것을 지키려고 복원하지 않은 파일:⏎{list}⏎스테이징은 복원하지 않은 파일:⏎{staged}⏎{err}` |
 
 `messages-files.js`
 
@@ -1945,6 +2000,7 @@ English forms and ⏎ is a line break.
 | `files.noFolder` | `No folder` | `폴더 없음` |
 | `files.empty` | `No files` | `파일 없음` |
 | `files.gone` | `{folder} no longer exists.` | `{folder} 폴더가 더 이상 없습니다.` |
+| `files.denied` | `{folder} can't be read: no permission.` | `{folder} 폴더를 읽을 권한이 없습니다.` |
 | `files.limited` | `File list limited to {perFolder} entries per folder and {total} total` | `파일 목록은 폴더당 {perFolder}개, 전체 {total}개까지만 보입니다` |
 | `files.loadingFile` | `Loading file…` | `파일 로드 중…` |
 | `files.unavailable` | `This file is no longer available` | `이 파일을 더 이상 열 수 없습니다` |
@@ -1986,21 +2042,24 @@ English forms and ⏎ is a line break.
   `restore -q --worktree --source=<snapshot>`, `log -g`, `rev-list --parents`; for a
   deleted branch's Restore `update-ref refs/heads/<name> <hash> ""` and
   `config -- branch.<name>.remote|merge <value>`; for a snapshot's staging
-  `ls-files -s`, and for putting it back `cat-file commit`, `ls-tree` and, on the real
-  index, `update-index --force-remove` and `--add --cacheinfo`; for deleted-branch
-  records `merge-base --is-ancestor`, `rev-list --first-parent --max-parents=0`,
+  `ls-files -s` and `diff-files --raw` (on the real index), and for putting it back
+  `cat-file commit`, `ls-tree` and, on the real index, `update-index --force-remove`,
+  `--add --cacheinfo` and `add -N -f`; for deleted-branch records
+  `for-each-ref --format=%(refname)%00%(worktreepath)`, `merge-base --is-ancestor`, `rev-list --first-parent --max-parents=0`,
   `update-ref --create-reflog refs/git-tools/deleted-branches`, `commit-tree` (the
   step-aside commit) and `log -g` on that ref; for the Last commit group
   `rev-parse -q --verify HEAD^{commit}`; for the Files panel
   `rev-parse --show-toplevel --show-prefix`,
   `status --porcelain=v2 -z --no-renames --ignored=matching --untracked-files=normal`
-  and `ls-files -z --cached --others --exclude-standard` and `--deleted`; for the User popup
+  and `ls-files -z --cached --others --exclude-standard`, `--deleted` and `--stage`
+  (submodules); for the User popup
   `log --use-mailmap --format=%aN%x00%aE`. Every read carries `--no-optional-locks -c core.fsmonitor=false -c diff.autoRefreshIndex=false`;
   the snapshot's commits and reflog and the step-aside commit carry
   `-c user.name=git-tools -c user.email=git-tools@localhost`,
   and Restore's one comparison with HEAD `-c diff.autoRefreshIndex=true`.
 - **For the Files panel**, on the space's machine: `sh -c` with a short script that lists
-  one folder (stopping one past the limit) and one that walks a folder outside a
+  one folder (stopping one past the limit; a folder it may not list or enter is answered
+  with its own exit code) and one that walks a folder outside a
   repository for the search (stopping past 20,000 files). For a folder on a Windows
   computer, `powershell -NoProfile -Command` with `Get-ChildItem` instead (also when a
   space's machine has no `sh`). Reveal in Finder runs `open -R <path>` on this computer.
@@ -2399,9 +2458,18 @@ English forms and ⏎ is a line break.
 - The Rollback dialog's footer says files can be brought back with Restore
   Rolled-Back Changes…: their content and their staging come back, except the staging
   of a path staged otherwise since or one that was in a conflict.
-- A file only announced with `git add -N` is recorded as an empty file staged, so after
-  a Restore it may show as an empty content staged (`AM`) rather than ` A`. Restoring the
-  staging of a submodule path is untested.
+- A file only announced with `git add -N` comes back announced (` A`) only from a
+  snapshot that names it in an `Intent:` line. A snapshot made before snapshots carried
+  those lines holds it as an empty file staged, and from that one it comes back as an
+  empty content staged (`AM`), which a plain `git commit` would commit empty. A file
+  announced but missing from disk when the rollback runs can't be told apart either
+  (`diff-files` shows it deleted, not `A`).
+- A submodule path (a gitlink) rolled back has only its index entry taken back to HEAD;
+  the submodule's checkout stays as it was, so Restore skips it with
+  `it was changed after the rollback`, and its staged commit doesn't come back. The
+  reason's words don't fit what happened.
+- When the index write fails partway, the batches written before stay; the result names
+  the paths whose staging wasn't written, and git's words.
 - The newest snapshot's second parent (its staging) shows in `git log --all` too, as a
   commit `Index of Rollback: N files`.
 
@@ -2412,7 +2480,8 @@ English forms and ⏎ is a line break.
   like `-f`, which Delete can delete. The upstream is read before `branch -D`, which
   drops the branch's config section.
 - If setting the upstream fails after the branch was made, the branch stays and git's
-  words show; it isn't deleted again.
+  words show; it isn't deleted again. When `.remote` was set and `.merge` failed,
+  `branch.<name>.remote` stays set alone.
 - The notice under the Log panel names only the last deleted branch, and only on that
   Log panel copy; every one is in the Deleted Branches dialog.
 - `git log --all --decorate` shows `refs/git-tools/deleted-branches` on the first commit
@@ -2421,8 +2490,16 @@ English forms and ⏎ is a line break.
 - Records live in that clone and are dropped by git's reflog expiry (about 30 days); the
   list shows the newest 50. A repository missing a recorded commit object (damaged) can
   make the whole list fail with git's words.
-- A branch git refuses to delete (checked out in another worktree) is still recorded;
-  the list leaves it out, since a branch of that name is at that commit.
+- A branch checked out in another worktree is refused before it is recorded. But a
+  worktree rebasing or bisecting that branch on a detached HEAD doesn't show it as
+  checked out (`%(worktreepath)` is empty), so the branch is recorded and then git
+  refuses to delete it. The list leaves that record out while the branch is at that
+  commit; once the branch moves, the record shows as
+  `a branch of this name exists now at another commit`, though it was never deleted.
+- When recording fails partway and moving the ref back fails too, the ref stays where it
+  was: on the step-aside commit, which `git log --all` shows until the next Delete
+  moves the ref again. When the move back after a `deleted …` entry fails, that entry
+  stays in the reflog of a branch that wasn't deleted, as above.
 
 **User filter**
 
@@ -2488,19 +2565,26 @@ English forms and ⏎ is a line break.
   when a row or the search box is pressed, and takes it back after a row menu closes.
 - A failed git read keeps the marks it had and shows nothing: the Commit panel shows
   git's words, and a machine without git would show an error every 10 s.
-- The search list is read when a search starts, not on the 10 s refresh: outside a
-  repository it is a walk of up to 20,000 files. A file made while searching shows from
-  the next search.
-- Inside a repository the search list has no limit. In one with hundreds of thousands
-  of files, the list may pass `exec`'s 8 MiB output limit and fail or come back cut
-  (untested).
+- While searching, the search list is read again at most once per 10 s, counted from
+  when the last list came in: outside a repository it is a walk of up to 20,000 files,
+  which a watch event shouldn't start each time. With the 10 s timer the gap can be
+  10 to 20 s.
+- Inside a repository git gives the whole list in one answer, which is then cut at
+  20,000. In one with hundreds of thousands of files, that answer may pass `exec`'s
+  8 MiB output limit or the call's time limit and fail (untested).
+- A refresh's reads take the place of a folder's read only when the refresh read that
+  folder: a folder folded and unfolded again while a refresh runs may show the
+  refresh's older entries until the next refresh.
+- The `Loading…` row shows only while an unfolded folder has no read yet; a folder read
+  quickly may never show it.
 - When a folder is cut at 500 entries, the ones kept are the first the system listed,
   not the first by name.
 - The preview reads through `readTextFile`, which stops at 1 MiB: a bigger file says it
   can't be previewed.
 - On Windows the folder lists and the search walk go through PowerShell and were not
   checked on a real machine; whether the walk follows folder links there is unknown, and
-  Copy Path uses `\` only when the folder is written with `\` alone.
+  Copy Path uses `\` only when the folder is written with `\` alone. A folder without
+  permission there isn't told apart: PowerShell's own words show as the error.
 
 **Icon theme**
 
@@ -2891,89 +2975,116 @@ two emails, and one author reached only by a tag)
      `a: something else is staged for it now`.
 109. Run `git log --oneline --all`: the newest snapshot and one `Index of Rollback: …`
      commit show; the Commit list and the Branch tree show neither.
+110. Create a new file `m` and only announce it, `git add -N m` (`git status --short`:
+     ` A m`). Roll back `m`, then Restore it: `git status --short` reads ` A m` again and
+     `git diff --cached --name-only` is empty, so `git commit` without paths commits
+     nothing of `m`.
 
 **Deleted Branches dialog** (a practice repository with a remote and several branches)
 
-110. In a repository nothing was ever deleted from, press Deleted Branches… in the Branch
+111. In a repository nothing was ever deleted from, press Deleted Branches… in the Branch
      tree's toolbar: the dialog says `No deleted branches are kept in this repository.`,
      the footer `Deleted branches are kept for about 30 days.`, and Restore is off.
-111. Delete four branches, one of them through the Delete Branch dialog (an unpushed
+112. Delete four branches, one of them through the Delete Branch dialog (an unpushed
      commit): `git log -g --format=%gs refs/git-tools/deleted-branches` lists a
      `deleted <name>` and a `parked` entry for each; `git log --all --oneline` shows no
      commit it didn't show before. Open the dialog: the four, newest first, each with its
      name, 7-character hash, subject and `Moments ago`; a long name is cut.
-112. From a terminal, create a branch of the first name at another commit and one of the
+113. From a terminal, create a branch of the first name at another commit and one of the
      second name at its own commit, then open the dialog again: the second is gone; the
      first is dim, says `a branch of this name exists now at another commit` (its
      subject as the tooltip) and can't be checked.
-113. Check the other two (↓ and Space check one too): `2 branches checked`. Press
+114. Check the other two (↓ and Space check one too): `2 branches checked`. Press
      Restore: `Restored 2 branches.`, the dialog reads its list again without them, both
      are back in the Branch tree at their commits (`git rev-parse <name>` as before the
      delete) with the upstreams they tracked, and the current branch and the working
      files haven't changed.
-114. Delete a branch, open the dialog, check it, press Restore and Esc at once: the
+115. Delete a branch, open the dialog, check it, press Restore and Esc at once: the
      branch still comes back and the Branch tree shows it.
-115. Delete `x` (the notice under the Log panel names it), then restore `x` from the
+116. Delete `x` (the notice under the Log panel names it), then restore `x` from the
      dialog: the notice is gone.
-116. Point a Log tab at another worktree of the same repository and open the dialog
+117. Point a Log tab at another worktree of the same repository and open the dialog
      there: it lists the same branches.
+118. Check out a branch `w` in another worktree (`git worktree add ../w w`), then Delete
+     `w` in the Log panel here: its error strip says
+     `Cannot delete branch 'w': it is checked out in the worktree at <path>.`, `w` stays,
+     and the dialog doesn't list it (`git log -g --format=%gs refs/git-tools/deleted-branches`
+     has no new `deleted w`).
+119. Delete a branch that tracks an upstream, create an empty `.git/config.lock`, then
+     restore it from the dialog: the result row above the footer (no error strip in the
+     dialog) says `Restored 1 branch. Restored without their upstream:` and
+     `<name>: error: could not lock config file …`; the branch is back at its commit,
+     without its upstream. Remove `.git/config.lock`.
 
 **Last commit group** (a practice repository whose last commit changed a file `b` and
 renamed `docs/guide.md` to `manual.md`)
 
-117. Turn Amend on: at the bottom of the Commit panel's list a group appears unfolded:
+120. Turn Amend on: at the bottom of the Commit panel's list a group appears unfolded:
      the commit glyph, the last commit's subject, `2 files` (`2개 파일` in Korean),
      then its files without checkboxes; its tooltip is the full hash. The buttons read
      `Amend Commit` and `Amend Commit and Push…`. Turn Amend off: the group goes and the
      buttons read `Commit` and `Commit and Push…`.
-118. Double-click `manual.md` in the group: a Diff tab `<parent> → <commit>` reading
+121. Double-click `manual.md` in the group: a Diff tab `<parent> → <commit>` reading
      `renamed from docs/guide.md`. Select `b`, press Show Diff: its Diff tab of that
      commit.
-119. With the keyboard, ↓ from the changed files goes into the group; Space on its rows
+122. With the keyboard, ↓ from the changed files goes into the group; Space on its rows
      does nothing. With the group row selected, Rollback… opens with every changed file
      checked and none of the group's.
-120. Amend with only the message changed: the hash changes, the staging is unchanged,
+123. Amend with only the message changed: the hash changes, the staging is unchanged,
      Amend goes off and the group with it. Turn Amend on again: the group shows the new
      commit.
-121. With Amend on, move the focus to a terminal in another repository: Amend is off
+124. With Amend on, move the focus to a terminal in another repository: Amend is off
      there and no group shows, at once.
-122. At the side panel's 280px, in English and in Korean, with a long subject: the group
+125. At the side panel's 280px, in English and in Korean, with a long subject: the group
      row shows the whole file count and cuts the subject; the two Amend buttons don't
      overlap.
 
 **Files panel** (a practice repository with a modified, a new, an ignored and a
 conflicting file, and an ignored folder `node_modules`)
 
-123. Press the Files button: the Files panel shows the folder as a tree, folders first.
+126. Press the Files button: the Files panel shows the folder as a tree, folders first.
      The modified file is `ansi4` with `M`, the new one `ansi2` with `A`, the conflicting
      one semibold with `U`; `node_modules` and the ignored file are dim with half-opacity
      icons and no letter; a folder holding a changed file has the `ansi4` dot, and
      `node_modules` has none.
-124. Change a file from a terminal: within about 2 s it shows its mark without a click.
+127. Change a file from a terminal: within about 2 s it shows its mark without a click.
      Delete the folder shown: `<folder> no longer exists.`
-125. Press a file: its preview with syntax colors, its path in the header and, for a
+128. Press a file: its preview with syntax colors, its path in the header and, for a
      changed file, Show Diff there; Back returns to the tree with the same folders open.
      A file with a NUL byte says `Binary file · no text preview`; a file over 1 MiB
      says `Cannot preview this file (binary, too large, or unreadable)`.
-126. Type part of a file name: matching files show, those whose name holds the text
+129. Type part of a file name: matching files show, those whose name holds the text
      first, each with its folder; Enter previews the first; Esc empties the box and the
      tree is back. A text nothing matches: `No matching files`.
-127. In a folder outside a repository holding more than 20,000 files, search: the note
+130. In a folder outside a repository holding more than 20,000 files, search: the note
      `Searched only the first 20,000 files in this folder`. In a folder with more than
      500 entries: `File list limited to 500 entries per folder and 5,000 total`.
-128. Click a row, then ↑ ↓ move, → unfolds a folder or goes to its first child, ← folds
+131. Click a row, then ↑ ↓ move, → unfolds a folder or goes to its first child, ← folds
      or goes to the parent, Enter folds or previews; Esc closes the preview.
-129. Right-click the modified file: Show Diff opens its Diff tab `HEAD → Working Tree`;
+132. Right-click the modified file: Show Diff opens its Diff tab `HEAD → Working Tree`;
      Copy Path puts its absolute path on the clipboard, Copy Relative Path its path from
      the repository root; Reveal in Finder shows it selected in Finder. An ignored
      file's menu has no Show Diff.
-130. In a space on another machine the Files panel shows that machine's folder and marks
+133. In a space on another machine the Files panel shows that machine's folder and marks
      (within 10 s of a change), and its menu has no Reveal in Finder.
-131. Point `HERDR_APP_HOME` at a copy whose `layouts/main.json` lacks the `files` block,
+134. Point `HERDR_APP_HOME` at a copy whose `layouts/main.json` lacks the `files` block,
      run `./install.sh`: it names `files`, prints `Nothing was changed.` and writes
      nothing.
+135. Make a folder `locked` unreadable (`chmod 000 locked`) and unfold it: the error
+     strip says `locked can't be read: no permission.` and nothing shows under it (no
+     `Loading…` row). `chmod 755 locked` afterwards.
+136. Move a terminal into a new untracked folder of the repository holding `b.js` and a
+     folder `inner` with a file: `b.js` is `ansi2` with `A` and `inner` has the dot. In a
+     terminal inside `node_modules`, everything is dim with no letter.
+137. In a repository with a submodule `sm`, search `sm`: the submodule itself isn't a
+     result.
+138. In a repository with more than 20,000 tracked files, search: the note
+     `Searched only the first 20,000 files in this folder`.
+139. Search for a text, then from a terminal create a file it matches: within about
+     20 s the file is in the results, and meanwhile the results stay without blinking
+     to `Loading…`.
 
 **Windows** (not run yet: no Windows machine was at hand)
 
-132. On a Windows computer whose display language is Korean, the screens are Korean; on
+140. On a Windows computer whose display language is Korean, the screens are Korean; on
      one in English, English. The Files panel lists folders and searches there.

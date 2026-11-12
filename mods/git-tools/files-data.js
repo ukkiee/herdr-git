@@ -84,3 +84,59 @@ export async function readFolder(exec, folder, { on = null, platform = null, lim
   const entries = r.entries.slice(0, keep).sort((a, b) => Number(b.dir) - Number(a.dir) || byName(a.name, b.name));
   return { ok: true, entries, limited: r.entries.length > keep, gone: false, err: "" };
 }
+
+// The repository `folder` is in: { ok, repo: { root, prefix } | null, err }. prefix is the
+// folder's path from root with a trailing "/" ("" at the root). Not being in a repository
+// is ok with repo null; a git that can't run or answers otherwise is not ok.
+async function repoOf(git, folder) {
+  const r = await git.read(folder, ["rev-parse", "--show-toplevel", "--show-prefix"]);
+  if (r.ok) {
+    const [root, prefix = ""] = r.out.split("\n");
+    if (root) return { ok: true, repo: { root, prefix }, err: "" };
+  }
+  if (r.code > 0 && /not a git repository/i.test(r.err)) return { ok: true, repo: null, err: "" };
+  return { ok: false, repo: null, err: r.err };
+}
+
+// One porcelain v2 entry's path: the text after `fields` space-separated fields (a path
+// may itself hold spaces, so it can't be split off the end).
+function pathAfter(entry, fields) {
+  let at = 0;
+  for (let i = 0; i < fields; i++) at = entry.indexOf(" ", at) + 1;
+  return entry.slice(at);
+}
+
+// X is HEAD → index, Y is index → work tree; the same reading as the Commit panel.
+function changeOf(xy) {
+  if (xy.includes("A")) return "added";
+  if (xy.includes("D")) return "deleted";
+  return "modified";
+}
+
+// readMarks: the git mark of every changed or ignored path under `folder`.
+//   marks: { [path]: "modified" | "added" | "deleted" | "conflict" | "ignored" }, paths
+//   from `folder`. Untracked files are "added". A key ending in "/" is a whole folder:
+//   an untracked folder ("added") or an ignored one ("ignored"); what's inside it isn't
+//   listed, so a node_modules costs one line. Deleted files are marked though they are
+//   no longer on disk (a folder's dot counts them). Paths elsewhere in the repository
+//   are left out.
+//   repo: { root, prefix }, or null outside a repository (marks is empty, ok is true).
+//   Reads only: nothing under .git is written, so the folder watch isn't set off again.
+export async function readMarks(exec, folder, { on = null } = {}) {
+  const git = makeGit(exec, on);
+  const where = await repoOf(git, folder);
+  if (!where.ok || !where.repo) return { ok: where.ok, repo: null, marks: {}, err: where.err };
+  const { prefix } = where.repo;
+  const r = await git.read(folder, ["status", "--porcelain=v2", "-z", "--no-renames", "--ignored=matching", "--untracked-files=normal", "--", "."]);
+  if (!r.ok) return { ok: false, repo: where.repo, marks: {}, err: r.err };
+  const marks = {};
+  const put = (path, mark) => { if (path.startsWith(prefix) && path.length > prefix.length) marks[path.slice(prefix.length)] = mark; };
+  for (const entry of r.out.split("\0")) {
+    const kind = entry[0];
+    if (kind === "1") put(pathAfter(entry, 8), changeOf(entry.slice(2, 4)));
+    else if (kind === "u") put(pathAfter(entry, 10), "conflict");
+    else if (kind === "?") put(entry.slice(2), "added");
+    else if (kind === "!") put(entry.slice(2), "ignored");
+  }
+  return { ok: true, repo: where.repo, marks, err: "" };
+}

@@ -1,10 +1,11 @@
 // node files-data.test.mjs: the Files panel's reads against throwaway folders and
 // repositories (no app needed).
 import { execFile, execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, writeFileSync, realpathSync, symlinkSync, readdirSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, realpathSync, symlinkSync, readdirSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
-import { readFolder } from "./files-data.js";
+import { readFolder, readMarks } from "./files-data.js";
+import { markLookup } from "./files-tree.js";
 
 const base = realpathSync(mkdtempSync(`${tmpdir()}/git-tools-files-`));
 // Same shape as herdr's exec: resolves with { code, stdout, stderr }, rejects when it can't start.
@@ -107,6 +108,97 @@ const init = (name) => {
   assert.equal(r.ok, false);
   assert.equal(r.gone, true);
   assert.deepEqual(r.entries, []);
+}
+
+// Every file and folder under .git with its size, time and mode: a read that refreshed
+// the index, took a lock or left a cookie changes it.
+const gitState = (repo) => {
+  const out = [];
+  const walk = (dir) => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      const p = `${dir}/${e.name}`, s = statSync(p);
+      out.push(`${p} ${s.size} ${s.mtimeMs} ${s.mode}`);
+      if (e.isDirectory()) walk(p);
+    }
+  };
+  walk(`${repo}/.git`);
+  return out.sort().join("\n");
+};
+
+// Git marks: modified, added (staged or untracked), deleted, conflict and ignored, keyed
+// by path from the folder read. An ignored folder marks what's under it; a folder's dot
+// counts changed files below it but not ignored ones. The read leaves .git as it was,
+// even with an index git would like to refresh.
+{
+  const repo = init("marks");
+  mkdirSync(`${repo}/src/deep`, { recursive: true });
+  mkdirSync(`${repo}/quiet`);
+  writeFileSync(`${repo}/.gitignore`, "node_modules/\n*.log\n");
+  for (const f of ["mod.txt", "gone.txt", "c.txt", "src/deep/a.ts", "quiet/q.txt", "same size.txt"]) writeFileSync(`${repo}/${f}`, "base\n");
+  sh(repo, "git add -A && git commit -q -m base && git checkout -q -b other && echo theirs > c.txt && git commit -qam theirs && git checkout -q main && echo ours > c.txt && git commit -qam ours && git merge -q other || true");
+  writeFileSync(`${repo}/mod.txt`, "changed\n");
+  sh(repo, "rm gone.txt");
+  writeFileSync(`${repo}/staged new.txt`, "n\n");
+  sh(repo, "git add 'staged new.txt'");
+  writeFileSync(`${repo}/새 파일.txt`, "u\n");
+  writeFileSync(`${repo}/src/deep/b.ts`, "u\n");
+  mkdirSync(`${repo}/newdir/inner`, { recursive: true });
+  writeFileSync(`${repo}/newdir/inner/f.txt`, "u\n");
+  mkdirSync(`${repo}/node_modules/pkg`, { recursive: true });
+  writeFileSync(`${repo}/node_modules/pkg/index.js`, "i\n");
+  writeFileSync(`${repo}/quiet/debug.log`, "l\n");
+  // Same size, later time: the index entry no longer matches the file's stat.
+  writeFileSync(`${repo}/same size.txt`, "BASE\n");
+  sh(repo, "git checkout -q -- 'same size.txt' && touch -t 203001010000 'same size.txt'");
+  const before = gitState(repo);
+
+  const r = await readMarks(exec, repo);
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.repo, { root: repo, prefix: "" });
+  const m = markLookup(r.marks);
+  assert.equal(m.mark("mod.txt"), "modified");
+  assert.equal(m.mark("staged new.txt"), "added");
+  assert.equal(m.mark("새 파일.txt"), "added");
+  assert.equal(m.mark("gone.txt"), "deleted");
+  assert.equal(m.mark("c.txt"), "conflict");
+  assert.equal(m.mark("src/deep/b.ts"), "added");
+  assert.equal(m.mark("src/deep/a.ts"), null);
+  assert.equal(m.mark("same size.txt"), null);
+  assert.equal(m.mark("newdir"), "added");
+  assert.equal(m.mark("newdir/inner/f.txt"), "added");
+  assert.equal(m.mark("node_modules"), "ignored");
+  assert.equal(m.mark("node_modules/pkg"), "ignored");
+  assert.equal(m.mark("node_modules/pkg/index.js"), "ignored");
+  assert.equal(m.mark("quiet/debug.log"), "ignored");
+  assert.equal(m.mark("quiet/q.txt"), null);
+  assert.equal(m.dot("src"), true);
+  assert.equal(m.dot("src/deep"), true);
+  assert.equal(m.dot("newdir"), true);
+  assert.equal(m.dot("newdir/inner"), true);
+  assert.equal(m.dot("quiet"), false);
+  assert.equal(m.dot("node_modules"), false);
+  assert.equal(gitState(repo), before);
+
+  // From a folder inside the repository: paths are from that folder, the rest of the
+  // repository leaves no marks, and the prefix says where the folder sits.
+  const inner = await readMarks(exec, `${repo}/src`);
+  assert.equal(inner.ok, true);
+  assert.deepEqual(inner.repo, { root: repo, prefix: "src/" });
+  const mi = markLookup(inner.marks);
+  assert.equal(mi.mark("deep/b.ts"), "added");
+  assert.equal(mi.dot("deep"), true);
+  assert.equal(mi.mark("mod.txt"), null);
+  assert.deepEqual(Object.keys(inner.marks), ["deep/b.ts"]);
+  assert.equal(gitState(repo), before);
+}
+
+// Outside a repository there are no marks, and that is not a failure.
+{
+  const dir = folder("plain");
+  writeFileSync(`${dir}/a.txt`, "a");
+  const r = await readMarks(exec, dir);
+  assert.deepEqual(r, { ok: true, repo: null, marks: {}, err: "" });
+  assert.equal(markLookup(r.marks).mark("a.txt"), null);
 }
 
 console.log("ok");

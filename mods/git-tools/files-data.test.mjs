@@ -1,7 +1,7 @@
 // node files-data.test.mjs: the Files panel's reads against throwaway folders and
 // repositories (no app needed).
 import { execFile, execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, writeFileSync, realpathSync, symlinkSync, readdirSync, statSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, realpathSync, symlinkSync, readdirSync, statSync, chmodSync } from "node:fs";
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
 import { readFolder, readMarks, readSearchList, roomFor } from "./files-data.js";
@@ -70,7 +70,7 @@ const init = (name) => {
 
   // An empty folder is fine and not limited.
   mkdirSync(`${dir}/empty`);
-  assert.deepEqual(await readFolder(exec, `${dir}/empty`), { ok: true, entries: [], limited: false, gone: false, err: "" });
+  assert.deepEqual(await readFolder(exec, `${dir}/empty`), { ok: true, entries: [], limited: false, gone: false, denied: false, err: "" });
 }
 
 // A folder over the per-folder limit gives the limit's worth, folders still first, and
@@ -118,6 +118,26 @@ const init = (name) => {
   assert.equal(r.ok, false);
   assert.equal(r.gone, true);
   assert.deepEqual(r.entries, []);
+}
+
+// A folder that can't be read (no permission) is a failure that says so, not an empty
+// folder: one that can't be listed and one that can be listed but not entered.
+{
+  const dir = folder("locked");
+  for (const [name, mode] of [["closed", 0o000], ["unlisted", 0o300], ["unentered", 0o600]]) {
+    mkdirSync(`${dir}/${name}`);
+    writeFileSync(`${dir}/${name}/inside.txt`, "i");
+    chmodSync(`${dir}/${name}`, mode);
+    const r = await readFolder(exec, `${dir}/${name}`);
+    chmodSync(`${dir}/${name}`, 0o755);
+    assert.equal(r.ok, false, name);
+    assert.equal(r.gone, false, name);
+    assert.equal(r.denied, true, name);
+    assert.deepEqual(r.entries, [], name);
+  }
+  const fine = await readFolder(exec, `${dir}/closed`);
+  assert.equal(fine.ok, true);
+  assert.equal(fine.denied, false);
 }
 
 // Every file and folder under .git with its size, time and mode: a read that refreshed

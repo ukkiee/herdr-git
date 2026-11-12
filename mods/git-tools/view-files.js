@@ -149,9 +149,9 @@ export default class FilesView {
           const r = await readFolder(exec, path ? `${root}/${path}` : root, { on, platform, room: roomFor(next, path) });
           if (this.context !== context) return;
           if (!r.ok) {
-            if (!path) { this.gone = r.gone; this.rootError = r.gone ? null : r.err || "?"; this.entries = new Map(); this.rebuild(); return; }
+            if (!path) { this.gone = r.gone; this.rootError = r.gone ? null : readError(r, root) || "?"; this.entries = new Map(); this.rebuild(); return; }
             // A folder deleted since it was opened just has nothing under it.
-            if (!r.gone) failed = failed ?? r.err;
+            if (!r.gone) failed = failed ?? readError(r, path);
             continue;
           }
           next.set(path, r.entries);
@@ -221,7 +221,7 @@ export default class FilesView {
         const r = await readFolder(exec, `${root}/${path}`, { on, platform: hostWindow()?.platform ?? null, room: roomFor(this.entries, path) });
         if (this.context !== context || !this.open.has(path)) return;
         if (r.ok) { this.entries.set(path, r.entries); this.limited = this.limited || r.limited; }
-        else if (!r.gone) this.error = r.err || null;
+        else if (!r.gone) this.error = readError(r, path) || null;
         this.rebuild();
       } finally {
         if (this.context === context) this.pending.delete(path);
@@ -415,6 +415,13 @@ export default class FilesView {
 
   // ---- drawing
 
+  // An error as shown: the reader's own words, or a note (readError) worded in the
+  // copy's language now, so a language switch rewords it.
+  say(error) {
+    if (!error) return "";
+    return typeof error === "string" ? error : this.t(error.note, { folder: error.folder });
+  }
+
   renderRow(i, t) {
     const r = this.rows[i];
     const mark = this.marks.mark(r.path);
@@ -447,7 +454,7 @@ export default class FilesView {
   renderTree(t) {
     if (!this.root) return notice(this.t("files.noFolder"), t);
     if (this.gone) return notice(this.t("files.gone", { folder: this.root }), t);
-    if (this.rootError) return notice(this.rootError, t);
+    if (this.rootError) return notice(this.say(this.rootError), t);
     if (!this.read) return notice(this.t("ui.loading"), t, { busy: true });
     if (!this.rows.length) return notice(this.t("files.empty"), t);
     return this.list.render(this.rows.length, (i) => this.renderRow(i, t), t);
@@ -550,7 +557,7 @@ export default class FilesView {
         : v_flex().flex_1().min_h(0)
           .child(div().flex_1().min_h(0).child(searching ? this.renderFound(t) : this.renderTree(t)))
           .children(notes.map((note, i) => div().id(`files-note-${i}`).flex_none().px(10).py(5).border_t(1).border_color(t.border).text_size(11).text_color(t.dim).child(note))))
-      .when(Boolean(this.error) && !previewing, (el) => el.child(errorStrip("files-error", this.error ?? "", t, (_e, cx) => { this.error = null; cx.notify(); })));
+      .when(Boolean(this.error) && !previewing, (el) => el.child(errorStrip("files-error", this.say(this.error), t, (_e, cx) => { this.error = null; cx.notify(); })));
   }
 }
 
@@ -559,6 +566,12 @@ export default class FilesView {
 function joinPath(root, path) {
   if (/\\/.test(root) && !root.includes("/")) return `${root.replace(/\\+$/, "")}\\${path.replaceAll("/", "\\")}`;
   return `${root.replace(/\/+$/, "")}/${path}`;
+}
+
+// What a failed readFolder says: a folder without permission gets a note worded when
+// drawn (FilesView.say), anything else the reader's own words ("" when it gave none).
+function readError(r, folder) {
+  return r.denied ? { note: "files.denied", folder } : r.err;
 }
 
 // "a/b/c" → "a/b"; "a" → "".

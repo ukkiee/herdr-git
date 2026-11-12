@@ -4,7 +4,7 @@
 // Every function returns a result and never throws. Nothing here writes under .git.
 //
 //   readFolder(exec, folder, { on, platform, limit, room })
-//     → { ok, entries: [{ name, dir }], limited, gone, err }
+//     → { ok, entries: [{ name, dir }], limited, gone, denied, err }
 //   readMarks(exec, folder, { on })
 //     → { ok, repo: { root, prefix } | null, marks: { [path]: mark }, err }
 //   readSearchList(exec, folder, { on, platform, limit })
@@ -40,8 +40,9 @@ function byName(a, b) {
 
 // Prints "d\0name\0" or "f\0name\0" per entry and stops one past the limit, so a huge
 // folder costs no more than the limit. `[ -d ]` follows links: a link to a folder is a
-// folder, a dangling link is a file. Exit 3: the folder isn't there.
-const LIST = '[ -d "$1" ] || exit 3; n=0; for p in "$1"/* "$1"/.[!.]* "$1"/..?*; do [ -e "$p" ] || [ -L "$p" ] || continue; name=${p##*/}; [ "$name" = .git ] && continue; if [ -d "$p" ]; then kind=d; else kind=f; fi; printf "%s\\0%s\\0" "$kind" "$name"; n=$((n+1)); [ "$n" -gt "$2" ] && break; done; exit 0';
+// folder, a dangling link is a file. Exit 3: the folder isn't there. Exit 4: it can't be
+// listed or entered, which would otherwise read as an empty folder.
+const LIST = '[ -d "$1" ] || exit 3; [ -r "$1" ] && [ -x "$1" ] || exit 4; n=0; for p in "$1"/* "$1"/.[!.]* "$1"/..?*; do [ -e "$p" ] || [ -L "$p" ] || continue; name=${p##*/}; [ "$name" = .git ] && continue; if [ -d "$p" ]; then kind=d; else kind=f; fi; printf "%s\\0%s\\0" "$kind" "$name"; n=$((n+1)); [ "$n" -gt "$2" ] && break; done; exit 0';
 
 // PowerShell's single-quoted string doubles its quotes, and it reads the curly ones as
 // quotes too.
@@ -72,7 +73,8 @@ async function shFolder(exec, folder, on, count) {
 //   limited: the folder had more than min(limit, room). Which entries survive a cut is
 //   the folder's own listing order, not the sorted order: the read stops early so a huge
 //   folder stays cheap.
-//   gone: the folder isn't there (deleted, or the root moved). err: the reader's words.
+//   gone: the folder isn't there (deleted, or the root moved). denied: it is there but
+//   can't be read (no permission; sh only). err: the reader's words, often empty.
 //   A machine without `sh` (a Windows host over ssh) is read with PowerShell.
 // Runs the sh reader, or the PowerShell one on a Windows window (this computer) and on a
 // machine where sh can't start (a Windows host over ssh). → { code, err } | the reader's
@@ -93,9 +95,9 @@ export async function readFolder(exec, folder, { on = null, platform = null, lim
   const keep = Math.max(0, Math.min(limit, room));
   const count = Math.max(limit, 0) + 1;
   const r = await readWith(on, platform, () => shFolder(exec, folder, on, count), () => windowsFolder(exec, folder, on, count));
-  if (r.code !== 0) return { ok: false, entries: [], limited: false, gone: r.code === 3, err: r.err };
+  if (r.code !== 0) return { ok: false, entries: [], limited: false, gone: r.code === 3, denied: r.code === 4, err: r.err };
   const entries = r.entries.slice(0, keep).sort((a, b) => Number(b.dir) - Number(a.dir) || byName(a.name, b.name));
-  return { ok: true, entries, limited: r.entries.length > keep, gone: false, err: "" };
+  return { ok: true, entries, limited: r.entries.length > keep, gone: false, denied: false, err: "" };
 }
 
 // The repository `folder` is in: { ok, repo: { root, prefix } | null, err }. prefix is the

@@ -2,6 +2,9 @@
 // read. Pure: no git, no herdr, so node tests every decision and the screen only draws.
 //
 //   markLookup(marks) → { mark(path), dot(folder) }
+//   rankSearch(files, query, { limit }) → { items: [{ path, name, dir }], limited }
+//   visibleRows(entries, open) → [{ path, name, folder, depth, open }]
+//   moveKey(rows, current, key) → { current, expand, collapse, preview }
 //
 // Paths are from the tree's root and use "/".
 
@@ -69,4 +72,63 @@ export function rankSearch(files, query, { limit = SEARCH_SHOWN } = {}) {
     return { path, name: path.slice(at + 1), dir: at < 0 ? "" : path.slice(0, at) };
   });
   return { items, limited: ranked.length > items.length };
+}
+
+// Nesting deeper than this isn't drawn: a link back to a parent folder would otherwise
+// open forever as someone keeps expanding it.
+const MAX_DEPTH = 40;
+
+// visibleRows: the tree as rows, top to bottom.
+//   entries: Map of folder path ("" for the root) → readFolder's entries. open: Set of
+//   folder paths shown open. A folder is drawn open only when it and every folder above
+//   it are open; an open folder not read yet has no rows under it.
+//   → [{ path, name, folder, depth, open }]
+export function visibleRows(entries, open) {
+  const out = [];
+  const walk = (prefix, depth) => {
+    if (depth > MAX_DEPTH) return;
+    for (const entry of entries.get(prefix) ?? []) {
+      const path = prefix ? `${prefix}/${entry.name}` : entry.name;
+      const isOpen = entry.dir && open.has(path);
+      out.push({ path, name: entry.name, folder: entry.dir, depth, open: isOpen });
+      if (isOpen) walk(path, depth + 1);
+    }
+  };
+  walk("", 0);
+  return out;
+}
+
+// moveKey: what a key does in the tree or the search results.
+//   rows: visibleRows' rows, or rankSearch's items (rows without `folder` are files).
+//   current: the chosen row's path, or null. key: "up" | "down" | "left" | "right" | "enter".
+//   → { current, expand, collapse, preview }: the row to choose next, and the folder to
+//   open, the folder to close or the file to preview (null when none). Up and down stop
+//   at the ends. Right opens a closed folder, or goes to an open one's first child. Left
+//   closes an open folder, or goes to the parent folder; a row at the root stays. Enter
+//   opens or closes a folder and previews a file. With no chosen row (or one no longer
+//   shown) an arrow chooses the first row; another key changes nothing.
+export function moveKey(rows, current, key) {
+  const result = (path, more = {}) => ({ current: path, expand: null, collapse: null, preview: null, ...more });
+  const at = rows.findIndex((r) => r.path === current);
+  const arrow = key === "up" || key === "down" || key === "left" || key === "right";
+  if (at < 0) return result(arrow && rows.length ? rows[0].path : null);
+  const row = rows[at];
+  if (key === "up") return result(rows[Math.max(0, at - 1)].path);
+  if (key === "down") return result(rows[Math.min(rows.length - 1, at + 1)].path);
+  if (key === "right") {
+    if (!row.folder) return result(row.path);
+    if (!row.open) return result(row.path, { expand: row.path });
+    const next = rows[at + 1];
+    return result(next && next.depth === row.depth + 1 ? next.path : row.path);
+  }
+  if (key === "left") {
+    if (row.folder && row.open) return result(row.path, { collapse: row.path });
+    const parent = row.path.slice(0, Math.max(0, row.path.lastIndexOf("/")));
+    return result(parent && rows.some((r) => r.path === parent) ? parent : row.path);
+  }
+  if (key === "enter") {
+    if (!row.folder) return result(row.path, { preview: row.path });
+    return result(row.path, row.open ? { collapse: row.path } : { expand: row.path });
+  }
+  return result(row.path);
 }

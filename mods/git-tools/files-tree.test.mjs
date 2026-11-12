@@ -1,7 +1,7 @@
 // node files-tree.test.mjs: the Files panel's pure decisions (search order, marks and dots,
 // visible rows, arrow keys).
 import assert from "node:assert/strict";
-import { markLookup, rankSearch } from "./files-tree.js";
+import { markLookup, rankSearch, visibleRows, moveKey } from "./files-tree.js";
 
 // Marks: a file's own mark, a whole ignored or untracked folder marking what's inside it,
 // the nearest such folder deciding, and dots that skip ignored files but count deletions.
@@ -79,6 +79,79 @@ import { markLookup, rankSearch } from "./files-tree.js";
   const exact = rankSearch(files, "a", { limit: 5 });
   assert.equal(exact.limited, false);
   assert.deepEqual(exact.items.map((i) => i.path), ["f/a1", "f/a2", "f/a3", "a-folder/x", "a-folder/y"]);
+}
+
+// Visible rows: the loaded folders drawn as a tree, open folders showing what they hold,
+// in the order each folder's entries came (readFolder sorts them).
+const entries = new Map([
+  ["", [{ name: "src", dir: true }, { name: "empty", dir: true }, { name: "z.txt", dir: false }]],
+  ["src", [{ name: "lib", dir: true }, { name: "main.js", dir: false }]],
+  ["src/lib", [{ name: "util.js", dir: false }]],
+  ["empty", []],
+]);
+{
+  assert.deepEqual(visibleRows(entries, new Set()), [
+    { path: "src", name: "src", folder: true, depth: 0, open: false },
+    { path: "empty", name: "empty", folder: true, depth: 0, open: false },
+    { path: "z.txt", name: "z.txt", folder: false, depth: 0, open: false },
+  ]);
+  // src/lib is remembered as open but src is closed: nothing under src shows.
+  assert.deepEqual(visibleRows(entries, new Set(["src/lib"])).map((r) => r.path), ["src", "empty", "z.txt"]);
+  assert.deepEqual(visibleRows(entries, new Set(["src", "src/lib", "empty"])), [
+    { path: "src", name: "src", folder: true, depth: 0, open: true },
+    { path: "src/lib", name: "lib", folder: true, depth: 1, open: true },
+    { path: "src/lib/util.js", name: "util.js", folder: false, depth: 2, open: false },
+    { path: "src/main.js", name: "main.js", folder: false, depth: 1, open: false },
+    { path: "empty", name: "empty", folder: true, depth: 0, open: true },
+    { path: "z.txt", name: "z.txt", folder: false, depth: 0, open: false },
+  ]);
+  // An open folder not read yet shows no children.
+  assert.deepEqual(visibleRows(new Map([["", [{ name: "a", dir: true }]]]), new Set(["a"])).map((r) => r.path), ["a"]);
+  assert.deepEqual(visibleRows(new Map(), new Set()), []);
+}
+
+// Arrow keys: up and down walk the visible rows and stop at the ends. Right opens a closed
+// folder, then goes to its first child; on a file or an empty folder it stays. Left closes
+// an open folder, otherwise goes to the parent; a row at the root stays. Enter opens or
+// closes a folder and previews a file.
+{
+  const rows = visibleRows(entries, new Set(["src", "empty"]));
+  // src, src/lib, src/main.js, empty, z.txt
+  const stay = { expand: null, collapse: null, preview: null };
+  const go = (current, key) => moveKey(rows, current, key);
+
+  assert.deepEqual(go("src", "up"), { current: "src", ...stay });
+  assert.deepEqual(go("src", "down"), { current: "src/lib", ...stay });
+  assert.deepEqual(go("src/main.js", "down"), { current: "empty", ...stay });
+  assert.deepEqual(go("z.txt", "down"), { current: "z.txt", ...stay });
+  assert.deepEqual(go("z.txt", "up"), { current: "empty", ...stay });
+
+  assert.deepEqual(go("src/lib", "right"), { current: "src/lib", ...stay, expand: "src/lib" });
+  assert.deepEqual(go("src", "right"), { current: "src/lib", ...stay });
+  assert.deepEqual(go("empty", "right"), { current: "empty", ...stay });
+  assert.deepEqual(go("src/main.js", "right"), { current: "src/main.js", ...stay });
+
+  assert.deepEqual(go("src", "left"), { current: "src", ...stay, collapse: "src" });
+  assert.deepEqual(go("src/lib", "left"), { current: "src", ...stay });
+  assert.deepEqual(go("src/main.js", "left"), { current: "src", ...stay });
+  assert.deepEqual(go("z.txt", "left"), { current: "z.txt", ...stay });
+
+  assert.deepEqual(go("src/lib", "enter"), { current: "src/lib", ...stay, expand: "src/lib" });
+  assert.deepEqual(go("src", "enter"), { current: "src", ...stay, collapse: "src" });
+  assert.deepEqual(go("z.txt", "enter"), { current: "z.txt", ...stay, preview: "z.txt" });
+
+  // Nothing chosen yet (or the row went away): an arrow picks the first row, Enter does nothing.
+  assert.deepEqual(go(null, "down"), { current: "src", ...stay });
+  assert.deepEqual(go("gone.txt", "up"), { current: "src", ...stay });
+  assert.deepEqual(go(null, "enter"), { current: null, ...stay });
+  assert.deepEqual(moveKey([], null, "down"), { current: null, ...stay });
+  // Another key changes nothing.
+  assert.deepEqual(go("src", "tab"), { current: "src", ...stay });
+
+  // Search results are rows too: up, down and Enter work on them.
+  const results = rankSearch(["a/one.txt", "b/two.txt"], "t").items;
+  assert.deepEqual(moveKey(results, "a/one.txt", "down"), { current: "b/two.txt", ...stay });
+  assert.deepEqual(moveKey(results, "b/two.txt", "enter"), { current: "b/two.txt", ...stay, preview: "b/two.txt" });
 }
 
 console.log("ok");

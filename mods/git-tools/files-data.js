@@ -9,6 +9,7 @@
 //     → { ok, repo: { root, prefix } | null, marks: { [path]: mark }, err }
 //   readSearchList(exec, folder, { on, platform, limit })
 //     → { ok, repo: boolean, files: [path], limited, err }
+//   roomFor(loaded, path, total) → the `room` to pass readFolder
 //
 // `on`: the space's machine, null for this computer. `platform`: the window's platform
 // ("windows" reads folders with PowerShell on this computer). Paths in results are
@@ -19,6 +20,15 @@ import { makeGit } from "./git.js";
 export const PER_FOLDER = 500;
 export const TOTAL = 5000;
 export const SEARCH_LIMIT = 20000;
+
+// roomFor(loaded, path, total?) → how many entries the folder at `path` may hold: `total`
+// (TOTAL) less what every other loaded folder holds. loaded: Map of folder path → entries.
+// Pass it as readFolder's `room`.
+export function roomFor(loaded, path, total = TOTAL) {
+  let used = 0;
+  for (const [folder, entries] of loaded) if (folder !== path) used += entries.length;
+  return Math.max(0, total - used);
+}
 
 // Case-insensitive first so "README.md" sits among the r's; the raw compare after it keeps
 // the order the same on every run.

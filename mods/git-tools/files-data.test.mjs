@@ -4,7 +4,7 @@ import { execFile, execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync, realpathSync, symlinkSync, readdirSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
-import { readFolder, readMarks, readSearchList } from "./files-data.js";
+import { readFolder, readMarks, readSearchList, roomFor } from "./files-data.js";
 import { markLookup } from "./files-tree.js";
 
 const base = realpathSync(mkdtempSync(`${tmpdir()}/git-tools-files-`));
@@ -100,6 +100,16 @@ const init = (name) => {
   const none = await readFolder(exec, dir, { room: 0 });
   assert.equal(none.limited, true);
   assert.deepEqual(none.entries, []);
+}
+
+// The room a folder may fill: the tree's total less what the other loaded folders hold
+// (a folder read again doesn't count against itself).
+{
+  const loaded = new Map([["", new Array(3).fill({ name: "x", dir: false })], ["a", new Array(4).fill({ name: "y", dir: false })]]);
+  assert.equal(roomFor(loaded, "b", 10), 3);
+  assert.equal(roomFor(loaded, "a", 10), 7);
+  assert.equal(roomFor(loaded, "b", 5), 0);
+  assert.equal(roomFor(new Map(), ""), 5000);
 }
 
 // A folder that isn't there is a result, not a throw, and says it's gone.

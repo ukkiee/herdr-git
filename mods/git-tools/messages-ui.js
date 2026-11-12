@@ -1,0 +1,41 @@
+// The words the shared parts in ui.js and main.js say (i18n.js). Keys start with "ui.".
+
+export const en = {
+  "ui.notRepository": "{folder} is not in a git repository.",
+  "ui.thisFolder": "This folder",
+  "ui.loading": "Loading…",
+  "ui.running": "Another git operation is running: {label}",
+  "ui.runningElsewhere": "Another git operation is running in another repository: {label}",
+  "ui.anotherRepository": "{label} (another repository)",
+  "ui.commitPanel": "Commit panel",
+  "ui.logPanel": "Log panel",
+  "ui.notTaken": "Nothing was started: the {who} that opened this dialog didn't respond. Try again.",
+  "ui.lostWhileRunning": "The result didn't reach this dialog. The {who} closed while git was running; check the repository before trying again.",
+  "ui.lostShownThere": "The result didn't reach this dialog. The {who} shows how it ended.",
+  "ui.noRepository": "No repository to work in.",
+  "ui.gitFailed": "git failed.",
+  "ui.cantServe": "This screen can't run that git operation.",
+  "ui.noScreen": "git-tools has no screen called \"{view}\".",
+  "ui.dismiss": "Dismiss",
+  "ui.close": "Close",
+};
+
+export const ko = {
+  "ui.notRepository": "{folder}은(는) git 저장소 안에 있지 않습니다.",
+  "ui.thisFolder": "이 폴더",
+  "ui.loading": "로드 중…",
+  "ui.running": "다른 git 작업이 실행 중입니다: {label}",
+  "ui.runningElsewhere": "다른 저장소에서 git 작업이 실행 중입니다: {label}",
+  "ui.anotherRepository": "{label} (다른 저장소)",
+  "ui.commitPanel": "커밋 패널",
+  "ui.logPanel": "로그 패널",
+  "ui.notTaken": "아무것도 시작하지 않았습니다. 이 창을 연 {who}이(가) 응답하지 않았습니다. 다시 시도하세요.",
+  "ui.lostWhileRunning": "결과가 이 창에 도착하지 않았습니다. git이 실행되는 동안 {who}이(가) 닫혔습니다. 다시 시도하기 전에 저장소를 확인하세요.",
+  "ui.lostShownThere": "결과가 이 창에 도착하지 않았습니다. 어떻게 끝났는지는 {who}에 표시됩니다.",
+  "ui.noRepository": "작업할 저장소가 없습니다.",
+  "ui.gitFailed": "git이 실패했습니다.",
+  "ui.cantServe": "이 화면은 그 git 작업을 실행할 수 없습니다.",
+  "ui.noScreen": "git-tools에 \"{view}\" 화면이 없습니다.",
+  "ui.dismiss": "닫기",
+  "ui.close": "닫기",
+};

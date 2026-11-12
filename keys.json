@@ -1,0 +1,6 @@
+{
+  "layout:main-git": {
+    "cmd-k": "mod.open:git-tools",
+    "cmd-shift-g": "layout.toggle:git-log"
+  }
+}

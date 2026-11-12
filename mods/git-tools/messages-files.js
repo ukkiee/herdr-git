@@ -1,5 +1,5 @@
-// The words of the Files panel: its header, the search, the states in place of the tree, the limit
-// note and the preview's notes. Keys start with "files.".
+// The words of the Files panel: its header, the search, the states in place of the tree,
+// the limit notes, the preview's notes and the row menu. Keys start with "files.".
 
 export const en = {
   "files.title": "Files",
@@ -23,6 +23,11 @@ export const en = {
   "files.noMatches": "No matching files",
   "files.moreMatches": "Showing the first {n} matches",
   "files.searchLimited": "Searched only the first {n} files in this folder",
+  "files.showDiff": "Show Diff",
+  "files.copyPath": "Copy Path",
+  "files.copyRelativePath": "Copy Relative Path",
+  "files.revealInFinder": "Reveal in Finder",
+  "files.revealFailed": "Finder could not show this file.",
 };
 
 export const ko = {
@@ -47,4 +52,9 @@ export const ko = {
   "files.noMatches": "일치하는 파일 없음",
   "files.moreMatches": "일치하는 파일 중 처음 {n}개만 보입니다",
   "files.searchLimited": "이 폴더의 처음 {n}개 파일에서만 찾았습니다",
+  "files.showDiff": "Diff 표시",
+  "files.copyPath": "경로 복사",
+  "files.copyRelativePath": "상대 경로 복사",
+  "files.revealInFinder": "Finder에서 보기",
+  "files.revealFailed": "Finder에서 이 파일을 보이지 못했습니다.",
 };

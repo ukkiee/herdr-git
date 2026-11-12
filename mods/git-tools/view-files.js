@@ -17,13 +17,19 @@
 // `this.hit`); an empty box brings the tree back. The file list is read when a search
 // starts and again in another folder, not on every refresh: outside a repository it is
 // a walk of up to 20,000 files.
+//
+// Keys: ↑ ↓ ← → Enter on the tree (moveKey), ↑ ↓ Enter on the results, Esc closes the
+// preview or ends the search. A right-click opens the row menu (Show Diff for a file with
+// a git mark, Copy Path, Copy Relative Path, Reveal in Finder); the preview's header has
+// Show Diff too.
 
 import { div, svg } from "gpui-kit";
 import { h_flex, v_flex, Editor, EditorState, InputState, Input } from "gpui-base";
 import { exec, theme, settings, watchFolder, readTextFile, window as hostWindow } from "herdr";
 import { readFolder, readMarks, readSearchList, roomFor, PER_FOLDER, TOTAL, SEARCH_LIMIT } from "./files-data.js";
 import { markLookup, visibleRows, rankSearch, moveKey, SEARCH_SHOWN } from "./files-tree.js";
-import { location, icon, fileGlyph, folderGlyph, darkLook, panelFrame, toolbar, row, notice, errorStrip, WindowedList } from "./ui.js";
+import { location, icon, fileGlyph, folderGlyph, darkLook, panelFrame, toolbar, iconButton, row, notice, errorStrip, WindowedList, openMenu } from "./ui.js";
+import { openDiff } from "./view-diff.js";
 
 const POLL = 10000;
 // The preview shows at most this many characters; readTextFile itself stops at 1 MiB.
@@ -70,7 +76,7 @@ export default class FilesView {
     this.entries = new Map(); // folder path ("" for the root) → readFolder's entries
     this.open = new Set();
     this.pending = new Set(); // folders being read after a press
-    this.marks = NO_LOOKUP; this.prefix = "";
+    this.marks = NO_LOOKUP; this.prefix = ""; this.repoRoot = null;
     this.rows = []; this.current = null;
     this.limited = false; this.gone = false; this.read = false; this.loading = false; this.again = false;
     this.error = null; this.rootError = null;
@@ -156,7 +162,7 @@ export default class FilesView {
         this.entries = next; this.limited = limited;
         // A failed git read keeps the marks it had and says nothing: the Commit panel
         // shows git's errors, and a machine without git would get one every 10 s.
-        if (m.ok) { this.marks = markLookup(m.marks); this.prefix = m.repo?.prefix ?? ""; }
+        if (m.ok) { this.marks = markLookup(m.marks); this.prefix = m.repo?.prefix ?? ""; this.repoRoot = m.repo?.root ?? null; }
         this.error = failed;
         this.rebuild();
         this.watch(cx);
@@ -320,6 +326,45 @@ export default class FilesView {
     return true;
   }
 
+  // ---- the row menu and Show Diff
+
+  // The Diff tab a file with a git mark opens (the working file against HEAD, as the
+  // Commit panel opens it), or null. Ignored files have nothing to compare.
+  diffFor(path) {
+    const mark = this.marks.mark(path);
+    if (!this.repoRoot || !LETTER[mark]) return null;
+    return { root: this.repoRoot, on: this.on, path: `${this.prefix}${path}`, status: mark };
+  }
+
+  // Reveal in Finder only where Finder can show the file: a macOS window and a space on
+  // this computer.
+  canReveal() { return hostWindow()?.platform === "macos" && !this.on; }
+
+  // The menu of a tree row or a result. What a pick does is worked out before it opens,
+  // so a pick made after the panel moved to another folder still acts on this row.
+  rowMenu(path, folder, cx) {
+    const diff = folder ? null : this.diffFor(path);
+    const absolute = joinPath(this.root, path), relative = `${this.prefix}${path}`, reveal = this.canReveal();
+    const items = [];
+    if (diff) items.push({ label: this.t("files.showDiff"), value: "diff" });
+    items.push({ label: this.t("files.copyPath"), value: "path", rule: true });
+    items.push({ label: this.t("files.copyRelativePath"), value: "relative" });
+    if (reveal) items.push({ label: this.t("files.revealInFinder"), value: "reveal" });
+    cx.spawn(async (cx) => {
+      const picked = await openMenu(this.bus, items, { lang: this.lang });
+      // The "focus" command never comes (the mod isn't focusable): the keyboard comes back here.
+      this.handle.focus();
+      if (picked === "diff") openDiff(diff);
+      else if (picked === "path") cx.write_to_clipboard(absolute);
+      else if (picked === "relative") cx.write_to_clipboard(relative);
+      else if (picked === "reveal") {
+        const r = await exec("open", ["-R", absolute]).catch(() => null);
+        if (!r || r.code !== 0) this.error = (r?.stderr ?? "").trim() || this.t("files.revealFailed");
+      }
+      cx.notify();
+    });
+  }
+
   // ---- the preview
 
   release() {
@@ -367,6 +412,7 @@ export default class FilesView {
     const el = row(`files-row-${r.path}`, t, { selected: r.path === this.current, depth: r.depth })
       .cursor_pointer()
       .on_click((_e, cx) => { this.handle.focus(); this.press(r, cx); cx.notify(); })
+      .on_mouse_down("right", (_e, cx) => { this.handle.focus(); this.select(r.path); this.rowMenu(r.path, r.folder, cx); cx.notify(); })
       .child(r.folder
         ? svg(icon(r.open ? "chevron-down" : "chevron-right")).size(12).flex_none().text_color(t.muted)
         : div().size(12).flex_none());
@@ -404,6 +450,7 @@ export default class FilesView {
     return row(`files-hit-${it.path}`, t, { selected: it.path === this.hit })
       .cursor_pointer()
       .on_click((_e, cx) => { this.handle.focus(); this.chooseHit(it.path); this.openHit(cx, it.path); cx.notify(); })
+      .on_mouse_down("right", (_e, cx) => { this.handle.focus(); this.chooseHit(it.path); this.rowMenu(it.path, false, cx); cx.notify(); })
       .child(fileGlyph(`${this.prefix}${it.path}`, { dark: this.dark }))
       .child(div().flex_none().max_w("70%").truncate().text_color(statusColor(mark, t))
         .when(mark === "conflict", (el) => el.font_semibold())
@@ -468,6 +515,7 @@ export default class FilesView {
     this.dark = darkLook();
     const previewing = Boolean(this.file);
     const where = previewing ? this.file : folderName(this.root);
+    const diff = previewing ? this.diffFor(this.file) : null;
     const shown = Boolean(this.root) && !this.gone && !this.rootError;
     const searching = shown && this.searching();
     const notes = searching ? this.foundNotes()
@@ -485,7 +533,8 @@ export default class FilesView {
           .on_click((_e, cx) => { this.show(null, cx); cx.notify(); })
           .child("←")))
         .child(div().flex_none().font_semibold().child(this.t("files.title")))
-        .child(div().flex_1().min_w(0).truncate().text_right().text_size(12).text_color(t.dim).child(where ?? "")))
+        .child(div().flex_1().min_w(0).truncate().text_right().text_size(12).text_color(t.dim).child(where ?? ""))
+        .when(Boolean(diff), (el) => el.child(iconButton("files-diff", "diff", t, { title: this.t("files.showDiff"), onClick: (_e, cx) => { openDiff(diff); cx.notify(); } }))))
       .when(shown && !previewing, (el) => el.child(this.renderSearchBox(t)))
       .child(previewing ? this.renderPreview(t)
         : v_flex().flex_1().min_h(0)
@@ -493,6 +542,13 @@ export default class FilesView {
           .children(notes.map((note, i) => div().id(`files-note-${i}`).flex_none().px(10).py(5).border_t(1).border_color(t.border).text_size(11).text_color(t.dim).child(note))))
       .when(Boolean(this.error) && !previewing, (el) => el.child(errorStrip("files-error", this.error ?? "", t, (_e, cx) => { this.error = null; cx.notify(); })));
   }
+}
+
+// The absolute path of a row: the root and the row's path, joined with the root's own
+// separator, so a Windows folder gives a Windows path.
+function joinPath(root, path) {
+  if (/\\/.test(root) && !root.includes("/")) return `${root.replace(/\\+$/, "")}\\${path.replaceAll("/", "\\")}`;
+  return `${root.replace(/\/+$/, "")}/${path}`;
 }
 
 // "a/b/c" → "a/b"; "a" → "".

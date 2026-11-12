@@ -526,9 +526,10 @@ export default class CommitView {
     if (r.kind === "group" && r.group === "last") {
       const last = this.last;
       // A commit made with an empty message has no subject: its short hash stands in.
+      // A subject can be long, so it is the one cut and the file count stays whole.
       return el.tooltip(last?.hash ?? "")
-        .child(div().flex_none().max_w("70%").truncate().font_semibold().child(last?.subject || (last?.hash ?? "").slice(0, 8)))
-        .child(div().flex_1().min_w(0).truncate().text_size(12).text_color(t.dim).child(count));
+        .child(div().flex_initial().min_w(0).truncate().font_semibold().child(last?.subject || (last?.hash ?? "").slice(0, 8)))
+        .child(div().flex_none().text_size(12).text_color(t.dim).child(count));
     }
     if (r.kind === "group") {
       const name = r.group === "changes" ? this.t("commit.changes") : this.t("commit.unversioned");

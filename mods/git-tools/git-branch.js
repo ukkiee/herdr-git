@@ -429,9 +429,10 @@ export async function restoreBranches(git, root, branches = []) {
 }
 
 // The worktree that has local branch `name` checked out: { ok, path } (path null when
-// none does), or { ok: false, err }. %(worktreepath) needs git 2.23. A branch another
-// worktree is rebasing or bisecting on a detached HEAD isn't found here; git's own
-// refusal then comes after the record.
+// none does), or { ok: false, err }. %(worktreepath) needs git 2.23. A branch that any
+// worktree, this one included, is rebasing or bisecting on a detached HEAD isn't found
+// here (nor by the current-branch check, HEAD being detached); git's own refusal then
+// comes after the record.
 async function checkedOutAt(git, root, name) {
   const r = await git.read(root, ["for-each-ref", "--format=%(refname)%00%(worktreepath)", HEADS]);
   if (!r.ok) return { ok: false, err: r.err || "git for-each-ref failed." };

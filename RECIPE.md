@@ -2496,10 +2496,11 @@ English forms and ⏎ is a line break.
 - Records live in that clone and are dropped by git's reflog expiry (about 30 days); the
   list shows the newest 50. A repository missing a recorded commit object (damaged) can
   make the whole list fail with git's words.
-- A branch checked out in another worktree is refused before it is recorded. But a
-  worktree rebasing or bisecting that branch on a detached HEAD doesn't show it as
-  checked out (`%(worktreepath)` is empty), so the branch is recorded and then git
-  refuses to delete it. The list leaves that record out while the branch is at that
+- A branch checked out in another worktree is refused before it is recorded. But while
+  any worktree, this clone's own included, is rebasing or bisecting that branch on a
+  detached HEAD, the branch is neither the current branch (HEAD is detached) nor shown
+  as checked out (`%(worktreepath)` is empty), so it is recorded and then git refuses
+  to delete it. The list leaves that record out while the branch is at that
   commit; once the branch moves, the record shows as
   `a branch of this name exists now at another commit`, though it was never deleted.
 - When recording fails partway and moving the ref back fails too, the ref stays where it

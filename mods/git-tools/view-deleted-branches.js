@@ -161,7 +161,7 @@ export default class DeletedBranchesView {
       this.running = false;
       // A success comes back without msg (serveRequest): every branch asked for came back.
       if (r.ok) this.result = { msg: { key: "branches.restored", args: { n: branches.length } }, err: "" };
-      else if (r.msg?.key === "branches.notAllRestored") this.result = { msg: r.msg, err: r.err };
+      else if (["branches.notAllRestored", "branches.notAllUpstream", "branches.notAllRestoredUpstream"].includes(r.msg?.key)) this.result = { msg: r.msg, err: r.err };
       else this.error = sentence(this.t, r.msg, r.err) || this.t("ui.gitFailed");
       this.load(cx);
     });

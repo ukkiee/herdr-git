@@ -200,6 +200,9 @@ export async function deleteBranch(git, root, name, { confirmed = false } = {}) 
   // Read before deleting: `branch -D` drops the branch's config section with it.
   const was = await branchState(git, root, name);
   if (!was.ok) return no(was.err, unmerged, was.msg);
+  // A branch that can't be recorded is not deleted.
+  const kept = await recordDeleted(git, root, { name, hash: was.hash, upstream: was.upstream });
+  if (!kept.ok) return no(`Branch '${name}' was not deleted: it couldn't be recorded to restore later. ${kept.err}`.trim(), unmerged, { key: "branches.notRecorded", args: { name, err: kept.err } });
   // -D: `-d` would refuse a branch that isn't merged into HEAD even when another branch
   // or the remote has all of it. The count above is the check.
   const r = await git(root, ["branch", "-D", "--", name]);
@@ -226,6 +229,88 @@ export async function restoreBranch(git, root, { name, hash, upstream = null } =
     if (!set.ok) return set;
   }
   return made;
+}
+
+// Deleted branches are kept in the reflog of one hidden ref. Each delete moves the ref
+// to the branch's commit with a "deleted …" message, then back to a commit of HEAD's own
+// history ("parked"). So a deleted commit is in the reflog only: gc keeps it while its
+// entry lives (git's reflog expiry: 30 days by default for a commit the ref no longer
+// reaches), and no `log --all`, branch or tag list shows it. The mod never expires
+// entries itself.
+const DELETED = "refs/git-tools/deleted-branches";
+const PARKED = "parked";
+
+// A reflog message is one line in which git squeezes every run of whitespace into one
+// space, so each field must be a single word: "%", whitespace and control characters
+// are written as %XX.
+const word = (s) => String(s).replace(/[%\s\x00-\x1f\x7f]/gu, (c) => encodeURIComponent(c));
+const unword = (s) => { try { return decodeURIComponent(s); } catch { return null; } };
+const recordMessage = ({ name, upstream }) => ["deleted", word(name), ...(upstream ? [word(upstream.remote), word(upstream.merge)] : [])].join(" ");
+
+// "deleted <name>" or "deleted <name> <remote> <merge>" → { name, upstream }, else null.
+function readRecord(message) {
+  const parts = message.split(" ");
+  if (parts[0] !== "deleted" || (parts.length !== 2 && parts.length !== 4)) return null;
+  const [name, remote, merge] = parts.slice(1).map(unword);
+  if (!name || (parts.length === 4 && (!remote || !merge))) return null;
+  return { name, upstream: parts.length === 4 ? { remote, merge } : null };
+}
+
+// What a ref names right now: { ok, hash } with null when there is no such ref.
+async function refValue(git, root, ref) {
+  const r = await git.read(root, ["rev-parse", "--verify", "--quiet", ref]);
+  if (r.ok) return { ok: true, hash: r.out.trim() };
+  if (r.code === 1) return { ok: true, hash: null };
+  return { ok: false, err: r.err || `git rev-parse ${ref} failed.` };
+}
+
+// Where the ref rests between deletes: { ok, hash, head }. A commit HEAD reaches adds
+// nothing to `log --all`, so the one it rests on now stays while HEAD still reaches it
+// (no walk through the history on every delete). Otherwise (the first delete, or HEAD's
+// history was rewritten under it) it is the root of HEAD's first-parent history.
+// Without a commit at HEAD there is no such history: the root of the deleted branch's.
+async function restingCommit(git, root, now, tip) {
+  const at = await refValue(git, root, "HEAD^{commit}");
+  if (!at.ok) return at;
+  const head = at.hash;
+  if (head && now) {
+    const reached = await git.read(root, ["merge-base", "--is-ancestor", now, head]);
+    if (reached.ok) return { ok: true, hash: now, head };
+    if (reached.code !== 1) return { ok: false, err: reached.err || "git merge-base failed." };
+  }
+  const r = await git.read(root, ["rev-list", "--first-parent", "--max-parents=0", head ?? tip, "--"]);
+  const hash = r.ok ? r.out.split("\n")[0].trim() : "";
+  if (!hash) return { ok: false, err: r.err || "git rev-list found no root commit." };
+  return { ok: true, hash, head };
+}
+
+// Records a branch about to be deleted ({ name, hash, upstream }): { ok } or
+// { ok: false, err }. On failure the ref may be left on the branch's own commit, which
+// the branch still has, so nothing shows that wasn't shown before.
+async function recordDeleted(git, root, branch) {
+  const move = (to, message) => git(root, ["update-ref", "--create-reflog", "-m", message, DELETED, to]);
+  const message = recordMessage(branch);
+  const now = await refValue(git, root, DELETED);
+  if (!now.ok) return now;
+  const rest = await restingCommit(git, root, now.hash, branch.hash);
+  if (!rest.ok) return rest;
+  // git adds no reflog entry for a move to the commit the ref is on already: step away
+  // first, to a commit HEAD reaches. With none (HEAD is on that very commit and it is
+  // the root), only `reflog write` can add the entry; git has it since 2.52.
+  if (now.hash === branch.hash) {
+    const away = [rest.hash, rest.head].find((hash) => hash && hash !== branch.hash);
+    if (!away) {
+      const r = await git(root, ["reflog", "write", DELETED, branch.hash, branch.hash, message]);
+      return r.ok ? { ok: true } : r;
+    }
+    const r = await move(away, PARKED);
+    if (!r.ok) return r;
+  }
+  const r = await move(branch.hash, message);
+  if (!r.ok) return r;
+  if (rest.hash === branch.hash) return { ok: true };
+  const parked = await move(rest.hash, PARKED);
+  return parked.ok ? { ok: true } : parked;
 }
 
 // A local branch's commit and upstream: { ok, hash, upstream } or { ok: false, err, msg? }.

@@ -684,4 +684,37 @@ const setting = (cwd, key) => ask(cwd, ["config", "--get", key]);
   assert.equal(exists(dir, "refs/heads/ghost"), false);
 }
 
+// ---- deleted branches are kept in the repository
+
+const DELETED = "refs/git-tools/deleted-branches";
+// Every commit `git log --all` shows, every branch and tag, and the reflog of the
+// hidden ref (newest first), as git itself reads them.
+const logAll = (cwd) => raw(cwd, ["log", "--all", "--format=%H"]).split("\n").filter(Boolean);
+const refsShown = (cwd) => raw(cwd, ["for-each-ref", "--format=%(objectname)", "refs/heads", "refs/tags"]).split("\n").filter(Boolean);
+const roots = (cwd) => raw(cwd, ["rev-list", "--max-parents=0", "HEAD"]).split("\n").filter(Boolean);
+const alive = (cwd, hash) => ask(cwd, ["cat-file", "-e", `${hash}^{commit}`]) !== null;
+
+// A deleted branch's commits are gone from every list, yet stay in the repository
+// through a gc that prunes everything unreachable now. The hidden ref rests on the root
+// of HEAD's history.
+{
+  const dir = placed("kept");
+  raw(dir, ["checkout", "-q", "-b", "wip/kept", "--track", "origin/main"]);
+  const k1 = commit(dir, "k1.txt", "k1");
+  const k2 = commit(dir, "k2.txt", "k2");
+  raw(dir, ["checkout", "-q", "main"]);
+  commit(dir, "main2.txt", "main two");
+  const del = await deleteBranch(git, dir, "wip/kept", { confirmed: true });
+  assert.equal(del.ok, true, del.err);
+  assert.equal(exists(dir, "refs/heads/wip/kept"), false);
+  for (const hash of [k1, k2]) {
+    assert.equal(logAll(dir).includes(hash), false, "log --all doesn't show a deleted commit");
+    assert.equal(refsShown(dir).includes(hash), false);
+  }
+  assert.deepEqual(roots(dir).includes(raw(dir, ["rev-parse", DELETED])), true, "the hidden ref rests on a root of HEAD's history");
+  raw(dir, ["gc", "-q", "--prune=now"]);
+  assert.equal(alive(dir, k1), true);
+  assert.equal(alive(dir, k2), true);
+}
+
 console.log("ok");

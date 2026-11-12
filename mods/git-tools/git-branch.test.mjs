@@ -736,4 +736,25 @@ const alive = (cwd, hash) => ask(cwd, ["cat-file", "-e", `${hash}^{commit}`]) !=
   assert.equal(translator("en")("branches.notRecorded", { name: "x", err: "fatal: y" }), "Branch 'x' was not deleted: it couldn't be recorded to restore later. fatal: y");
 }
 
+// HEAD's root commit amended away: the commit the ref rested on is out of HEAD's
+// history and would show in `log --all`. The next Delete rests it on the new root.
+{
+  const dir = lone("amended");
+  const c1 = raw(dir, ["rev-parse", "HEAD"]);
+  raw(dir, ["branch", "first", c1]);
+  raw(dir, ["checkout", "-q", "first"]);
+  const x1 = commit(dir, "x.txt", "x1");
+  raw(dir, ["checkout", "-q", "main"]);
+  assert.equal((await deleteBranch(git, dir, "first", { confirmed: true })).ok, true);
+  assert.equal(raw(dir, ["rev-parse", DELETED]), c1);
+  raw(dir, ["commit", "-q", "--amend", "-m", "base, amended"]);
+  const c2 = raw(dir, ["rev-parse", "HEAD"]);
+  raw(dir, ["branch", "second", c2]);
+  assert.equal((await deleteBranch(git, dir, "second")).ok, true);
+  assert.deepEqual([raw(dir, ["rev-parse", DELETED])], roots(dir));
+  assert.equal(raw(dir, ["rev-parse", DELETED]), c2);
+  assert.equal(logAll(dir).includes(c1), false);
+  assert.equal(logAll(dir).includes(x1), false);
+}
+
 console.log("ok");

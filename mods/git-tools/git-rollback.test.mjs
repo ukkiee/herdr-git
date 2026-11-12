@@ -620,13 +620,15 @@ git merge -q other || true`);
   }
 }
 
-// The git runner with some calls failing: `fails(args)` picks them.
+// The git runner with some calls failing: `fails(args, options)` picks them.
 const failing = (fails) => {
   const failed = { ok: false, code: 1, out: "", err: "injected failure" };
-  const run = async (cwd, args, options) => fails(args) ? failed : git(cwd, args, options);
-  run.read = async (cwd, args, options) => fails(args) ? failed : git.read(cwd, args, options);
+  const run = async (cwd, args, options) => fails(args, options) ? failed : git(cwd, args, options);
+  run.read = async (cwd, args, options) => fails(args, options) ? failed : git.read(cwd, args, options);
   return run;
 };
+// A call on the real index, not on the scratch index a snapshot is built in.
+const real = (options) => !options?.env?.GIT_INDEX_FILE;
 const entriesOf = (repo) => sh(repo, "git ls-files -s -z");
 
 // When git can't say which files carry those flags, nothing is written: every chosen file
@@ -665,7 +667,7 @@ if (sameFile("F", "f")) {
     sh(repo, `git update-index --cacheinfo 100644,${blob("staged-F")},F --cacheinfo 100644,${blob("staged-f")},f`);
     const before = entriesOf(repo);
 
-    const run = failing((args) => args.includes("hash-object") || (undo === "fails" && args.includes("--cacheinfo")));
+    const run = failing((args, options) => args.includes("hash-object") || (undo === "fails" && args.includes("--cacheinfo") && real(options)));
     const r = await rollback(run, repo, { files: ["F", "f"].map((path) => ({ path, status: "deleted" })) });
     assert.equal(r.ok, false, undo);
     assert.deepEqual(r.skipped.map((skip) => skip.path).sort(), ["F", "f"], undo);
@@ -688,7 +690,7 @@ if (sameFile("F", "f")) {
   sh(repo, "git rm -q removed && echo staged > changed && git add changed && rm changed && mkdir removed changed");
   const before = { removed: index(repo, "removed"), changed: index(repo, "changed") };
 
-  const r = await rollback(failing((args) => args.includes("--force-remove")), repo, { files: ["removed", "changed"].map((path) => ({ path, status: "deleted" })) });
+  const r = await rollback(failing((args, options) => args.includes("--force-remove") && real(options)), repo, { files: ["removed", "changed"].map((path) => ({ path, status: "deleted" })) });
   assert.equal(r.ok, false);
   assert.deepEqual(r.skipped.map((skip) => skip.path).sort(), ["changed", "removed"]);
   assert.equal(index(repo, "changed"), before.changed);
@@ -743,8 +745,8 @@ if (sameFile("F", "f")) {
 
 const SNAPSHOTS = "refs/git-tools/rollback";
 const tip = (repo) => sh(repo, `git rev-parse -q --verify ${SNAPSHOTS} || true`).trim();
-// The snapshot's change against its parent (or against nothing, for a root snapshot).
-const changes = (repo, hash) => sh(repo, `git diff-tree -r --root --no-renames --name-status -z ${hash}`).split("\0").filter(Boolean)
+// The snapshot's change against its first parent (or against nothing, for a root snapshot).
+const changes = (repo, hash) => sh(repo, `git diff-tree -r --root --no-renames --name-status -z --diff-merges=first-parent ${hash}`).split("\0").filter(Boolean)
   .slice(1).reduce((out, word, i, all) => (i % 2 ? out : [...out, `${word} ${all[i + 1]}`]), []).sort();
 const blob = (repo, hash, path) => sh(repo, `git cat-file -p "${hash}:${path}"`);
 
@@ -769,7 +771,7 @@ git add -A && git commit -q -m first`);
   assert.deepEqual(r.skipped.map((skip) => skip.path), ["flagged"]);
   assert.match(r.snapshot, /^[0-9a-f]{40,64}$/);
   assert.equal(tip(repo), r.snapshot);
-  assert.equal(sh(repo, `git rev-parse ${r.snapshot}^@`).trim(), head);
+  assert.equal(sh(repo, `git rev-parse ${r.snapshot}^1`).trim(), head);
   assert.equal(sh(repo, `git log -1 --format=%s ${r.snapshot}`).trim(), "Rollback: 4 files");
   assert.deepEqual(changes(repo, r.snapshot), ["A -new.ts", "D gone.md", "M src/mod.ts", "M staged.ts"]);
   assert.equal(blob(repo, r.snapshot, "src/mod.ts"), "work\n");
@@ -784,6 +786,70 @@ git add -A && git commit -q -m first`);
   assert.equal(sh(repo, "git branch --list --format='%(refname)'").trim(), "refs/heads/main");
   assert.equal(sh(repo, "git tag --list").trim(), "");
   assert.equal(sh(repo, "git rev-parse HEAD").trim(), head);
+}
+
+// The snapshot's second parent holds each rolled-back path's index as it was just before
+// the rollback, on HEAD's tree: a staged change, a partly staged file, an added file, a
+// staged deletion, and a file with nothing staged (HEAD's). A path in a conflict can't be
+// in a tree: it is HEAD's there, and the snapshot's message names it. Paths not rolled
+// back are HEAD's, whatever is staged for them. The first parent and the change against
+// it are what they are without a second parent.
+{
+  const repo = init("snapshot-index");
+  sh(repo, `for f in staged partly gone plain clash other; do echo head > $f; done
+git add -A && git commit -q -m first`);
+  sh(repo, `echo index > staged && git add staged && echo work > staged
+printf 'head\\nindex\\n' > partly && git add partly && printf 'head\\nindex\\nwork\\n' > partly
+git rm -q gone && echo plain-work > plain && echo new > fresh && git add fresh
+echo staged-other > other && git add other`);
+  const old = sh(repo, "git rev-parse HEAD:clash").trim();
+  const ours = sh(repo, "echo ours | git hash-object -w --stdin").trim(), theirs = sh(repo, "echo theirs | git hash-object -w --stdin").trim();
+  sh(repo, `printf '0 ${"0".repeat(40)}\\tclash\\n100644 ${old} 1\\tclash\\n100644 ${ours} 2\\tclash\\n100644 ${theirs} 3\\tclash\\n' | git update-index --index-info`);
+  writeFileSync(`${repo}/clash`, "<<<<<<< ours\nours\n=======\ntheirs\n>>>>>>> theirs\n");
+  const head = sh(repo, "git rev-parse HEAD").trim();
+  // "<mode> <object>" by path: of a tree ("<mode> blob <object>\t<path>"), and of the
+  // index's stage-0 entries ("<mode> <object> 0\t<path>").
+  const lines = (out) => out.split("\0").filter(Boolean).map((line) => [...line.split("\t")[0].split(" "), line.slice(line.indexOf("\t") + 1)]);
+  const treeOf = (rev) => new Map(lines(sh(repo, `git ls-tree -r -z ${rev}`)).map(([mode, , object, path]) => [path, `${mode} ${object}`]));
+  const stageZero = new Map(lines(sh(repo, "git ls-files -s -z")).filter(([, , stage]) => stage === "0").map(([mode, object, , path]) => [path, `${mode} ${object}`]));
+  const expected = treeOf("HEAD");
+  for (const path of ["staged", "partly", "fresh"]) expected.set(path, stageZero.get(path));
+  expected.delete("gone");
+
+  const files = [["staged", "modified"], ["partly", "modified"], ["gone", "deleted"], ["plain", "modified"], ["fresh", "added"], ["clash", "conflict"]];
+  const r = await rollback(git, repo, { files: files.map(([path, status]) => ({ path, status })), deleteAdded: true });
+  assert.equal(r.ok, true, r.err);
+  assert.equal(sh(repo, `git rev-parse ${r.snapshot}^1`).trim(), head);
+  assert.deepEqual(changes(repo, r.snapshot), ["A fresh", "D gone", "M clash", "M partly", "M plain", "M staged"]);
+  assert.equal(blob(repo, r.snapshot, "partly"), "head\nindex\nwork\n");
+  const second = sh(repo, `git rev-parse ${r.snapshot}^2`).trim();
+  assert.deepEqual(treeOf(second), expected);
+  assert.equal(blob(repo, second, "partly"), "head\nindex\n");
+  assert.equal(sh(repo, `git log -1 --format=%s ${r.snapshot}`).trim(), "Rollback: 6 files");
+  assert.match(sh(repo, `git log -1 --format=%B ${r.snapshot}`), /^Conflict: "clash"$/m);
+  assert.doesNotMatch(sh(repo, `git log -1 --format=%B ${r.snapshot}`), /Conflict: "(staged|partly|gone|plain|fresh)"/);
+  // Then the files and their index went back to HEAD.
+  assert.deepEqual(status(repo), ["M  other"]);
+}
+
+// When the second parent can't be made (any one of the commits or trees a snapshot takes
+// fails), nothing is rolled back and no snapshot is left.
+for (const step of ["write-tree", "commit-tree"]) {
+  for (const nth of [1, 2]) {
+    const repo = init(`snapshot-index-fails-${step}-${nth}`);
+    sh(repo, "echo head > a && echo head > b && git add -A && git commit -q -m first");
+    sh(repo, "echo staged > a && git add a && echo work > a && rm b && echo new > n && git add n");
+    const before = { index: entriesOf(repo), status: status(repo) };
+    let seen = 0;
+    const run = failing((args) => args.includes(step) && ++seen === nth);
+    const r = await rollback(run, repo, { files: [["a", "modified"], ["b", "deleted"], ["n", "added"]].map(([path, status]) => ({ path, status })), deleteAdded: true });
+    assert.equal(r.ok, false, `${step} ${nth}`);
+    assert.equal(r.snapshot, null, `${step} ${nth}`);
+    assert.equal(r.msg?.key, "restore.notRecorded", `${step} ${nth}`);
+    assert.equal(entriesOf(repo), before.index, `${step} ${nth}`);
+    assert.deepEqual(status(repo), before.status, `${step} ${nth}`);
+    assert.equal(tip(repo), "", `${step} ${nth}`);
+  }
 }
 
 // Making the snapshot changes nothing in the real index or the working tree: when the

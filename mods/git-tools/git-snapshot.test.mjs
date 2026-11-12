@@ -80,6 +80,45 @@ const onDisk = (repo, path) => {
   assert.ok(Math.abs(r.snapshots[0].time - before) < 60, String(r.snapshots[0].time));
 }
 
+// A snapshot as one with a single parent is made (HEAD, no index held): `paths` recorded
+// from the working tree, then rolled back by git itself. → its hash
+const oldSnapshot = (repo, paths) => {
+  const dir = sh(repo, "git rev-parse --absolute-git-dir").trim();
+  const env = { ...process.env, GIT_INDEX_FILE: `${dir}/old-snapshot-index` };
+  const run = (args) => execFileSync("git", args, { cwd: repo, env, encoding: "utf8" }).trim();
+  run(["read-tree", "HEAD"]);
+  run(["update-index", "--add", "--remove", "--", ...paths]);
+  const message = `Rollback: ${paths.length} ${paths.length === 1 ? "file" : "files"}`;
+  const hash = run(["commit-tree", run(["write-tree"]), "-p", "HEAD", "-m", message]);
+  sh(repo, `git update-ref --create-reflog -m "${message}" refs/git-tools/rollback ${hash}`);
+  execFileSync("git", ["checkout", "-q", "HEAD", "--", ...paths], { cwd: repo });
+  return hash;
+};
+
+// Snapshots with one parent and with two, mixed, are listed alike: the same times, files
+// and statuses, the change against the first parent.
+{
+  const repo = init("list-mixed");
+  sh(repo, "echo head > a && echo head > b && echo head > c && git add -A && git commit -q -m first");
+  sh(repo, "echo old > a && rm b");
+  const old = oldSnapshot(repo, ["a", "b"]);
+  sh(repo, "echo staged > a && git add a && echo work > a && echo work > c");
+  const fresh = await back(repo, [["a", "modified"], ["c", "modified"]]);
+  sh(repo, "echo again > b");
+  const older = oldSnapshot(repo, ["b"]);
+  assert.equal(sh(repo, `git rev-list --parents -n 1 ${fresh}`).trim().split(" ").length, 3);
+
+  const r = await listSnapshots(git, repo);
+  assert.equal(r.ok, true, r.err);
+  assert.deepEqual(r.snapshots.map((s) => s.hash), [older, fresh, old]);
+  assert.deepEqual(r.snapshots.map((s) => s.files), [
+    [{ path: "b", status: "modified" }],
+    [{ path: "a", status: "modified" }, { path: "c", status: "modified" }],
+    [{ path: "a", status: "modified" }, { path: "b", status: "deleted" }],
+  ]);
+  for (const s of r.snapshots) assert.ok(Number.isInteger(s.time) && s.time > 0);
+}
+
 // A file name holding the bytes the list is read with (\x01, a tab, a line break) is one
 // path of one snapshot.
 {

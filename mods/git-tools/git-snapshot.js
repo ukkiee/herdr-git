@@ -27,6 +27,10 @@ const scratchIndex = (dir, copy) => `${dir}/git-tools-rollback-index-${copy}`;
 const noCopy = { ok: false, code: -1, out: "", err: "This copy of git-tools has no id to name its scratch index with.", msg: { key: "restore.noCopy" } };
 
 const HASH = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/;
+// A line of a snapshot's message naming a path that was in a conflict, which its second
+// parent can't hold: this prefix, then the path as a JSON string (any byte a name holds
+// stays on the line).
+const CONFLICT = "Conflict: ";
 
 // HEAD's commit: { ok: true, head } with null in a repository without a commit.
 async function headCommit(git, root) {
@@ -73,6 +77,10 @@ async function build(git, root, paths, env, head, copy) {
   const odd = await outside(git, root, head, tree.out.trim(), paths);
   if (!odd.ok) return fail(odd);
   const message = `Rollback: ${paths.length} ${paths.length === 1 ? "file" : "files"}`;
+  // Without a commit there is no first parent to put the index's commit after: such a
+  // snapshot holds no index, like one made before snapshots held it.
+  const index = head ? await indexCommit(git, root, paths, env, head, message, copy) : { ok: true, parents: [], conflicts: [] };
+  if (!index.ok) return fail(index);
   // The snapshot before it and the copy's id go in the message's body. Without them, a
   // rollback of the same files in the same state within the same second is the same commit
   // (one copy after another, or two apps' copies that read the same snapshot before
@@ -80,13 +88,69 @@ async function build(git, root, paths, env, head, copy) {
   const before = await git.read(root, ["rev-parse", "-q", "--verify", SNAPSHOTS]);
   if (!before.ok && before.code !== 1) return fail(before);
   const after = before.ok ? ["-m", `After ${before.out.trim()}`] : [];
-  const commit = await git(root, [...IDENTITY, "commit-tree", "--no-gpg-sign", tree.out.trim(), ...(head ? ["-p", head] : []), "-m", message, ...after, "-m", `Copy ${copy}`]);
+  const conflicts = index.conflicts.length ? ["-m", index.conflicts.map((path) => `${CONFLICT}${JSON.stringify(path)}`).join("\n")] : [];
+  const parents = [head, ...index.parents].filter(Boolean).flatMap((parent) => ["-p", parent]);
+  const commit = await git(root, [...IDENTITY, "commit-tree", "--no-gpg-sign", tree.out.trim(), ...parents, "-m", message, ...after, "-m", `Copy ${copy}`, ...conflicts]);
   if (!commit.ok) return fail(commit);
   const hash = commit.out.trim();
   // --create-reflog: git keeps a reflog only for branches and HEAD unless told to.
   const ref = await git(root, [...IDENTITY, "update-ref", "--create-reflog", "-m", message, SNAPSHOTS, hash]);
   if (!ref.ok) return fail(ref);
   return { ok: true, code: 0, out: "", err: "", snapshot: hash };
+}
+
+// indexCommit: the snapshot's second parent. A commit on `head` whose tree is HEAD's with
+// each of `paths` as the real index has it now: its staged entry, or nothing for a staged
+// deletion. A path in a conflict (stages 1 to 3) can't be in a tree: it stays HEAD's and
+// comes back in `conflicts`, for the snapshot's message. Built in the scratch index `env`
+// names, which holds the snapshot's own tree until this starts.
+// → { ok, parents: [hash], conflicts: [path] }
+async function indexCommit(git, root, paths, env, head, message, copy) {
+  const staged = await indexEntries(git, root, paths);
+  if (!staged.ok) return staged;
+  const base = await git(root, ["read-tree", head], { env });
+  if (!base.ok) return base;
+  const removed = [], conflicts = [], entries = [];
+  for (const path of paths) {
+    const list = staged.entries.get(path);
+    if (!list) removed.push(path);
+    else if (list.some((entry) => entry.stage !== "0")) conflicts.push(path);
+    else entries.push([path, list[0]]);
+  }
+  for (const chunk of chunks(removed)) {
+    const r = await git(root, ["update-index", "--force-remove", "--", ...chunk], { env });
+    if (!r.ok) return r;
+  }
+  for (const chunk of chunks(entries, ([path]) => path.length * 3 + 120)) {
+    const r = await git(root, ["update-index", "--add", ...chunk.flatMap(([path, { mode, object }]) => ["--cacheinfo", mode, object, path])], { env });
+    if (!r.ok) return r;
+  }
+  const tree = await git(root, ["write-tree"], { env });
+  if (!tree.ok) return tree;
+  const odd = await outside(git, root, head, tree.out.trim(), paths);
+  if (!odd.ok) return odd;
+  const commit = await git(root, [...IDENTITY, "commit-tree", "--no-gpg-sign", tree.out.trim(), "-p", head, "-m", `Index of ${message}`, "-m", `Copy ${copy}`]);
+  if (!commit.ok) return commit;
+  return { ok: true, parents: [commit.out.trim()], conflicts };
+}
+
+// The real index's entries of `paths`: { ok, entries: Map(path → [{ mode, object, stage }]) }.
+// A path the index lacks has no key.
+async function indexEntries(git, root, paths) {
+  const found = new Map(), asked = new Set(paths);
+  for (const chunk of chunks(paths)) {
+    const r = await git.read(root, ["--literal-pathspecs", "ls-files", "-s", "-z", "--", ...chunk]);
+    if (!r.ok) return r;
+    // "<mode> <object> <stage>\t<path>"; a path names the files under a folder of that name too.
+    for (const line of r.out.split("\0")) {
+      const tab = line.indexOf("\t");
+      if (tab < 0 || !asked.has(line.slice(tab + 1))) continue;
+      const [mode, object, stage] = line.slice(0, tab).split(" ");
+      const path = line.slice(tab + 1);
+      found.set(path, [...(found.get(path) ?? []), { mode, object, stage }]);
+    }
+  }
+  return { ok: true, entries: found };
 }
 
 const changedWhileRecording = (path) => ({
@@ -119,8 +183,10 @@ export async function listSnapshots(git, root) {
   // reaches. -z ends the header and each status and path with NUL. The output is read
   // word by word: a status is always followed by its path, so a path is never taken for
   // anything else whatever bytes it holds, and a word that starts with \x01 where a status
-  // could be is the next entry's header (a status never does).
-  const r = await git.read(root, ["log", "-g", `--max-count=${LIST_LIMIT}`, "--format=%x01%H %ct", "--name-status", "--no-renames", "--root", "-z", "--no-color", SNAPSHOTS, "--"]);
+  // could be is the next entry's header (a status never does). A snapshot holding the
+  // index has two parents: without --diff-merges=first-parent (git 2.31) git lists no
+  // files for it; with it, the change against the first, the HEAD it was made on.
+  const r = await git.read(root, ["log", "-g", `--max-count=${LIST_LIMIT}`, "--format=%x01%H %ct", "--name-status", "--no-renames", "--root", "--diff-merges=first-parent", "-z", "--no-color", SNAPSHOTS, "--"]);
   if (!r.ok) {
     // Never rolled back: no such ref. Asked of git, not read from its words, which may be
     // in another language.

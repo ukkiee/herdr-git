@@ -64,22 +64,25 @@ async function shFolder(exec, folder, on, count) {
 //   folder stays cheap.
 //   gone: the folder isn't there (deleted, or the root moved). err: the reader's words.
 //   A machine without `sh` (a Windows host over ssh) is read with PowerShell.
+// Runs the sh reader, or the PowerShell one on a Windows window (this computer) and on a
+// machine where sh can't start (a Windows host over ssh). → { code, err } | the reader's
+// result; a throw becomes { code: -1, err }.
+async function readWith(on, platform, unix, windows) {
+  const why = (error) => String(error?.message ?? error);
+  try {
+    if (!on && platform === "windows") return await windows();
+    try { return await unix(); }
+    catch (error) {
+      if (on && why(error).includes("cannot start sh: program not found")) return await windows();
+      throw error;
+    }
+  } catch (error) { return { code: -1, err: why(error) }; }
+}
+
 export async function readFolder(exec, folder, { on = null, platform = null, limit = PER_FOLDER, room = TOTAL } = {}) {
   const keep = Math.max(0, Math.min(limit, room));
   const count = Math.max(limit, 0) + 1;
-  let r;
-  try {
-    if (!on && platform === "windows") r = await windowsFolder(exec, folder, on, count);
-    else {
-      try { r = await shFolder(exec, folder, on, count); }
-      catch (error) {
-        if (on && String(error?.message ?? error).includes("cannot start sh: program not found")) r = await windowsFolder(exec, folder, on, count);
-        else throw error;
-      }
-    }
-  } catch (error) {
-    return { ok: false, entries: [], limited: false, gone: false, err: String(error?.message ?? error) };
-  }
+  const r = await readWith(on, platform, () => shFolder(exec, folder, on, count), () => windowsFolder(exec, folder, on, count));
   if (r.code !== 0) return { ok: false, entries: [], limited: false, gone: r.code === 3, err: r.err };
   const entries = r.entries.slice(0, keep).sort((a, b) => Number(b.dir) - Number(a.dir) || byName(a.name, b.name));
   return { ok: true, entries, limited: r.entries.length > keep, gone: false, err: "" };
@@ -139,4 +142,49 @@ export async function readMarks(exec, folder, { on = null } = {}) {
     else if (kind === "!") put(entry.slice(2), "ignored");
   }
   return { ok: true, repo: where.repo, marks, err: "" };
+}
+
+// Every file below the current folder as "./path\0", .git skipped, links to folders not
+// followed (a loop would never end), stopping one past the limit. Exit 3: no such folder.
+const WALK = 'cd "$1" 2>/dev/null || exit 3; limit=$2; n=0; walk() { for p in "$1"/* "$1"/.[!.]* "$1"/..?*; do [ -e "$p" ] || [ -L "$p" ] || continue; [ "${p##*/}" = .git ] && continue; if [ -d "$p" ] && [ ! -L "$p" ]; then walk "$p"; elif [ ! -d "$p" ]; then printf "%s\\0" "$p"; n=$((n+1)); [ "$n" -gt "$limit" ] && exit 0; fi; done; }; walk .';
+
+async function shWalk(exec, folder, on, count) {
+  const r = await exec("sh", ["-c", WALK, "files", folder, String(count - 1)], { on });
+  if (r.code !== 0) return { code: r.code, err: (r.stderr ?? "").trim() };
+  return { code: 0, files: r.stdout.split("\0").filter(Boolean).map((p) => p.slice(2)) };
+}
+
+async function windowsWalk(exec, folder, on, count) {
+  const command = "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); & { param($p) if (-not (Test-Path -LiteralPath $p -PathType Container)) { exit 3 }; $root = (Get-Item -LiteralPath $p).FullName.TrimEnd('\\') + '\\'; @(Get-ChildItem -LiteralPath $p -Recurse -File -Force -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName.Substring($root.Length) } | Where-Object { $_ -notmatch '(^|\\\\)\\.git(\\\\|$)' } | Select-Object -First " + count + " | ForEach-Object { $_.Replace('\\', '/') }) | ConvertTo-Json -Compress } " + psQuote(folder);
+  const r = await exec("powershell", ["-NoProfile", "-Command", command], { on });
+  if (r.code !== 0) return { code: r.code, err: (r.stderr ?? "").trim() };
+  const parsed = JSON.parse(r.stdout || "[]");
+  return { code: 0, files: (Array.isArray(parsed) ? parsed : [parsed]).map(String) };
+}
+
+// readSearchList: the files the search box looks through, paths from `folder`, in no
+// particular order (files-tree.js rankSearch sorts).
+//   In a repository (repo: true): tracked files and untracked ones, not ignored ones and
+//   not tracked files already deleted from disk. Not limited.
+//   Outside one (repo: false): the folder walked, .git skipped, at most `limit` files
+//   (SEARCH_LIMIT); limited says there were more. A folder with hundreds of thousands of
+//   files takes as long as the walk, up to the limit.
+//   Reads only: nothing under .git is written.
+export async function readSearchList(exec, folder, { on = null, platform = null, limit = SEARCH_LIMIT } = {}) {
+  const git = makeGit(exec, on);
+  const where = await repoOf(git, folder);
+  if (where.ok && where.repo) {
+    const listed = await git.read(folder, ["ls-files", "-z", "--cached", "--others", "--exclude-standard"]);
+    if (!listed.ok) return { ok: false, repo: true, files: [], limited: false, err: listed.err };
+    const deleted = await git.read(folder, ["ls-files", "-z", "--deleted"]);
+    if (!deleted.ok) return { ok: false, repo: true, files: [], limited: false, err: deleted.err };
+    const gone = new Set(deleted.out.split("\0"));
+    // A conflicted path is listed once per stage; an untracked nested repository as "dir/".
+    const files = [...new Set(listed.out.split("\0"))].filter((p) => p && !p.endsWith("/") && !gone.has(p));
+    return { ok: true, repo: true, files, limited: false, err: "" };
+  }
+  const count = Math.max(limit, 0) + 1;
+  const r = await readWith(on, platform, () => shWalk(exec, folder, on, count), () => windowsWalk(exec, folder, on, count));
+  if (r.code !== 0) return { ok: false, repo: false, files: [], limited: false, err: r.err };
+  return { ok: true, repo: false, files: r.files.slice(0, Math.max(limit, 0)), limited: r.files.length > limit, err: "" };
 }

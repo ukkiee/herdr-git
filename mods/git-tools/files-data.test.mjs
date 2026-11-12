@@ -4,7 +4,7 @@ import { execFile, execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync, realpathSync, symlinkSync, readdirSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
-import { readFolder, readMarks } from "./files-data.js";
+import { readFolder, readMarks, readSearchList } from "./files-data.js";
 import { markLookup } from "./files-tree.js";
 
 const base = realpathSync(mkdtempSync(`${tmpdir()}/git-tools-files-`));
@@ -199,6 +199,76 @@ const gitState = (repo) => {
   const r = await readMarks(exec, dir);
   assert.deepEqual(r, { ok: true, repo: null, marks: {}, err: "" });
   assert.equal(markLookup(r.marks).mark("a.txt"), null);
+}
+
+const sorted = (list) => [...list].sort();
+
+// The search list inside a repository: tracked files and new files, not ignored ones, not
+// files deleted from disk, nothing under .git. Paths are from the folder searched.
+{
+  const repo = init("search-repo");
+  mkdirSync(`${repo}/src/deep`, { recursive: true });
+  writeFileSync(`${repo}/.gitignore`, "node_modules/\n*.log\n");
+  writeFileSync(`${repo}/top.txt`, "t");
+  writeFileSync(`${repo}/gone.txt`, "g");
+  writeFileSync(`${repo}/src/deep/a b.ts`, "a");
+  sh(repo, "git add -A && git commit -q -m base && rm gone.txt");
+  writeFileSync(`${repo}/src/새 파일.ts`, "n");
+  writeFileSync(`${repo}/src/line\nbreak.ts`, "n");
+  writeFileSync(`${repo}/src/debug.log`, "l");
+  mkdirSync(`${repo}/node_modules/pkg`, { recursive: true });
+  writeFileSync(`${repo}/node_modules/pkg/index.js`, "i");
+  const before = gitState(repo);
+
+  const r = await readSearchList(exec, repo);
+  assert.equal(r.ok, true);
+  assert.equal(r.repo, true);
+  assert.equal(r.limited, false);
+  assert.deepEqual(sorted(r.files), sorted([".gitignore", "top.txt", "src/deep/a b.ts", "src/새 파일.ts", "src/line\nbreak.ts"]));
+
+  const inner = await readSearchList(exec, `${repo}/src`);
+  assert.deepEqual(sorted(inner.files), sorted(["deep/a b.ts", "새 파일.ts", "line\nbreak.ts"]));
+  assert.equal(gitState(repo), before);
+}
+
+// Outside a repository the folder is walked: every file below it, links to files too,
+// nothing under a .git, and the walk stops at the limit and says so.
+{
+  const dir = folder("search-plain");
+  mkdirSync(`${dir}/a/b`, { recursive: true });
+  mkdirSync(`${dir}/proj/.git/objects`, { recursive: true });
+  mkdirSync(`${dir}/.hidden dir`);
+  writeFileSync(`${dir}/one.txt`, "1");
+  writeFileSync(`${dir}/a/two "q".txt`, "2");
+  writeFileSync(`${dir}/a/b/셋.txt`, "3");
+  writeFileSync(`${dir}/a/b/line\nbreak`, "4");
+  writeFileSync(`${dir}/proj/main.c`, "5");
+  writeFileSync(`${dir}/proj/.git/HEAD`, "ref");
+  writeFileSync(`${dir}/proj/.git/objects/x`, "x");
+  writeFileSync(`${dir}/.hidden dir/.env`, "6");
+  symlinkSync("one.txt", `${dir}/link.txt`);
+  symlinkSync("a", `${dir}/link-dir`);
+  const all = ["one.txt", "a/two \"q\".txt", "a/b/셋.txt", "a/b/line\nbreak", "proj/main.c", ".hidden dir/.env", "link.txt"];
+
+  const r = await readSearchList(exec, dir);
+  assert.equal(r.ok, true);
+  assert.equal(r.repo, false);
+  assert.equal(r.limited, false);
+  assert.deepEqual(sorted(r.files), sorted(all));
+
+  const exact = await readSearchList(exec, dir, { limit: all.length });
+  assert.equal(exact.limited, false);
+  assert.equal(exact.files.length, all.length);
+
+  const cut = await readSearchList(exec, dir, { limit: 3 });
+  assert.equal(cut.ok, true);
+  assert.equal(cut.limited, true);
+  assert.equal(cut.files.length, 3);
+  for (const f of cut.files) assert.equal(all.includes(f), true, f);
+
+  const missing = await readSearchList(exec, `${base}/no-such-folder`);
+  assert.equal(missing.ok, false);
+  assert.deepEqual(missing.files, []);
 }
 
 console.log("ok");

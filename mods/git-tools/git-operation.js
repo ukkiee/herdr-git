@@ -249,7 +249,7 @@ async function continueRun(git, root, { message = "", files = [] }, before) {
       // as an empty cherry-pick is, and the sequence (if any) goes on.
       const now = await readOperation(git, root);
       if (before.kind !== "merge" && now.ok && now.kind === before.kind && !now.conflicts.length && !now.staged.length) {
-        return git(root, [before.kind, "--skip"], { timeout: TIMEOUT, env: NO_EDITOR });
+        return { ...await git(root, [before.kind, "--skip"], { timeout: TIMEOUT, env: NO_EDITOR }), empty: true };
       }
       return r;
     }
@@ -260,7 +260,8 @@ async function continueRun(git, root, { message = "", files = [] }, before) {
 
 // runOperation(git, root, { type, ...args }) → { ok, code, out, err, msg?, outcome, operation }
 //   type: "continue" | "abort" | "skip". args: Continue's { message, files }.
-//   outcome: settle's word (above). ok: the outcome is done, stopped or empty.
+//   outcome: settle's word (above); "empty" also when Continue found the resolved commit
+//   already in and skipped it. ok: the outcome is done, stopped or empty.
 //   operation: readOperation afterwards, so the screen shows where things are now.
 //   A refusal before anything ran (nothing in progress, conflicts left) has outcome
 //   "refused" and changed nothing.
@@ -274,7 +275,9 @@ export async function runOperation(git, root, { type, ...args } = {}) {
   const run = await request.run(git, root, args, before);
   const after = await readOperation(git, root);
   const blocked = run.ok ? [] : await blockingFiles(git, root, type, before, run);
-  const outcome = settle(before, after, run, { blocked });
+  const settled = settle(before, after, run, { blocked });
+  // A Continue whose commit came out empty skipped it: said so, unless it stopped again.
+  const outcome = run.empty && settled === "done" ? "empty" : settled;
   return { ok: outcome === "done" || outcome === "stopped" || outcome === "empty", code: run.code, out: run.out ?? "", err: run.err ?? "", ...(run.msg ? { msg: run.msg } : {}), outcome, operation: after.ok ? after : null, ...(blocked.length ? { blocked } : {}) };
 }
 

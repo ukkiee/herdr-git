@@ -195,6 +195,189 @@ git checkout -q a`);
   assert.equal(here.kind, null);
 }
 
+// ---- Continue, Abort, Skip
+
+const where = (repo) => ({ head: head(repo), branch: branch(repo), states: states(repo), status: status(repo) });
+const parents = (repo) => sh(repo, "git rev-list --parents -n 1 HEAD").trim().split(" ").length - 1;
+const body = (repo) => { const raw = sh(repo, "git cat-file commit HEAD"); return raw.slice(raw.indexOf("\n\n") + 2); };
+const resolve = (repo, text = "done") => sh(repo, `printf '${text}\\n' > f.txt && git add f.txt`);
+
+// Continue while a file is still in conflict changes nothing and says why.
+for (const [name, cmd] of [["merge", "git merge side"], ["rebase", "git checkout -q side && git rebase main"], ["pick", "git cherry-pick side~1"]]) {
+  const repo = init(`continue-early-${name}`);
+  start(repo, cmd);
+  const before = where(repo);
+  const r = await continueOperation(git, repo, { message: "x" });
+  assert.equal(r.ok, false, name);
+  assert.equal(r.outcome, "refused", name);
+  assert.deepEqual(r.msg, { key: "ops.conflictsLeft", args: { n: 1 } }, name);
+  assert.equal(translator("en")(r.msg.key, r.msg.args), r.err);
+  assert.deepEqual(where(repo), before, name);
+}
+
+// Continue a merge: one commit with both parents and the given message. A change the
+// merge never touched stays in the work tree; a checked one goes into the commit.
+{
+  const repo = init("continue-merge");
+  sh(repo, "echo mine > g.txt && echo new > u.txt");
+  start(repo, "git merge side");
+  resolve(repo);
+  const r = await continueOperation(git, repo, { message: "merged by hand\n\n#42 stays", files: [{ path: "u.txt", status: "unversioned" }] });
+  assert.equal(r.ok, true, r.err);
+  assert.equal(r.outcome, "done");
+  assert.equal(r.operation.kind, null);
+  assert.equal(parents(repo), 2);
+  assert.equal(body(repo), "merged by hand\n\n#42 stays\n");
+  assert.deepEqual(lines(sh(repo, "git show --format= --name-only HEAD --first-parent")).sort(), ["f.txt", "h.txt", "u.txt"]);
+  assert.deepEqual(where(repo).states, []);
+  assert.deepEqual(status(repo), [" M g.txt"]);
+}
+
+// Without a message of its own, Continue commits the operation's (here a cherry-pick's
+// original message), and a sequence goes on to the end.
+{
+  const repo = init("continue-pick-several");
+  start(repo, "git cherry-pick side side~1");
+  resolve(repo);
+  const r = await continueOperation(git, repo, {});
+  assert.equal(r.outcome, "done", r.err);
+  assert.deepEqual(subjects(repo), ["s1", "s2", "m", "base"]);
+  assert.deepEqual(states(repo), []);
+}
+{
+  const repo = init("continue-revert-several");
+  start(repo, "echo k > k.txt && git add k.txt && git commit -q -m n && printf 'two\\n' > f.txt && git commit -q -am two && git revert --no-edit HEAD~1 HEAD~2");
+  resolve(repo);
+  const r = await continueOperation(git, repo, {});
+  assert.equal(r.outcome, "done", r.err);
+  assert.deepEqual(subjects(repo), ['Revert "m"', 'Revert "n"', "two", "n", "m", "base"]);
+  assert.deepEqual(states(repo), []);
+}
+
+// A rebase goes on to the end, on its branch, each commit with its own message; one
+// changed in the box is the one recorded.
+{
+  const repo = init("continue-rebase");
+  start(repo, "git checkout -q side && git rebase main");
+  resolve(repo);
+  const r = await continueOperation(git, repo, { message: "s1" });
+  assert.equal(r.outcome, "done", r.err);
+  assert.deepEqual([branch(repo), subjects(repo), states(repo)], ["side", ["s2", "s1", "m", "base"], []]);
+
+  const again = init("continue-rebase-message");
+  start(again, "git checkout -q side && git rebase main");
+  resolve(again);
+  const said = await continueOperation(git, again, { message: "s1, fixed\n\n#42 and \"quotes\" $HOME" });
+  assert.equal(said.outcome, "done", said.err);
+  assert.equal(sh(again, "git log -1 --format=%B side~1"), "s1, fixed\n\n#42 and \"quotes\" $HOME\n\n");
+  assert.deepEqual(subjects(again), ["s2", "s1, fixed", "m", "base"]);
+}
+
+// A rebase that stops again at the next commit: stopped, with where it is now.
+{
+  const repo = init("continue-rebase-stops");
+  sh(repo, "git checkout -q side && printf 'side again\\n' > f.txt && git commit -q -am s3 && git checkout -q main");
+  start(repo, "git checkout -q side && git rebase main");
+  resolve(repo);
+  const r = await continueOperation(git, repo, {});
+  assert.equal(r.ok, true, r.err);
+  assert.equal(r.outcome, "stopped");
+  assert.equal(r.operation.kind, "rebase");
+  assert.equal(r.operation.current.subject, "s3");
+  assert.deepEqual(r.operation.step, { n: 3, total: 3 });
+}
+
+// A cherry-pick resolved to what HEAD already has: nothing to commit, so it is skipped and
+// nothing stays in progress.
+{
+  const repo = init("continue-empty");
+  start(repo, "git cherry-pick side~1");
+  resolve(repo, "main");
+  const r = await continueOperation(git, repo, {});
+  assert.equal(r.outcome, "empty", r.err);
+  assert.deepEqual([subjects(repo), states(repo), status(repo)], [["m", "base"], [], []]);
+}
+
+// Continue never waits for an editor, even where the repository's editor and GIT_EDITOR
+// are a command that fails.
+{
+  const saved = process.env.GIT_EDITOR;
+  process.env.GIT_EDITOR = "false";
+  try {
+    for (const [name, cmd] of [["merge", "git merge side"], ["rebase", "git checkout -q side && git rebase main"], ["revert", "printf 'two\\n' > f.txt && git commit -q -am two && git revert --no-edit HEAD~1"]]) {
+      const repo = init(`editor-${name}`);
+      sh(repo, "git config core.editor false");
+      start(repo, cmd);
+      resolve(repo);
+      const r = await continueOperation(git, repo, {});
+      assert.equal(r.outcome, "done", `${name}: ${r.err}`);
+      assert.deepEqual(states(repo), [], name);
+    }
+  } finally {
+    if (saved === undefined) delete process.env.GIT_EDITOR;
+    else process.env.GIT_EDITOR = saved;
+  }
+}
+
+// Abort goes back to where the operation started: HEAD and branch. A change the merge
+// never touched stays.
+{
+  const repo = init("abort-merge");
+  sh(repo, "echo mine > g.txt");
+  const before = { head: head(repo), branch: branch(repo) };
+  start(repo, "git merge side");
+  const r = await abortOperation(git, repo);
+  assert.equal(r.outcome, "done", r.err);
+  assert.deepEqual({ head: head(repo), branch: branch(repo) }, before);
+  assert.deepEqual([states(repo), status(repo)], [[], [" M g.txt"]]);
+
+  const rebase = init("abort-rebase");
+  sh(rebase, "git checkout -q side");
+  const was = head(rebase);
+  start(rebase, "git rebase main");
+  assert.equal((await abortOperation(git, rebase)).outcome, "done");
+  assert.deepEqual([head(rebase), branch(rebase), states(rebase)], [was, "side", []]);
+
+  // Several cherry-picks: the one already made is taken back too.
+  const picks = init("abort-picks");
+  const at = head(picks);
+  start(picks, "git cherry-pick side side~1");
+  assert.notEqual(head(picks), at);
+  assert.equal((await abortOperation(git, picks)).outcome, "done");
+  assert.deepEqual([head(picks), states(picks), status(picks)], [at, [], []]);
+
+  const none = init("abort-none");
+  const no = await abortOperation(git, none);
+  assert.deepEqual([no.ok, no.outcome, no.msg], [false, "refused", { key: "ops.nothingToAbort" }]);
+}
+
+// Skip leaves out the stopped commit only: the rest of the rebase or the sequence goes on.
+{
+  const repo = init("skip-rebase");
+  start(repo, "git checkout -q side && git rebase main");
+  const r = await skipOperation(git, repo);
+  assert.equal(r.outcome, "done", r.err);
+  assert.deepEqual([branch(repo), subjects(repo), states(repo)], ["side", ["s2", "m", "base"], []]);
+
+  const picks = init("skip-picks");
+  start(picks, "git cherry-pick side~1 side");
+  assert.equal((await skipOperation(git, picks)).outcome, "done");
+  assert.deepEqual([subjects(picks), states(picks)], [["s2", "m", "base"], []]);
+
+  const reverts = init("skip-reverts");
+  start(reverts, "echo k > k.txt && git add k.txt && git commit -q -m n && printf 'two\\n' > f.txt && git commit -q -am two && git revert --no-edit HEAD~2 HEAD~1");
+  assert.equal((await skipOperation(git, reverts)).outcome, "done");
+  assert.deepEqual([subjects(reverts), states(reverts)], [['Revert "n"', "two", "n", "m", "base"], []]);
+
+  // One cherry-pick has nothing after it to go on to: Skip isn't offered.
+  const one = init("skip-one");
+  start(one, "git cherry-pick side~1");
+  const before = where(one);
+  const no = await skipOperation(git, one);
+  assert.deepEqual([no.ok, no.outcome, no.msg], [false, "refused", { key: "ops.nothingToSkip" }]);
+  assert.deepEqual(where(one), before);
+}
+
 // git can't be reached: a result with the reason, not an exception.
 {
   const down = await readOperation(makeGit(() => Promise.reject(new Error("machine vps is unreachable")), "vps"), "/repo");

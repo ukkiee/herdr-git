@@ -25,6 +25,13 @@
 //                            Last commit group
 //   host.writeFailed(t, cx)  shows a write's failure in the panel's write strip: a commit
 //                            that fails after the panel left its repository
+//   host.operation()         the operation in progress and the files in conflict
+//                            (git-operation.js readOperation), or null when not read
+//
+// While an operation is in progress Commit goes on with it (git-commit.js), Amend is off,
+// the message box holds the operation's message until the person writes their own, and
+// a line above it names the operation with its Abort and Skip. While any file is in
+// conflict Commit is off and says why.
 //
 // Commands the panel passes on (`git-tools.<name>`, for scripts; only a copy opened with
 // props.folder obeys them, see command()):
@@ -33,10 +40,11 @@
 
 import { div } from "gpui-kit";
 import { h_flex, v_flex, TextareaState } from "gpui-base";
-import { theme, props } from "herdr";
+import { theme, props, notify } from "herdr";
 import { commit, lastMessage, headIsPushed } from "./git-commit.js";
+import { abortOperation, skipOperation } from "./git-operation.js";
 import { openPush } from "./view-push.js";
-import { broadcast, button, checkbox, errorStrip, textBox, writingOn, fromRepo, sentence } from "./ui.js";
+import { broadcast, button, checkbox, errorStrip, textBox, writingOn, fromRepo, sentence, openMenu } from "./ui.js";
 import { sameRepo } from "./lock.js";
 
 // The repository a message and Amend belong to.
@@ -57,6 +65,8 @@ export default class CommitForm {
     this.error = null;
     this.where = null; // the repository the message belongs to
     this.drafts = new Map();
+    // The operation whose message prefill() put in the box ("" for none), and that message.
+    this.filledKey = ""; this.filled = null;
     this.typing = false;
     this.text = this.makeText("");
     this.handle = cx.focus_handle();
@@ -100,10 +110,29 @@ export default class CommitForm {
     this.where = where;
     this.amend = false; this.pushed = false; this.error = null;
     this.text.set_value(this.drafts.get(where) ?? "");
+    // The message put in for the last repository's operation isn't this one's.
+    this.filledKey = ""; this.filled = null;
   }
 
-  // Amend only counts while there is a commit to amend.
-  amending() { return this.amend && Boolean(this.host.hasHead); }
+  // The operation in progress on the shown repository, or null.
+  inProgress() { const op = this.host.operation?.(); return op?.kind ? op : null; }
+  conflictCount() { return this.host.operation?.()?.conflicts?.length ?? 0; }
+
+  // Amend only counts while there is a commit to amend and no operation in progress.
+  amending() { return this.amend && Boolean(this.host.hasHead) && !this.inProgress(); }
+
+  // The operation's message goes into the box when it starts (or the panel first sees it),
+  // unless the person has written something; it leaves with the operation if untouched.
+  prefill() {
+    const op = this.inProgress();
+    const key = op ? `${this.where}:${op.kind}:${op.current?.hash ?? ""}` : "";
+    if (key === this.filledKey) return;
+    const now = this.text.value();
+    if (!op) { if (this.filled !== null && now === this.filled) this.text.set_value(""); }
+    else if (!now.trim() || now === this.filled) this.text.set_value(op.message);
+    this.filledKey = key;
+    this.filled = op ? op.message : null;
+  }
 
   // Whether Amend is on for `repo` ({ root, on }). False for a repository the form hasn't
   // followed to yet: the panel's read reaches a new repository before the next render's
@@ -116,14 +145,17 @@ export default class CommitForm {
     if (!host.repo) return host.t("commit.notRepository");
     const writing = host.writeBlock();
     if (writing) return writing;
-    if (!count && !this.amending()) return host.t("commit.selectFiles");
+    const conflicts = this.conflictCount();
+    if (conflicts) return host.t("ops.conflictsLeft", { n: conflicts });
+    // Continuing commits what the operation staged, even with nothing else checked.
+    if (!count && !this.amending() && !this.inProgress()) return host.t("commit.selectFiles");
     if (!this.text.value().trim()) return host.t("commit.specifyMessage");
     return null;
   }
 
   toggleAmend(cx) {
     const host = this.host, repo = host.repo;
-    if (!repo || !host.hasHead || host.writeBlock()) return;
+    if (!repo || !host.hasHead || host.writeBlock() || this.inProgress()) return;
     this.amend = !this.amend;
     this.pushed = false;
     host.amendChanged(cx);
@@ -147,10 +179,10 @@ export default class CommitForm {
     this.follow();
     const files = host.included();
     if (this.blocked(files.length)) return;
-    const message = this.text.value(), amend = this.amending(), where = this.where;
+    const message = this.text.value(), amend = this.amending(), where = this.where, going = this.inProgress();
     // What other copies show while this runs ("Another git operation is running: …"), each
     // in its own language.
-    if (!host.setBusy({ key: amend ? "commit.amending" : "commit.committing" }, cx)) return;
+    if (!host.setBusy({ key: going ? "ops.continuing" : amend ? "commit.amending" : "commit.committing" }, cx)) return;
     this.error = null;
     this.running = push ? "push" : "commit";
     cx.spawn(async (cx) => {
@@ -171,8 +203,10 @@ export default class CommitForm {
         host.committed(cx, repo);
         host.setBusy(null, cx);
         broadcast({ type: "changed", root: repo.root });
-        // Even from another repository: the dialog names the branch and where it goes.
-        if (push) openPush({ root: repo.root, on: repo.on, owner: host.bus.id, lang: host.lang });
+        this.told(r, going?.kind);
+        // Even from another repository: the dialog names the branch and where it goes. Not
+        // while the operation stopped again: there is nothing finished to push yet.
+        if (push && r.outcome !== "stopped") openPush({ root: repo.root, on: repo.on, owner: host.bus.id, lang: host.lang });
       } else {
         // The message and Included stay as they are for another try. The form shows the
         // error only while the panel still shows that repository; otherwise (moved on, or
@@ -185,6 +219,55 @@ export default class CommitForm {
         // A hook may have rewritten files before failing.
         host.refresh(cx);
       }
+      cx.notify();
+    });
+  }
+
+  // The notification for how an operation's request ended, when it is worth one: it
+  // stopped again on a conflict, or the commit was already in and was skipped.
+  // kind: the operation the request was made on.
+  told(r, kind) {
+    const t = this.host.t, op = r.operation;
+    if (r.outcome === "stopped" && op?.kind) notify({ title: t("ops.stopped"), body: this.label(op), level: "warning" });
+    else if (r.outcome === "empty") notify({ title: kind === "revert" ? t("ops.emptyRevertTitle") : t("ops.emptyTitle"), body: t("ops.emptyBody"), level: "info" });
+  }
+
+  // The line above the message while an operation is in progress: "Merging side", "Rebasing
+  // feature (1/2)".
+  label(op) {
+    const t = this.host.t, subject = op.current ? `'${op.current.subject || op.current.hash.slice(0, 8)}'` : "";
+    if (op.kind === "merge") return t("ops.merging", { name: op.target ?? "" });
+    if (op.kind === "rebase") return op.step?.total ? t("ops.rebasingStep", { name: op.rebasing ?? "HEAD", n: op.step.n, total: op.step.total }) : t("ops.rebasing", { name: op.rebasing ?? "HEAD" });
+    if (op.kind === "cherry-pick") return t("ops.cherryPicking", { name: subject });
+    return t("ops.reverting", { name: subject });
+  }
+
+  // Abort or Skip, under the repository's lock like a commit. Abort asks first, by its
+  // name in a one-item menu: it throws away the resolution work.
+  operate(type, cx) {
+    const host = this.host, repo = host.repo, op = this.inProgress();
+    if (!repo || !op || host.writeBlock()) return;
+    const abortKey = { merge: "ops.abortMerge", rebase: "ops.abortRebase", "cherry-pick": "ops.abortCherryPick", revert: "ops.abortRevert" }[op.kind];
+    cx.spawn(async (cx) => {
+      if (type === "abort") {
+        const sure = await openMenu(host.bus, [{ label: host.t(abortKey), value: "abort" }], { lang: host.lang });
+        if (sure !== "abort") return;
+      }
+      if (!sameRepo(repo, host.repo) || !host.setBusy({ key: type === "abort" ? "ops.aborting" : "ops.skipping" }, cx)) return;
+      this.error = null;
+      let r;
+      try { r = await (type === "abort" ? abortOperation : skipOperation)(repo.git, repo.root); }
+      catch (error) { r = { ok: false, err: String(error?.message ?? error) }; }
+      host.setBusy(null, cx);
+      // Even a refused one may have moved things (a hook after the commit): read again.
+      broadcast({ type: "changed", root: repo.root });
+      if (r.ok) this.told(r, op.kind);
+      else {
+        const err = sentence(host.t, r.msg, r.err) || host.t("commit.commitFailed");
+        if (sameRepo(repo, host.repo)) this.error = err;
+        else host.writeFailed(fromRepo(host, repo, err), cx);
+      }
+      host.refresh(cx);
       cx.notify();
     });
   }
@@ -203,7 +286,8 @@ export default class CommitForm {
 
   render(cx) {
     this.follow();
-    const t = theme(), host = this.host;
+    this.prefill();
+    const t = theme(), host = this.host, op = this.inProgress();
     // A new message box can't be made while drawing; the next turn makes it.
     if (this.textLang !== host.lang && !this.relabeling) {
       this.relabeling = true;
@@ -215,9 +299,9 @@ export default class CommitForm {
     // no button here (a dialog's Push or Rollback).
     const writing = host.writeBlock(), spinning = this.running && writingOn(host, host.repo) ? this.running : null;
     const elsewhere = writing && !spinning ? writing : null;
-    const canAmend = Boolean(host.hasHead) && !writing;
+    const canAmend = Boolean(host.hasHead) && !writing && !op;
     const why = this.blocked(), amending = this.amending();
-    const whyNoAmend = canAmend ? null : host.hasHead ? writing : host.t("commit.noCommitsToAmend");
+    const whyNoAmend = canAmend ? null : !host.hasHead ? host.t("commit.noCommitsToAmend") : op ? host.t("ops.noAmend") : writing;
     const amendRow = h_flex().id("commit-amend").flex_none().gap(6).items_center()
       .child(checkbox("commit-amend-check", this.amending(), t, { disabled: !canAmend, onClick: (_e, cx) => this.toggleAmend(cx) }))
       .child(div().text_color(canAmend ? t.foreground : t.dim).child(host.t("commit.amend")));
@@ -238,15 +322,24 @@ export default class CommitForm {
           div().id("commit-amend-warning").w_full().min_w(0).text_size(12).text_color(t.ansi3).child(host.t("commit.amendWarning"))))
         // No second confirmation: the sentence is on screen for as long as HEAD is detached,
         // and Commit stays one press.
-        .when(Boolean(host.detached), (el) => el.child(
+        // A rebase runs on a detached HEAD by design: its own line says what goes on instead.
+        .when(Boolean(host.detached) && op?.kind !== "rebase", (el) => el.child(
           div().id("commit-detached-warning").w_full().min_w(0).text_size(12).text_color(t.ansi3).child(host.t("commit.detachedWarning"))))
+        .when(Boolean(op), (el) => el.child(h_flex().id("commit-operation").w_full().min_w(0).flex_wrap().gap(6).items_center()
+          .child(div().flex_1().min_w(0).truncate().text_size(12).text_color(t.ansi3).child(op ? `⚠ ${this.label(op)}` : ""))
+          .child(button("commit-op-abort", host.t({ merge: "ops.abortMerge", rebase: "ops.abortRebase", "cherry-pick": "ops.abortCherryPick", revert: "ops.abortRevert" }[op?.kind] ?? "ops.abortMerge"), t, {
+            disabled: Boolean(writing), title: writing ?? undefined, onClick: (_e, cx) => this.operate("abort", cx),
+          }))
+          .when(Boolean(op?.canSkip), (el) => el.child(button("commit-op-skip", host.t("ops.skipCommit"), t, {
+            disabled: Boolean(writing), title: writing ?? undefined, onClick: (_e, cx) => this.operate("skip", cx),
+          })))))
         .child(textBox("commit-message", this.text, t, { focused: this.typing }))
         // With Amend on the labels are longer: "Amend Commit" and "Amend Commit and Push…"
         // don't fit side by side at the panel's 280px, so the second one wraps under the
         // first instead of running over it.
         .child(h_flex().w_full().min_w(0).flex_wrap().gap(8).items_center()
           .child(button("commit-run", host.t(amending ? "commit.amendCommit" : "commit.commit"), t, {
-            kind: "primary", disabled: Boolean(why), busy: spinning === "commit", title: why ?? host.t(amending ? "commit.amendCommitTitle" : "commit.commitTitle"),
+            kind: "primary", disabled: Boolean(why), busy: spinning === "commit", title: why ?? (op ? host.t("ops.continueTitle") : host.t(amending ? "commit.amendCommitTitle" : "commit.commitTitle")),
             onClick: (_e, cx) => this.run(false, cx),
           }))
           .child(button("commit-run-push", host.t(amending ? "commit.amendCommitAndPush" : "commit.commitAndPush"), t, {

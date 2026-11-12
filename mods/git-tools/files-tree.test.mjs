@@ -160,6 +160,19 @@ const entries = new Map([
   assert.deepEqual([...keepPressed(read, new Map(), new Set(["a"])).keys()].sort(), ["", "a"]);
 }
 
+// A refresh whose read of an open folder failed doesn't keep the old reads of the open
+// folders below it, nor a read a press made below it meanwhile: under a failed folder
+// nothing is shown, so nothing there may count toward the cut or the room left.
+{
+  const fresh = (name) => ({ ok: true, entries: [{ name, dir: true }], limited: true });
+  const denied = { ok: false, entries: [], limited: false, gone: false, denied: true };
+  const read = new Map([["", fresh("p")], ["p", denied], ["q", fresh("r")]]);
+  const now = new Map([["", fresh("p")], ["p", fresh("c")], ["p/c", fresh("d")], ["p/c/d", fresh("e")], ["p/x", fresh("y")], ["q", fresh("r")], ["q/r", fresh("s")]]);
+  const kept = keepPressed(read, now, new Set(["p", "p/c", "p/c/d", "p/x", "q", "q/r"]));
+  assert.deepEqual([...kept.keys()].sort(), ["", "p", "q", "q/r"]);
+  assert.equal(kept.get("p"), denied);
+}
+
 // The keys skip a "reading" row: it can't be chosen, and right on a folder still being
 // read stays on it.
 {

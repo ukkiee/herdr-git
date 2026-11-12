@@ -111,13 +111,21 @@ export function visibleRows(entries, open, failed = new Set()) {
 //   a press may have read a folder into it while the refresh ran. open: the folders open
 //   now.
 //   → Map: the refresh's reads, plus what `now` has for folders the refresh didn't read,
-//   keeping only open folders and the root (""). Taken with no wait between it and
+//   keeping only open folders and the root (""), and only those whose every parent folder
+//   is kept and read fine: below a failed folder nothing is shown, so an older read there
+//   must not count toward the cut or the room left. Taken with no wait between it and
 //   putting the result in place, so no press lands in between and is lost.
 export function keepPressed(read, now, open) {
   const out = new Map();
   const kept = (path) => !path || open.has(path);
   for (const [path, folder] of read) if (kept(path)) out.set(path, folder);
   for (const [path, folder] of now) if (!read.has(path) && kept(path)) out.set(path, folder);
+  const reachable = (path) => {
+    if (!path) return true;
+    const parent = path.slice(0, Math.max(0, path.lastIndexOf("/")));
+    return out.get(parent)?.ok === true && reachable(parent);
+  };
+  for (const path of [...out.keys()]) if (!reachable(path)) out.delete(path);
   return out;
 }
 

@@ -24,7 +24,9 @@ import { serveDeletedBranches } from "./view-deleted-branches.js";
 import LogBranches from "./log-branches.js";
 import LogFilters from "./log-filters.js";
 import LogList from "./log-list.js";
-import LogDetails from "./log-details.js";
+import LogDetails, { copyRevision, checkoutCommit, newBranchAt } from "./log-details.js";
+import { menuItems } from "./log-menus.js";
+import { NONE, pickCommit, pickForMenu, keepPicked, pickedInOrder } from "./log-select.js";
 
 // Column widths, px. The Commit list takes what the side columns leave and never gets
 // narrower than LIST_MIN: when the panel is too narrow, Commit details goes first, then
@@ -50,6 +52,37 @@ const store = (column, width) => { try { localStorage.setItem(column.key, String
 // Fetch is one of them: it moves remote branches and prunes the gone ones.
 const WRITES = new Set(["branches-checkout", "branches-delete", "details-checkout-revision", "log-fetch", "branches-fetch", "log-restore-branch"]);
 
+// What each menu and toolbar item of the Log panel does (log-menus.js has the items, their
+// order and names). An item shows only when it is here. Each gets (host, target, cx):
+//   commit.*   target: the commits picked, newest first
+//   file.*     target: Commit details' file row
+//   branch.*   target: a branch row's { name, from, scope, current } (log-branches.js target)
+//   toolbars   target: the Branch tree's cursor branch, or nothing
+const ACTIONS = {
+  "commit.copyRevision": (host, commits, cx) => copyRevision(commits, cx),
+  "commit.checkoutRevision": (host, commits, cx) => checkoutCommit(host, commits[0], cx),
+  "commit.newBranch": (host, commits) => newBranchAt(host, commits[0]),
+  "file.showDiff": (host, m) => host.details.showDiff(m),
+  "details.expandAll": (host, _m, cx) => host.details.expandAll(cx),
+  "details.collapseAll": (host, _m, cx) => host.details.collapseAll(cx),
+  "branch.checkout": (host, b, cx) => host.branches.checkout(b, cx),
+  "branch.newFrom": (host, b, cx) => host.branches.newBranch(b, cx),
+  "branch.delete": (host, b, cx) => host.branches.remove(b, cx),
+  "branches.new": (host, _b, cx) => host.branches.newBranch(null, cx),
+  "branches.delete": (host, b, cx) => host.branches.remove(b, cx),
+  "branches.deleted": (host, _b, cx) => host.branches.deletedBranches(cx),
+  "branches.fetch": (host, _b, cx) => host.fetch(cx),
+  "branches.expandAll": (host, _b, cx) => host.branches.expandAll(cx),
+  "branches.collapseAll": (host, _b, cx) => host.branches.collapseAll(cx),
+  "log.refresh": (host, _t, cx) => host.refresh(cx),
+  "log.fetch": (host, _t, cx) => host.fetch(cx),
+  "log.hide": () => toggleLogPanel(),
+};
+const handled = (id) => Object.prototype.hasOwnProperty.call(ACTIONS, id);
+
+// The Log toolbar's icons, by item.
+const LOG_ICONS = { "log.refresh": "refresh", "log.fetch": "fetch", "log.hide": "x" };
+
 export default class LogView {
   init(p, cx) {
     this.fixed = p.folder ? { folder: p.folder, on: p.on ?? null } : null;
@@ -57,7 +90,9 @@ export default class LogView {
     this.repo = null; // { git, root, on, folder }
     this.branch = null; // the ref the list is limited to
     this.filterArgs = []; // extra `git log` arguments from the filter row
-    this.selected = null; // the selected commit
+    this.selected = null; // the commit last clicked among those picked (picks.lead)
+    this.picks = NONE; // the commits picked in the Commit list (log-select.js)
+    this.detailsOf = ""; // the hashes Commit details was last told to show
     this.busy = null; // the work of the git write running now ({ key }, ui.js takeWrite)
     this.held = null; // the repository this panel's write lock is on (ui.js takeWrite)
     this.error = null;
@@ -108,14 +143,72 @@ export default class LogView {
     this.select(hash, cx);
   }
 
-  // hash: a commit in the list, or null. Commit details hears about it only when the
-  // selection moves to another commit (not when a reload reads the same one again).
+  // hash: a commit in the list, picked alone, or null: nothing picked. Commit details hears
+  // about it only when the commits picked change (not when a reload reads them again).
   select(hash, cx) {
-    const commit = hash ? this.list.find(hash) : null;
-    const moved = (commit?.hash ?? null) !== (this.selected?.hash ?? null);
-    this.selected = commit;
-    if (moved) this.details.show(commit, cx);
+    this.picks = hash && this.list.find(hash) ? pickCommit(NONE, hash, {}, this.listIndex()) : NONE;
+    this.settle(cx);
+  }
+
+  // A click with Shift (a range) or Cmd (one more, one fewer) on a commit row.
+  pickWith(hash, mods, cx) {
+    this.jumpTurn++;
+    this.picks = pickCommit(this.picks, hash, mods, this.listIndex());
+    this.settle(cx);
+  }
+
+  // A right-click: the menu acts on what is picked when the row is one of them.
+  pickForMenu(hash, cx) {
+    this.jumpTurn++;
+    this.picks = pickForMenu(this.picks, hash);
+    this.settle(cx);
+  }
+
+  // The list was read again: commits still in it stay picked.
+  keepPicks(cx) {
+    const at = (h) => this.list.index.get(h);
+    this.picks = keepPicked(this.picks, (h) => at(h) !== undefined, at);
+    this.settle(cx);
+  }
+
+  isPicked(hash) { return this.picks.picked.has(hash); }
+
+  // The commits picked, newest first, as the list has them now.
+  pickedCommits() {
+    return pickedInOrder(this.picks, (h) => this.list.index.get(h)).map((h) => this.list.find(h));
+  }
+
+  listIndex() {
+    const { list } = this;
+    return { at: (h) => list.index.get(h), hashAt: (i) => list.rows[i]?.commit.hash };
+  }
+
+  // `selected` follows the lead (a newly read object after a reload: Commit details sees
+  // that and reads the containing branches again); Commit details is told when the commits
+  // picked are others now.
+  settle(cx) {
+    const commits = this.pickedCommits(), key = commits.map((c) => c.hash).join(" ");
+    this.selected = this.picks.lead ? this.list.find(this.picks.lead) : null;
+    if (key !== this.detailsOf) {
+      this.detailsOf = key;
+      if (commits.length > 1) this.details.showMany(commits, cx);
+      else this.details.show(commits[0] ?? null, cx);
+    }
     cx.notify();
+  }
+
+  // ---- menus and toolbars (log-menus.js, ACTIONS)
+
+  // items(menu, ctx) → what that menu or toolbar shows now: the model's items this panel does.
+  items(menu, ctx) { return menuItems(menu, handled, { fixed: Boolean(this.fixed), ...ctx }); }
+
+  // Runs the item `id` on `target`.
+  run(id, target, cx) { if (handled(id)) ACTIONS[id](this, target, cx); }
+
+  // An item's tooltip: its reason when it is off, else its name.
+  itemTitle(it) {
+    if (it.why) return it.why.text ?? this.t(it.why.key, it.why.args);
+    return this.t(it.key, it.args);
   }
 
   // A hash jump takes a turn (beginJump) before its first read and checks it after every
@@ -312,7 +405,7 @@ export default class LogView {
     if (repo && this.deleted && !sameRepo(this.deleted.repo, repo)) this.deleted = null;
     this.branch = null;
     this.refs = null;
-    if (this.selected) { this.selected = null; this.details.show(null, cx); }
+    if (this.picks.picked.size || this.selected) { this.picks = NONE; this.selected = null; this.detailsOf = ""; this.details.show(null, cx); }
     if (!repo) { this.list.reload(cx); return; }
     this.watch(repo, cx);
   }
@@ -475,13 +568,17 @@ export default class LogView {
           // so a cut keeps it; the full sentence is the tooltip.
           .when(Boolean(writing), (el) => el.child(div().id("log-writing").flex_initial().min_w(0).max_w(320).truncate().px(6).text_size(12).text_color(t.muted)
             .tooltip(writing ?? "").child(writeLabel ?? "")))
-          .child(iconButton("log-refresh", "refresh", t, { title: this.t("log.refresh"), busy: loading, onClick: (_e, cx) => this.refresh(cx) }))
-          .child(iconButton("log-fetch", "fetch", t, { title: writing ?? this.t("log.fetch"), disabled: Boolean(writing), busy: this.writingHere()?.key === "log.fetching", onClick: (_e, cx) => this.fetch(cx) }))
-          .when(!this.fixed, (el) => el.child(iconButton("log-hide", "x", t, { title: this.t("log.hide"), onClick: () => toggleLogPanel() }))))
+          .children(this.items("logTools", { writing }).map((it) => this.toolButton(it, t, it.id === "log.refresh" && loading))))
         .child(div().flex_1().min_h(0).w_full().child(this.list.render(cx))))
       .when(c.showDetails, (el) => el
         .child(this.split("log-split-details", "details", t))
         .child(div().id("log-details").flex_none().w(c.details).h_full().min_h(0).overflow_hidden().child(this.details.render(cx))));
+  }
+
+  // A Log toolbar item as a button. Element ids keep the item's name ("log-refresh").
+  toolButton(it, t, spinning = false) {
+    const busy = spinning || (it.work !== null && this.writingHere()?.key === it.work);
+    return iconButton(it.id.replace(".", "-"), LOG_ICONS[it.id] ?? "file", t, { title: this.itemTitle(it), disabled: it.disabled, busy, onClick: (_e, cx) => this.run(it.id, null, cx) });
   }
 
   // Another folder to follow, or changes that arrived while the panel was hidden: taken

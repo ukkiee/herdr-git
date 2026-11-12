@@ -12,10 +12,18 @@
 //   host.setBranch(ref, cx)    sets it (null clears) and reads the list again
 //   host.filterArgs            extra `git log` arguments from the filter row ([] when none)
 //   host.setFilterArgs(a, cx)  sets them and reads the list again
-//   host.selected              the selected commit (as git-log.js returns it), or null
-//   host.select(hash, cx)      selects a commit that is in the list (null clears)
+//   host.selected              the commit last clicked among those picked (as git-log.js
+//                              returns it), or null: what a one-commit action works on
+//   host.select(hash, cx)      picks a commit that is in the list, alone (null clears)
 //   host.pick(hash, cx)        the same for the person's own pick: a hash jump still
 //                              running is dropped
+//   host.pickWith(hash, { shift, cmd }, cx), host.pickForMenu(hash, cx), host.keepPicks(cx):
+//                              Shift and Cmd clicks, a right-click, a list read again
+//                              (log-select.js)
+//   host.picks, host.isPicked(hash), host.pickedCommits() (newest first)
+//   host.items(menu, ctx)      a menu's or toolbar's items now (log-menus.js menuItems with
+//                              the actions this panel does); host.run(id, target, cx) runs
+//                              one; host.itemTitle(item) is its tooltip
 //   host.beginJump()           a new hash jump's turn; host.jumpLive(turn) is false once
 //                              a newer jump, search, filter, pick or repository took over
 //   host.goTo(hash, cx, turn?) Promise<true | false | null>: finds a commit by (short)
@@ -236,9 +244,9 @@ export default class LogList {
         // A preview already put the list at the top of this view; from there on the
         // place is the person's.
         if (moved && !r.over) this.list.top = 0;
-        // The selected commit may be gone (amended, filtered out); if it is still here,
-        // host.select swaps in the newly read one.
-        if (host.selected) host.select(this.index.has(host.selected.hash) ? host.selected.hash : null, cx);
+        // Picked commits may be gone (amended, filtered out); the ones still here stay
+        // picked, and host.selected becomes the newly read object.
+        if (host.picks.picked.size) host.keepPicks(cx);
       }
       cx.notify();
     });
@@ -385,9 +393,15 @@ export default class LogList {
 
   commitRow(i, t, palette, wide, v, labelSpace) {
     const m = this.rows[i], { commit } = m, { host } = this;
-    return row(`log-commit-${i}`, t, { selected: host.selected?.hash === commit.hash }).pl(2)
-      .on_click((_e, cx) => { this.handle.focus(); host.pick(commit.hash, cx); cx.notify(); })
-      .on_mouse_down("right", (_e, cx) => { this.handle.focus(); host.pick(commit.hash, cx); openCommitMenu(host, commit, cx); cx.notify(); })
+    return row(`log-commit-${i}`, t, { selected: host.isPicked(commit.hash) }).pl(2)
+      .on_click((e, cx) => {
+        this.handle.focus();
+        const mods = { shift: Boolean(e.modifiers?.shift), cmd: Boolean(e.modifiers?.platform || e.modifiers?.control) };
+        if (mods.shift || mods.cmd) host.pickWith(commit.hash, mods, cx);
+        else host.pick(commit.hash, cx);
+        cx.notify();
+      })
+      .on_mouse_down("right", (_e, cx) => { this.handle.focus(); host.pickForMenu(commit.hash, cx); openCommitMenu(host, host.pickedCommits(), cx); cx.notify(); })
       // On the row, so it runs before the list's own wheel handling and can stop it.
       .on_scroll_wheel((e, cx) => { if (this.slide(e, cx)) cx.stop_propagation(); })
       .child(this.graphCell(m, t, palette, v))

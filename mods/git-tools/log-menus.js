@@ -72,8 +72,8 @@ const ITEMS = {
   "details.revertSelected": { key: "log.revertSelectedChanges" },
   "details.historyUpToHere": { key: "log.historyUpToHere" },
   "details.displayOptions": { key: "log.displayOptions" },
-  "details.expandAll": { key: "log.expandAll" },
-  "details.collapseAll": { key: "log.collapseAll" },
+  "details.expandAll": { key: "log.expandAll", when: unread },
+  "details.collapseAll": { key: "log.collapseAll", when: unread },
 
   // ---- the Branch tree: a branch row's menu, a remote's folder
   "branch.checkout": { key: "log.checkout", write: true },
@@ -87,7 +87,7 @@ const ITEMS = {
   "branch.newWorktreeFrom": { key: "branches.newWorktreeFrom", args: name },
   "branch.update": { key: "branches.update" },
   "branch.push": { key: "branches.push" },
-  "branch.trackedBranch": { key: "branches.trackedBranch", args: (ctx) => ({ upstream: ctx.upstream }) },
+  "branch.trackedBranch": { key: "branches.trackedBranch", args: (ctx) => ({ upstream: ctx.upstream }), shown: (ctx) => Boolean(ctx.upstream) },
   "branch.pullRebase": { key: "branches.pullRebase", args: current },
   "branch.pullMerge": { key: "branches.pullMerge", args: current },
   "branch.rename": { key: "branches.rename" },

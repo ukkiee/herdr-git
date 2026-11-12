@@ -60,6 +60,8 @@ const all = (name, ctx = {}, t = ko) => look(menuItems(name, everything, ctx), t
     "'main'에서 새 브랜치…", "─", "작업 트리로 차이점 표시", "─", "'main'(으)로부터 새 워크트리…", "─",
     "업데이트", "푸시…", "추적된 브랜치 'origin/main'", "─", "이름 변경…",
   ]);
+  // A current branch that tracks nothing has no Tracked Branch item.
+  assert.ok(!all("currentBranch", { name: "main", current: "main" }).some((s) => s.startsWith("추적된 브랜치")));
   // The HEAD row: the current branch's menu without its tracked branch.
   assert.deepEqual(all("headBranch", { name: "main", current: "main" }), [
     "'main'에서 새 브랜치…", "─", "작업 트리로 차이점 표시", "─", "'main'(으)로부터 새 워크트리…", "─",
@@ -149,6 +151,9 @@ const all = (name, ctx = {}, t = ko) => look(menuItems(name, everything, ctx), t
   assert.equal(reason("logTools", "log.fetch", { writing: busy }), busy);
   assert.equal(reason("logTools", "log.refresh", { writing: busy }), null);
   assert.equal(reason("branchTools", "branches.expandAll", { writing: busy }), null);
+  // Commit details' Expand All and Collapse All wait for files to show.
+  assert.equal(reason("detailsTools", "details.expandAll", { loaded: false }), "");
+  assert.equal(reason("detailsTools", "details.collapseAll", { loaded: true, writing: busy }), null);
   // An item off for no reason worth words (nothing read yet) has an empty text, not a key.
   const off = menuItems("branchTools", everything, { loaded: false }).find((x) => x.id === "branches.new");
   assert.deepEqual([off.disabled, off.why], [true, { text: "" }]);

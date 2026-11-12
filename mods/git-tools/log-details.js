@@ -4,7 +4,8 @@
 // someone else, and the branches that contain the commit.
 //
 // A part of the Log panel: `host` is described at the top of log-list.js. The panel
-// calls show(commit, cx) when the selection moves to another commit, and retry(cx) on
+// calls show(commit, cx) when the selection moves to another commit (showMany(commits, cx)
+// when several are picked: the files they changed together), and retry(cx) on
 // Refresh and on its poll: a read that failed is tried again for the same commit.
 //
 // The commit and its files are read at once; the containing branches are read apart
@@ -22,6 +23,7 @@ import { theme } from "herdr";
 import { readCommit, readContaining } from "./git-show.js";
 import { checkoutRevision } from "./git-branch.js";
 import { buildRows, folderKeys, parentIndex } from "./tree.js";
+import { combineChanges } from "./log-select.js";
 import { openDiff } from "./view-diff.js";
 import { openBranchNew } from "./view-branch-new.js";
 import { ROW, icon, fileGlyph, folderGlyph, darkLook, row, toolbar, spacer, iconButton, notice, broadcast, openMenu, WindowedList, runningText, workName } from "./ui.js";
@@ -34,6 +36,10 @@ const MAX_BRANCHES = 12;
 const TREE_SHARE = 0.5;
 
 const short = (hash) => String(hash ?? "").slice(0, SHORT);
+
+// The toolbar's icons and element ids, by item (log-menus.js detailsTools).
+const TOOL_ICONS = { "details.showDiff": "diff", "details.expandAll": "expand-all", "details.collapseAll": "collapse-all" };
+const TOOL_IDS = { "details.expandAll": "log-detail-expand", "details.collapseAll": "log-detail-collapse" };
 const stop = (_e, cx) => cx.stop_propagation();
 
 // Always the date itself ("11/9/26, 9:05 AM" | "26. 11. 9. 오전 9:05"): the list says
@@ -47,9 +53,11 @@ function statusColor(status, t) {
 
 // ---- the commit row's right-click menu
 
-// Copy Revision Number: the full hash on the clipboard.
-export function copyRevision(commit, cx) {
-  if (commit?.hash) cx.write_to_clipboard(commit.hash);
+// Copy Revision Number: the full hash on the clipboard; several commits' hashes, newest
+// first, between spaces. commits: a commit or a list of them.
+export function copyRevision(commits, cx) {
+  const hashes = (Array.isArray(commits) ? commits : [commits]).map((c) => c?.hash).filter(Boolean);
+  if (hashes.length) cx.write_to_clipboard(hashes.join(" "));
 }
 
 // Checkout Revision: a detached HEAD at the commit. git's refusal (changes in the way)
@@ -85,31 +93,44 @@ export function newBranchAt(host, commit) {
   openBranchNew({ root: repo.root, on: repo.on, from: commit.hash, label: short(commit.hash), chosen: Boolean(host.fixed), owner: host.bus.id, lang: host.lang });
 }
 
-// openCommitMenu(host, commit, cx)
-//   The Commit list calls this on a right-click of a commit row: Copy Revision Number,
-//   Checkout Revision, New Branch…. host: the Log panel; commit: as git-log.js returns it.
-//   The Commit list gets the keyboard back when the menu goes.
-export function openCommitMenu(host, commit, cx) {
-  if (!host?.repo || !commit?.hash) return;
-  // The panel's own write here is named like another copy's: the menu has no spinner.
-  // Called from a click: ui.js parts are handed the panel's words (tr).
+// The words of a write running on the repository, for a menu item it stops. The panel's
+// own write here is named like another copy's: a menu has no spinner.
+function writingWords(host) {
+  const tr = host.t, writing = host.writeBlock();
+  return writing ? (host.writingHere() ? runningText(workName(host.busy, tr), tr) : writing) : null;
+}
+
+// Opens a menu of the model's items (host.items) and runs the one picked. The answer
+// settles in this panel's own call (ui.js openMenu), so what the pick starts is the panel's
+// work and outlives the popup.
+function openItems(host, items, target, cx, { width, hint, after }) {
+  if (!items.length) return;
   const tr = host.t;
-  const writing = host.writeBlock(), busy = Boolean(writing), why = busy ? (host.writingHere() ? runningText(workName(host.busy, tr), tr) : writing) : undefined;
-  const items = [
-    { label: tr("log.copyRevision"), value: "copy", hint: short(commit.hash) },
-    { label: tr("log.checkoutRevision"), value: "checkout", rule: true, disabled: busy, title: why },
-    { label: tr("log.newBranch"), value: "branch", disabled: busy, title: why },
-  ];
+  const rows = items.map((it) => ({
+    label: tr(it.key, it.args), value: it.id, rule: it.rule, disabled: it.disabled,
+    title: it.why?.text || (it.why?.key ? tr(it.why.key, it.why.args) : undefined),
+    hint: hint?.[it.id],
+  }));
   cx.spawn(async (cx) => {
-    // The answer settles in this panel's own call (ui.js openMenu), so what the pick
-    // starts is the panel's work and outlives the popup.
-    const pick = await openMenu(host.bus, items, { width: 260, lang: host.lang });
-    host.list.handle.focus();
-    if (pick === "copy") copyRevision(commit, cx);
-    else if (pick === "checkout") checkoutCommit(host, commit, cx);
-    else if (pick === "branch") newBranchAt(host, commit);
+    const pick = await openMenu(host.bus, rows, { width, lang: host.lang });
+    after?.();
+    if (pick) host.run(pick, target, cx);
     cx.notify();
   });
+}
+
+// openCommitMenu(host, commits, cx)
+//   The Commit list calls this on a right-click of a commit row: the commit menu's items
+//   (log-menus.js) this panel does, for the commits picked. host: the Log panel; commits:
+//   a commit or the commits picked, newest first, as git-log.js returns them.
+//   The Commit list gets the keyboard back when the menu goes.
+export function openCommitMenu(host, commits, cx) {
+  const list = (Array.isArray(commits) ? commits : [commits]).filter((c) => c?.hash);
+  if (!host?.repo || !list.length) return;
+  const head = host.branches.data?.head;
+  const items = host.items("commit", { count: list.length, current: head?.branch ?? "HEAD", writing: writingWords(host) });
+  const hint = list.length === 1 ? { "commit.copyRevision": short(list[0].hash) } : null;
+  openItems(host, items, list, cx, { width: 300, hint, after: () => host.list.handle.focus() });
 }
 
 // ---- the column
@@ -140,6 +161,7 @@ export default class LogDetails {
   // author, time) shows at once; the rest when it is read.
   show(commit, cx) {
     const repo = this.host.repo, turn = ++this.turn;
+    this.many = null;
     this.commit = repo && commit?.hash ? commit : null;
     this.seen = this.commit;
     this.info = null; this.branches = null;
@@ -168,9 +190,45 @@ export default class LogDetails {
     this.readBranches(cx);
   }
 
+  // Several commits picked: the files they changed together (log-select.js
+  // combineChanges), and one line per commit under the tree. Each commit is read as for
+  // one; a file's Show Diff shows the change of the newest picked commit that touched it.
+  showMany(commits, cx) {
+    const repo = this.host.repo, turn = ++this.turn;
+    this.commit = null; this.many = commits; this.seen = null;
+    this.info = null; this.branches = null;
+    this.collapsed = new Set(); this.cursor = null; this.rows = []; this.list.top = 0;
+    this.describe();
+    cx.notify();
+    if (!repo) return;
+    cx.spawn(async (cx) => {
+      const read = [];
+      // A few at a time: a Shift range can pick hundreds.
+      for (let i = 0; i < commits.length; i += 8) {
+        read.push(...await Promise.all(commits.slice(i, i + 8).map((c) => readCommit(repo.git, repo.root, c.hash))));
+        if (turn !== this.turn) return;
+      }
+      const failed = read.find((r) => !r.ok);
+      if (failed) {
+        this.info = { ok: false, err: failed.err, files: [] };
+        this.failed = failed.err;
+        this.host.fail(failed.err, cx);
+      } else {
+        if (this.failed && this.host.error === this.failed) this.host.fail(null, cx);
+        this.failed = null;
+        const files = combineChanges(read).map((f) => ({ ...f, commit: read.find((r) => r.files.some((x) => x.path === f.path))?.hash }));
+        this.info = { ok: true, many: true, files };
+        this.build();
+      }
+      this.describe();
+      cx.notify();
+    });
+  }
+
   // What failed for the commit shown (its files and message, or the branches that
   // contain it) is read again; what was read stays.
   retry(cx) {
+    if (this.many) { if (this.info && !this.info.ok) this.showMany(this.many, cx); return; }
     if (!this.commit || !this.host.repo) return;
     if (this.info && !this.info.ok) this.show(this.commit, cx);
     else if (this.branches === false) this.readBranches(cx);
@@ -217,9 +275,15 @@ export default class LogDetails {
 
   describe() {
     const c = this.commit, info = this.info?.ok ? this.info : null;
-    if (!c) { this.text = null; return; }
     const tr = this.host.t, lang = this.host.lang;
     this.textLang = lang;
+    if (this.many) {
+      const items = [{ key: "subject", kind: "subject", text: tr("log.commitsSelected", { n: this.many.length }) }];
+      this.many.forEach((m, i) => items.push({ key: `many-${i}`, kind: "meta", text: `${short(m.hash)} · ${m.subject} · ${m.author}` }));
+      this.text = { items, id: this.many.map((m) => m.hash).join("-").slice(0, 200) };
+      return;
+    }
+    if (!c) { this.text = null; return; }
     const lines = (info ? info.message : c.subject ?? "").split("\n");
     const body = lines.slice(1);
     while (body.length && !body[0].trim()) body.shift();
@@ -259,7 +323,7 @@ export default class LogDetails {
   showDiff(m) {
     const repo = this.host.repo;
     if (!repo || !this.info?.ok || !m || m.folder) return false;
-    openDiff({ root: repo.root, on: repo.on, path: m.path, commit: this.info.hash, status: m.item.status, oldPath: m.item.from ?? null });
+    openDiff({ root: repo.root, on: repo.on, path: m.path, commit: m.item.commit ?? this.info.hash, status: m.item.status, oldPath: m.item.from ?? null });
     return true;
   }
 
@@ -304,14 +368,10 @@ export default class LogDetails {
   menu(m, cx) {
     if (!m || m.folder) return;
     // While the menu is open its row shows no tooltip: it would cover the menu's item.
+    const items = this.host.items("file", { writing: writingWords(this.host) });
+    if (!items.length) return;
     this.menuRow = m.key;
-    cx.spawn(async (cx) => {
-      const pick = await openMenu(this.host.bus, [{ label: this.host.t("log.showDiff"), value: "diff" }], { lang: this.host.lang });
-      if (this.menuRow === m.key) this.menuRow = null;
-      this.handle.focus();
-      if (pick === "diff") this.showDiff(m);
-      cx.notify();
-    });
+    openItems(this.host, items, m, cx, { width: 300, after: () => { if (this.menuRow === m.key) this.menuRow = null; this.handle.focus(); } });
   }
 
   // `git-tools.details-…` for keys and scripts:
@@ -332,7 +392,7 @@ export default class LogDetails {
     else if (name === "details-expand-all") this.expandAll(cx);
     else if (name === "details-collapse-all") this.collapseAll(cx);
     else if (name === "details-focus") this.handle.focus();
-    else if (name === "details-commit-menu") openCommitMenu(host, commit, cx);
+    else if (name === "details-commit-menu") openCommitMenu(host, host.pickedCommits(), cx);
     else if (name === "details-copy-revision") copyRevision(commit, cx);
     else if (name === "details-checkout-revision") checkoutCommit(host, commit, cx);
     else if (name === "details-new-branch") newBranchAt(host, commit);
@@ -390,7 +450,7 @@ export default class LogDetails {
   // a new id per commit and per item count starts another commit at the top, and keeps
   // a list from reusing the heights of items that have moved.
   words(t) {
-    const { items } = this.text, id = `log-detail-message-${this.commit.hash}-${items.length}`;
+    const { items } = this.text, id = `log-detail-message-${this.text.id ?? this.commit.hash}-${items.length}`;
     return div().relative().flex_1().min_h(0).w_full().min_w(0)
       .child(list(id, items.length, (i) => items[i].key, (i) => this.wordsItem(items[i], t)).size_full())
       .child(Scrollbar.vertical(id).absolute().inset_0());
@@ -401,7 +461,7 @@ export default class LogDetails {
     this.dark = darkLook();
     this.follow(cx);
     if (!host.repo) return div();
-    if (!this.commit || !this.text) return notice(tr("log.selectCommit"), t);
+    if ((!this.commit && !this.many) || !this.text) return notice(tr("log.selectCommit"), t);
     const n = this.rows.length, loading = !this.info;
     // The tree is as tall as its rows, up to its share of the column; the message takes
     // the rest. Before the column is measured: a guess that the first frame corrects.
@@ -419,8 +479,9 @@ export default class LogDetails {
       .child(toolbar(t)
         .child(div().px(4).flex_1().min_w(0).truncate().text_size(12).text_color(t.muted).child(loading ? "" : tr("log.files", { n: this.info.files.length })))
         .child(spacer())
-        .child(iconButton("log-detail-expand", "expand-all", t, { title: tr("log.expandAll"), disabled: !n, onClick: (_e, cx) => this.expandAll(cx) }))
-        .child(iconButton("log-detail-collapse", "collapse-all", t, { title: tr("log.collapseAll"), disabled: !n, onClick: (_e, cx) => this.collapseAll(cx) })))
+        .children(host.items("detailsTools", { loaded: n > 0 }).map((it) => iconButton(TOOL_IDS[it.id] ?? it.id.replace(".", "-"), TOOL_ICONS[it.id] ?? "file", t, {
+          title: host.itemTitle(it) || tr(it.key, it.args), disabled: it.disabled, onClick: (_e, cx) => host.run(it.id, this.cursorRow(), cx),
+        }))))
       .child(div().id("log-detail-tree").track_focus(this.handle).flex_none().w_full().h(treeHeight).border_b(1).border_color(t.border)
         .on_key_down((e, cx) => {
           if (e.key === "down") this.move(1, cx);

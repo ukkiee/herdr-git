@@ -32,6 +32,10 @@ const GROUPS = [["local", "log.local"], ["remote", "log.remote"]];
 const INDENT = 12;
 const FILTER_COMMAND = "branches-filter:";
 
+// The vertical toolbar's icons and element ids, by item (log-menus.js branchTools).
+const TOOL_ICONS = { "branches.new": "plus", "branches.delete": "branch-delete", "branches.deleted": "restore", "branches.fetch": "fetch", "branches.expandAll": "expand-all", "branches.collapseAll": "collapse-all" };
+const TOOL_IDS = { "branches.new": "log-branch-new", "branches.delete": "log-branch-delete", "branches.deleted": "log-branch-deleted", "branches.fetch": "log-branch-fetch", "branches.expandAll": "log-branch-expand", "branches.collapseAll": "log-branch-collapse" };
+
 export default class LogBranches {
   init(host, cx) {
     this.host = host;
@@ -315,26 +319,37 @@ export default class LogBranches {
     cx.notify();
   }
 
+  // Which menu a row has (log-menus.js): the HEAD row, the current branch, another local
+  // branch, a remote branch, a remote's own folder (the first level under Remote).
+  menuOf(m, b) {
+    if (m.kind === "head") return "headBranch";
+    if (m.kind === "folder") return m.key.startsWith("remote:") && m.depth === 1 ? "remoteFolder" : null;
+    if (!b) return null;
+    return b.scope === "remote" ? "remoteBranch" : b.current ? "currentBranch" : "localBranch";
+  }
+
   menu(m, cx) {
-    const b = this.target(m);
-    if (!b) return;
-    const writing = this.host.writeBlock(), busy = Boolean(writing), block = this.deleteBlock(b), tr = this.host.t;
-    const items = [
-      { label: tr("log.checkout"), value: "checkout", disabled: b.current || busy, title: b.current ? tr("log.alreadyCheckedOut") : writing ?? undefined },
-      { label: tr("log.newBranchFrom", { name: shortenMiddle(b.name, 30) }), value: "new", disabled: busy, title: writing ?? undefined },
-      { label: tr("log.delete"), value: "delete", rule: true, disabled: Boolean(block) || busy, title: block ?? writing ?? undefined },
-    ];
+    const { host } = this, b = this.target(m), which = m ? this.menuOf(m, b) : null;
+    if (!which) return;
+    const d = this.data, tr = host.t;
+    const upstream = m.kind === "branch" && m.scope === "local" ? m.branch.upstream : null;
+    const ctx = {
+      name: b ? shortenMiddle(b.name, 30) : m.label, current: d?.head.branch ?? (d?.head.hash ? d.head.hash.slice(0, 7) : "HEAD"),
+      upstream: upstream ?? "", writing: host.writeBlock(), deleteBlock: b ? this.deleteBlock(b) : null,
+    };
+    const items = host.items(which, ctx);
+    if (!items.length) return;
+    const target = b ?? { remote: m.label };
+    const rows = items.map((it) => ({ label: tr(it.key, it.args), value: it.id, rule: it.rule, disabled: it.disabled, title: it.why ? (it.why.text ?? tr(it.why.key, it.why.args)) || undefined : undefined }));
     // While the menu is open its row shows no tooltip: it would cover the first item.
     this.menuRow = m.key;
     cx.spawn(async (cx) => {
       // The answer arrives in this panel's own call (ui.js), so what the pick starts
       // (git, a dialog) is the panel's work and outlives the popup.
-      const pick = await openMenu(this.host.bus, items, { width: 300, lang: this.host.lang });
+      const pick = await openMenu(host.bus, rows, { width: 300, lang: host.lang });
       if (this.menuRow === m.key) this.menuRow = null;
       this.handle.focus();
-      if (pick === "checkout") this.checkout(b, cx);
-      else if (pick === "new") this.newBranch(b, cx);
-      else if (pick === "delete") this.remove(b, cx);
+      if (pick) host.run(pick, target, cx);
       cx.notify();
     });
   }
@@ -409,16 +424,19 @@ export default class LogBranches {
       .when(b.behind > 0, (el) => el.child(div().flex_none().text_size(11).text_color(t.ansi4).child(`↓${b.behind}`)));
   }
 
+  // The vertical toolbar (log-menus.js branchTools). Its buttons act on the cursor row.
   tools(t) {
-    const { host } = this, writing = host.writeBlock(), busy = Boolean(writing), b = this.target(this.cursorRow()), block = this.deleteBlock(b), tr = host.t;
-    return v_flex().id("log-branch-tools").flex_none().w(30).h_full().py(5).gap(2).items_center().border_r(1).border_color(t.border)
-      .child(iconButton("log-branch-new", "plus", t, { title: writing ?? tr("log.newBranch"), disabled: !this.data || busy, onClick: (_e, cx) => this.newBranch(null, cx) }))
-      .child(iconButton("log-branch-delete", "branch-delete", t, { title: block ?? writing ?? tr("log.deleteBranch", { name: b.name }), disabled: Boolean(block) || busy, busy: host.writingHere()?.key === "log.deleting", onClick: (_e, cx) => this.remove(b, cx) }))
-      .child(iconButton("log-branch-deleted", "restore", t, { title: tr("branches.openDeleted"), disabled: !this.data, onClick: (_e, cx) => this.deletedBranches(cx) }))
-      .child(iconButton("log-branch-fetch", "fetch", t, { title: writing ?? tr("log.fetch"), disabled: busy, busy: host.writingHere()?.key === "log.fetching", onClick: (_e, cx) => host.fetch(cx) }))
-      .child(div().w(16).h(1).my(3).bg(t.border))
-      .child(iconButton("log-branch-expand", "expand-all", t, { title: tr("log.expandAll"), onClick: (_e, cx) => this.expandAll(cx) }))
-      .child(iconButton("log-branch-collapse", "collapse-all", t, { title: tr("log.collapseAll"), onClick: (_e, cx) => this.collapseAll(cx) }));
+    const { host } = this, b = this.target(this.cursorRow()), tr = host.t;
+    const items = host.items("branchTools", { loaded: Boolean(this.data), name: b?.name, writing: host.writeBlock(), deleteBlock: this.deleteBlock(b) });
+    let bar = v_flex().id("log-branch-tools").flex_none().w(30).h_full().py(5).gap(2).items_center().border_r(1).border_color(t.border);
+    for (const it of items) {
+      if (it.rule) bar = bar.child(div().w(16).h(1).my(3).bg(t.border));
+      const title = (it.why?.text ?? (it.why ? tr(it.why.key, it.why.args) : "")) || tr(it.key, it.args);
+      bar = bar.child(iconButton(TOOL_IDS[it.id] ?? it.id.replace(".", "-"), TOOL_ICONS[it.id] ?? "file", t, {
+        title, disabled: it.disabled, busy: it.work !== null && host.writingHere()?.key === it.work, onClick: (_e, cx) => host.run(it.id, b, cx),
+      }));
+    }
+    return bar;
   }
 
   render(cx) {

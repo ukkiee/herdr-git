@@ -581,7 +581,10 @@ git add -A && git commit -q -m first`);
   assert.match(last, /git/);
   const worded = (lang) => { const t = translator(lang), msg = wordRestore(t, r); return t(msg.key, msg.args); };
   assert.equal(worded("en"), r.err);
-  assert.notEqual(worded("ko").split("\n").at(-1).trim(), "");
+  const ko = worded("ko").split("\n").at(-1);
+  assert.notEqual(ko.trim(), "");
+  assert.doesNotMatch(ko, /failed|without|message/, ko);
+  assert.match(ko, /[가-힣]/, ko);
 }
 
 // A snapshot with one parent (made before snapshots held the index) restores the working

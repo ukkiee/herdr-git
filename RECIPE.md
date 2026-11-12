@@ -428,7 +428,8 @@ Modal, 760×480, title `Restore Rolled-Back Changes`.
   `something else is staged for it now`,
   `it was in a conflict, and a conflict can't be brought back`, or
   `git failed before staging it`; in that last case git's words follow as the last line
-  (`git failed while staging, without a message.` when git said nothing).
+  (`git failed while staging, without a message.`, `restore.stagingSilent` in the
+  screen's language, when git said nothing).
   Any other failure shows in an error strip.
 - Footer note `Files changed since the rollback are left as they are.` (`Restoring…`
   while it runs; `Another git operation is running: <label>` while another screen writes
@@ -1565,7 +1566,8 @@ paths, under `Restored without their staging:` (`restore.stagingNotAll`, or
 `restore.notAllStaging` with both lists). The index is written in batches, each one
 call that writes all of it or nothing; when reading the index or a write fails, the
 paths of that batch and the ones after it are listed `git failed before staging it`, the
-result is a failure with git's code, and its sentence ends with git's words
+result is a failure with git's code, and its sentence ends with git's words, or
+`restore.stagingSilent` as the result's `msg.cause` when git said nothing
 (`restore.stagingNotAllFailed`, or `restore.notAllStagingFailed` with both lists); the
 files stay restored and batches written before stay written. A snapshot with one parent
 leaves the index alone.
@@ -1993,6 +1995,7 @@ English forms and ⏎ is a line break.
 | `restore.stagingChanged` | `something else is staged for it now` | `지금 다른 내용이 스테이징되어 있습니다` |
 | `restore.stagingConflict` | `it was in a conflict, and a conflict can't be brought back` | `충돌 중이던 파일이라 충돌 상태는 복원하지 못합니다` |
 | `restore.stagingFailed` | `git failed before staging it` | `스테이징하기 전에 git이 실패했습니다` |
+| `restore.stagingSilent` | `git failed while staging, without a message.` | `스테이징하던 중 git이 아무 메시지 없이 실패했습니다.` |
 | `restore.stagingNotAllFailed` | `Restored 1 file. Restored without their staging:⏎{staged}⏎{err} / Restored {n} files. Restored without their staging:⏎{staged}⏎{err}` | `{n}개 파일을 복원했습니다. 스테이징은 복원하지 않은 파일:⏎{staged}⏎{err}` |
 | `restore.notAllStagingFailed` | `Restored 1 file. Not restored, to keep what is there now:⏎{list}⏎Restored without their staging:⏎{staged}⏎{err} / Restored {n} files. Not restored, to keep what is there now:⏎{list}⏎Restored without their staging:⏎{staged}⏎{err}` | `{n}개 파일을 복원했습니다. 지금 있는 것을 지키려고 복원하지 않은 파일:⏎{list}⏎스테이징은 복원하지 않은 파일:⏎{staged}⏎{err}` |
 

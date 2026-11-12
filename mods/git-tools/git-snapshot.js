@@ -262,6 +262,8 @@ const STAGING = {
   changed: { reason: "something else is staged for it now", msg: { key: "restore.stagingChanged" } },
   conflict: { reason: "it was in a conflict, and a conflict can't be brought back", msg: { key: "restore.stagingConflict" } },
   failed: { reason: "git failed before staging it", msg: { key: "restore.stagingFailed" } },
+  // The last line of a result whose index write failed with no words from git.
+  silent: { reason: "git failed while staging, without a message.", msg: { key: "restore.stagingSilent" } },
 };
 
 // restore(git, root, { snapshot, paths, copy })
@@ -400,10 +402,12 @@ export async function restore(git, root, { snapshot, paths = [], copy } = {}) {
         ? [`${files} ${notStaged(stagingSkipped)}`, { key: "restore.stagingNotAll", args: { n, staged } }]
         : [`${files} ${notRestored(skipped)}\n${notStaged(stagingSkipped)}`, { key: "restore.notAllStaging", args: { n, list, staged } }];
     // git's words, as they are, on the last line (restore.*Failed). A write cut off by the
-    // time limit says nothing, and the line would be left empty.
+    // time limit says nothing, so this module's own sentence stands in, as its cause so a
+    // screen words it in its language.
     if (broke) {
-      const said = broke.err || "git failed while staging, without a message.";
-      [err, msg] = [`${err}\n${said}`, { key: `${msg.key}Failed`, args: { ...msg.args, err: said } }];
+      const said = broke.err || STAGING.silent.reason;
+      const cause = broke.err ? {} : { cause: STAGING.silent.msg };
+      [err, msg] = [`${err}\n${said}`, { key: `${msg.key}Failed`, args: { ...msg.args, err: said }, ...cause }];
     }
     return { ok: false, code: broke ? broke.code : -1, out: "", restored, skipped, stagingSkipped, changed: moved(), err, msg };
   }

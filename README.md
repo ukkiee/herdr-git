@@ -198,6 +198,10 @@ restored after that).
 - Diffs are unified only: no side-by-side view, no syntax colors. In the Commit panel a
   renamed file lists as a deleted file and an added file, and the added file's diff is
   the whole file.
+- The Files preview's syntax colors come from the Herdr editor's syntax set. Formats it
+  lacks (TypeScript, TOML, Terraform, Kotlin, Swift and others) borrow the closest syntax,
+  so keywords only that language has stay uncolored; formats with no close syntax (Vim
+  script, Nix, Pug, Stylus, AsciiDoc, CSV and others) show without colors.
 - Commit amends only the last commit and commits whole files, not lines.
 - In a space on another machine nothing watches the files: a working file's Diff tab
   reads again every 10 seconds while it is on screen.

@@ -186,6 +186,10 @@ cd herdr-git && ./install.sh
 - stash·shelve, merge, rebase, pull, cherry-pick, revert, reset이 없습니다.
 - diff는 통합 보기뿐입니다. 좌우 나란히 보기와 구문 색이 없습니다. Commit panel에서 이름이
   바뀐 파일은 삭제된 파일과 추가된 파일로 따로 보이고, 추가된 파일의 diff는 파일 전체입니다.
+- Files 미리보기의 구문 색은 Herdr 편집기의 문법 묶음에 기댑니다. 묶음에 없는 형식(TypeScript,
+  TOML, Terraform, Kotlin, Swift 등)은 가장 가까운 문법을 빌려서 그 언어에만 있는 키워드는 색이
+  없고, 가까운 문법도 없는 형식(Vim script, Nix, Pug, Stylus, AsciiDoc, CSV 등)은 색 없이
+  보입니다.
 - Amend는 마지막 커밋만 고치고, 커밋은 줄 단위가 아니라 파일 단위입니다.
 - 다른 머신의 space에서는 파일을 감시하지 못합니다. 작업 파일의 Diff tab은 화면에 보이는
   동안 10초마다 다시 읽습니다.

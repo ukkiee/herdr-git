@@ -30,12 +30,11 @@ import { readFolder, readMarks, readSearchList, roomFor, PER_FOLDER, TOTAL, SEAR
 import { markLookup, visibleRows, keepPressed, pressLands, stripFailure, pressFailure, failureKey, rankSearch, moveKey, SEARCH_SHOWN } from "./files-tree.js";
 import { location, icon, fileGlyph, folderGlyph, darkLook, panelFrame, toolbar, iconButton, row, notice, errorStrip, WindowedList, openMenu } from "./ui.js";
 import { openDiff } from "./view-diff.js";
+import { editorLanguage } from "./editor-language.js";
 
 const POLL = 10000;
 // The preview shows at most this many characters; readTextFile itself stops at 1 MiB.
 const PREVIEW_CHARS = 400000;
-// File extensions the editor knows by another language's name.
-const LANG = { ts: "js", tsx: "js", mts: "js", cts: "js", jsx: "js", mjs: "js", toml: "yaml", jsonc: "json", svelte: "html", vue: "html" };
 const LETTER = { modified: "M", added: "A", deleted: "D", conflict: "U" };
 const NO_LOOKUP = markLookup({});
 
@@ -418,11 +417,10 @@ export default class FilesView {
         if (this.file !== path || this.context !== context) return;
         if (text === null) { this.fileNote = "files.unavailable"; return; }
         if (text.includes("\0")) { this.fileNote = "files.binary"; return; }
-        const t = theme(), name = path.slice(path.lastIndexOf("/") + 1);
-        const ext = name.includes(".") ? name.slice(name.lastIndexOf(".") + 1).toLowerCase() : "txt";
+        const t = theme();
         this.cut = text.length > PREVIEW_CHARS;
         this.code = EditorState.new({
-          language: LANG[ext] ?? ext, readonly: true,
+          language: editorLanguage(path), readonly: true,
           value: this.cut ? text.slice(0, PREVIEW_CHARS) : text,
           font_family: settings().font_family, font_size: 12,
           syntax: { keyword: t.ansi5, string: t.ansi2, comment: t.dim, function: t.ansi4, type: t.ansi3, number: t.ansi1, constant: t.ansi6 },

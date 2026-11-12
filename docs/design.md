@@ -48,7 +48,7 @@ space가 다른 머신에 있으면 git 명령을 모두 그 머신에서 실행
 | 공용 부품 | `ui.js` | 저장소 찾기, 행·버튼·체크박스, 보이는 행만 그리는 `WindowedList`, 창과 메뉴 열기, 쓰기 잠금과 창 요청의 화면 쪽 |
 | 화면 | `view-*.js`(`view-files.js`, `view-deleted-branches.js` 포함), `commit-form.js`, `log-*.js` | 그리기와 사람의 입력 |
 | git | `git.js`, `git-status.js`, `git-commit.js`, `git-rollback.js`, `git-snapshot.js`, `git-diff.js`, `git-push.js`, `git-log.js`, `git-log-filter.js`, `git-branch.js`, `git-show.js`(`readLastCommit` 포함), `files-data.js` | git과 폴더 읽기 명령을 부르고 결과를 해석한다 |
-| 순수 계산 | `graph.js`, `tree.js`, `bus.js`, `lock.js`, `i18n.js`, `icon-theme.js`, `files-tree.js` | 그래프 배치, 경로 트리와 3상태 체크, 버스와 잠금 값, 언어와 문장, 아이콘 고르기, Files panel의 줄·표시·찾기 순위·키 |
+| 순수 계산 | `graph.js`, `tree.js`, `bus.js`, `lock.js`, `i18n.js`, `icon-theme.js`, `files-tree.js`, `editor-language.js` | 그래프 배치, 경로 트리와 3상태 체크, 버스와 잠금 값, 언어와 문장, 아이콘 고르기, Files panel의 줄·표시·찾기 순위·키, 미리보기의 구문 색 |
 | 데이터 | `messages-*.js`(`messages-files.js` 포함), `icon-theme-data.js`, `icons/` | 문구 표, 생성한 아이콘 규칙, 아이콘 파일 |
 
 저장소 루트에는 레이아웃 변환 `layout.mjs`, 설치 `install.sh`, 키 `keys.json`, 아이콘 생성기
@@ -347,6 +347,15 @@ Rollback은 Rollback dialog의 버튼으로만 실행되고, 쓰기 전에 버�
   일부를 대소문자 없이 찾고, 파일 이름에 든 것이 먼저, 각각 경로순, 200개까지다.
 - **미리보기는 `readTextFile`로 읽는다.** 1 MiB보다 큰 파일과 읽을 수 없는 파일은 미리 볼 수 없다고
   하고, NUL이 든 파일은 이진 파일로 본다. 400,000자에서 자른다.
+- **구문 색은 파일 이름으로 고른다** (`editor-language.js`의 `editorLanguage`). Herdr 편집기는
+  syntect 기본 문법 묶음만 갖고 있고, 언어 이름을 그 문법들의 확장자로 찾는다. 묶음에 없는 흔한
+  형식은 가장 가까운 문법을 빌린다: HCL(`.tf`, `.hcl`)·Elixir·Julia·CoffeeScript는 Ruby,
+  `.env`·Dockerfile·ignore 파일·CMake·PowerShell·GraphQL·`.conf`는 셸, INI·`.gitconfig`·
+  `.editorconfig`는 Java Properties, TOML은 YAML, Kotlin은 Scala, Swift·Protocol Buffers는 Go,
+  Dart는 Java, Zig는 Rust, F#은 OCaml, Elm은 Haskell, 셰이더는 C, SCSS·LESS는 CSS, 템플릿
+  (Astro, Handlebars, Jinja 등)은 HTML, Starlark(Bazel)는 Python. 빌린 문법은 주석·문자열·숫자를
+  맞게 칠하고, 키워드는 두 언어가 같은 것만 칠한다. 이름으로 정하는 파일(`Makefile`,
+  `Gemfile`, `Dockerfile`, `.bashrc`, `BUILD.bazel` 등)은 확장자보다 먼저 본다.
 - **Show Diff**는 git 표시가 있는 파일에만 있고, Commit panel의 작업 파일과 같은 Diff tab(HEAD →
   작업 트리)을 연다. Reveal in Finder는 macOS 창이고 space가 이 컴퓨터일 때만 있다(`open -R`).
 - 키보드는 줄이나 찾기 칸을 누른 뒤에 받는다. mod가 `focusable`이 아니어서 Herdr가 키보드를
@@ -535,6 +544,10 @@ Herdr는 mod를 QuickJS로 돌린다. JIT가 없고, 한 호출이 너무 오래
 - 자격 증명과 GPG 입력 창이 없다. 입력을 요구하는 원격에서는 푸시와 fetch가 실패한다.
 - diff는 통합 보기뿐이고 구문 색이 없다. Commit panel은 이름 변경을 감지하지 않아서, 이름이
   바뀐 작업 파일은 삭제된 파일과 추가된 파일로 따로 보이고 추가된 쪽의 diff는 파일 전체다.
+- Files 미리보기는 편집기 문법 묶음에 없는 언어를 가까운 문법으로 칠하므로, 그 언어에만 있는
+  키워드는 색이 없다. 가까운 문법이 없는 형식(Vim script, Nix, Pug, Stylus, AsciiDoc, CSV,
+  `yarn.lock` 등)은 색 없이 보인다. Sass 들여쓰기 문법(`.sass`)은 편집기 스스로 Haml 문법으로
+  칠한다. CSS 문법은 중괄호 없는 이 문법에 색을 하나도 내지 않아서 빌리지 않는다.
 - 원격 space는 폴더 감시가 안 되어 10초 타이머로만 새로 읽는다. 저장소는 한 번에 하나다.
 - 다른 worktree의 git 폴더는 저장소 루트 밖에 있어 감시되지 않는다. 그런 worktree에서 터미널로
   커밋하면 작업 파일의 Diff tab은 다음 10초 읽기에 따라온다.

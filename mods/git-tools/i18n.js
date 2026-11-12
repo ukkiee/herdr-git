@@ -39,13 +39,17 @@ export function readLocaleEnv(text) {
 // systemLang(platform, read) → "ko" | "en" | null: the language of the window's computer.
 // platform: the window's ("macos" | "linux" | "windows"). read: { code, stdout } of the
 // command that asks that system (ui.js readSystemLang), null when it couldn't run.
-// Windows is English without asking. null: not known (no window to ask about yet, or the
-// command failed), which is not English: the copy keeps its language and asks again.
+// Windows answers with one culture name ("ko-KR\r\n"); an empty answer there is not known,
+// unlike Linux where no locale variable set means the default, English.
+// null: not known (no window to ask about yet, or the command failed or said nothing),
+// which is not English: the copy keeps its language and asks again.
 export function systemLang(platform, read) {
-  if (platform === "windows") return "en";
-  if (platform !== "macos" && platform !== "linux") return null;
+  if (platform !== "macos" && platform !== "linux" && platform !== "windows") return null;
   if (!read || read.code !== 0) return null;
-  return pickLang(platform === "macos" ? readAppleLanguages(read.stdout) : readLocaleEnv(read.stdout));
+  if (platform === "macos") return pickLang(readAppleLanguages(read.stdout));
+  const tags = readLocaleEnv(read.stdout);
+  if (platform === "windows" && !tags.length) return null;
+  return pickLang(tags);
 }
 
 // ---- sentences

@@ -14,12 +14,25 @@ import { pickLang, readAppleLanguages, readLocaleEnv, systemLang, translator, se
   assert.equal(systemLang("macos", { code: 0, stdout: '(\n    "en-US"\n)' }), "en");
   assert.equal(systemLang("linux", { code: 0, stdout: "\n\nko_KR.UTF-8\n" }), "ko");
   assert.equal(systemLang("linux", { code: 0, stdout: "\n\n\n" }), "en");
-  assert.equal(systemLang("windows", null), "en");
   assert.equal(systemLang("macos", { code: 1, stdout: "" }), null, "the command failed");
   assert.equal(systemLang("macos", null), null, "the command couldn't run");
   assert.equal(systemLang("linux", { code: 127, stdout: "" }), null);
   assert.equal(systemLang(undefined, { code: 0, stdout: '("ko-KR")' }), null, "no window yet");
   assert.equal(systemLang(null, null), null);
+}
+
+// Windows: the culture name PowerShell prints for (Get-UICulture).Name, chosen by the same
+// rule. A failed, missing or silent command is not known, never English.
+{
+  assert.equal(systemLang("windows", { code: 0, stdout: "ko-KR\r\n" }), "ko");
+  assert.equal(systemLang("windows", { code: 0, stdout: "en-US\r\n" }), "en");
+  assert.equal(systemLang("windows", { code: 0, stdout: "ja-JP\r\n" }), "en");
+  assert.equal(systemLang("windows", { code: 0, stdout: "  \r\n ko-KR \r\n\r\n" }), "ko", "blanks around the name");
+  assert.equal(systemLang("windows", { code: 0, stdout: "" }), null, "nothing printed");
+  assert.equal(systemLang("windows", { code: 0, stdout: " \r\n\r\n" }), null, "only blank lines");
+  assert.equal(systemLang("windows", { code: 1, stdout: "" }), null, "the command failed");
+  assert.equal(systemLang("windows", { code: 1, stdout: "ko-KR\r\n" }), null, "a failed command's output");
+  assert.equal(systemLang("windows", null), null, "no powershell to run");
 }
 
 // The first preferred language decides: Korean when it is Korean, English otherwise.

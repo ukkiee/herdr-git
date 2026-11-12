@@ -22,7 +22,7 @@ import { div, svg } from "gpui-kit";
 import { h_flex, v_flex, Editor, EditorState, InputState, Input } from "gpui-base";
 import { exec, theme, settings, watchFolder, readTextFile, window as hostWindow } from "herdr";
 import { readFolder, readMarks, readSearchList, roomFor, PER_FOLDER, TOTAL, SEARCH_LIMIT } from "./files-data.js";
-import { markLookup, visibleRows, rankSearch, SEARCH_SHOWN } from "./files-tree.js";
+import { markLookup, visibleRows, rankSearch, moveKey, SEARCH_SHOWN } from "./files-tree.js";
 import { location, icon, fileGlyph, folderGlyph, darkLook, panelFrame, toolbar, row, notice, errorStrip, WindowedList } from "./ui.js";
 
 const POLL = 10000;
@@ -52,6 +52,9 @@ export default class FilesView {
     this.reset();
     this.list = new WindowedList("files-tree");
     this.found = new WindowedList("files-found");
+    // The panel takes the keyboard when a row is pressed, as the Commit panel does: the
+    // mod isn't "focusable", so Herdr never hands it over.
+    this.handle = cx.focus_handle();
     this.makeInput("");
     this.refresh(cx);
     // The watch misses things (a remote space has none at all), so the timer stays on.
@@ -283,6 +286,40 @@ export default class FilesView {
     else this.show(r.path, cx);
   }
 
+  // ---- keys
+
+  // One key, by its keystroke spelling; true when the panel used it. The keys reach the
+  // panel from its rows and from the search box (bubbling up), so while the box has the
+  // keyboard only ↑ ↓ (and Enter, Esc on results) are taken: ← → move its caret.
+  key(name, cx) {
+    if (this.file) {
+      if (name !== "escape") return false;
+      this.show(null, cx);
+      return true;
+    }
+    if (!this.root || this.gone || this.rootError) return false;
+    if (this.searching()) {
+      if (name === "escape") {
+        this.query.set_value("");
+        this.hit = null; this.rank();
+        return true;
+      }
+      if (name !== "up" && name !== "down" && name !== "enter") return false;
+      const move = moveKey(this.ranked?.items ?? [], this.hit, name);
+      this.chooseHit(move.current);
+      if (move.preview) this.openHit(cx, move.preview);
+      return true;
+    }
+    if (!["up", "down", "left", "right", "enter"].includes(name)) return false;
+    if (this.typing && name !== "up" && name !== "down") return false;
+    const move = moveKey(this.rows, this.current, name);
+    if (move.current) this.select(move.current);
+    if (move.expand && !this.open.has(move.expand)) this.toggle(move.expand, cx);
+    if (move.collapse && this.open.has(move.collapse)) this.toggle(move.collapse, cx);
+    if (move.preview) this.show(move.preview, cx);
+    return true;
+  }
+
   // ---- the preview
 
   release() {
@@ -329,7 +366,7 @@ export default class FilesView {
     const ignored = mark === "ignored";
     const el = row(`files-row-${r.path}`, t, { selected: r.path === this.current, depth: r.depth })
       .cursor_pointer()
-      .on_click((_e, cx) => { this.press(r, cx); cx.notify(); })
+      .on_click((_e, cx) => { this.handle.focus(); this.press(r, cx); cx.notify(); })
       .child(r.folder
         ? svg(icon(r.open ? "chevron-down" : "chevron-right")).size(12).flex_none().text_color(t.muted)
         : div().size(12).flex_none());
@@ -366,7 +403,7 @@ export default class FilesView {
     const mark = this.marks.mark(it.path);
     return row(`files-hit-${it.path}`, t, { selected: it.path === this.hit })
       .cursor_pointer()
-      .on_click((_e, cx) => { this.chooseHit(it.path); this.openHit(cx, it.path); cx.notify(); })
+      .on_click((_e, cx) => { this.handle.focus(); this.chooseHit(it.path); this.openHit(cx, it.path); cx.notify(); })
       .child(fileGlyph(`${this.prefix}${it.path}`, { dark: this.dark }))
       .child(div().flex_none().max_w("70%").truncate().text_color(statusColor(mark, t))
         .when(mark === "conflict", (el) => el.font_semibold())
@@ -435,7 +472,12 @@ export default class FilesView {
     const searching = shown && this.searching();
     const notes = searching ? this.foundNotes()
       : this.limited && shown ? [this.t("files.limited", { perFolder: grouped(PER_FOLDER), total: grouped(TOTAL) })] : [];
-    return panelFrame("files-panel", t)
+    return panelFrame("files-panel", t).track_focus(this.handle)
+      .on_key_down((e, cx) => {
+        if (!this.key(e.keystroke, cx)) return;
+        cx.stop_propagation();
+        cx.notify();
+      })
       .child(toolbar(t).px(10).gap(8)
         // The mod has no left arrow icon: the arrow is a glyph, as in Herdr's own Files.
         .when(previewing, (el) => el.child(div().id("files-back").size(24).flex_none().flex().items_center().justify_center().rounded(5)

@@ -33,7 +33,12 @@ const INDENT = 12;
 const FILTER_COMMAND = "branches-filter:";
 
 // The vertical toolbar's icons and element ids, by item (log-menus.js branchTools).
-const TOOL_ICONS = { "branches.new": "plus", "branches.delete": "branch-delete", "branches.deleted": "restore", "branches.fetch": "fetch", "branches.expandAll": "expand-all", "branches.collapseAll": "collapse-all" };
+// An item missing here draws the settings icon: an unknown name would throw in render.
+const TOOL_ICONS = {
+  "branches.hide": "hide-branches", "branches.new": "plus", "branches.updateSelected": "update", "branches.delete": "branch-delete",
+  "branches.deleted": "restore", "branches.compareWithCurrent": "compare", "branches.fetch": "fetch", "branches.favorite": "favorite",
+  "branches.navigateLog": "locate", "branches.settings": "branch-settings", "branches.expandAll": "expand-all", "branches.collapseAll": "collapse-all",
+};
 const TOOL_IDS = { "branches.new": "log-branch-new", "branches.delete": "log-branch-delete", "branches.deleted": "log-branch-deleted", "branches.fetch": "log-branch-fetch", "branches.expandAll": "log-branch-expand", "branches.collapseAll": "log-branch-collapse" };
 
 export default class LogBranches {
@@ -432,7 +437,7 @@ export default class LogBranches {
     for (const it of items) {
       if (it.rule) bar = bar.child(div().w(16).h(1).my(3).bg(t.border));
       const title = (it.why?.text ?? (it.why ? tr(it.why.key, it.why.args) : "")) || tr(it.key, it.args);
-      bar = bar.child(iconButton(TOOL_IDS[it.id] ?? it.id.replace(".", "-"), TOOL_ICONS[it.id] ?? "file", t, {
+      bar = bar.child(iconButton(TOOL_IDS[it.id] ?? it.id.replace(".", "-"), TOOL_ICONS[it.id] ?? "settings", t, {
         title, disabled: it.disabled, busy: it.work !== null && host.writingHere()?.key === it.work, onClick: (_e, cx) => host.run(it.id, b, cx),
       }));
     }

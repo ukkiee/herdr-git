@@ -80,8 +80,12 @@ const ACTIONS = {
 };
 const handled = (id) => Object.prototype.hasOwnProperty.call(ACTIONS, id);
 
-// The Log toolbar's icons, by item.
-const LOG_ICONS = { "log.refresh": "refresh", "log.fetch": "fetch", "log.hide": "x" };
+// The Log toolbar's icons, by item. An item missing here draws the settings icon: an
+// unknown name would throw in render.
+const LOG_ICONS = {
+  "log.graphOptions": "graph-options", "log.refresh": "refresh", "log.fetch": "fetch", "log.cherryPick": "cherry-pick",
+  "log.displayOptions": "layout", "log.goToHash": "go-to-hash", "log.hide": "x",
+};
 
 export default class LogView {
   init(p, cx) {
@@ -578,7 +582,7 @@ export default class LogView {
   // A Log toolbar item as a button. Element ids keep the item's name ("log-refresh").
   toolButton(it, t, spinning = false) {
     const busy = spinning || (it.work !== null && this.writingHere()?.key === it.work);
-    return iconButton(it.id.replace(".", "-"), LOG_ICONS[it.id] ?? "file", t, { title: this.itemTitle(it), disabled: it.disabled, busy, onClick: (_e, cx) => this.run(it.id, null, cx) });
+    return iconButton(it.id.replace(".", "-"), LOG_ICONS[it.id] ?? "settings", t, { title: this.itemTitle(it), disabled: it.disabled, busy, onClick: (_e, cx) => this.run(it.id, null, cx) });
   }
 
   // Another folder to follow, or changes that arrived while the panel was hidden: taken

@@ -38,7 +38,11 @@ const TREE_SHARE = 0.5;
 const short = (hash) => String(hash ?? "").slice(0, SHORT);
 
 // The toolbar's icons and element ids, by item (log-menus.js detailsTools).
-const TOOL_ICONS = { "details.showDiff": "diff", "details.expandAll": "expand-all", "details.collapseAll": "collapse-all" };
+// An item missing here draws the settings icon: an unknown name would throw in render.
+const TOOL_ICONS = {
+  "details.showDiff": "show-diff", "details.revertSelected": "revert-selected", "details.historyUpToHere": "history",
+  "details.displayOptions": "eye", "details.expandAll": "expand-all", "details.collapseAll": "collapse-all",
+};
 const TOOL_IDS = { "details.expandAll": "log-detail-expand", "details.collapseAll": "log-detail-collapse" };
 const stop = (_e, cx) => cx.stop_propagation();
 
@@ -479,7 +483,7 @@ export default class LogDetails {
       .child(toolbar(t)
         .child(div().px(4).flex_1().min_w(0).truncate().text_size(12).text_color(t.muted).child(loading ? "" : tr("log.files", { n: this.info.files.length })))
         .child(spacer())
-        .children(host.items("detailsTools", { loaded: n > 0 }).map((it) => iconButton(TOOL_IDS[it.id] ?? it.id.replace(".", "-"), TOOL_ICONS[it.id] ?? "file", t, {
+        .children(host.items("detailsTools", { loaded: n > 0 }).map((it) => iconButton(TOOL_IDS[it.id] ?? it.id.replace(".", "-"), TOOL_ICONS[it.id] ?? "settings", t, {
           title: host.itemTitle(it) || tr(it.key, it.args), disabled: it.disabled, onClick: (_e, cx) => host.run(it.id, this.cursorRow(), cx),
         }))))
       .child(div().id("log-detail-tree").track_focus(this.handle).flex_none().w_full().h(treeHeight).border_b(1).border_color(t.border)

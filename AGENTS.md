@@ -14,4 +14,4 @@ Git tools for the Herdr desktop app, built as a Herdr mod.
 
 - Mods are plain JS under `mods/<name>/`: no dependencies, no build step. Git logic takes `exec` as an argument and is tested with `node <file>.test.mjs` against real temporary repositories.
 - The Herdr mod authoring guide is outside this repo, at `~/.config/herdr-app/AGENTS.md`. Read it before writing mod code.
-- Full offline check: every `*.test.mjs` plus `herdr-app check mods/<name>`.
+- Full offline check: `node tools/check.mjs` (every `*.test.mjs`, then `herdr-app check mods/git-tools`).

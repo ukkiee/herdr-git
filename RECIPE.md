@@ -2103,6 +2103,8 @@ Each line is one check: do what it says, see what follows.
    `ok` (the last one after `skip: …` unless `ICON_THEME_SOURCE` is set).
 2. Run `herdr-app check mods/git-tools`: it passes.
 
+`node tools/check.mjs` runs both steps and prints one line per test file.
+
 **Install**
 
 3. Run `./install.sh` with Herdr open: it ends with `Layout main-git is shown.`, the

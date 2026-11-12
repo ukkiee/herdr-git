@@ -1,8 +1,9 @@
 // node icon-theme.test.mjs: file and folder names → Icon theme paths (no app, no git).
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { fileIcon, folderIcon, makeIconTheme, darkColor } from "./icon-theme.js";
 import { FILE_RULES, FOLDER_RULES, DARK_FILE_ICONS, CLOSED_ONLY_FOLDER_ICONS } from "./icon-theme-data.js";
 
@@ -10,7 +11,7 @@ const F = (name) => `mods/git-tools/icons/theme/files/${name}.svg`;
 const D = (name) => `mods/git-tools/icons/theme/folders/${name}.svg`;
 const O = (name) => `mods/git-tools/icons/theme/foldersOpen/${name}.svg`;
 
-// The spec's examples: the matching rule with the highest priority wins, else the default icon.
+// Examples: the matching rule with the highest priority wins, else the default icon.
 {
   assert.equal(fileIcon("a.ts"), F("typeScript"));
   assert.equal(fileIcon("a.test.ts"), F("testts"));
@@ -303,6 +304,32 @@ const DIRS = ["", "src/", "test/", "tests/unit/", "src/locales/", ".github/workf
   console.log(`patterns run per first lookup: mean ${mean.toFixed(1)}, most ${most} (${counts.length} names)`);
   assert.ok(mean <= 4, `mean ${mean}`);
   assert.ok(most <= 16, `most ${most}`);
+}
+
+// Filing the rules (warm) stays a plain walk over them. The app's engine has no JIT and stops a
+// call that runs too long, so anything worked out per rule at start (reading a pattern, say)
+// belongs in the generator. Measured without the JIT, against a walk that only files every
+// rule under its hints: the ratio holds on a slow machine too.
+{
+  const here = dirname(fileURLToPath(import.meta.url));
+  const code = `
+    import { makeIconTheme } from ${JSON.stringify(pathToFileURL(join(here, "icon-theme.js")).href)};
+    import { FILE_RULES, FOLDER_RULES } from ${JSON.stringify(pathToFileURL(join(here, "icon-theme-data.js")).href)};
+    const best = (f) => { let m = Infinity; for (let i = 0; i < 9; i++) { const t = performance.now(); f(); m = Math.min(m, performance.now() - t); } return m; };
+    const warm = best(() => makeIconTheme().warm());
+    const walk = best(() => {
+      const filed = new Map();
+      for (const rule of [...FILE_RULES, ...FOLDER_RULES]) {
+        for (const key of [rule.name, ...(rule.names ?? []), ...(rule.exts ?? []), ...(rule.needles ?? [])]) {
+          const list = filed.get(key);
+          if (list) list.push(rule); else filed.set(key, [rule]);
+        }
+      }
+    });
+    console.log(JSON.stringify({ warm, walk }));`;
+  const { warm, walk } = JSON.parse(execFileSync(process.execPath, ["--jitless", "--input-type=module", "-e", code], { encoding: "utf8" }));
+  console.log(`filing the rules without the JIT: ${warm.toFixed(1)} ms, ${(warm / walk).toFixed(1)} times a plain walk`);
+  assert.ok(warm <= 8 * walk, `filing took ${warm} ms, a plain walk ${walk} ms`);
 }
 
 // A background takes the _dark variants (light ink) when light ink shows better on it than

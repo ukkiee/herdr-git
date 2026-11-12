@@ -290,9 +290,14 @@ Herdr는 mod를 QuickJS로 돌린다. JIT가 없고, 한 호출이 너무 오래
   원격 space, 큰 저장소의 체감 속도, 한국어 문장이 자연스러운지. 화면에는 자동 테스트가 없어서
   바꿀 때마다 사람이 다시 본다. 확인 절차는 RECIPE의 "Done when"에 있다.
 
-**전체 오프라인 검사:** 루트의 `node layout.test.mjs`, `mods/git-tools`의 `*.test.mjs` 17개 각각,
-`node tools/gen-icon-theme.test.mjs`가 모두 `ok`를 찍고, `herdr-app check mods/git-tools`가
-통과한다. 테스트는 node 내장 모듈(`node:assert/strict` 등)만 쓴다.
+**전체 오프라인 검사:** `node tools/check.mjs`가 한 번에 돌린다. 루트의 `node layout.test.mjs`,
+`mods/git-tools`의 `*.test.mjs` 17개 각각, `node tools/gen-icon-theme.test.mjs`가 모두 `ok`를 찍고,
+`herdr-app check mods/git-tools`가 통과한다. 테스트는 node 내장 모듈(`node:assert/strict` 등)만 쓴다.
+
+**느린 엔진의 예산:** `icon-theme.test.mjs`가 JIT를 끈 node로 규칙을 꽂는 시간을 재서, 규칙을
+힌트 아래에 꽂기만 하는 단순한 순회의 8배 안인지 본다. 시작할 때 규칙마다 하는 계산이 다시
+늘어나면 여기서 걸린다. 처음 보는 이름 하나가 돌리는 정규식의 수(평균 4, 최대 16 이하)도 같은
+파일이 센다.
 
 **생성물 재현 검사:** `ICON_THEME_SOURCE=<폴더> node tools/gen-icon-theme.test.mjs`가 임시 폴더에
 테마를 다시 만들어 커밋된 생성물과 바이트 단위로 비교한다. 변수가 없으면 `skip: …`과 `ok`만

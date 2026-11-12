@@ -1,7 +1,7 @@
 // node files-tree.test.mjs: the Files panel's pure decisions (search order, marks and dots,
 // visible rows, what a refresh keeps, arrow keys).
 import assert from "node:assert/strict";
-import { markLookup, rankSearch, visibleRows, keepPressed, moveKey } from "./files-tree.js";
+import { markLookup, rankSearch, visibleRows, keepPressed, moveKey, stripFailure, failureKey } from "./files-tree.js";
 
 // Marks: a file's own mark, a whole ignored or untracked folder marking what's inside it,
 // the nearest such folder deciding, and dots that skip ignored files but count deletions.
@@ -230,6 +230,38 @@ const entries = new Map([
   const results = rankSearch(["a/one.txt", "b/two.txt"], "t").items;
   assert.deepEqual(moveKey(results, "a/one.txt", "down"), { current: "b/two.txt", ...stay });
   assert.deepEqual(moveKey(results, "b/two.txt", "enter"), { current: "b/two.txt", ...stay, preview: "b/two.txt" });
+}
+
+// The error strip after a refresh: a folder's read failure closed by hand stays closed
+// while the same folder keeps failing the same way; another folder's failure, a changed
+// failure, or the same one coming back after it cleared shows again.
+{
+  const denied = (folder) => ({ folder, error: { note: "files.denied", folder } });
+  const shown = (failures, closed) => {
+    const r = stripFailure(failures, closed);
+    return { show: r.show, closed: r.closed };
+  };
+  // Nothing closed: the first failure shows.
+  let r = shown([denied("a"), denied("b")], new Set());
+  assert.deepEqual(r.show, denied("a"));
+  // "a" closed: the next refresh shows "b", then nothing once "b" is closed too.
+  r = shown([denied("a"), denied("b")], new Set([failureKey(denied("a"))]));
+  assert.deepEqual(r.show, denied("b"));
+  r = shown([denied("a"), denied("b")], new Set([...r.closed, failureKey(denied("b"))]));
+  assert.equal(r.show, null);
+  const bothClosed = r.closed;
+  // The same folder failing another way shows again.
+  r = shown([{ folder: "a", error: "a: Input/output error" }], bothClosed);
+  assert.deepEqual(r.show, { folder: "a", error: "a: Input/output error" });
+  // A failure gone from a refresh is forgotten: when it comes back it shows.
+  r = shown([denied("b")], bothClosed);
+  assert.equal(r.show, null);
+  r = shown([denied("a"), denied("b")], r.closed);
+  assert.deepEqual(r.show, denied("a"));
+  // No failures: nothing shows and nothing stays closed.
+  r = shown([], bothClosed);
+  assert.equal(r.show, null);
+  assert.equal(r.closed.size, 0);
 }
 
 console.log("ok");

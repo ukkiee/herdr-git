@@ -27,7 +27,7 @@ import { div, svg } from "gpui-kit";
 import { h_flex, v_flex, Editor, EditorState, InputState, Input } from "gpui-base";
 import { exec, theme, settings, watchFolder, readTextFile, window as hostWindow } from "herdr";
 import { readFolder, readMarks, readSearchList, roomFor, PER_FOLDER, TOTAL, SEARCH_LIMIT } from "./files-data.js";
-import { markLookup, visibleRows, keepPressed, rankSearch, moveKey, SEARCH_SHOWN } from "./files-tree.js";
+import { markLookup, visibleRows, keepPressed, stripFailure, failureKey, rankSearch, moveKey, SEARCH_SHOWN } from "./files-tree.js";
 import { location, icon, fileGlyph, folderGlyph, darkLook, panelFrame, toolbar, iconButton, row, notice, errorStrip, WindowedList, openMenu } from "./ui.js";
 import { openDiff } from "./view-diff.js";
 
@@ -83,6 +83,9 @@ export default class FilesView {
     this.rows = []; this.current = null;
     this.limited = false; this.gone = false; this.read = false; this.loading = false; this.again = false;
     this.error = null; this.rootError = null;
+    // The folder read failure in the error strip, if that is what it shows, and the ones
+    // closed by hand (stripFailure).
+    this.errorFailure = null; this.closedFailures = new Set();
     this.watching = null;
     this.release();
     this.file = null; this.fileNote = null; this.cut = false;
@@ -149,15 +152,14 @@ export default class FilesView {
     const platform = hostWindow()?.platform ?? null;
     cx.spawn(async (cx) => {
       try {
-        const read = new Map(), loaded = new Map();
-        let failed = null;
+        const read = new Map(), loaded = new Map(), failures = [];
         for (const path of ["", ...this.open]) {
           if (path && !loaded.has(parentOf(path))) continue;
           const r = await readFolder(exec, path ? `${root}/${path}` : root, { on, platform, room: roomFor(loaded, path) });
           if (this.context !== context) return;
           if (!r.ok && !path) { this.gone = r.gone; this.rootError = r.gone ? null : readError(r, root) || "?"; this.folders = new Map(); this.rebuild(); return; }
           // A folder deleted since it was opened just has nothing under it.
-          if (!r.ok && !r.gone) failed = failed ?? readError(r, path);
+          if (!r.ok && !r.gone && readError(r, path)) failures.push({ folder: path, error: readError(r, path) });
           read.set(path, r);
           if (r.ok) loaded.set(path, r.entries);
         }
@@ -170,7 +172,10 @@ export default class FilesView {
         // A failed git read keeps the marks it had and says nothing: the Commit panel
         // shows git's errors, and a machine without git would get one every 10 s.
         if (m.ok) { this.marks = markLookup(m.marks); this.prefix = m.repo?.prefix ?? ""; this.repoRoot = m.repo?.root ?? null; }
-        this.error = failed;
+        const strip = stripFailure(failures, this.closedFailures);
+        this.closedFailures = strip.closed;
+        this.errorFailure = strip.show;
+        this.error = strip.show?.error ?? null;
         this.rebuild();
         this.watch(cx);
       } finally {
@@ -224,7 +229,10 @@ export default class FilesView {
         if (this.context !== context || !this.open.has(path)) return;
         // Failed or gone is kept too: nothing under it, not a "reading" row that never ends.
         this.folders.set(path, r);
-        if (!r.ok && !r.gone) this.error = readError(r, path) || null;
+        if (!r.ok && !r.gone && readError(r, path)) {
+          this.error = readError(r, path);
+          this.errorFailure = { folder: path, error: this.error };
+        }
         this.rebuild();
       } finally {
         if (this.context === context) this.pending.delete(path);
@@ -383,7 +391,7 @@ export default class FilesView {
       else if (picked === "relative") cx.write_to_clipboard(relative);
       else if (picked === "reveal") {
         const r = await exec("open", ["-R", absolute]).catch(() => null);
-        if (!r || r.code !== 0) this.error = (r?.stderr ?? "").trim() || this.t("files.revealFailed");
+        if (!r || r.code !== 0) { this.error = (r?.stderr ?? "").trim() || this.t("files.revealFailed"); this.errorFailure = null; }
       }
       cx.notify();
     });
@@ -428,6 +436,13 @@ export default class FilesView {
   close() { this.release(); }
 
   // ---- drawing
+
+  // A folder read failure closed here stays closed in later refreshes while it lasts.
+  closeError(cx) {
+    if (this.errorFailure) this.closedFailures.add(failureKey(this.errorFailure));
+    this.error = null; this.errorFailure = null;
+    cx.notify();
+  }
 
   // An error as shown: the reader's own words, or a note (readError) worded in the
   // copy's language now, so a language switch rewords it.
@@ -577,7 +592,7 @@ export default class FilesView {
         : v_flex().flex_1().min_h(0)
           .child(div().flex_1().min_h(0).child(searching ? this.renderFound(t) : this.renderTree(t)))
           .children(notes.map((note, i) => div().id(`files-note-${i}`).flex_none().px(10).py(5).border_t(1).border_color(t.border).text_size(11).text_color(t.dim).child(note))))
-      .when(Boolean(this.error) && !previewing, (el) => el.child(errorStrip("files-error", this.say(this.error), t, (_e, cx) => { this.error = null; cx.notify(); })));
+      .when(Boolean(this.error) && !previewing, (el) => el.child(errorStrip("files-error", this.say(this.error), t, (_e, cx) => this.closeError(cx))));
   }
 }
 

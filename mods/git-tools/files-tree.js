@@ -129,6 +129,25 @@ export function keepPressed(read, now, open) {
   return out;
 }
 
+// failureKey: one folder read failure as a string, the same for the same folder failing
+//   the same way. failure: { folder, error }, error being the reader's words or a note.
+export function failureKey({ folder, error }) {
+  return JSON.stringify([folder, error]);
+}
+
+// stripFailure: which folder read failure a refresh puts in the error strip.
+//   failures: [{ folder, error }] the refresh met, in the order it read the folders.
+//   closed: Set of failureKey()s whose strip was closed by hand.
+//   → { show, closed }: the first failure not closed (or null), and `closed` less the
+//   failures this refresh didn't meet. A folder left open without permission would
+//   otherwise bring the strip back every 10 s; a failure that clears and comes back is
+//   new news and shows again.
+export function stripFailure(failures, closed) {
+  const met = new Set(failures.map(failureKey));
+  const still = new Set([...closed].filter((key) => met.has(key)));
+  return { show: failures.find((f) => !still.has(failureKey(f))) ?? null, closed: still };
+}
+
 // moveKey: what a key does in the tree or the search results.
 //   rows: visibleRows' rows, or rankSearch's items (rows without `folder` are files).
 //   current: the chosen row's path, or null. key: "up" | "down" | "left" | "right" | "enter".

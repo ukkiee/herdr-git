@@ -313,6 +313,59 @@ async function recordDeleted(git, root, branch) {
   return parked.ok ? { ok: true } : parked;
 }
 
+const DELETED_LIMIT = 50;
+const TAKEN = { reason: "a branch of this name exists now at another commit", key: "branches.nameTaken" };
+
+// readDeletedBranches(git, root) → { ok, err, branches }
+//   branches: the deleted branches still kept, newest first, DELETED_LIMIT at most:
+//   [{ name, hash, subject, time, upstream, restorable, reason, msg? }]. hash: the full
+//   hash it pointed at; subject: that commit's first line; time: when it was deleted,
+//   unix seconds; upstream: as deleteBranch's `deleted` has it, or null.
+//   A branch deleted more than once at the same commit is one entry, the newest. One
+//   whose name is a local branch at that same commit now is left out (restored already).
+//   One whose name is a local branch at another commit now is listed with restorable
+//   false and why (reason, and msg for i18n.js); restorable ones have reason "".
+//   [] when nothing was ever deleted here. The ref is shared by every worktree of the
+//   repository, so each of them reads the same list.
+export async function readDeletedBranches(git, root) {
+  const fail = (r) => ({ ok: false, err: r.err || "git log failed.", branches: [] });
+  const [log, heads] = await Promise.all([
+    // --date=unix puts the entry's time in its selector: "…@{1794470000}".
+    git.read(root, ["log", "-g", "--date=unix", "--format=%H%x00%gd%x00%gs%x00%s", DELETED, "--"]),
+    git.read(root, ["for-each-ref", "--format=%(refname)%00%(objectname)", HEADS]),
+  ]);
+  if (!heads.ok) return fail(heads);
+  if (!log.ok) {
+    // Never deleted anything here: no such ref. Asked of git, not read from its words,
+    // which may be in another language.
+    const ref = await refValue(git, root, DELETED);
+    return ref.ok && ref.hash === null ? { ok: true, err: "", branches: [] } : fail(log);
+  }
+  const now = new Map();
+  for (const line of heads.out.split("\n")) {
+    const [ref, hash] = line.split("\0");
+    if (ref && hash) now.set(ref.slice(HEADS.length), hash);
+  }
+  const branches = [], seen = new Set();
+  for (const line of log.out.split("\n")) {
+    const [hash, selector, message, subject = ""] = line.split("\0");
+    const record = message === undefined ? null : readRecord(message);
+    if (!record) continue;
+    const key = `${record.name}\0${hash}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const there = now.get(record.name);
+    if (there === hash) continue;
+    const time = Number(/@\{(\d+)\}$/.exec(selector)?.[1] ?? 0);
+    const state = there === undefined
+      ? { restorable: true, reason: "" }
+      : { restorable: false, reason: TAKEN.reason, msg: { key: "branches.nameTaken", args: { name: record.name } } };
+    branches.push({ name: record.name, hash, subject, time, upstream: record.upstream, ...state });
+    if (branches.length >= DELETED_LIMIT) break;
+  }
+  return { ok: true, err: "", branches };
+}
+
 // A local branch's commit and upstream: { ok, hash, upstream } or { ok: false, err, msg? }.
 async function branchState(git, root, name) {
   const at = await git.read(root, ["rev-parse", "--verify", "--quiet", `${HEADS}${name}^{commit}`]);

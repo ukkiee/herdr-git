@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
 import { makeGit } from "./git.js";
 import { translator } from "./i18n.js";
-import { readBranches, checkout, checkoutRevision, checkBranchName, createBranch, fetchAll, deleteBranch, restoreBranch } from "./git-branch.js";
+import { readBranches, checkout, checkoutRevision, checkBranchName, createBranch, fetchAll, deleteBranch, restoreBranch, readDeletedBranches } from "./git-branch.js";
 
 const tmp = realpathSync(mkdtempSync(`${tmpdir()}/git-tools-branch-`));
 // Same shape as herdr's exec: resolves with { code, stdout, stderr }, rejects when it can't start.
@@ -755,6 +755,125 @@ const alive = (cwd, hash) => ask(cwd, ["cat-file", "-e", `${hash}^{commit}`]) !=
   assert.equal(raw(dir, ["rev-parse", DELETED]), c2);
   assert.equal(logAll(dir).includes(c1), false);
   assert.equal(logAll(dir).includes(x1), false);
+}
+
+// ---- readDeletedBranches
+
+// Deleted here, in this order (one each unless said):
+//   at-root, at-root-2: on b1, the commit the hidden ref rests on, while HEAD is on it too
+//   (main moves on to m2)
+//   at-root-3:  on b1 again, with HEAD elsewhere
+//   feat/a:     a1, tracking origin/main
+//   fix/50%:    p1, tracking local main ("."), a name with a "%"
+//   -f:         f1, tracking nothing
+//   twice:      t1, deleted, restored, deleted again: one line
+//   same-back:  s1, deleted, then made again at s1 by hand: left out
+//   moved:      v1, deleted, then a branch of that name made at m2: shown, not restorable
+// A branch one commit past main, made by its full ref (a name may be "-f"), with an
+// upstream when one is given as [remote, merge].
+const branchAt = (dir, name, file, text, upstream = null) => {
+  raw(dir, ["checkout", "-q", "--detach", "main"]);
+  const hash = commit(dir, file, text);
+  raw(dir, ["checkout", "-q", "main"]);
+  raw(dir, ["update-ref", `refs/heads/${name}`, hash]);
+  if (upstream) {
+    raw(dir, ["config", `branch.${name}.remote`, upstream[0]]);
+    raw(dir, ["config", `branch.${name}.merge`, upstream[1]]);
+  }
+  return hash;
+};
+const deleted = async (dir, name) => {
+  const r = await deleteBranch(git, dir, name, { confirmed: true });
+  assert.equal(r.ok, true, `${name}: ${r.err}`);
+  return r;
+};
+const listed = placed("listed");
+const started = Math.floor(Date.now() / 1000);
+const b1 = raw(listed, ["rev-parse", "HEAD"]);
+raw(listed, ["branch", "--no-track", "at-root", b1]);
+raw(listed, ["branch", "--no-track", "at-root-2", b1]);
+await deleted(listed, "at-root");
+await deleted(listed, "at-root-2");
+const lm2 = commit(listed, "m2.txt", "m2");
+raw(listed, ["branch", "--no-track", "at-root-3", b1]);
+await deleted(listed, "at-root-3");
+const a1 = branchAt(listed, "feat/a", "a.txt", "a one", ["origin", "refs/heads/main"]);
+await deleted(listed, "feat/a");
+const p1 = branchAt(listed, "fix/50%", "p.txt", "p one", [".", "refs/heads/main"]);
+await deleted(listed, "fix/50%");
+const f1b = branchAt(listed, "-f", "f.txt", "f one");
+await deleted(listed, "-f");
+const tw1 = branchAt(listed, "twice", "t.txt", "t one");
+const once = await deleted(listed, "twice");
+assert.equal((await restoreBranch(git, listed, once.deleted)).ok, true);
+await deleted(listed, "twice");
+const s1 = branchAt(listed, "same-back", "s.txt", "s one");
+await deleted(listed, "same-back");
+raw(listed, ["branch", "--no-track", "same-back", s1]);
+const v1 = branchAt(listed, "moved", "v.txt", "v one");
+await deleted(listed, "moved");
+raw(listed, ["branch", "--no-track", "moved", lm2]);
+const ended = Math.floor(Date.now() / 1000);
+
+{
+  const r = await readDeletedBranches(git, listed);
+  assert.equal(r.ok, true, r.err);
+  for (const b of r.branches) assert.ok(b.time >= started && b.time <= ended, `${b.name}: deleted between ${started} and ${ended}, not ${b.time}`);
+  const free = { restorable: true, reason: "" };
+  assert.deepEqual(r.branches.map(({ time, ...b }) => b), [
+    { name: "moved", hash: v1, subject: "v one", upstream: null, restorable: false, reason: "a branch of this name exists now at another commit", msg: { key: "branches.nameTaken", args: { name: "moved" } } },
+    { name: "twice", hash: tw1, subject: "t one", upstream: null, ...free },
+    { name: "-f", hash: f1b, subject: "f one", upstream: null, ...free },
+    { name: "fix/50%", hash: p1, subject: "p one", upstream: { remote: ".", merge: "refs/heads/main" }, ...free },
+    { name: "feat/a", hash: a1, subject: "a one", upstream: { remote: "origin", merge: "refs/heads/main" }, ...free },
+    { name: "at-root-3", hash: b1, subject: "b1", upstream: null, ...free },
+    { name: "at-root-2", hash: b1, subject: "b1", upstream: null, ...free },
+    { name: "at-root", hash: b1, subject: "b1", upstream: null, ...free },
+  ]);
+  assert.equal(translator("ko")("branches.nameTaken", { name: "moved" }), "같은 이름의 브랜치가 지금 다른 커밋에 있습니다");
+  // Still nothing of theirs in `log --all`.
+  for (const hash of [a1, p1, f1b, tw1, v1]) assert.equal(logAll(listed).includes(hash), false);
+}
+
+// Never deleted anything: an empty list. Not a repository: an error.
+{
+  const r = await readDeletedBranches(git, placed("none-deleted"));
+  assert.deepEqual([r.ok, r.branches], [true, []]);
+  const plain = `${tmp}/plain-deleted`;
+  mkdirSync(plain);
+  const bad = await readDeletedBranches(git, plain);
+  assert.equal(bad.ok, false);
+  assert.ok(bad.err);
+  assert.deepEqual(bad.branches, []);
+}
+
+// A linked worktree reads the same list, and a branch deleted there joins it.
+{
+  const wt = `${tmp}/listed-wt`;
+  raw(listed, ["worktree", "add", "-q", "--detach", wt, "main"]);
+  const before = await readDeletedBranches(git, listed);
+  assert.deepEqual(await readDeletedBranches(git, wt), before);
+  const w1 = branchAt(listed, "from-wt", "w.txt", "w one");
+  await deleted(wt, "from-wt");
+  const after = await readDeletedBranches(git, listed);
+  assert.deepEqual(after.branches.map((b) => [b.name, b.hash]), [["from-wt", w1], ...before.branches.map((b) => [b.name, b.hash])]);
+  assert.deepEqual(await readDeletedBranches(git, wt), after);
+}
+
+// The newest 50 only.
+{
+  const dir = lone("many");
+  const base = raw(dir, ["rev-parse", "HEAD"]);
+  const order = [];
+  for (let i = 1; i <= 55; i++) {
+    const name = `old/${String(i).padStart(2, "0")}`;
+    raw(dir, ["branch", "--no-track", name, base]);
+    await deleted(dir, name);
+    order.unshift(name);
+  }
+  const r = await readDeletedBranches(git, dir);
+  assert.equal(r.ok, true, r.err);
+  assert.deepEqual(r.branches.map((b) => b.name), order.slice(0, 50));
 }
 
 console.log("ok");

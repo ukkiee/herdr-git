@@ -22,7 +22,8 @@
 // The copy's language: props.lang when the opener gave one (dialogs and menus get the
 // opener's, ui.js openDialog/openMenu), else the language last read on this computer
 // (ui.js rememberedLang), else English; a copy without props.lang then reads the
-// system's language and switches when it differs.
+// system's language and switches when it differs. Right after the app starts the system
+// may not answer yet: the copy asks again, and follows what another copy remembered.
 
 import { View, div } from "gpui-kit";
 import { props, nextCommand, theme } from "herdr";
@@ -39,6 +40,9 @@ import BranchNew from "./view-branch-new.js";
 import Menu from "./view-menu.js";
 import IconSheet from "./view-icon-sheet.js";
 import LogButton from "./view-log-button.js";
+
+// When the system's language isn't known yet, how long to wait before each next ask.
+const ASK_AGAIN = [1000, 3000, 10000];
 
 // The screen table: props.view → the screen's class.
 export const VIEWS = {
@@ -77,23 +81,13 @@ export default class GitTools extends View {
     this.screen.bus = this.events;
     this.screen.locks = this.locks;
     const fixed = fixedLang(p);
+    this.fixed = Boolean(fixed);
     this.speak(fixed ?? rememberedLang() ?? "en");
     // Here, not in a screen's first render: the copies share the module, so only the
     // first copy pays for it.
     warmIcons();
     this.say(() => this.screen.init(p, cx));
-    if (!fixed) {
-      cx.spawn(async (cx) => {
-        const lang = await readSystemLang();
-        if (!lang) return;
-        rememberLang(lang);
-        if (lang !== this.lang) {
-          this.speak(lang);
-          this.say(() => this.screen.spoke?.(cx));
-          cx.notify();
-        }
-      });
-    }
+    if (!fixed) this.askLang(cx, 0);
     // A lock this copy holds stays alive only while it beats (lock.js STALE). Writes
     // nothing while the copy holds none.
     cx.timer.every(LOCK_BEAT, () => this.locks.beat());
@@ -117,6 +111,28 @@ export default class GitTools extends View {
     });
   }
 
+  // Reads the system's language and remembers it for every copy; not known, it asks
+  // again a few times.
+  askLang(cx, attempt) {
+    cx.spawn(async (cx) => {
+      const lang = await readSystemLang();
+      if (!lang) {
+        if (attempt < ASK_AGAIN.length) cx.timer.after(ASK_AGAIN[attempt], (cx) => this.askLang(cx, attempt + 1));
+        return;
+      }
+      rememberLang(lang);
+      this.turnTo(lang, cx);
+    });
+  }
+
+  // Switches the copy to `lang` when it speaks another, and draws again.
+  turnTo(lang, cx) {
+    if (!lang || lang === this.lang) return;
+    this.speak(lang);
+    this.say(() => this.screen.spoke?.(cx));
+    cx.notify();
+  }
+
   // The copy's language, on this view and its screen.
   speak(lang) {
     this.t = translator(lang);
@@ -132,6 +148,12 @@ export default class GitTools extends View {
   render(cx) {
     // What other copies posted since this one last looked (ui.js): the loop in init gets it.
     this.events.pump(cx);
+    // The remembered language changed (another copy read the system's): this copy follows.
+    // In a timer: nothing may be redrawn from inside render.
+    if (!this.fixed && !this.turning && (rememberedLang() ?? this.lang) !== this.lang) {
+      this.turning = true;
+      cx.timer.after(0, (cx) => { this.turning = false; this.turnTo(rememberedLang(), cx); });
+    }
     return this.say(() => this.screen.render(cx));
   }
 

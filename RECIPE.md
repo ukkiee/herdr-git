@@ -419,13 +419,18 @@ another machine runs every git command on that machine. A panel opened with
 
 - The words follow the computer the window is on, also for a space on another machine:
   Korean when its first preferred language starts with `ko` (`ko`, `ko-KR`,
-  `ko_KR.UTF-8`), English for anything else, an empty list or an answer that can't be
-  read. macOS: the system's preferred languages. Linux: the first set of `LC_ALL`,
-  `LC_MESSAGES`, `LANG`. Windows: always English. There is no switch in the mod.
+  `ko_KR.UTF-8`), English for anything else or an empty list. macOS: the system's
+  preferred languages. Linux: the first set of `LC_ALL`, `LC_MESSAGES`, `LANG`. Windows:
+  always English. There is no switch in the mod.
 - The language last read is kept in Herdr's shared state, so a screen opened later
   starts in it at once. A screen starts in that (English the very first time), reads
-  the system's again, and changes over when it differs. After changing the system
-  language, open screens follow it at the next start of Herdr.
+  the system's again, and changes over when it differs. When one screen reads another
+  language than the one kept, every open screen follows it.
+- An answer that can't be read is not English. Right after Herdr starts there may be no
+  window to ask about yet, and the command can fail: the screen then keeps its language
+  and asks again after 1, 3 and 10 seconds.
+- After changing the system language, open screens follow it at the next start of
+  Herdr, or sooner when a screen that reads the system starts (a Diff tab, for one).
 - A dialog or popup menu opens in the language of the screen that opened it, from its
   first frame. A screen opened with `props.lang` (`"en"` or `"ko"`) stays in that
   language (a way to see the English screens on a Korean computer).
@@ -963,8 +968,11 @@ time and never keep `t` in a variable.
 **Language.** `main.js` gives each screen `this.t` (`t(key, args)`) and `this.lang`
 before its `init`: `props.lang` when set (fixed), else the shared `git-tools.lang`, else
 English. An unfixed copy then reads the system's language in a `cx.spawn` of its `init`
-(`readSystemLang`), writes `git-tools.lang` when it differs, and when it differs from
-its own it swaps `t` and `lang` and redraws. `main.js` runs the screen's `init`,
+(`askLang` → `readSystemLang`), writes `git-tools.lang` when it differs, and when it
+differs from its own it swaps `t` and `lang` and redraws (`turnTo`). A null answer (not
+known) changes nothing and is asked again after 1, 3 and 10 seconds (`ASK_AGAIN`). In
+`render`, an unfixed copy whose language isn't the shared one turns to it in a
+`cx.timer.after(0, …)`, so every copy follows the one that read. `main.js` runs the screen's `init`,
 `render`, `command`, `event`, `serve` and `close` inside `speakAs(this.t, …)`, so the
 shared parts in `ui.js` speak the copy's language while one of those calls runs; in a
 click handler or after an `await` they take the screen (`askOwner`, `serveRequest`,
@@ -976,7 +984,8 @@ language would outlive a change of the system's), so a tab reads its own.
 
 **`ui.js`** (shared parts): `MOD`, `ROW` (24), `icon(name)`; the language:
 `speakAs(t, fn)`, `fixedLang(props)`, `rememberedLang()`, `rememberLang(lang)`,
-`readSystemLang()` → Promise of `"ko" | "en"`, or null when the command couldn't start,
+`readSystemLang()` → Promise of `"ko" | "en"`, or null when it isn't known (no window
+yet, or the command failed or couldn't start),
 `sentence(t, msg, text)` (from `i18n.js`); the Icon theme: `darkLook(color?)`
 (whether `color`, default `theme().background`, is dark; read once per render),
 `darkColor(color)` (true, false, or null when it can't read it), `fileGlyph(path, { dark, size })` and
@@ -1107,7 +1116,7 @@ the git ones run against real temporary repositories):
 | `git-log.js` | `readLog`, `readRefsState`, `readGitDir`, `refsChanged`, `resolveCommit`, `shortenMiddle`, `labelRefs`, `formatCommitTime` |
 | `git-branch.js` | `readBranches`, `checkout`, `checkoutRevision`, `checkBranchName`, `createBranch`, `fetchAll`, `deleteBranch` (a branch it removed comes back as `deleted: { name, hash, upstream }`, `upstream` `{ remote, merge }` or null, read before `branch -D`), `restoreBranch(git, root, { name, hash, upstream })` |
 | `git-log-filter.js` | `DATE_PRESETS` (`{ label, key, since }`: `label` is the saved English name, `key` the words), `datePreset(label)`, `dateText(t, { dateLabel, since, until })`, `isDate`, `filterArgs` (`users: [{ name } \| { text }]` besides `user`), `isHash`, `readMe`, `userOf`, `readAuthors(git, root)` → `{ ok, err, authors: [{ name, emails }] }`, `matchAuthors(authors, query)`, `readBranchNames` |
-| `i18n.js` | `LANGS` (`["en", "ko"]`), `pickLang(tags)`, `readAppleLanguages(stdout)`, `readLocaleEnv(stdout)`, `TABLES`, `translator(lang, tables?)` → `t(key, args)` (`t.lang`), `sentence(t, msg, text)`, `formatTime(seconds, lang, now?)`, `formatDateTime(seconds, lang)` |
+| `i18n.js` | `LANGS` (`["en", "ko"]`), `pickLang(tags)`, `readAppleLanguages(stdout)`, `readLocaleEnv(stdout)`, `systemLang(platform, read)` (→ `"ko" | "en"`, or null when it isn't known), `TABLES`, `translator(lang, tables?)` → `t(key, args)` (`t.lang`), `sentence(t, msg, text)`, `formatTime(seconds, lang, now?)`, `formatDateTime(seconds, lang)` |
 | `messages-<area>.js` | `en` and `ko`, one per area: `ui`, `commit`, `log`, `filters`, `branches`, `dialogs`, `restore` (see "Words") |
 | `icon-theme.js` | `THEME_ROOT` (`"mods/git-tools/icons/theme"`), `DEFAULT_FILE_ICON` (`"file"`), `DEFAULT_FOLDER_ICON` (`"folder"`), `DEFAULT_DISABLED_PACKS` (`["ANGULAR"]`), `DEFAULT_EXCLUDE` (`["Zeit Now Ignore"]`), `makeIconTheme({ fileRules, folderRules, disabledPacks, exclude, root })` → `{ fileIcon, folderIcon, warm, stats }`, and the shared `fileIcon(path, { dark })`, `folderIcon(name, { open })` → the icon's path, `warmIcons()` (compiles the shared rules; `main.js` init) |
 | `icon-theme-data.js` | generated: `SOURCE`, `FILE_RULES`, `FOLDER_RULES` (`{ name, pattern, priority, icon, pack? }`, in source order), `DARK_FILE_ICONS`, `CLOSED_ONLY_FOLDER_ICONS`, `SKIPPED_RULES` |
@@ -1663,7 +1672,8 @@ English forms and ⏎ is a line break.
 - **To read the system language**, on the computer the window is on (never a space's
   machine): `defaults read -g AppleLanguages` on macOS, and on Linux
   `sh -c 'printf "%s\n%s\n%s\n" "$LC_ALL" "$LC_MESSAGES" "$LANG"'`. Once per screen when
-  it opens, 5 s timeout. Nothing on Windows.
+  it opens, and again after 1, 3 and 10 seconds while the answer isn't known; 5 s
+  timeout. Nothing on Windows.
   Branch and remote names go after `--end-of-options` (or as full `refs/heads/…` names),
   so a branch called `-f` or a remote called `--force` stays a name.
 - **git 2.37 or later** (`--since-as-filter` for the Date filter; `--end-of-options`
@@ -2473,3 +2483,9 @@ two emails, and one author reached only by a tag)
      button reads like Files. The Commit panel's Git Log button is lit with it.
 104. Drag the tab bar where it is empty, then the strip beside the Git button: each
      moves the window.
+
+**Language at the start of Herdr**
+
+105. On a Korean computer, with the Commit panel and the Log panel showing, quit Herdr
+     and start it: within about 15 seconds both panels are Korean, and the app home's
+     `shared.json` has `"git-tools.lang": "ko"`.

@@ -4,7 +4,23 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { pickLang, readAppleLanguages, readLocaleEnv, translator, sentence, formatTime, formatDateTime } from "./i18n.js";
+import { pickLang, readAppleLanguages, readLocaleEnv, systemLang, translator, sentence, formatTime, formatDateTime } from "./i18n.js";
+
+// The system's language from what was read on the window's computer. Not knowing is its
+// own answer (null): right after the app starts there may be no window to ask about yet,
+// or the command may fail, and English must not be taken for the system's language then.
+{
+  assert.equal(systemLang("macos", { code: 0, stdout: '(\n    "ko-KR",\n    en\n)' }), "ko");
+  assert.equal(systemLang("macos", { code: 0, stdout: '(\n    "en-US"\n)' }), "en");
+  assert.equal(systemLang("linux", { code: 0, stdout: "\n\nko_KR.UTF-8\n" }), "ko");
+  assert.equal(systemLang("linux", { code: 0, stdout: "\n\n\n" }), "en");
+  assert.equal(systemLang("windows", null), "en");
+  assert.equal(systemLang("macos", { code: 1, stdout: "" }), null, "the command failed");
+  assert.equal(systemLang("macos", null), null, "the command couldn't run");
+  assert.equal(systemLang("linux", { code: 127, stdout: "" }), null);
+  assert.equal(systemLang(undefined, { code: 0, stdout: '("ko-KR")' }), null, "no window yet");
+  assert.equal(systemLang(null, null), null);
+}
 
 // The first preferred language decides: Korean when it is Korean, English otherwise.
 {

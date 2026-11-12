@@ -9,7 +9,7 @@ import { h_flex, v_flex, Textarea, Scrollbar } from "gpui-base";
 import { spaces, panes, focused, layout, openOverlay, closeOverlay, run, shared, setShared, exec, settings, theme, window as hostWindow } from "herdr";
 import { makeCopy, post } from "./bus.js";
 import { makeLocks, BEAT, sameRepo, repoName } from "./lock.js";
-import { LANGS, translator, pickLang, readAppleLanguages, readLocaleEnv, sentence } from "./i18n.js";
+import { LANGS, translator, systemLang, sentence } from "./i18n.js";
 import { fileIcon, folderIcon, darkColor } from "./icon-theme.js";
 
 export const MOD = "git-tools";
@@ -58,23 +58,17 @@ export function rememberLang(lang) {
 }
 
 // The language of the computer the window is on (a remote space's too): macOS's first
-// preferred language, Linux's locale variables, English on Windows and when the answer
-// can't be read. null when the command couldn't start (keep what the copy has).
+// preferred language, Linux's locale variables, English on Windows. null when it isn't
+// known: no window yet (right after the app starts) or the command failed or couldn't
+// start. The copy then keeps what it has and asks again (main.js).
 export async function readSystemLang() {
+  const platform = hostWindow()?.platform;
+  let read = null;
   try {
-    const platform = hostWindow()?.platform;
-    if (platform === "macos") {
-      const r = await exec("defaults", ["read", "-g", "AppleLanguages"], { timeout: 5000 });
-      return r.code === 0 ? pickLang(readAppleLanguages(r.stdout)) : "en";
-    }
-    if (platform === "linux") {
-      const r = await exec("sh", ["-c", 'printf "%s\\n%s\\n%s\\n" "$LC_ALL" "$LC_MESSAGES" "$LANG"'], { timeout: 5000 });
-      return r.code === 0 ? pickLang(readLocaleEnv(r.stdout)) : "en";
-    }
-    return "en";
-  } catch {
-    return null;
-  }
+    if (platform === "macos") read = await exec("defaults", ["read", "-g", "AppleLanguages"], { timeout: 5000 });
+    else if (platform === "linux") read = await exec("sh", ["-c", 'printf "%s\\n%s\\n%s\\n" "$LC_ALL" "$LC_MESSAGES" "$LANG"'], { timeout: 5000 });
+  } catch { /* read stays null: not known */ }
+  return systemLang(platform, read);
 }
 
 // The language a dialog or popup menu opened now gets: the caller's `lang`, else the

@@ -271,8 +271,13 @@ export default class FilesView {
 
   // Enter in the box and a press on a result: the result's preview. The box's submit and
   // the panel's own Enter can both come for one press, so an open preview isn't read again.
+  // The panel takes the keyboard: the preview takes the box's place, and a box that is no
+  // longer drawn keeps the keyboard where no key reaches the panel, Esc included.
   openHit(cx, path = this.hit) {
-    if (path && path !== this.file) this.show(path, cx);
+    if (!path || path === this.file) return;
+    this.handle.focus();
+    this.typing = false;
+    this.show(path, cx);
   }
 
   // ---- rows

@@ -561,6 +561,29 @@ git add -A && git commit -q -m first`);
   assert.doesNotMatch(worded("ko"), /is staged|git failed|Restored|staging/);
 }
 
+// git fails while staging without a word (a write cut off by the time limit): the result
+// still ends on a line saying git failed, not on an empty line.
+{
+  const repo = init("restore-staging-fails-silently");
+  sh(repo, "for f in p q; do echo head > $f; done; git add -A && git commit -q -m first");
+  sh(repo, "for f in p q; do echo index > $f && git add $f && echo work > $f; done");
+  const snapshot = await back(repo, [["p", "modified"], ["q", "modified"]]);
+  const fails = (args, options) => args.includes("--cacheinfo") && !options?.env?.GIT_INDEX_FILE;
+  const run = async (cwd, args, options) => fails(args, options) ? { ok: false, code: -1, out: "", err: "" } : git(cwd, args, options);
+  run.read = git.read;
+
+  const r = await restore(run, repo, { snapshot, paths: ["p", "q"] });
+  assert.equal(r.ok, false);
+  assert.deepEqual(r.restored.sort(), ["p", "q"]);
+  assert.match(r.err, /^p: git failed before staging it$/m);
+  const last = r.err.split("\n").at(-1);
+  assert.notEqual(last.trim(), "", JSON.stringify(r.err));
+  assert.match(last, /git/);
+  const worded = (lang) => { const t = translator(lang), msg = wordRestore(t, r); return t(msg.key, msg.args); };
+  assert.equal(worded("en"), r.err);
+  assert.notEqual(worded("ko").split("\n").at(-1).trim(), "");
+}
+
 // A snapshot with one parent (made before snapshots held the index) restores the working
 // tree only: what was staged then stays unstaged, and the index is left as it is.
 {

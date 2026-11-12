@@ -427,7 +427,8 @@ Modal, 760×480, title `Restore Rolled-Back Changes`.
   `Restored without their staging:`, one `<path>: <reason>` line each:
   `something else is staged for it now`,
   `it was in a conflict, and a conflict can't be brought back`, or
-  `git failed before staging it`; in that last case git's words follow as the last line.
+  `git failed before staging it`; in that last case git's words follow as the last line
+  (`git failed while staging, without a message.` when git said nothing).
   Any other failure shows in an error strip.
 - Footer note `Files changed since the rollback are left as they are.` (`Restoring…`
   while it runs; `Another git operation is running: <label>` while another screen writes

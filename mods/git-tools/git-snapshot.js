@@ -399,8 +399,12 @@ export async function restore(git, root, { snapshot, paths = [], copy } = {}) {
       : !skipped.length
         ? [`${files} ${notStaged(stagingSkipped)}`, { key: "restore.stagingNotAll", args: { n, staged } }]
         : [`${files} ${notRestored(skipped)}\n${notStaged(stagingSkipped)}`, { key: "restore.notAllStaging", args: { n, list, staged } }];
-    // git's words, as they are, on the last line (restore.*Failed).
-    if (broke) [err, msg] = [`${err}\n${broke.err}`, { key: `${msg.key}Failed`, args: { ...msg.args, err: broke.err } }];
+    // git's words, as they are, on the last line (restore.*Failed). A write cut off by the
+    // time limit says nothing, and the line would be left empty.
+    if (broke) {
+      const said = broke.err || "git failed while staging, without a message.";
+      [err, msg] = [`${err}\n${said}`, { key: `${msg.key}Failed`, args: { ...msg.args, err: said } }];
+    }
     return { ok: false, code: broke ? broke.code : -1, out: "", restored, skipped, stagingSkipped, changed: moved(), err, msg };
   }
   return { ok: true, code: 0, out: "", err: "", restored, skipped, stagingSkipped, changed: moved() };

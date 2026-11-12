@@ -28,6 +28,7 @@
 - `Popover` 안의 요소도 휠 입력(`on_scroll_wheel`, 스크롤 영역)과 키 입력(`on_key_down`, 포커스가 그 안의 `Input`에 있을 때 위·아래 화살표 포함)을 받는다. [실험]
 - `image("mods/<name>/x.svg")`는 색이 든 SVG를 그 색대로 그린다(Atom Material Icons의 16×16 아이콘으로 확인). [실험]
 - 앱 내부 drag & drop은 없다(외부 파일 드롭만). [문서]
+- 키보드: `mod.json`에 `"focusable": true`가 없는 mod에는 Herdr가 키보드를 넘겨주지 않고 `focus` 명령도 보내지 않는다. 패널은 `cx.focus_handle()`을 `track_focus`로 달고, 줄을 누를 때 스스로 `focus()`해야 `on_key_down`을 받는다. 키 이름은 키 바인딩 철자(`up`, `enter`, `escape`, `space`)다. [문서/코드] Space가 `"space"`로 오는 것은 dialog에서 확인했다. [실험] 안쪽 `Input`에 포커스가 있을 때의 키가 바깥 요소의 `on_key_down`까지 올라오는지는 `Popover` 안에서만 확인했다(위). [미확인: 패널] 팝업 메뉴가 닫힌 뒤에는 키보드가 돌아오지 않으므로 다시 `focus()`한다. [코드]
 
 ## `herdr` API
 

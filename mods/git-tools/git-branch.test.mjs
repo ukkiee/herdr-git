@@ -998,6 +998,27 @@ for (const [days, kept] of [[29, true], [31, false]]) {
   assert.deepEqual([r.ok, r.err, r.restored, r.skipped], [true, "", [{ name: "one", hash: one }], []]);
 }
 
+// A branch another worktree has checked out is refused before anything is recorded, with
+// where it is checked out. After a commit there, the deleted list still doesn't have it.
+{
+  const dir = placed("other-worktree");
+  const wt = `${tmp}/other-worktree-wt`;
+  raw(dir, ["worktree", "add", "-q", "-b", "w", wt, "main"]);
+  const log = () => ask(dir, ["reflog", "show", "--format=%H %gs", DELETED]);
+  const before = log();
+  const r = await deleteBranch(git, dir, "w", { confirmed: true });
+  assert.equal(r.ok, false);
+  assert.equal(r.deleted, undefined);
+  assert.deepEqual(r.msg, { key: "branches.checkedOutElsewhere", args: { name: "w", path: wt } });
+  assert.equal(translator("en")(r.msg.key, r.msg.args), r.err);
+  assert.equal(r.err, `Cannot delete branch 'w': it is checked out in the worktree at ${wt}.`);
+  assert.doesNotMatch(translator("ko")(r.msg.key, r.msg.args), /Cannot|checked out/);
+  assert.equal(exists(dir, "refs/heads/w"), true);
+  assert.equal(log(), before);
+  commit(wt, "w.txt", "w one");
+  assert.deepEqual((await readDeletedBranches(git, dir)).branches, []);
+}
+
 // A branch made again whose upstream git couldn't set back (its config write fails) is
 // restored, and listed apart with git's words; it isn't said to be skipped.
 {

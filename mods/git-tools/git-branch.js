@@ -178,8 +178,9 @@ export async function fetchAll(git, root) {
 }
 
 // deleteBranch(git, root, name, { confirmed }) → { ok, code, out, err, unmerged, deleted? }
-//   Local branches only; the current branch and remote branches are refused, confirmed
-//   or not.
+//   Local branches only; the current branch, one another worktree has checked out (msg
+//   branches.checkedOutElsewhere, with its path) and remote branches are refused,
+//   confirmed or not.
 //   unmerged: how many of its commits no other branch, remote branch, tag or HEAD
 //   reaches, so would be lost. With any, it is refused (ok false, unmerged > 0) until
 //   confirmed is true. This is our own count, not `git branch -d`'s idea of merged
@@ -194,6 +195,10 @@ export async function deleteBranch(git, root, name, { confirmed = false } = {}) 
   const no = (err, unmerged = 0, msg = undefined) => ({ ...refused(err, msg ? { msg } : {}), unmerged });
   if (!(await hasRef(git, root, HEADS + name))) return no(`'${name}' is not a local branch. Only local branches can be deleted.`, 0, { key: "log.onlyLocalDelete", args: { name } });
   if ((await currentBranch(git, root)) === name) return no(`Cannot delete the current branch '${name}'.`, 0, { key: "log.deleteCurrent", args: { name } });
+  // git refuses it too, but only after it was recorded: a record of a branch never deleted.
+  const elsewhere = await checkedOutAt(git, root, name);
+  if (!elsewhere.ok) return no(elsewhere.err);
+  if (elsewhere.path) return no(`Cannot delete branch '${name}': it is checked out in the worktree at ${elsewhere.path}.`, 0, { key: "branches.checkedOutElsewhere", args: { name, path: elsewhere.path } });
   const at = await hasRef(git, root, "HEAD");
   // --exclude takes the name without refs/heads/ and applies to the --branches after it.
   const lost = await git.read(root, ["rev-list", "--count", HEADS + name, "--not", `--exclude=${name}`, "--branches", "--remotes", "--tags", ...(at ? ["HEAD"] : [])]);
@@ -415,6 +420,20 @@ export async function restoreBranches(git, root, branches = []) {
       ? [`${branchesWord} ${noUpstream}`, { key: "branches.notAllUpstream", args: { n, untracked: lines } }]
       : [`${branchesWord} ${notRestored}\n${noUpstream}`, { key: "branches.notAllRestoredUpstream", args: { n, list, untracked: lines } }];
   return { ok: false, code: -1, out: "", restored, skipped, untracked, err, msg };
+}
+
+// The worktree that has local branch `name` checked out: { ok, path } (path null when
+// none does), or { ok: false, err }. %(worktreepath) needs git 2.23. A branch another
+// worktree is rebasing or bisecting on a detached HEAD isn't found here; git's own
+// refusal then comes after the record.
+async function checkedOutAt(git, root, name) {
+  const r = await git.read(root, ["for-each-ref", "--format=%(refname)%00%(worktreepath)", HEADS]);
+  if (!r.ok) return { ok: false, err: r.err || "git for-each-ref failed." };
+  for (const line of r.out.split("\n")) {
+    const [ref, path] = line.split("\0");
+    if (ref === HEADS + name) return { ok: true, path: path || null };
+  }
+  return { ok: true, path: null };
 }
 
 // A local branch's commit and upstream: { ok, hash, upstream } or { ok: false, err, msg? }.

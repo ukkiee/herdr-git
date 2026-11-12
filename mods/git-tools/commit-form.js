@@ -21,6 +21,8 @@
 //   host.committed(cx, repo) after a commit on `repo`: clears Included and reads the list
 //                            again, if the panel still shows `repo`
 //   host.refresh(cx)         reads the list again
+//   host.amendChanged(cx)    Amend was turned on or off: the panel shows or drops the
+//                            Last commit group
 //   host.writeFailed(t, cx)  shows a write's failure in the panel's write strip: a commit
 //                            that fails after the panel left its repository
 //
@@ -116,6 +118,7 @@ export default class CommitForm {
     if (!repo || !host.hasHead || host.writeBlock()) return;
     this.amend = !this.amend;
     this.pushed = false;
+    host.amendChanged(cx);
     cx.notify();
     if (!this.amend) return;
     const where = this.where;
@@ -151,8 +154,11 @@ export default class CommitForm {
       // Amend and Included are that repository's and stay as they are.
       if (r.ok) {
         // The one to clear then is the put-away draft.
-        if (this.where === where) { this.text.set_value(""); this.amend = false; this.pushed = false; }
-        else this.drafts.delete(where);
+        if (this.where === where) {
+          const was = this.amend;
+          this.text.set_value(""); this.amend = false; this.pushed = false;
+          if (was) host.amendChanged(cx);
+        } else this.drafts.delete(where);
         // Included is cleared before the lock goes, so the read that follows is one read.
         host.committed(cx, repo);
         host.setBusy(null, cx);
@@ -202,7 +208,7 @@ export default class CommitForm {
     const writing = host.writeBlock(), spinning = this.running && writingOn(host, host.repo) ? this.running : null;
     const elsewhere = writing && !spinning ? writing : null;
     const canAmend = Boolean(host.hasHead) && !writing;
-    const why = this.blocked();
+    const why = this.blocked(), amending = this.amending();
     const whyNoAmend = canAmend ? null : host.hasHead ? writing : host.t("commit.noCommitsToAmend");
     const amendRow = h_flex().id("commit-amend").flex_none().gap(6).items_center()
       .child(checkbox("commit-amend-check", this.amending(), t, { disabled: !canAmend, onClick: (_e, cx) => this.toggleAmend(cx) }))
@@ -227,15 +233,16 @@ export default class CommitForm {
         .when(Boolean(host.detached), (el) => el.child(
           div().id("commit-detached-warning").w_full().min_w(0).text_size(12).text_color(t.ansi3).child(host.t("commit.detachedWarning"))))
         .child(textBox("commit-message", this.text, t, { focused: this.typing }))
-        // The labels stay the same with Amend on: a longer "Amend Commit and Push…"
-        // doesn't fit next to the other button at the panel's 280px.
-        .child(h_flex().w_full().min_w(0).gap(8).items_center()
-          .child(button("commit-run", host.t("commit.commit"), t, {
-            kind: "primary", disabled: Boolean(why), busy: spinning === "commit", title: why ?? host.t("commit.commitTitle"),
+        // With Amend on the labels are longer: "Amend Commit" and "Amend Commit and Push…"
+        // don't fit side by side at the panel's 280px, so the second one wraps under the
+        // first instead of running over it.
+        .child(h_flex().w_full().min_w(0).flex_wrap().gap(8).items_center()
+          .child(button("commit-run", host.t(amending ? "commit.amendCommit" : "commit.commit"), t, {
+            kind: "primary", disabled: Boolean(why), busy: spinning === "commit", title: why ?? host.t(amending ? "commit.amendCommitTitle" : "commit.commitTitle"),
             onClick: (_e, cx) => this.run(false, cx),
           }))
-          .child(button("commit-run-push", host.t("commit.commitAndPush"), t, {
-            disabled: Boolean(why), busy: spinning === "push", title: why ?? host.t("commit.commitAndPushTitle"),
+          .child(button("commit-run-push", host.t(amending ? "commit.amendCommitAndPush" : "commit.commitAndPush"), t, {
+            disabled: Boolean(why), busy: spinning === "push", title: why ?? host.t(amending ? "commit.amendCommitAndPushTitle" : "commit.commitAndPushTitle"),
             onClick: (_e, cx) => this.run(true, cx),
           })))
         .when(Boolean(elsewhere), (el) => el.child(

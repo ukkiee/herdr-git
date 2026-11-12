@@ -29,6 +29,25 @@ export function makeGit(exec, on) {
   return git;
 }
 
+// Paths go on the command line (herdr's exec has no stdin), so a long list is split to
+// stay far below the smallest limit an OS or an ssh hop puts on one command.
+const CHUNK_BYTES = 60000, CHUNK_PATHS = 1000;
+
+// chunks(paths, cost?) → [[path]]: `paths` in order, in parts that each fit one command.
+// cost: the bytes one path takes on the command line, worst case UTF-8; a caller that
+// puts more around each path (pathspec magic, a mode and an object) says how much.
+export function chunks(paths, cost = (path) => path.length * 3 + 1) {
+  const out = [];
+  let chunk = [], bytes = 0;
+  for (const path of paths) {
+    const size = cost(path);
+    if (chunk.length && (bytes + size > CHUNK_BYTES || chunk.length >= CHUNK_PATHS)) { out.push(chunk); chunk = []; bytes = 0; }
+    chunk.push(path); bytes += size;
+  }
+  if (chunk.length) out.push(chunk);
+  return out;
+}
+
 // The repository a folder belongs to: { ok: true, root }, or { ok: false, notRepo, err }.
 // notRepo tells "this folder isn't in a repository" (show the notice) from "git could not
 // be asked" (show the error and try again later).

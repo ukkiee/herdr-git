@@ -6,6 +6,7 @@
 // which is not a branch or a tag: no branch list, tag list, Commit list or push sees it.
 // No `herdr` import: node tests it against real repositories (git-snapshot.test.mjs).
 
+import { chunks } from "./git.js";
 import { sentence } from "./i18n.js";
 
 export const SNAPSHOTS = "refs/git-tools/rollback";
@@ -24,21 +25,6 @@ const IDENTITY = ["-c", "user.name=git-tools", "-c", "user.email=git-tools@local
 const COPY = /^[0-9a-f]{1,64}$/;
 const scratchIndex = (dir, copy) => `${dir}/git-tools-rollback-index-${copy}`;
 const noCopy = { ok: false, code: -1, out: "", err: "This copy of git-tools has no id to name its scratch index with.", msg: { key: "restore.noCopy" } };
-
-// Paths go on the command line (exec has no stdin): split as git-rollback.js does.
-const CHUNK_BYTES = 60000, CHUNK_PATHS = 1000;
-// cost: the bytes one path takes on the command line, worst case UTF-8.
-function chunks(paths, cost = (path) => path.length * 3 + 1) {
-  const out = [];
-  let chunk = [], bytes = 0;
-  for (const path of paths) {
-    const size = cost(path);
-    if (chunk.length && (bytes + size > CHUNK_BYTES || chunk.length >= CHUNK_PATHS)) { out.push(chunk); chunk = []; bytes = 0; }
-    chunk.push(path); bytes += size;
-  }
-  if (chunk.length) out.push(chunk);
-  return out;
-}
 
 const HASH = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/;
 

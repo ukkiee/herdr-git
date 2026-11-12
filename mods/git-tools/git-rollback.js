@@ -1,25 +1,9 @@
 // Rolling files back to HEAD. The only caller is the Rollback dialog (view-rollback.js);
 // what is rolled back is recorded first, so Restore (git-snapshot.js) can bring it back.
 
+import { chunks } from "./git.js";
 import { record } from "./git-snapshot.js";
 import { sentence } from "./i18n.js";
-
-// Paths go on the command line (herdr's exec has no stdin), so a long list is split to
-// stay far below the smallest limit an OS or an ssh hop puts on one command.
-const CHUNK_BYTES = 60000, CHUNK_PATHS = 1000;
-
-// cost: the bytes one path takes on the command line, worst case UTF-8.
-function chunks(paths, cost = (path) => path.length * 3 + 1) {
-  const out = [];
-  let chunk = [], bytes = 0;
-  for (const path of paths) {
-    const size = cost(path);
-    if (chunk.length && (bytes + size > CHUNK_BYTES || chunk.length >= CHUNK_PATHS)) { out.push(chunk); chunk = []; bytes = 0; }
-    chunk.push(path); bytes += size;
-  }
-  if (chunk.length) out.push(chunk);
-  return out;
-}
 
 // Why a path was skipped: the English reason, and its msg (i18n.js) for a screen to word
 // it in its language. notPutBack: the msg for the reason with NOT_PUT_BACK after it.

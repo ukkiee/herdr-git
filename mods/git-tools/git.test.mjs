@@ -3,7 +3,7 @@ import { execFile, execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, realpathSync, statSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
-import { makeGit, repoRoot } from "./git.js";
+import { makeGit, repoRoot, chunks } from "./git.js";
 
 const root = realpathSync(mkdtempSync(`${tmpdir()}/git-tools-`));
 // Same shape as herdr's exec: resolves with { code, stdout, stderr }, rejects when it can't start.
@@ -105,6 +105,26 @@ const git = makeGit(exec, null);
   assert.equal(gone.ok, false);
   assert.equal(gone.notRepo, false, "a folder that can't be reached is an error, not 'not a repository'");
   assert.ok(gone.err.length > 0);
+}
+
+// A long list of paths is split so each part fits one command: at most 1,000 paths and
+// 60,000 bytes (three bytes a character, the most UTF-8 takes for these, plus one between),
+// in order, nothing lost. A cost says what else a caller puts around each path.
+{
+  assert.deepEqual(chunks([]), []);
+  assert.deepEqual(chunks(["a", "b"]), [["a", "b"]]);
+  const many = Array.from({ length: 2500 }, (_, i) => `f${i}`);
+  const parts = chunks(many);
+  assert.deepEqual(parts.map((part) => part.length), [1000, 1000, 500]);
+  assert.deepEqual(parts.flat(), many);
+  // 100 characters cost 301 bytes: 199 fit in 60,000.
+  const long = Array.from({ length: 400 }, (_, i) => String(i).padStart(100, "x"));
+  assert.deepEqual(chunks(long).map((part) => part.length), [199, 199, 2]);
+  assert.deepEqual(chunks(long).flat(), long);
+  // A path too long for the limit by itself still goes, alone.
+  const huge = "h".repeat(30000);
+  assert.deepEqual(chunks(["a", huge, "b"]), [["a"], [huge], ["b"]]);
+  assert.deepEqual(chunks(many.slice(0, 600), () => 200).map((part) => part.length), [300, 300]);
 }
 
 console.log("ok");

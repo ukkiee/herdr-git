@@ -44,5 +44,6 @@
 
 - `render`는 `cx.notify()`와 Herdr 라이브 데이터 변화마다 다시 돌고, 다시 그리기는 창 전체다. 파싱·정렬·그래프 계산은 캐시한다. [문서]
 - import는 `gpui-kit`, `gpui-base`, `herdr`, 같은 폴더의 `./x.js`뿐이다. 폴더 밖 import는 심볼릭 링크 포함 거부된다. [문서/코드]
+- **다시 불러오기는 메모리를 돌려주지 않는다.** mod 폴더의 파일을 저장해 사본들이 다시 불려 올 때마다 Herdr 프로세스의 메모리가 늘고 줄지 않는다. git-tools의 사본 셋이 떠 있을 때 한 번에 약 5 MB였다. 앱을 켠 뒤 45번쯤, 늘어난 양이 약 256 MB일 때 git-tools의 다시 불러오기가 `Null"null"`로 실패했고 다른 mod의 화면에도 `out of memory` 띠가 떴다. 그 뒤로는 앱을 다시 시작해야 풀린다. `herdr-app check`는 10번을 돌려도 늘지 않았다. [실험: herdr-app 0.1.15, macOS]
 - `herdr-app check <mod 폴더>`: 한 번 로드해 초기 묘사를 검사한다. 레이아웃 계산, 지연 행, 이후 async 상태는 보지 않는다. [문서]
 - `herdr-app shot [file.png]`: 마지막 창 프레임을 PNG로 저장한다. [문서]

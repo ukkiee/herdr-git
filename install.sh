@@ -28,8 +28,10 @@ if ! herdr-app status >/dev/null 2>&1; then
   exit 1
 fi
 
+# Only files that differ are written: Herdr reloads the mod each time a file in its
+# folder is saved, and the mod has thousands of files.
 mkdir -p "$home/mods/git-tools"
-cp -R "$here/mods/git-tools/." "$home/mods/git-tools/"
+node "$here/layout.mjs" --copy "$here/mods/git-tools" "$home/mods/git-tools"
 herdr-app check "$home/mods/git-tools"
 
 # The first time, let Herdr clone main so its clicks (sizes, theme pick) come along.

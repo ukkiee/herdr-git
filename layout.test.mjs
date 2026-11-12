@@ -6,7 +6,7 @@ import { mkdtempSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
-import { toMainGit, writeWhole, LOG_ID, MOD } from "./layout.mjs";
+import { toMainGit, writeWhole, copyChanged, LOG_ID, MOD } from "./layout.mjs";
 
 // The parts of Herdr's shipped `main` the transform touches, plus a field of each
 // kind it must leave alone.
@@ -143,6 +143,46 @@ const leftovers = (dir, name) => fs.readdirSync(dir).filter((entry) => entry !==
   writeWhole(fs, file, "the new layout\n");
   assert.equal(fs.readFileSync(file, "utf8"), "the new layout\n");
   assert.deepEqual(leftovers(dir, "main-git.json"), []);
+}
+
+// The mod folder is copied by content. Herdr reloads every copy of a mod each time a file
+// in its folder is saved, so a file that is already the same is not written again, and a
+// file that differs is written whole under a hidden name (Herdr ignores those) and then
+// renamed into place: Herdr never reads half a file.
+{
+  const from = `${tmp}/mod-from`, to = `${tmp}/mod-to`;
+  fs.mkdirSync(`${from}/icons/theme`, { recursive: true });
+  fs.mkdirSync(`${to}/icons`, { recursive: true });
+  fs.writeFileSync(`${from}/main.js`, "export default 1;\n");
+  fs.writeFileSync(`${from}/view.js`, "new view\n");
+  fs.writeFileSync(`${from}/icons/theme/a.svg`, "<svg/>\n");
+  fs.writeFileSync(`${from}/icons/x.svg`, "<svg new/>\n");
+  fs.writeFileSync(`${to}/main.js`, "export default 1;\n");
+  fs.writeFileSync(`${to}/view.js`, "old view, longer than the new one\n");
+  fs.writeFileSync(`${to}/icons/x.svg`, "<svg old/>\n");
+  fs.writeFileSync(`${to}/gone.js`, "only in the app home\n");
+  const stamp = (file) => { const s = fs.statSync(file); return [s.ino, s.mtimeMs]; };
+  const kept = stamp(`${to}/main.js`);
+  const names = (dir, rel = "") => fs.readdirSync(`${dir}/${rel}`, { withFileTypes: true })
+    .flatMap((e) => (e.isDirectory() ? names(dir, `${rel}${e.name}/`) : [`${rel}${e.name}`])).sort();
+  const hidden = () => names(to).filter((name) => name.split("/").pop().startsWith("."));
+
+  // A disk that fills up: every file in place is still whole, and nothing is left behind.
+  assert.throws(() => copyChanged(halfFs, from, to), /no space left/);
+  assert.equal(fs.readFileSync(`${to}/view.js`, "utf8"), "old view, longer than the new one\n");
+  assert.equal(fs.readFileSync(`${to}/icons/x.svg`, "utf8"), "<svg old/>\n");
+  assert.deepEqual(hidden(), []);
+
+  assert.deepEqual(copyChanged(fs, from, to), { written: ["icons/theme/a.svg", "icons/x.svg", "view.js"], same: 1 });
+  assert.deepEqual(stamp(`${to}/main.js`), kept, "a file that is already the same is not written again");
+  for (const name of names(from)) assert.equal(fs.readFileSync(`${to}/${name}`, "utf8"), fs.readFileSync(`${from}/${name}`, "utf8"), name);
+  assert.equal(fs.readFileSync(`${to}/gone.js`, "utf8"), "only in the app home\n", "a file only the app home has stays");
+  assert.deepEqual(hidden(), []);
+  assert.deepEqual(copyChanged(fs, from, to), { written: [], same: 4 }, "run again, nothing is written");
+
+  // A folder the app home doesn't have yet.
+  assert.deepEqual(copyChanged(fs, from, `${tmp}/mod-new`), { written: ["icons/theme/a.svg", "icons/x.svg", "main.js", "view.js"], same: 0 });
+  assert.deepEqual(names(`${tmp}/mod-new`), names(from));
 }
 
 // The keys step of install.sh, run as install.sh runs it but on a disk that fills up:

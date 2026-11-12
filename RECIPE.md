@@ -809,7 +809,13 @@ In order, stopping with `Nothing was changed.` at any of the first four:
    `~/.config/herdr-app`).
 3. `node layout.mjs main.json` accepts it.
 4. `herdr-app status` answers (Herdr is running).
-5. Copies `mods/git-tools/` into the app home and runs `herdr-app check` on it.
+5. Copies `mods/git-tools/` into the app home with `node layout.mjs --copy <from> <to>`
+   (`copyChanged(fs, from, to)` → `{ written, same }`), which writes only the files the
+   app home lacks or holds with other bytes: Herdr reloads every copy of the mod each
+   time a file in its folder is saved. Each file to write first goes whole to a hidden
+   name beside its place (`.<name>.<pid>.tmp`; Herdr doesn't reload for hidden files),
+   then all are renamed into place. Files only the app home has stay. It prints
+   `N files updated, M already the same.` Then runs `herdr-app check` on the folder.
 6. The first time only: `herdr-app do layout.clone '{"name":"main","as":"main-git"}'`
    (so the person's clicks and theme pick come along).
 7. Writes `layouts/main-git.json` with `layout.mjs`, runs
@@ -1657,9 +1663,9 @@ English forms and ⏎ is a line break.
   folder.
 - **`install.sh`** runs `node`, `herdr-app status`, `herdr-app check`,
   `herdr-app do layout.clone` (first time) and `herdr-app do layout.switch`, and writes in
-  the app home: `mods/git-tools/`, `layouts/main-git.json`, and `keys.json` (only added
-  to). The last two are written whole to a temporary file next to them and renamed over
-  them.
+  the app home: `mods/git-tools/` (only the files that differ), `layouts/main-git.json`,
+  and `keys.json` (only added to). Each file is written whole to a temporary file next to
+  it and renamed over it.
 
 ## Watch out
 
@@ -1795,8 +1801,13 @@ English forms and ⏎ is a line break.
   `layout.show` and closes in `init`.
 - In a command name the text after `:` arrives as typed (`branches-filter:<text>`).
 - `overlay.close` closes the topmost overlay, toasts included. Saving any file of the mod
-  (and so every `install.sh`) restarts every copy: open dialogs close and what screens
-  held (checks, a typed message, filters) starts over.
+  (and so an `install.sh` that changes one) restarts every copy: open dialogs close and
+  what screens held (checks, a typed message, filters) starts over.
+- Each of those reloads costs memory Herdr doesn't give back, about 5 MB with the two
+  panels and the Git button up. After about 45 in one run of the app (some 256 MB),
+  reloads fail with `Null"null"` in `herdr-app status` and every mod's view shows
+  `out of memory` until Herdr is restarted. While working on the mod, restart Herdr now
+  and then.
 - `herdr-app status` lists overlays by mod name only.
 
 **Git**
@@ -2128,8 +2139,8 @@ Each line is one check: do what it says, see what follows.
    window shows `main-git`, `layouts/main.json` is byte for byte as before, and the app
    home's `keys.json` has `cmd-k` and `cmd-shift-g` under `layout:main-git` (or a line
    saying which key was already taken).
-4. Run `./install.sh` again: `layouts/main-git.json` and `keys.json` are byte for byte as
-   after the first run.
+4. Run `./install.sh` again: it prints `0 files updated, …`, and
+   `layouts/main-git.json` and `keys.json` are byte for byte as after the first run.
 5. Point `HERDR_APP_HOME` at a copy whose `layouts/main.json` lacks `panel-body`, run
    `./install.sh`: it names the missing node, prints `Nothing was changed.` and writes
    nothing.

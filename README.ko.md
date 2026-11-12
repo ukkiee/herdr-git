@@ -96,7 +96,7 @@ git clone https://github.com/ukkiee/herdr-git
 cd herdr-git && ./install.sh
 ```
 
-`install.sh`는 mod를 복사하고, 지금의 `main` 레이아웃으로 `main-git`을 만들어 그리로
+`install.sh`는 mod를 복사하고(설치된 것과 다른 파일만), 지금의 `main` 레이아웃으로 `main-git`을 만들어 그리로
 바꾸고, 키를 더합니다. `main` 레이아웃의 구조가 예상과 다르면 어느 부분이 없는지 알리고
 아무것도 바꾸지 않습니다.
 

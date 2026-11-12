@@ -3,6 +3,7 @@
 //
 //   node layout.mjs <main.json>              check only: exit 1 and the reason if it can't be done
 //   node layout.mjs <main.json> <out.json>   write the transformed layout to out.json
+//   node layout.mjs --copy <from> <to>       copy the mod folder, writing only what differs
 
 export const MOD = "git-tools";
 export const LOG_ID = "git-log";
@@ -74,9 +75,60 @@ export function writeWhole(fs, path, text) {
   }
 }
 
+// copyChanged(fs, from, to) → { written: [path relative to the folder], same: count }
+//   Copies folder `from` over folder `to`, writing only the files `to` lacks or holds with
+//   other bytes. Herdr reloads every copy of a mod each time a file in its folder is
+//   saved, so rewriting a file that is already the same costs a reload for nothing, and
+//   a mod of thousands of files costs thousands. Every file to write is first written
+//   whole beside its place under a hidden name (Herdr doesn't reload for hidden files),
+//   then all are renamed into place one after another: Herdr never reads half a file.
+//   Files only `to` has are left alone. Throws as fs does, with nothing renamed when a
+//   write failed and no hidden file left behind. `fs`: node's fs module.
+export function copyChanged(fs, from, to) {
+  const files = [];
+  const walk = (rel) => {
+    for (const entry of fs.readdirSync(rel ? `${from}/${rel}` : from, { withFileTypes: true })) {
+      const next = rel ? `${rel}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) walk(next);
+      else if (entry.isFile()) files.push(next);
+    }
+  };
+  walk("");
+  files.sort();
+  const pending = [], written = [];
+  let same = 0;
+  try {
+    for (const rel of files) {
+      const data = fs.readFileSync(`${from}/${rel}`), target = `${to}/${rel}`;
+      let old = null;
+      try { old = fs.readFileSync(target); } catch {}
+      if (old && old.equals(data)) { same++; continue; }
+      const cut = target.lastIndexOf("/"), dir = target.slice(0, cut);
+      fs.mkdirSync(dir, { recursive: true });
+      const temp = `${dir}/.${target.slice(cut + 1)}.${process.pid}.tmp`;
+      pending.push({ temp, target, rel });
+      fs.writeFileSync(temp, data);
+    }
+    for (const { temp, target, rel } of pending) { fs.renameSync(temp, target); written.push(rel); }
+  } catch (error) {
+    for (const { temp } of pending) { try { fs.unlinkSync(temp); } catch {} }
+    throw error;
+  }
+  return { written, same };
+}
+
 const invoked = typeof process !== "undefined" && process.argv[1] && import.meta.url === (await import("node:url")).pathToFileURL(process.argv[1]).href;
 if (invoked) {
   const fs = await import("node:fs");
+  if (process.argv[2] === "--copy") {
+    const [source, target] = process.argv.slice(3);
+    if (!source || !target) { console.error("usage: node layout.mjs --copy <from> <to>"); process.exit(2); }
+    try {
+      const r = copyChanged(fs, source, target);
+      console.log(`${r.written.length} ${r.written.length === 1 ? "file" : "files"} updated, ${r.same} already the same.`);
+    } catch (e) { console.error(`Cannot copy to ${target}: ${e.message}. Files already there are whole.`); process.exit(1); }
+    process.exit(0);
+  }
   const [from, to] = process.argv.slice(2);
   if (!from) { console.error("usage: node layout.mjs <main.json> [<out.json>]"); process.exit(2); }
   let main;

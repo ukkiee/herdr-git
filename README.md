@@ -102,8 +102,8 @@ git clone https://github.com/ukkiee/herdr-git
 cd herdr-git && ./install.sh
 ```
 
-`install.sh` copies the mod, builds `main-git` from your current `main` layout, switches
-to it and adds the keys. If your `main` layout isn't shaped the way it expects, it says
+`install.sh` copies the mod (only the files that differ from what is installed), builds
+`main-git` from your current `main` layout, switches to it and adds the keys. If your `main` layout isn't shaped the way it expects, it says
 which part is missing and changes nothing.
 
 ### Keys

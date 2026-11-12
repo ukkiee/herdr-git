@@ -1,4 +1,5 @@
-// Branches: reading, checkout, create, fetch, delete (git-branch.test.mjs).
+// Branches: reading, checkout, create, fetch, delete, and the deleted ones kept to
+// restore (git-branch.test.mjs).
 // Every function takes `git` from makeGit (git.js) and the repository root, and returns
 // a result instead of throwing. No forced checkout, no remote branch deletion.
 // No `herdr` import: node tests it.
@@ -187,6 +188,8 @@ export async function fetchAll(git, root) {
 //   deleted, when ok: { name, hash, upstream } for restoreBranch. hash is the full hash
 //   it pointed at; upstream is { remote, merge } as its config had them ("origin" and
 //   "refs/heads/x", or "." for a local branch), or null when it tracked nothing.
+//   The same is recorded in the repository first (readDeletedBranches lists it); when
+//   that fails the branch is not deleted (msg branches.notRecorded, with git's words).
 export async function deleteBranch(git, root, name, { confirmed = false } = {}) {
   const no = (err, unmerged = 0, msg = undefined) => ({ ...refused(err, msg ? { msg } : {}), unmerged });
   if (!(await hasRef(git, root, HEADS + name))) return no(`'${name}' is not a local branch. Only local branches can be deleted.`, 0, { key: "log.onlyLocalDelete", args: { name } });
@@ -296,7 +299,8 @@ async function recordDeleted(git, root, branch) {
   if (!rest.ok) return rest;
   // git adds no reflog entry for a move to the commit the ref is on already: step away
   // first, to a commit HEAD reaches. With none (HEAD is on that very commit and it is
-  // the root), only `reflog write` can add the entry; git has it since 2.52.
+  // the root), only `reflog write` can add the entry; an older git without it refuses,
+  // and the branch is not deleted.
   if (now.hash === branch.hash) {
     const away = [rest.hash, rest.head].find((hash) => hash && hash !== branch.hash);
     if (!away) {

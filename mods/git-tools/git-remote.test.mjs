@@ -181,6 +181,36 @@ const commitMine = (mine, path, at, word) => { edit(mine, path, at, word); sh(mi
   assert.equal(text(m2, "a.txt").split("\n")[0], "their-a1");
 }
 {
+  // A repository set to pull by rebasing (pull.rebase, or the branch's own rebase setting)
+  // and a pull without --rebase or --no-rebase: it rebases, so any tracked change is in
+  // the way, and Smart can run it. --no-rebase still merges by the merge rule.
+  for (const key of ["pull.rebase", "branch.main.rebase"]) {
+    const { mine, theirs } = setup();
+    push(theirs, "a.txt", 0, "their-a1");
+    commitMine(mine, "c.txt", 0, "my-c1");
+    sh(mine, `git config ${key} true`);
+    edit(mine, "b.txt", 4, "local-b5");
+    const before = status(mine);
+    const refused = await pull(git, mine, { remote: "origin", branch: "main", options: [] });
+    assert.equal(refused.outcome, "refused", `${key}: ${refused.err}`);
+    assert.deepEqual(refused.blocked, ["b.txt"]);
+    assert.equal(refused.request.rebase, true);
+    assert.deepEqual(status(mine), before);
+    const smart = await smartRun(git, mine, { request: refused.request });
+    assert.equal(smart.outcome, "done", smart.err);
+    // Rebased: my commit sits on theirs, no merge commit.
+    assert.equal(rev(mine, "HEAD~1"), rev(theirs, "main"));
+    assert.deepEqual(status(mine), before);
+  }
+  const { mine, theirs } = setup();
+  push(theirs, "a.txt", 0, "their-a1");
+  sh(mine, "git config pull.rebase true");
+  edit(mine, "b.txt", 4, "local-b5");
+  const merged = await pull(git, mine, { remote: "origin", branch: "main", options: ["--no-rebase"] });
+  assert.equal(merged.outcome, "done", merged.err);
+  assert.equal(merged.request?.rebase ?? false, false);
+}
+{
   // No tracked branch: the pull dialog's own pick still works; a bare pull fails with git's
   // words.
   const { mine } = setup();

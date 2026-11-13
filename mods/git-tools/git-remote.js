@@ -174,7 +174,8 @@ async function settled(git, root, before, run, request, from) {
 //   say (pull.rebase, pull.ff).
 export async function pull(git, root, { remote, branch, options = [] } = {}) {
   const opts = (Array.isArray(options) ? options : []).filter((o) => ACCEPTED.has(o));
-  const request = { type: "pull", remote: str(remote), branch: str(branch), options: opts, rebase: opts.includes("--rebase"), target: `${str(remote)}/${str(branch)}` };
+  const rebase = opts.includes("--rebase") || (!opts.includes("--no-rebase") && await pullsByRebase(git, root));
+  const request = { type: "pull", remote: str(remote), branch: str(branch), options: opts, rebase, target: `${str(remote)}/${str(branch)}` };
   if (!request.remote || !request.branch) return refuse("Choose a remote and a branch to pull.", { key: "remote.pickBranch" });
   const before = await readOperation(git, root);
   if (!before.ok) return failedWith(before);
@@ -182,6 +183,19 @@ export async function pull(git, root, { remote, branch, options = [] } = {}) {
   if (!fetched.ok) return failedWith(fetched, { fetchFailed: true, changed: true });
   const run = await git(root, ["pull", ...opts, "--end-of-options", request.remote, `refs/heads/${request.branch}`], STEP);
   return settled(git, root, before, run, request, before.head);
+}
+
+// Whether a pull given neither --rebase nor --no-rebase rebases: the current branch's
+// branch.<name>.rebase, else pull.rebase. Any value but a false one rebases ("merges" and
+// "interactive" too).
+async function pullsByRebase(git, root) {
+  const cur = await git.read(root, ["symbolic-ref", "-q", "--short", "HEAD"]);
+  const keys = [...(cur.ok && cur.out.trim() ? [`branch.${cur.out.trim()}.rebase`] : []), "pull.rebase"];
+  for (const key of keys) {
+    const r = await git.read(root, ["config", "--get", key]);
+    if (r.ok && r.out.trim()) return !/^(false|no|off|0)$/i.test(r.out.trim());
+  }
+  return false;
 }
 
 // ---- Update Project

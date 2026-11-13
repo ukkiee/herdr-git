@@ -12,6 +12,9 @@
 //   bus, lang, t, locks           as main.js sets them on a screen
 //   setBusy(work, cx, repo)       the write lock (ui.js takeWrite), as the panels have it
 //   noteDeleted(repo, deleted)?   a branch deleted from the popup (the Log panel's Restore notice)
+//   popupRight(origin)?           the rightmost window px the popup may reach (origin: the
+//                                 widget's top left), or undefined
+//   popupSide()?                  where a branch's menu opens beside the popup: "right" (default) or "left"
 // and the host's copy serves the dialogs the widget opens with it as owner: New Branch,
 // Delete Branch (view-branch-new.js serveBranch) and Push (view-push.js servePush).
 //
@@ -27,16 +30,16 @@ import { makeGit, repoRoot } from "./git.js";
 import { readHeads, widgetFace } from "./git-heads.js";
 import { readOperation, continueOperation, abortOperation, skipOperation, operationName } from "./git-operation.js";
 import { checkout, deleteBranch } from "./git-branch.js";
-import { shortenMiddle } from "./git-log.js";
-import { menuItems } from "./log-menus.js";
+import { belowSpot } from "./ui-size.js";
 import { openConflicts, openConflictsIfStopped } from "./view-conflicts.js";
 import { location, uiGlyph, iconButton, darkLook, broadcast, openCommitPanel, openMenu, takeWrite, releaseWrite, writeBlock, readBlocked, sentence } from "./ui.js";
 import { openPush, servePush } from "./view-push.js";
 import { openBranchNew, openBranchDelete, serveBranch } from "./view-branch-new.js";
 import { serveAction } from "./serve-actions.js";
-import { openVcsPopup, askAbort, branchMenu, popupHandles, POPUP_ACTIONS } from "./view-vcs-popup.js";
+import { openVcsPopup, askAbort, branchMenuRows, deleteBlockOf, popupHandles, POPUP_ACTIONS, POPUP_WIDTH } from "./view-vcs-popup.js";
 
 const POLL = 10000;
+const PAD = 2; // the block's padding left of the widget
 const stop = (_e, cx) => cx.stop_propagation();
 
 export class VcsWidget {
@@ -200,25 +203,25 @@ export class VcsWidget {
     }, cx);
   }
 
-  deleteBlock(b) {
-    const tr = this.host.t;
-    if (b.scope === "remote") return tr("log.remoteNoDelete");
-    if (b.current) return tr("log.currentNoDelete");
-    return null;
-  }
+  deleteBlock(b) { return deleteBlockOf(b, this.host.t); }
 
   // ---- the popup
 
-  open(at, cx) {
+  // e: the press on the widget. The popup opens right under the widget, not over it,
+  // held left of the host's right limit (host.popupRight, when it has one).
+  open(e, cx) {
     const host = this.host, repo = this.repo;
     if (!repo) return;
+    const local = e.local_position, height = e.bounds?.height ?? 26;
+    const origin = local ? { x: e.position.x - local.x, y: e.position.y - local.y } : e.position;
+    const at = belowSpot({ position: e.position, local, height }, { width: POPUP_WIDTH, right: host.popupRight?.(origin) });
     cx.spawn(async (cx) => {
       // The answer arrives in this copy's own call (ui.js), so what the pick starts is
       // this copy's work and outlives the popup.
-      const pick = await openVcsPopup(host.bus, { root: repo.root, on: repo.on, lang: host.lang, at });
+      const pick = await openVcsPopup(host.bus, { root: repo.root, on: repo.on, lang: host.lang, at, side: host.popupSide?.() });
       if (!pick) return;
-      if (pick.id === "branch") this.branchMenu(pick.target, cx);
-      else if (popupHandles(pick.id)) POPUP_ACTIONS[pick.id](this, pick, cx);
+      // A branch menu's item comes with its branch; the popup's own actions with the pick.
+      if (popupHandles(pick.id)) POPUP_ACTIONS[pick.id](this, pick.target ?? pick, cx);
       cx.notify();
     });
   }
@@ -226,16 +229,10 @@ export class VcsWidget {
   // A branch's menu, as the Branch tree has it for that kind of branch (log-menus.js),
   // with the items the popup does, at the pointer (view-vcs-popup.js says why).
   branchMenu(b, cx) {
-    const host = this.host, tr = host.t, which = branchMenu(b);
-    if (!which || !this.repo) return;
-    const head = this.heads?.head;
-    const ctx = {
-      name: shortenMiddle(b.name, 30), current: head?.branch ?? (head?.hash ? head.hash.slice(0, 7) : "HEAD"),
-      upstream: b.upstream ?? "", writing: writeBlock(host, this.repo), deleteBlock: this.deleteBlock(b),
-    };
-    const items = menuItems(which, popupHandles, ctx);
-    if (!items.length) return;
-    const rows = items.map((it) => ({ label: tr(it.key, it.args), value: it.id, rule: it.rule, disabled: it.disabled, title: it.why ? (it.why.text ?? tr(it.why.key, it.why.args)) || undefined : undefined }));
+    const host = this.host;
+    if (!this.repo) return;
+    const rows = branchMenuRows(b, { head: this.heads?.head, writing: writeBlock(host, this.repo), tr: host.t });
+    if (!rows.length) return;
     cx.spawn(async (cx) => {
       const pick = await openMenu(host.bus, rows, { width: 300, lang: host.lang });
       if (pick && popupHandles(pick)) POPUP_ACTIONS[pick](this, b, cx);
@@ -254,7 +251,7 @@ export class VcsWidget {
     const dark = darkLook(background ?? t.background);
     let main = h_flex().id("vcs-widget").h(26).px(8).gap(5).min_w(0).items_center().rounded(6).text_size(12).text_color(t.foreground)
       .hover((s) => s.bg(t.hover))
-      .on_mouse_down("left", (e, cx) => { cx.stop_propagation(); this.open(e.position, cx); });
+      .on_mouse_down("left", (e, cx) => { cx.stop_propagation(); this.open(e, cx); });
     if (face.kind === "progress") {
       main = main.child(div().flex_none().text_color(t.ansi3).child("⚠"))
         .child(div().min_w(0).truncate().child(tr(face.name.key, face.name.args)));
@@ -291,6 +288,12 @@ export default class VcsWidgetBlock {
   get repo() { return this.widget?.repo ?? null; }
   where() { return location(); }
 
+  // The block is the window's top right corner, so its popup keeps inside the block's right
+  // edge and a branch's menu opens on the popup's left. origin: the widget's top left,
+  // which sits PAD in from the block's left edge.
+  popupRight(origin) { return this.width ? origin.x - PAD + this.width : undefined; }
+  popupSide() { return "left"; }
+
   setBusy(work, cx, repo = this.repo) {
     let ok = true;
     if (work) ok = takeWrite(this, repo, work);
@@ -311,8 +314,11 @@ export default class VcsWidgetBlock {
 
   render(cx) {
     const t = theme();
-    // The strip continues the tab bar: its color and the line under it.
-    return h_flex().id("vcs-widget-strip").size_full().min_w(0).pl(6).items_center().justify_end().bg(t.chrome).border_b(1).border_color(t.border)
+    // The strip continues the tab bar: its color and the line under it. The widget sits at
+    // its left, right after the tab bar's Changes button; the block's width is fixed by the
+    // layout, so what the name leaves stays empty on the right, by the Git button.
+    return h_flex().id("vcs-widget-strip").size_full().min_w(0).pl(PAD).items_center().bg(t.chrome).border_b(1).border_color(t.border)
+      .on_size_change((size, cx) => { if (size.width !== this.width) { this.width = size.width; cx.notify(); } })
       .child(this.widget.render(cx, { background: t.chrome }));
   }
 }

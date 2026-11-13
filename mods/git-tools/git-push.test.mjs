@@ -372,6 +372,86 @@ git config branch.work.remote --force && echo 2 > old.txt && git commit -q -am s
   assert.equal(remoteRef(remote, "work"), rev(repo, "HEAD"));
 }
 
+// Push All up to Here: the plan stops at the commit picked (newest first from there), its
+// files are what reaching it changes, and the push sends that commit and nothing after it.
+// A first push of the branch sets its upstream as a plain push does.
+{
+  const { repo, remote } = setup("up-to", "work");
+  sh(repo, "git push -q --set-upstream origin work");
+  writeFileSync(`${repo}/b.txt`, "b\n");
+  const c1 = commitAll(repo, "c1");
+  writeFileSync(`${repo}/c.txt`, "c\n");
+  const c2 = commitAll(repo, "c2");
+  writeFileSync(`${repo}/d.txt`, "d\n");
+  commitAll(repo, "c3");
+  const plan = await readPushPlan(git, repo, { upTo: c2.slice(0, 8) });
+  assert.equal(plan.ok, true, plan.err);
+  assert.equal(plan.upTo, c2);
+  assert.deepEqual(plan.commits.map((c) => c.hash), [c2, c1]);
+  const files = await readPushFiles(git, repo, { to: plan.upTo });
+  assert.deepEqual(byPath(files.files), [{ path: "b.txt", status: "added" }, { path: "c.txt", status: "added" }]);
+  const r = await push(git, repo, { upTo: c2 });
+  assert.equal(r.ok, true, r.err);
+  assert.equal(remoteRef(remote, "work"), c2);
+  assert.deepEqual((await readPushPlan(git, repo, { upTo: c2 })).commits, []);
+
+  // A new branch: the commit goes there, and the branch tracks it afterwards.
+  sh(repo, "git checkout -q -b fresh");
+  const p = await readPushPlan(git, repo, { upTo: c1 });
+  assert.equal(p.ok, true, p.err);
+  assert.equal(p.isNew, true);
+  assert.equal(p.tracked, false);
+  const first = await push(git, repo, { upTo: c1 });
+  assert.equal(first.ok, true, first.err);
+  assert.equal(remoteRef(remote, "fresh"), c1);
+  assert.equal(upstream(repo), "origin/fresh");
+}
+
+// up to a commit that isn't on the current branch: refused, nothing pushed.
+{
+  const { repo, remote } = setup("up-to-elsewhere", "work");
+  sh(repo, "git checkout -q -b side && echo s > s.txt && git add -A && git commit -q -m side");
+  const side = rev(repo, "HEAD");
+  sh(repo, "git checkout -q work");
+  const before = remoteRef(remote, "work");
+  const plan = await readPushPlan(git, repo, { upTo: side });
+  worded(plan, "refs.notOnBranch");
+  worded(await push(git, repo, { upTo: side }), "refs.notOnBranch");
+  assert.equal(remoteRef(remote, "side"), "");
+  assert.equal(remoteRef(remote, "work"), before);
+}
+
+// Force Push up to here: the lease is the same; the remote branch ends at that commit.
+{
+  const { repo, remote } = setup("up-to-force", "work");
+  sh(repo, "git push -q --set-upstream origin work && echo x > x.txt && git add -A && git commit -q -m x && git push -q");
+  sh(repo, "git reset -q --hard HEAD~1 && echo y > y.txt && git add -A && git commit -q -m y && echo z > z.txt && git add -A && git commit -q -m z");
+  const y = rev(repo, "HEAD~1");
+  const r = await push(git, repo, { upTo: y, force: true });
+  assert.equal(r.ok, true, r.err);
+  assert.equal(remoteRef(remote, "work"), y);
+}
+
+// Push… on a local branch that isn't checked out: that branch's plan and push.
+{
+  const { repo, remote } = setup("other-branch", "work");
+  sh(repo, "git checkout -q -b other && echo o > o.txt && git add -A && git commit -q -m other && git checkout -q work");
+  const tip = rev(repo, "other");
+  const plan = await readPushPlan(git, repo, { branch: "other" });
+  assert.equal(plan.ok, true, plan.err);
+  assert.deepEqual({ branch: plan.branch, remote: plan.remote, target: plan.target, tracked: plan.tracked }, { branch: "other", remote: "origin", target: "other", tracked: false });
+  assert.deepEqual(plan.commits.map((c) => c.hash), [tip]);
+  const files = await readPushFiles(git, repo, { to: tip, branch: "other" });
+  assert.deepEqual(files.files, [{ path: "o.txt", status: "added" }]);
+  const r = await push(git, repo, { branch: "other" });
+  assert.equal(r.ok, true, r.err);
+  assert.equal(remoteRef(remote, "other"), tip);
+  assert.equal(sh(repo, "git rev-parse --abbrev-ref other@{u}").trim(), "origin/other");
+  assert.equal(sh(repo, "git symbolic-ref --short HEAD").trim(), "work");
+  const gone = await readPushPlan(git, repo, { branch: "nope" });
+  assert.equal(gone.ok, false);
+}
+
 // The safety rule, over every program started above: no bare --force, no -f, no
 // "+refspec" (the three ways to overwrite a remote branch without a lease). Each push ran
 // with terminal prompts off, and each Force Push that reached git carried its lease.
@@ -389,7 +469,7 @@ git config branch.work.remote --force && echo 2 > old.txt && git commit -q -am s
     }
   }
   for (const call of all) assert.deepEqual(call.slice(0, 3), ["env", "GIT_TERMINAL_PROMPT=0", "git"], call.join(" "));
-  assert.equal(all.filter((call) => call.some((arg) => arg.startsWith("--force-with-lease="))).length, 3, "rewritten, lease, force-new");
+  assert.equal(all.filter((call) => call.some((arg) => arg.startsWith("--force-with-lease="))).length, 4, "rewritten, lease, force-new, up-to-force");
 }
 
 // With a .mailmap the plan's commits name their authors as it maps them, the way the

@@ -111,6 +111,9 @@ export default class ExtractView {
     this.pushed = Boolean(p.pushed);
     this.initial = Boolean(p.initial);
     this.text = TextareaState.new({ value: "", rows: 6 });
+    // The textarea may take Cmd/Ctrl+Enter as its submit rather than pass the key up to
+    // the dialog's key handler: both run OK, which `waiting` makes safe to reach twice.
+    this.text.on("submit", (e, cx) => { if (e?.secondary && this.mode === "extract") { this.run(cx); cx.notify(); } });
     this.waiting = false;
     this.error = null;
     this.handle = cx.focus_handle();

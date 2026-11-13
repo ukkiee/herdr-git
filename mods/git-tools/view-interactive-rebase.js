@@ -243,7 +243,16 @@ export default class InteractiveRebaseView {
   beginReword(r) {
     if (!r || this.waiting) return;
     const text = r.message ?? this.messages[r.hash] ?? "";
-    this.editing = { hash: r.hash, was: text, state: TextareaState.new({ value: text, rows: 4 }) };
+    const state = TextareaState.new({ value: text, rows: 4 });
+    // Cmd/Ctrl+Enter in the box applies the new message. The textarea takes it as its
+    // submit rather than passing the key up to the dialog's key handler.
+    state.on("submit", (e, cx) => {
+      if (!e?.secondary || this.editing?.state !== state) return;
+      this.applyReword();
+      this.handle.focus();
+      cx.notify();
+    });
+    this.editing = { hash: r.hash, was: text, state };
     this.selected = new Set([r.hash]); this.cursor = r.hash; this.anchor = r.hash;
   }
 

@@ -554,6 +554,8 @@ export default class CommitView {
 
   event(e, cx) {
     if (e.type === "changed" && (!e.root || e.root === this.repo?.root)) this.refresh(cx);
+    // Fixup… or Squash Into… picked in the Log panel on this repository (view-extract.js).
+    if (e.type === "rewrite-target" && sameRepo({ root: e.root, on: e.on ?? null }, this.repo)) this.form.aim(e, cx);
     // Another write on the noticed repository, whichever copy ran it, ends the notice; the
     // rollback's own "changed" (by its request's key) doesn't. A "changed" without a root
     // stands for events that went unseen, which may hold such a write: it ends it too.

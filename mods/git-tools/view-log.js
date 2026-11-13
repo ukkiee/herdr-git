@@ -46,6 +46,7 @@ import { renameFrom } from "./view-rename-branch.js";
 import { remoteDialog } from "./view-remote.js";
 import { pushUpTo, pushBranch } from "./view-push.js";
 import { updateHere, checkoutUpdateHere, pullHere, updateSelected } from "./view-update-project.js";
+import { aimHere, extractHere, dropChangesHere } from "./view-extract.js";
 
 // Column widths, px. The Commit list takes what the side columns leave and never gets
 // narrower than LIST_MIN: when the panel is too narrow, Commit details goes first, then
@@ -137,6 +138,10 @@ const ACTIONS = {
   "branch.pullRebase": (host, b, cx) => pullHere(host, host.repo, "ui.logPanel", b, true, cx),
   "branch.pullMerge": (host, b, cx) => pullHere(host, host.repo, "ui.logPanel", b, false, cx),
   "branches.updateSelected": (host, b, cx) => updateSelected(host, host.repo, "ui.logPanel", b, cx),
+  "commit.fixup": (host, commits, cx) => aimHere(host, commits, false, cx),
+  "commit.squashInto": (host, commits, cx) => aimHere(host, commits, true, cx),
+  "file.extractSelected": (host, m, cx) => extractHere(host, m, cx),
+  "file.dropSelected": (host, m, cx) => dropChangesHere(host, m, cx),
 };
 
 // The bus event that tells every Log panel the options file changed.

@@ -1,6 +1,7 @@
 // The words of the history edits (i18n.js): why an edit item is off, the Edit Commit
-// Message, Squashed Commit Message and Drop Commits dialogs, and the rewrite module's
-// sentences. Keys start with "rewrite.".
+// Message, Squashed Commit Message, Drop Commits and Extract Selected Changes dialogs, the
+// Commit panel's Fixup and Squash Into target, and the rewrite module's sentences. Keys
+// start with "rewrite.".
 
 export const en = {
   // Why an edit item is off (rebase-plan.js editCheck)
@@ -49,6 +50,22 @@ export const en = {
   "rewrite.undone": "Commit Undone",
   "rewrite.stoppedTitle": "Rebase Stopped",
   "rewrite.stoppedBody": "The rebase stopped before it ended. Continue or abort it from the Commit panel.",
+  // Fixup and Squash Into in the Commit panel
+  "rewrite.fixupTarget": "Fixup: {hash} {subject}",
+  "rewrite.squashTarget": "Squash into: {hash} {subject}",
+  "rewrite.commitAndRebase": "Commit and Rebase…",
+  "rewrite.commitAndRebaseTitle": "Commit the checked changes into commit {hash}",
+  "rewrite.fixingUp": "Fixing up commit…",
+  "rewrite.squashingInto": "Squashing into commit…",
+  "rewrite.fixedUp": "Fixed up commit {hash}",
+  "rewrite.squashedInto": "Squashed into commit {hash}",
+  // Extract and Drop Selected Changes
+  "rewrite.extractTitle": "Extract Selected Changes to Separate Commit",
+  "rewrite.extractDescription": { one: "Message for the new commit of {n} file taken out of commit {hash}", other: "Message for the new commit of {n} files taken out of commit {hash}" },
+  "rewrite.extracting": "Extracting changes…",
+  "rewrite.extracted": "Changes Extracted",
+  "rewrite.droppingChanges": "Dropping changes…",
+  "rewrite.droppedChanges": "Changes Dropped",
 };
 
 export const ko = {
@@ -94,4 +111,18 @@ export const ko = {
   "rewrite.undone": "커밋을 실행 취소했습니다",
   "rewrite.stoppedTitle": "리베이스가 중단됨",
   "rewrite.stoppedBody": "리베이스가 끝나기 전에 멈췄습니다. 커밋 창에서 계속하거나 중단하세요.",
+  "rewrite.fixupTarget": "픽스업: {hash} {subject}",
+  "rewrite.squashTarget": "다음으로 스쿼시: {hash} {subject}",
+  "rewrite.commitAndRebase": "커밋 및 리베이스…",
+  "rewrite.commitAndRebaseTitle": "체크한 변경을 커밋 {hash}에 넣습니다",
+  "rewrite.fixingUp": "커밋 픽스업 중…",
+  "rewrite.squashingInto": "커밋에 스쿼시 중…",
+  "rewrite.fixedUp": "커밋 {hash}에 픽스업했습니다",
+  "rewrite.squashedInto": "커밋 {hash}에 스쿼시했습니다",
+  "rewrite.extractTitle": "선택된 변경 사항을 별도의 커밋으로 추출",
+  "rewrite.extractDescription": "커밋 {hash}에서 꺼낸 파일 {n}개로 만들 새 커밋의 메시지",
+  "rewrite.extracting": "변경 사항 추출 중…",
+  "rewrite.extracted": "변경 사항을 추출했습니다",
+  "rewrite.droppingChanges": "변경 사항 삭제 중…",
+  "rewrite.droppedChanges": "변경 사항을 삭제했습니다",
 };

@@ -393,13 +393,25 @@ export default class LogDetails {
     cx.notify();
   }
 
+  // The edit facts of the commit shown are read first, so Extract and Drop Selected Changes
+  // show on or off with their reason (ctx.edit, ctx.files: one file of the commit's).
   menu(m, cx) {
     if (!m || m.folder) return;
-    // While the menu is open its row shows no tooltip: it would cover the menu's item.
-    const items = this.host.items("file", { writing: writingWords(this.host) });
-    if (!items.length) return;
-    this.menuRow = m.key;
-    openItems(this.host, items, m, cx, { width: 300, after: () => { if (this.menuRow === m.key) this.menuRow = null; this.handle.focus(); } });
+    const { host } = this, repo = host.repo, info = this.info;
+    const one = info?.ok && !info.many && info.hash ? info.hash : null;
+    cx.spawn(async (cx) => {
+      const facts = repo && one ? await readEditFacts(repo.git, repo.root, [one]) : null;
+      if (repo && !host.shows(repo)) return;
+      const items = host.items("file", {
+        writing: writingWords(host), count: info?.many ? Math.max(2, host.pickedCommits().length) : 1,
+        files: { picked: 1, total: info?.files?.length ?? 0 }, ...(facts?.ok ? { edit: facts } : {}),
+      });
+      if (!items.length) return;
+      // While the menu is open its row shows no tooltip: it would cover the menu's item.
+      this.menuRow = m.key;
+      openItems(host, items, m, cx, { width: 300, after: () => { if (this.menuRow === m.key) this.menuRow = null; this.handle.focus(); } });
+      cx.notify();
+    });
   }
 
   // `git-tools.details-…` for keys and scripts:

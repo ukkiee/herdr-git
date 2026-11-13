@@ -370,8 +370,12 @@ Rollback은 Rollback dialog의 버튼으로만 실행되고, 쓰기 전에 버�
 - **편집기를 띄우지 않는다.** 이어가기와 다시 쌓기는 모두 `GIT_EDITOR=true`로 돈다.
   `merge --continue`와 `rebase --continue`는 비대화식에서도 편집기를 띄우기 때문이다. 메시지는
   mod가 인자나 변수로 넘긴다. merge의 Continue는 경로 없는 `commit -m`, cherry-pick·revert는 커밋 뒤
-  sequencer가 있으면 `--continue`, rebase는 `--continue`(메시지를 바꿨으면 그 메시지로)다. 해결 결과가
-  비면 `--skip`으로 정리한다.
+  sequencer가 있으면 `--continue`, rebase는 `--continue`다. 해결 결과가 비면 `--skip`으로 정리한다.
+- **rebase의 Continue에서 메시지를 바꿨으면** 멈춘 자리에 따라 넘긴다. 충돌로 멈춘 pick은 그
+  메시지로 커밋한 뒤 `--continue`하고, 원래 작성자와 작성 시각을 남긴다(`git commit`은
+  `author-script`를 읽지 않아 `GIT_AUTHOR_*`로 넘긴다). edit으로 멈춘 커밋은 그 커밋을 amend한다
+  (스테이징한 것도 함께). 멈춘 뒤 그 위에 커밋을 더 만들었으면 git의 기본 Continue로 가고 메시지는
+  쓰이지 않는다. squash·fixup 멈춤과 `--apply` 방식의 멈춤은 git이 여는 편집기에 메시지를 넣는다.
 - **빈 cherry-pick은 진행 중 상태를 남기지 않는다.** `--skip`으로 정리하고 알림으로 알린다.
 - **원격과 주고받는 동작**(fetch, pull, 업데이트, 여기까지 푸시, 태그 푸시, 원격 편집 뒤 fetch)은 모두
   `GIT_TERMINAL_PROMPT=0`으로 돈다. 비밀번호를 칠 곳이 없으므로 묻는 원격은 기다리지 않고 git의
@@ -569,7 +573,10 @@ Rollback은 Rollback dialog의 버튼으로만 실행되고, 쓰기 전에 버�
   `branch --set-upstream-to`를 따로 부른다. 푸시 직전 다시 읽기와 Force Push 규칙은 보통 푸시와 같다.
 - 원격 편집은 `remote rename`·`set-url` 뒤 "원격으로 가져오기"가 켜져 있으면 그 원격만
   `fetch --prune`한다. 원격 추가는 `remote add --end-of-options <이름> <URL>` 뒤 같은 체크로 그 원격을
-  가져온다. 빈 이름·URL은 git을 부르기 전에 거절하고, 이미 있는 이름은 git의 글로 실패한다. 원격
+  가져온다. 원격 정의는 됐는데 가져오기만 실패하면 원격 정의 창은 닫히고 원격은 남으며, "원격
+  {name}을(를) 정의했지만 가져오지 못했습니다" 알림에 git의 글을 싣는다(`defineRemote`의
+  `fetchFailed`). 다시 물어도 이름이 이미 있어 실패할 뿐이기 때문이다.
+  빈 이름·URL은 git을 부르기 전에 거절하고, 이미 있는 이름은 git의 글로 실패한다. 원격
   제거는 그 원격 추적 브랜치도 git이 지운다. 태그 푸시는 `push <원격> refs/tags/T:refs/tags/T`다.
 - **Git Remotes dialog**(VCS Operations popup의 원격 관리…)는 원격을 이름 │ URL 표로 읽는다. 툴바의 추가는
   빈 원격 정의 창(추가 모드), 편집과 더블클릭은 그 원격의 원격 정의 창, 제거는 제거 확인을 연다. 쓰기는
@@ -610,12 +617,18 @@ Rollback은 Rollback dialog의 버튼으로만 실행되고, 쓰기 전에 버�
   들어가지 않는다(`git diff` 꼴). 빈 메시지는 `Local changes`로 둔다(`commit-tree -m ""`는 표준 입력을
   기다린다).
 - **패치 적용**(Apply Patch dialog, 파일에서와 클립보드에서)은 먼저 글을 읽어(`readPatchFiles`, 순수 함수) 파일과 상태를
-  보이고, 체크한 파일만 `--include`(글자 그대로 이스케이프한 경로)로 적용한다. 순서는 `apply --check`,
+  보이고, 체크한 파일만 `--include`(글자 그대로 이스케이프한 경로)로 적용한다. 창이 보인 파일을 모두
+  체크해도 늘 이름으로 넘겨, 목록이 놓친 파일은 들어가지 않는다. 순서는 `apply --check`,
   작업 트리에만 적용, 실패하면 `apply --3way`(인덱스도 쓴다)다. 충돌은 git의 글이 아니라
   `ls-files -u`로 가르고, 충돌이 남으면 패널이 Conflicts dialog를 연다. 충돌 없는 3-way는 "스테이징
   되었습니다" 알림을 띄운다. 3-way도 거절되면, 패치가 아닌 글이면, 없는 파일이면 아무것도 바꾸지
-  않는다. 클립보드의 글은 그 머신의 임시 파일 `git-tools-result.XXXXXXXX`로 넘기고 패널이 적용한 뒤
-  지운다. 파일에서 읽는 패치는 `readTextFile`의 한도인 1 MiB까지다.
+  않는다. 단, 체크한 파일이 1000개를 넘거나 경로마다 `길이×6+11`로 어림한 합이 60,000을 넘으면
+  명령 줄 한도 때문에 여러 번에 나눠 `git apply`하고(`git.js`의 `chunks`), 그때 뒤 부분이 거절되면
+  앞 부분은 적용된 채 남는다. 클립보드의 글은 그 머신의 임시 파일 `git-tools-result.XXXXXXXX`로 넘기고 패널이 적용한 뒤
+  지운다. 파일에서 읽는 패치는 `readTextFile`의 한도인 1 MiB까지이고, 한도는 UTF-8 바이트로 잰다.
+  경로의 `~`와 `~/…`는 패치가 있는 머신의 홈 폴더로 푼다(이 컴퓨터는 `home()`, 원격은
+  `printenv HOME`). git과 읽기가 셸 없이 돌아 따로 풀어 줄 곳이 없기 때문이다. `~이름` 꼴은 입력한
+  그대로 둔다.
 - **상위 항목에 대한 변경 내용 표시**는 고른 커밋의 그 파일을 부모와 비교하는 compare Diff 탭을 연다.
   병합 커밋이면 부모마다 연다. 이름 변경 전 이름은 첫 부모와의 Diff에만 쓴다(`git-compare.js`의
   `parentDiffs`).
@@ -1035,6 +1048,8 @@ Herdr는 mod를 QuickJS로 돌린다. JIT가 없고, 한 호출이 너무 오래
   그려지는지, 그 위의 클릭이 팝업 밖 클릭으로 닫히지 않는지)는 Herdr 동작에 기댄다.
 - squash·fixup에서 멈춘 뒤 메시지를 고치고 바로 뒤에 squash가 또 있으면, 마지막 메시지가 그 뒤 커밋의
   메시지까지 대신한다.
+- edit으로 멈춘 뒤 그 위에 커밋을 더 만들고 Continue에서 메시지를 고치면, 고친 메시지는 적용되지 않는다.
+- 아주 많은 파일을 나눠 적용하는 패치는 뒤 부분이 거절되면 앞 부분이 적용된 채 남는다.
 - Apply Patch dialog에는 파일을 고르는 창이 없다(플랫폼에 파일 선택 API가 없고 폴더 선택만 있다). 경로를
   입력하거나 📁로 폴더를 고르고, 📁는 이 컴퓨터의 space에서만 보인다. 1 MiB보다 큰 패치 파일은
   "패치가 1 MiB보다 큽니다"로 거절한다.

@@ -12,6 +12,7 @@ import { makeLocks, BEAT, sameRepo, repoName } from "./lock.js";
 import { LANGS, translator, systemLang, sentence } from "./i18n.js";
 import { fileIcon, folderIcon, darkColor } from "./icon-theme.js";
 import { iconShape, iconDraw } from "./ui-icons.js";
+import { menuWidth } from "./ui-size.js";
 import { en as consoleEn, ko as consoleKo } from "./messages-console.js";
 
 export const MOD = "git-tools";
@@ -394,13 +395,15 @@ const MENU_ROW = 28, MENU_PAD = 5, MENU_RULE = 9;
 // press inside a dialog is somewhere outside the dialog: a dialog passes `at`.
 // lang: the menu's language, as for openDialog (pass `lang: this.lang`). Labels are the
 // opener's to word; the menu screen draws them as given.
+// width: the narrowest the menu is. It widens to its longest label (ui-size.js menuWidth),
+// so a label with a long branch name still shows what it does.
 export function openMenu(bus, items, { width = 220, at, lang } = {}) {
   // Unique among all copies: every opener sees every answer and takes the one with its key.
   const key = `menu-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   const height = MENU_PAD * 2 + items.length * MENU_ROW + items.filter((it, i) => it.rule && i > 0).length * MENU_RULE;
   const answer = bus.wait(key);
   const spot = at && Number.isFinite(at.x) && Number.isFinite(at.y) ? { x: at.x, y: at.y } : undefined;
-  openOverlay({ mod: MOD, kind: "popup", width, height, ...(spot ? { at: spot } : {}), props: { view: "menu", key, items, lang: openingLang(lang) } });
+  openOverlay({ mod: MOD, kind: "popup", width: menuWidth(items, { min: width }), height, ...(spot ? { at: spot } : {}), props: { view: "menu", key, items, lang: openingLang(lang) } });
   return answer;
 }
 

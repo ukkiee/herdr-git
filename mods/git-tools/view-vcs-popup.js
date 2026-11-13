@@ -47,7 +47,12 @@ export function branchMenu(target) {
   return null;
 }
 
-const WIDTH = 380, HEIGHT = 520, ROW_H = 26;
+// A popup is as tall as what the mod draws, whatever height openOverlay asks for, so
+// size_full() and flex_1() inside it measure 0 and leave a WindowedList no room: the
+// popup and its list get their heights here. LIST_H is HEIGHT less the padding (5 above
+// and below), the search row and the gap under it.
+const WIDTH = 380, HEIGHT = 520, ROW_H = 26, PAD = 5, SEARCH_H = 32, GAP = 4;
+const LIST_H = HEIGHT - 2 * PAD - SEARCH_H - GAP;
 const newKey = (what) => `${what}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
 // openVcsPopup(bus, { root, on, lang, at }) → resolves in the opener's copy with the pick
@@ -207,7 +212,7 @@ export default class VcsPopup {
       : this.err ? notice(this.err, t)
         : !n ? notice(this.t("vcs.nothing"), t)
           : this.list.render(n, (i) => this.rowFor(rows[i], i, t), t);
-    return v_flex().id("vcs-popup").size_full().min_h(0).p(5).bg(t.popover).text_size(12.8)
+    return v_flex().id("vcs-popup").w_full().h(HEIGHT).p(PAD).bg(t.popover).text_size(12.8)
       .on_key_down((e, cx) => {
         if (e.key === "down") this.move(1, rows);
         else if (e.key === "up") this.move(-1, rows);
@@ -217,10 +222,10 @@ export default class VcsPopup {
         cx.stop_propagation();
         cx.notify();
       })
-      .child(h_flex().id("vcs-popup-search").h(32).flex_none().w_full().px(6).gap(6).items_center().border_b(1).border_color(t.border)
+      .child(h_flex().id("vcs-popup-search").h(SEARCH_H).flex_none().w_full().px(6).gap(6).items_center().border_b(1).border_color(t.border)
         .child(uiGlyph("search").text_color(t.dim))
         .child(Input.new(this.input).flex_1().min_w(0).h_full().text_size(12.8).text_color(t.foreground))
         .child(iconButton("vcs-popup-refresh", "refresh", t, { title: this.t("vcs.refresh"), busy: Boolean(this.loading), onClick: (_e, cx) => this.reload(cx) })))
-      .child(div().flex_1().min_h(0).w_full().pt(4).child(body));
+      .child(div().h(LIST_H).flex_none().w_full().mt(GAP).child(body));
   }
 }

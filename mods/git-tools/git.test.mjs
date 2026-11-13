@@ -232,4 +232,42 @@ const slowExec = ({ refuseAt = Infinity } = {}) => {
   assert.ok(many.seen.calls <= 4 * 5, `tries are bounded (${many.seen.calls})`);
 }
 
+// An exec that rejects with no error object at all is still a failed result, recorded once.
+for (const value of [undefined, null, 0, "", false]) {
+  const calls = [];
+  const r = await makeGit(() => Promise.reject(value), null, { record: (c) => calls.push(c) })(repo, ["commit", "-m", "x"]);
+  assert.deepEqual([r.ok, r.code], [false, -1], `rejected with ${JSON.stringify(value)}`);
+  assert.equal(calls.length, 1);
+}
+
+// A call refused every time stops after 5 runs, each retry woken by one of the runner's
+// own execs that really ran, and runs no 6th time however many more of those end.
+{
+  const held = [];
+  let targetRuns = 0;
+  const exec = async (cmd, args) => {
+    if (args.at(-1) === "target") { targetRuns++; throw new Error("'herdr.exec': 16 execs are running already"); }
+    await new Promise((go) => held.push(go));
+    return { code: 0, stdout: args.at(-1), stderr: "" };
+  };
+  const git = makeGit(exec, null);
+  const settle = () => new Promise((go) => setImmediate(go));
+  // Two of its own going and no queue; each round one ends (waking the target) and a new
+  // one starts, so the runner always has something of its own to wait on.
+  const others = [git(repo, ["x", "o0"]), git(repo, ["x", "o1"])];
+  await settle();
+  const target = git(repo, ["x", "target"]);
+  for (let i = 0; i < 10; i++) {
+    await settle();
+    others.push(git(repo, ["x", `n${i}`]));
+    await settle();
+    held.shift()?.();
+  }
+  while (held.length) { await settle(); held.shift()(); }
+  const r = await target;
+  await Promise.all(others);
+  assert.equal(targetRuns, 5);
+  assert.deepEqual([r.ok, r.code], [false, -1]);
+}
+
 console.log("ok");

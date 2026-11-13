@@ -25,6 +25,7 @@ import { checkoutRevision } from "./git-branch.js";
 import { readEditFacts } from "./git-rewrite.js";
 import { buildRows, folderKeys, parentIndex } from "./tree.js";
 import { combineChanges } from "./log-select.js";
+import { oneAtATime } from "./one-at-a-time.js";
 import { openDiff } from "./view-diff.js";
 import { openBranchNew } from "./view-branch-new.js";
 import { tip, ROW, ICON, icon, uiGlyph, fileGlyph, folderGlyph, darkLook, row, toolbar, spacer, iconButton, notice, broadcast, openMenu, WindowedList, runningText, workName } from "./ui.js";
@@ -176,6 +177,8 @@ export default class LogDetails {
     this.branches = null; // readContaining's: null while reading, false when it failed
     this.turn = 0; // one per show(): answers of an older turn are dropped
     this.branchTurn = 0;
+    // One branch walk at a time, the newest commit's next (one-at-a-time.js).
+    this.walk = oneAtATime(({ repo, hash }) => readContaining(repo.git, repo.root, hash));
     this.seen = null; // host.selected as last looked at (follow)
     this.collapsed = new Set(); // folder keys
     this.cursor = null; // key of the row last clicked or reached with the arrow keys
@@ -269,15 +272,17 @@ export default class LogDetails {
     else if (this.branches === false) this.readBranches(cx);
   }
 
-  // Apart from readCommit, so a slow walk doesn't hold the rest back. Also run again when
-  // the refs moved under the same commit (follow): what was shown stays until then.
+  // Apart from readCommit, so a slow walk doesn't hold the rest back, and one walk at a time:
+  // walks for commits arrowed past would hold the runner's slots the newest commit's files
+  // need. Also run again when the refs moved under the same commit (follow): what was shown
+  // stays until then.
   readBranches(cx) {
     const repo = this.host.repo, turn = this.turn, mine = ++this.branchTurn;
     if (!repo || !this.commit) return;
     const { hash } = this.commit;
     cx.spawn(async (cx) => {
-      const r = await readContaining(repo.git, repo.root, hash);
-      if (turn !== this.turn || mine !== this.branchTurn) return;
+      const r = await this.walk({ repo, hash });
+      if (!r || turn !== this.turn || mine !== this.branchTurn) return;
       this.branches = r.ok ? r.branches : false;
       this.describe();
       cx.notify();

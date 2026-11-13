@@ -60,22 +60,23 @@ export function makeGit(exec, on, { record } = {}) {
     if (timeout) options.timeout = timeout;
     const vars = Object.entries(env ?? {}).map(([k, v]) => `${k}=${v}`);
     const at = Date.now();
-    let r, failed;
+    // `threw` apart from `failed`: an exec may reject with no error at all (undefined, "").
+    let r, failed, threw;
     for (let tries = 1; ; tries++) {
       await take();
-      failed = undefined;
+      failed = undefined; threw = false;
       flying++;
       try { r = vars.length ? await exec("env", [...vars, "git", ...args], options) : await exec("git", args, options); }
-      catch (error) { failed = error; }
+      catch (error) { failed = error; threw = true; }
       finally { flying--; give(); }
-      const busy = Boolean(failed) && BUSY.test(String(failed?.message ?? failed));
+      const busy = threw && BUSY.test(String(failed?.message ?? failed));
       landed(!busy);
       if (!busy || tries >= TRIES) break;
       let ran = false;
       while (!ran && flying > 0) ran = await new Promise((go) => refused.push(go));
       if (!ran) break;
     }
-    if (failed) {
+    if (threw) {
       const err = String(failed?.message ?? failed);
       await note({ at, cwd, on: on ?? null, args, code: -1, stdout: "", stderr: err });
       return { ok: false, code: -1, out: "", err };

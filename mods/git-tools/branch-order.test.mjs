@@ -106,11 +106,11 @@ const local = (...list) => list.map((name) => ({ name }));
   // The popup: "On single click" with its two choices, then the two checks.
   const items = treeSettingsMenu(defaults);
   assert.deepEqual(items, [
-    { header: true, key: "branchTree.singleClick" },
-    { id: "click:filter", key: "branchTree.updateFilter", checked: true },
-    { id: "click:navigate", key: "branchTree.navigateLog", checked: false },
-    { id: "grouped", key: "branchTree.groupByDirectory", checked: true, rule: true },
-    { id: "tags", key: "branchTree.showTags", checked: true },
+    { header: true, key: "branch-tree.singleClick" },
+    { id: "click:filter", key: "branch-tree.updateFilter", checked: true },
+    { id: "click:navigate", key: "branch-tree.navigateLog", checked: false },
+    { id: "grouped", key: "branch-tree.groupByDirectory", checked: true, rule: true },
+    { id: "tags", key: "branch-tree.showTags", checked: true },
   ]);
   assert.deepEqual(treeSettingsMenu({ ...defaults, click: "navigate", tags: false }).filter((it) => it.id).map((it) => it.checked), [false, true, true, false]);
 

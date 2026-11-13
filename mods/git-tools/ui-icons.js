@@ -79,6 +79,7 @@ export const UI_ICONS = {
   "graph-options": color("icons/expui/vcs/intelliSort.svg"),
   "layout": color("icons/expui/general/layout.svg"),
   "hide-branches": color("icons/expui/general/chevronLeft.svg"),
+  "my-branches": color("icons/expui/general/search.svg"),
   "settings": color("icons/expui/general/moreVertical.svg"),
   "branch-settings": color("icons/expui/general/settings.svg", D),
   "close": color("icons/expui/general/close.svg"),

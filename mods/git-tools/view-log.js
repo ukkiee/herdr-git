@@ -25,7 +25,7 @@ import { serveAction } from "./serve-actions.js";
 import { openReset } from "./view-reset.js";
 import { servePush } from "./view-push.js";
 import { VcsWidget } from "./view-vcs-widget.js";
-import LogBranches from "./log-branches.js";
+import LogBranches, { TOOLS_WIDTH } from "./log-branches.js";
 import LogFilters from "./log-filters.js";
 import LogList from "./log-list.js";
 import LogDetails, { copyRevision, checkoutCommit, newBranchAt } from "./log-details.js";
@@ -158,6 +158,11 @@ const ACTIONS = {
   "commit.rebaseOnto": (host, commits, cx) => { if (commits[0]?.hash) operateHere(host, { type: "rebase", target: commits[0].hash }, cx); },
   "commit.interactiveRebase": (host, commits, cx) => interactiveHere(host, commits, cx),
   "branch.newWorktreeFrom": (host, b) => openNewWorktree(host, host.repo, b),
+  "branches.hide": (host, _b, cx) => host.branches.toggle("hidden", cx),
+  "branches.showMine": (host, _b, cx) => host.branches.toggle("mine", cx),
+  "branches.favorite": (host, b, cx) => host.branches.toggleFavorite(b, cx),
+  "branches.navigateLog": (host, b, cx) => host.branches.navigate(b, cx),
+  "branches.settings": (host, _b, cx) => host.branches.openSettings(cx),
 };
 
 // The bus event that tells every Log panel the options file changed.
@@ -696,12 +701,15 @@ export default class LogView {
   columns() {
     const total = this.width ?? 100000;
     let { branches, details } = this.widths;
+    // Hide Git Branches leaves the Branch tree's toolbar, to bring it back.
+    const hidden = this.branches.hidden();
+    if (hidden) branches = TOOLS_WIDTH;
     const showDetails = total >= branches + details + LIST_MIN + SPLIT * 2;
     if (!showDetails) details = 0;
     const showBranches = total >= branches + LIST_MIN + SPLIT;
     if (!showBranches) branches = 0;
-    const list = total - branches - details - (showDetails ? SPLIT : 0) - (showBranches ? SPLIT : 0);
-    return { branches, details, list, showBranches, showDetails, total };
+    const list = total - branches - details - (showDetails ? SPLIT : 0) - (showBranches && !hidden ? SPLIT : 0);
+    return { branches, details, list, showBranches, showDetails, total, hidden };
   }
 
   split(id, which, t) {
@@ -743,7 +751,7 @@ export default class LogView {
       })
       .when(c.showBranches, (el) => el
         .child(div().id("log-branches").flex_none().w(c.branches).h_full().min_h(0).overflow_hidden().child(this.branches.render(cx)))
-        .child(this.split("log-split-branches", "branches", t)))
+        .when(!c.hidden, (el) => el.child(this.split("log-split-branches", "branches", t))))
       .child(v_flex().id("log-center").flex_1().min_w(0).h_full().min_h(0)
         .child(toolbar(t)
           .when(this.drawsWidget(), (el) => el.child(div().id("log-vcs-widget").flex_none().max_w(260).min_w(0).child(this.widget.render(cx))))

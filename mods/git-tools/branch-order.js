@@ -117,11 +117,11 @@ export function treeSettings(saved) {
 export function treeSettingsMenu(settings) {
   const s = treeSettings(settings);
   return [
-    { header: true, key: "branchTree.singleClick" },
-    { id: "click:filter", key: "branchTree.updateFilter", checked: s.click === "filter" },
-    { id: "click:navigate", key: "branchTree.navigateLog", checked: s.click === "navigate" },
-    { id: "grouped", key: "branchTree.groupByDirectory", checked: s.grouped, rule: true },
-    { id: "tags", key: "branchTree.showTags", checked: s.tags },
+    { header: true, key: "branch-tree.singleClick" },
+    { id: "click:filter", key: "branch-tree.updateFilter", checked: s.click === "filter" },
+    { id: "click:navigate", key: "branch-tree.navigateLog", checked: s.click === "navigate" },
+    { id: "grouped", key: "branch-tree.groupByDirectory", checked: s.grouped, rule: true },
+    { id: "tags", key: "branch-tree.showTags", checked: s.tags },
   ];
 }
 

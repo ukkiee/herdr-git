@@ -108,8 +108,6 @@ const TRICKY = "it's \"quoted\"\n\n#12 costs $HOME `x` \\ end";
 {
   const { repo, hashes } = fourCommits("reword-old");
   writeFileSync(`${repo}/local.txt`, "local\n");
-  writeFileSync(`${repo}/one.txt`, "one, changed\n");
-  sh(repo, "echo staged >> four.txt && git add four.txt");
   const r = await editMessage(git, repo, { commit: hashes[1], message: TRICKY });
   assert.equal(r.ok, true, r.err);
   assert.equal(r.outcome, "done");
@@ -119,12 +117,40 @@ const TRICKY = "it's \"quoted\"\n\n#12 costs $HOME `x` \\ end";
   assert.deepEqual(h.map((c) => c.author), ["author-one", "author-two", "author-three", "author-four"]);
   assert.deepEqual(h[2].files, ["one.txt", "three.txt", "two.txt"]);
   assert.equal(run(repo, ["rev-parse", "HEAD~3"]).trim(), hashes[0]);
-  // Local changes come back: the changed file, the untracked one, and the staged one as a
-  // change not staged (git's autostash gives the index back as files only).
-  assert.deepEqual(status(repo), [" M four.txt", " M one.txt", "?? local.txt"]);
-  assert.equal(sh(repo, "cat one.txt"), "one, changed\n");
-  assert.equal(sh(repo, "cat four.txt"), "four\nstaged\n");
+  // An untracked file doesn't stand in the way and stays.
+  assert.deepEqual(status(repo), ["?? local.txt"]);
   assert.equal(run(repo, ["symbolic-ref", "--short", "HEAD"]).trim(), "main");
+}
+
+// Changes to tracked files (in the working tree or staged): a replay doesn't start. The
+// refusal names every changed tracked file, and nothing changes: history, files, index.
+{
+  const { repo, hashes } = fourCommits("replay-local");
+  writeFileSync(`${repo}/local.txt`, "local\n");
+  writeFileSync(`${repo}/one.txt`, "one, changed\n");
+  sh(repo, "echo staged >> four.txt && git add four.txt && git rm -q --cached three.txt");
+  const before = status(repo);
+  for (const r of [
+    await editMessage(git, repo, { commit: hashes[1], message: "x" }),
+    await dropCommits(git, repo, { commits: [hashes[1]] }),
+    await squashCommits(git, repo, { commits: [hashes[2], hashes[1]], message: "x" }),
+  ]) {
+    assert.equal(r.ok, false);
+    assert.equal(r.outcome, "refused");
+    assert.deepEqual(r.blocked, ["four.txt", "one.txt", "three.txt"]);
+    assert.equal(r.msg.key, "rewrite.localChanges");
+    assert.equal(r.err, en["rewrite.localChanges"].replace("{files}", "four.txt, one.txt, three.txt"));
+    assert.equal(r.changed, false);
+  }
+  assert.equal(head(repo), hashes[3]);
+  assert.deepEqual(status(repo), before);
+  assert.equal(sh(repo, "cat one.txt"), "one, changed\n");
+  // The last commit's message needs no replay: local changes don't stop it, and nothing
+  // staged goes in.
+  const amend = await editMessage(git, repo, { commit: hashes[3], message: "four, again" });
+  assert.equal(amend.ok, true, amend.err);
+  assert.equal(history(repo).at(-1).message, "four, again");
+  assert.deepEqual(status(repo), before);
 }
 
 // The first commit of the history can be reworded too (after the screen asked).

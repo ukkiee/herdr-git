@@ -148,6 +148,21 @@ async function checked(git, root, hashes, action) {
 
 // ---- the replay
 
+// How many paths a local-changes refusal names in its sentence (`blocked` has them all).
+const FILES_SHOWN = 10;
+
+// Every tracked path the working tree or the index has otherwise than HEAD: { ok, paths },
+// sorted. A rename is its two paths.
+async function trackedChanges(git, root) {
+  const found = new Set();
+  for (const cached of [false, true]) {
+    const r = await git.read(root, ["diff", ...(cached ? ["--cached"] : []), "--no-ext-diff", "--no-renames", "--name-only", "-z", "HEAD", "--"]);
+    if (!r.ok) return r;
+    for (const path of r.out.split("\0")) if (path) found.add(path);
+  }
+  return { ok: true, paths: [...found].sort() };
+}
+
 // The commits from `oldest` to HEAD, oldest first.
 async function range(git, root, oldest, root0) {
   const r = await git.read(root, ["rev-list", "--reverse", "--topo-order", root0 ? "HEAD" : `${oldest}^..HEAD`, "--"]);
@@ -175,9 +190,18 @@ async function movingRefs(git, root, hashes) {
 //   Replays the current branch from `oldest` (a full hash on it) with steps
 //   (rebase-plan.js todoList), one for every commit from `oldest` to HEAD, in the order to
 //   replay. `steps` is the list, or a function of the commits from `oldest` to HEAD
-//   (oldest first) that makes it. The edit check is the caller's. Local changes are put
-//   aside and back (--autostash): a rebase refuses to start on changed files.
+//   (oldest first) that makes it. The edit check is the caller's.
+//   Changes to tracked files (working tree or index) stop it before it starts, as they
+//   stop git's rebase: outcome "refused" with `blocked`, every such path. They aren't put
+//   aside with --autostash: a stash that doesn't apply cleanly afterwards stays behind
+//   while git still says the rebase ended well. Untracked files don't stop it.
 export async function runPlan(git, root, { oldest, steps } = {}) {
+  const local = await trackedChanges(git, root);
+  if (!local.ok) return { ...result(local), outcome: "failed", operation: null, changed: false };
+  if (local.paths.length) {
+    const files = local.paths.length > FILES_SHOWN ? `${local.paths.slice(0, FILES_SHOWN).join(", ")}, …` : local.paths.join(", ");
+    return { ...refused(english("rewrite.localChanges", { files }), { key: "rewrite.localChanges", args: { files } }), blocked: local.paths };
+  }
   const parents = HASH.test(String(oldest ?? "")) ? await git.read(root, ["rev-list", "--no-walk", "--parents", oldest, "--"]) : { ok: false };
   if (!parents.ok) return { ...unknown(oldest ?? ""), outcome: "failed", operation: null, changed: false };
   const isRoot = lines(parents.out)[0]?.split(" ").length === 1;
@@ -186,7 +210,8 @@ export async function runPlan(git, root, { oldest, steps } = {}) {
   const plan = todoList(typeof steps === "function" ? steps(span.hashes) : steps, { refs: await movingRefs(git, root, span.hashes) });
   if (!plan.ok) return refused(plan.err, plan.msg);
   const before = await readOperation(git, root);
-  const run = await git(root, ["rebase", "-i", "--autostash", "--no-autosquash", isRoot ? "--root" : `${oldest}^`], {
+  // --no-autostash: the person's rebase.autoStash would put the changes aside too.
+  const run = await git(root, ["rebase", "-i", "--no-autostash", "--no-autosquash", isRoot ? "--root" : `${oldest}^`], {
     timeout: TIMEOUT,
     env: { GIT_SEQUENCE_EDITOR: SEQUENCE_EDITOR, GIT_EDITOR: "true", GITTOOLS_TODO: plan.lines.join("\n"), ...plan.env },
   });

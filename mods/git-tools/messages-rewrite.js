@@ -23,6 +23,7 @@ export const en = {
   "rewrite.nothingToMeld": "There is no commit before {hash} to meld it into.",
   "rewrite.unknownCommit": "Commit {hash} is not in this repository.",
   "rewrite.notOneLine": "The selected commits are not in one line of history from the current commit.",
+  "rewrite.localChanges": "Local changes to tracked files stop the rebase: {files}. Commit or stash them first.",
   // Dialogs
   "rewrite.editTitle": "Edit Commit Message",
   "rewrite.editDescription": "Edit message for commit {hash} by {author}",
@@ -66,6 +67,7 @@ export const ko = {
   "rewrite.nothingToMeld": "{hash} 앞에 합칠 커밋이 없습니다.",
   "rewrite.unknownCommit": "커밋 {hash}이(가) 이 저장소에 없습니다.",
   "rewrite.notOneLine": "선택한 커밋이 현재 커밋에서 이어지는 한 줄의 기록에 있지 않습니다.",
+  "rewrite.localChanges": "추적하는 파일의 로컬 변경 때문에 리베이스할 수 없습니다: {files}. 먼저 커밋하거나 스태시하세요.",
   "rewrite.editTitle": "커밋 메시지 편집",
   "rewrite.editDescription": "{author}이(가) 작성한 커밋 {hash}의 메시지를 편집합니다",
   "rewrite.squashTitle": "스쿼시한 커밋 메시지",

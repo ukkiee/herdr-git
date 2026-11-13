@@ -49,6 +49,7 @@ import { abortOperation, skipOperation, operationName } from "./git-operation.js
 import { openPush } from "./view-push.js";
 import { broadcast, button, checkbox, errorStrip, textBox, writingOn, fromRepo, sentence } from "./ui.js";
 import { askAbort } from "./view-vcs-popup.js";
+import { openConflictsIfStopped } from "./view-conflicts.js";
 import { sameRepo } from "./lock.js";
 import { fixupInto, readMessages } from "./git-rewrite.js";
 import { tellRewrite } from "./log-rewrite.js";
@@ -339,7 +340,8 @@ export default class CommitForm {
         host.committed(cx, repo);
         host.setBusy(null, cx);
         broadcast({ type: "changed", root: repo.root });
-        this.told(r, going?.kind);
+        // Stopped on a conflict again: the Conflicts dialog opens, as after any request.
+        if (!openConflictsIfStopped(r, this.conflictArgs(repo))) this.told(r, going?.kind);
         // Even from another repository: the dialog names the branch and where it goes. Not
         // while the operation stopped again: there is nothing finished to push yet.
         if (push && r.outcome !== "stopped") openPush({ root: repo.root, on: repo.on, owner: host.bus.id, lang: host.lang });
@@ -368,6 +370,9 @@ export default class CommitForm {
     else if (r.outcome === "empty") notify({ title: kind === "revert" ? t("ops.emptyRevertTitle") : t("ops.emptyTitle"), body: t("ops.emptyBody"), level: "info" });
   }
 
+  // Where the Conflicts dialog opens from the panel: its writes go to this panel.
+  conflictArgs(repo) { return { root: repo.root, on: repo.on, owner: this.host.bus.id, lang: this.host.lang, who: "ui.commitPanel" }; }
+
   // The line above the message while an operation is in progress: "Merging main", "Rebasing
   // feature (1/2)", named as the VCS widget names it (git-operation.js operationName).
   label(op) {
@@ -390,7 +395,7 @@ export default class CommitForm {
       host.setBusy(null, cx);
       // Even a refused one may have moved things (a hook after the commit): read again.
       broadcast({ type: "changed", root: repo.root });
-      if (r.ok) this.told(r, op.kind);
+      if (r.ok) { if (!openConflictsIfStopped(r, this.conflictArgs(repo))) this.told(r, op.kind); }
       else {
         const err = sentence(host.t, r.msg, r.err) || host.t("commit.commitFailed");
         if (sameRepo(repo, host.repo)) this.error = err;

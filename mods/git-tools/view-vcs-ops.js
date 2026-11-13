@@ -37,8 +37,7 @@ import { openRemotes } from "./view-remotes.js";
 // What each item does, run in the owning panel's copy: run(panel, cx, how).
 //   panel: the Log panel (kind "log") or the Commit panel (kind "commit"): repo, bus, t,
 //   lang, writeBlock(), setBusy(), writeFailed().
-//   how: { kind, alt }. alt: Option was held while picking (Update Project then shows its
-//   dialog even after "Don't show again").
+//   how: { kind }.
 //   by: the panel kinds that can serve the item's write; without it, both.
 // A new operation is one line here; an id with no line never shows.
 const WHO = { commit: "ui.commitPanel", log: "ui.logPanel" };
@@ -71,7 +70,7 @@ export const VCS_ACTIONS = {
   // The Commit panel's Rollback with nothing selected: every changed file, checked.
   "rollback": { by: ["commit"], run: (panel) => panel.rollback(null) },
   "console": { run: (panel) => openConsole(panel.t) },
-  "updateProject": { run: (panel, cx, how) => startUpdateProject(panel, repoOf(panel), WHO[how.kind], cx, { alt: how.alt }) },
+  "updateProject": { run: (panel, cx, how) => startUpdateProject(panel, repoOf(panel), WHO[how.kind], cx) },
   "pull": { run: (panel, _cx, how) => { const r = repoOf(panel); if (r) openPull({ root: r.root, on: r.on ?? null, owner: panel.bus.id, lang: panel.lang, who: WHO[how.kind] }); } },
   "merge": { run: (panel, _cx, how) => { const r = repoOf(panel); if (r) openMerge({ root: r.root, on: r.on ?? null, owner: panel.bus.id, who: WHO[how.kind], lang: panel.lang }); } },
   "rebase": { run: (panel, _cx, how) => { const r = repoOf(panel); if (r) openRebase({ root: r.root, on: r.on ?? null, owner: panel.bus.id, who: WHO[how.kind], lang: panel.lang }); } },
@@ -123,7 +122,7 @@ function fetchFrom(panel, kind, cx) {
 const WIDTH = 300, TITLE = 34, CAPTION = 24, ROW = 26, RULE = 9, PAD = 5;
 const heightOf = (items, group) => TITLE + (group ? 0 : CAPTION) + PAD * 2 + items.length * ROW + items.filter((it, i) => it.rule && i > 0).length * RULE;
 
-// ask(panel, kind, group) → Promise<{ id, alt } | null>: opens the popup over the panel's
+// ask(panel, kind, group) → Promise<{ id } | null>: opens the popup over the panel's
 // copy and resolves with the pick. Items with an `off` check are asked first (a read).
 // Await it inside cx.spawn.
 async function ask(panel, kind, group) {
@@ -148,7 +147,7 @@ export function vcsOpsCommand(panel, kind, cx, { folder = null } = {}) {
     const pick = await ask(panel, kind, group);
     if (!pick || typeof pick.id !== "string") return;
     if (vcsOpsItems(handledBy(kind), pick.id).length) { open(pick.id); return; }
-    if (handledBy(kind)(pick.id)) VCS_ACTIONS[pick.id].run(panel, cx, { kind, alt: pick.alt === true });
+    if (handledBy(kind)(pick.id)) VCS_ACTIONS[pick.id].run(panel, cx, { kind });
     cx.notify();
   });
   open(undefined);
@@ -165,10 +164,10 @@ export default class VcsOps {
     this.handle.focus();
   }
 
-  pick(i, alt) {
+  pick(i) {
     const item = this.items[i];
     if (!item || item.disabled) return;
-    answerMenu(this.bus, this.key, { id: item.id, alt: Boolean(alt) });
+    answerMenu(this.bus, this.key, { id: item.id });
     closeOverlay(this.overlay);
   }
 
@@ -184,16 +183,15 @@ export default class VcsOps {
   }
 
   key_down(e) {
-    const alt = Boolean(e.modifiers?.alt);
     if (e.key === "down") this.move(1);
     else if (e.key === "up") this.move(-1);
-    else if (e.key === "enter" || (e.key === "right" && this.items[this.at]?.sub)) this.pick(this.at, alt);
+    else if (e.key === "enter" || (e.key === "right" && this.items[this.at]?.sub)) this.pick(this.at);
     else if (e.key === "escape") closeOverlay(this.overlay);
     else {
       // A digit picks its row (Option-digit types a character on many Mac keyboards).
       const i = numberedPick(this.items, e.key);
       if (i < 0) return false;
-      this.pick(i, alt);
+      this.pick(i);
     }
     return true;
   }
@@ -212,7 +210,7 @@ export default class VcsOps {
             .child(h_flex().id(`vcs-ops-${item.id}`).h(ROW).px(8).gap(8).rounded(6).items_center()
               .when(i === this.at && !item.disabled, (el) => el.bg(t.selected))
               .when(!item.disabled, (el) => el.cursor_pointer().hover((s) => s.bg(t.hover))
-                .on_click((e, cx) => { cx.stop_propagation(); this.pick(i, e.modifiers?.alt); }))
+                .on_click((_e, cx) => { cx.stop_propagation(); this.pick(i); }))
               .child(div().w(12).flex_none().text_size(11.5).text_color(t.dim).child(item.number ?? ""))
               .child(div().flex_1().min_w(0).truncate().text_color(item.disabled ? t.dim : t.foreground).child(item.label))
               .when(Boolean(item.sub), (el) => el.child(uiGlyph("chevron-right", { dark, size: 12 })))))));

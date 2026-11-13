@@ -584,12 +584,13 @@ export default class LogBranches {
     const favorite = isFavorite(fullRef(m.scope, b.name), this.prefs);
     // The icon is the star: a favorite's, or an empty one under the pointer. A click on it
     // marks or unmarks the branch and does nothing else.
-    const name = here ? (favorite ? "current-branch-favorite" : "current-branch")
-      : favorite ? "favorite" : this.hovered === m.key ? "favorite-hover" : "branch-item";
+    // Each name written out so ui-icons.test.mjs sees it.
+    const glyph = here ? (favorite ? uiGlyph("current-branch-favorite", { dark }) : uiGlyph("current-branch", { dark }))
+      : favorite ? uiGlyph("favorite", { dark }) : uiGlyph(this.hovered === m.key ? "favorite-hover" : "branch-item", { dark });
     const star = div().id(`log-branch-star-${i}`).flex_none().cursor_pointer()
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
       .on_click((_e, cx) => { cx.stop_propagation(); this.toggleFavorite(this.target(m), cx); })
-      .child(uiGlyph(name, { dark }));
+      .child(glyph);
     el = el.on_hover((over, cx) => {
       const was = this.hovered;
       if (over) this.hovered = m.key; else if (this.hovered === m.key) this.hovered = null;

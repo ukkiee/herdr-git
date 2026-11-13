@@ -216,10 +216,13 @@ export default class VcsPopup {
     }
     const depth = r.scope === "remote" ? 44 : 26;
     const favorite = r.scope !== "tag" && isFavorite(refOf(r.scope === "remote" ? "remote" : "local", r.name), this.prefs);
-    const glyph = r.scope === "tag" ? "tag" : r.current ? (favorite ? "current-branch-favorite" : "current-branch") : favorite ? "favorite" : "branch-item";
+    // Each name written out so ui-icons.test.mjs sees it.
+    const glyph = r.scope === "tag" ? uiGlyph("tag", { dark })
+      : r.current ? uiGlyph(favorite ? "current-branch-favorite" : "current-branch", { dark })
+        : uiGlyph(favorite ? "favorite" : "branch-item", { dark });
     return el.pl(depth).hover((s) => s.bg(t.hover))
       .on_mouse_down("left", (e, cx) => { this.at = i; this.activate(r, e.position, cx); cx.stop_propagation(); })
-      .child(uiGlyph(glyph, { dark }))
+      .child(glyph)
       .child(div().flex_1().min_w(0).truncate().when(r.current, (el) => el.font_semibold()).child(r.label))
       // Commits to pull (blue ↓) and to push (green ↑), and the branch it tracks.
       .when(r.behind > 0, (el) => el.child(div().flex_none().text_size(11).text_color(t.ansi4).child(`↓${r.behind}`)))

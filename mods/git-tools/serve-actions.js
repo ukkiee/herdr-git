@@ -24,7 +24,7 @@ import { serveReword, serveSquash, serveDrop } from "./log-rewrite.js";
 import { runSmartRequest } from "./view-smart.js";
 import { runTagCreate } from "./view-tag.js";
 import { runRenameBranch } from "./view-rename-branch.js";
-import { runRemoteEdit, runRemoteRemove } from "./view-remote.js";
+import { runRemoteEdit, runRemoteRemove, runRemoteAdd } from "./view-remote.js";
 import { runRemote } from "./view-update-project.js";
 import { serveExtract, serveDropChanges } from "./view-extract.js";
 import { serveOperation } from "./view-merge.js";
@@ -64,6 +64,7 @@ export const SERVE_ACTIONS = {
   "tag-create": { work: "refs.tagging", run: (git, root, args) => runTagCreate(git, root, args) },
   "branch-rename": { work: "refs.renaming", run: (git, root, args) => runRenameBranch(git, root, args) },
   "remote-edit": { work: "refs.editingRemote", run: (git, root, args) => runRemoteEdit(git, root, args) },
+  "remote-add": { work: "refs.addingRemote", run: (git, root, args) => runRemoteAdd(git, root, args) },
   "remote-remove": { work: "refs.removingRemote", run: (git, root, args) => runRemoteRemove(git, root, args) },
   "remote-pull": { work: "remote.pulling", run: (git, root, args, panel) => runRemote(git, root, { ...args, type: "pull" }, panel) },
   "remote-update": { work: "remote.updating", run: (git, root, args, panel) => runRemote(git, root, { ...args, type: "update" }, panel) },

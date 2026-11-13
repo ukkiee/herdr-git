@@ -1,22 +1,29 @@
 // Define Remote dialog (Edit Remote on a remote's folder in the Branch tree): Name, URL,
-// "Fetch from the remote" (on at first), Cancel and OK. And, with props.mode "remove", the
-// question before Remove Remote. git removes the remote's branches with it.
+// "Fetch from the remote" (on at first), Cancel and OK. With props.mode "add" (Git
+// Remotes' Add) the same dialog starts empty and OK adds the remote. And, with
+// props.mode "remove", the question before Remove Remote. git removes the remote's
+// branches with it.
 //
-// Neither runs git that writes: they ask the panel copy that opened them (props.owner),
-// "remote-edit" and "remote-remove" in serve-actions.js, under the repository's write lock.
+// None runs git that writes: they ask the panel copy that opened them (props.owner),
+// "remote-add", "remote-edit" and "remote-remove" in serve-actions.js, under the
+// repository's write lock.
 //
-// props: { view: "remote", mode: "edit" | "remove", root, on, name, owner, lang, overlay }.
+// props: { view: "remote", mode: "add" | "edit" | "remove", root, on, name, owner, lang, overlay }.
 
 import { div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { exec, theme } from "herdr";
 import { makeGit } from "./git.js";
-import { readRemote, editRemote, fetchRemote, removeRemote } from "./git-refs.js";
+import { readRemote, addRemote, editRemote, fetchRemote, removeRemote } from "./git-refs.js";
 import { openDialog, dialogFrame, button, checkbox, close, askOwner, writeBlock, scrollText, sentence, notice } from "./ui.js";
 
 // openRemoteEdit({ root, on, name, owner, lang }) / openRemoteRemove(…): name: the remote.
 export function openRemoteEdit({ root, on = null, name, owner = null, lang } = {}) {
   return openDialog("remote", { mode: "edit", root, on, name, owner, lang }, { width: 520, height: 240 });
+}
+// openRemoteAdd({ root, on, owner, lang }): the dialog with empty fields.
+export function openRemoteAdd({ root, on = null, owner = null, lang } = {}) {
+  return openDialog("remote", { mode: "add", root, on, name: "", owner, lang }, { width: 520, height: 240 });
 }
 export function openRemoteRemove({ root, on = null, name, owner = null, lang } = {}) {
   return openDialog("remote", { mode: "remove", root, on, name, owner, lang }, { width: 420, height: 160 });
@@ -42,6 +49,16 @@ export async function runRemoteEdit(git, root, args) {
   return fetched.ok ? fetched : { ...fetched, changed: true };
 }
 
+// The panel's side of "remote-add" { name, url, fetch }: the new remote, then a fetch
+// from it when asked, as an edit's.
+export async function runRemoteAdd(git, root, args) {
+  const name = text(args.name).trim();
+  const r = await addRemote(git, root, { name, url: text(args.url) });
+  if (!r.ok || args.fetch !== true) return r;
+  const fetched = await fetchRemote(git, root, name);
+  return fetched.ok ? fetched : { ...fetched, changed: true };
+}
+
 // The panel's side of "remote-remove" { name }.
 export function runRemoteRemove(git, root, args) {
   return removeRemote(git, root, text(args.name));
@@ -55,6 +72,7 @@ export default class RemoteView {
     this.name = text(p.name);
     this.owner = p.owner ?? null;
     this.removing = p.mode === "remove";
+    this.adding = p.mode === "add";
     this.waiting = false;
     this.error = null;
     this.handle = cx.focus_handle();
@@ -68,6 +86,7 @@ export default class RemoteView {
       input.on("change", (_e, cx) => { this.error = null; cx.notify(); });
       input.on("submit", (_e, cx) => this.ok(cx));
     }
+    if (this.adding) { this.read = true; this.nameInput.focus(); return; }
     this.urlInput.focus();
     cx.spawn(async (cx) => {
       const r = this.root ? await readRemote(makeGit(exec, this.on), this.root, this.name) : { ok: false, err: "" };
@@ -82,7 +101,7 @@ export default class RemoteView {
   writing() { return this.waiting || !this.root ? null : writeBlock(this, { root: this.root, on: this.on }); }
 
   ready() {
-    if (this.waiting || this.writing() || !this.name) return false;
+    if (this.waiting || this.writing() || (!this.name && !this.adding)) return false;
     if (this.removing) return true;
     return this.read && Boolean(this.nameInput.value().trim()) && Boolean(this.urlInput.value().trim());
   }
@@ -91,10 +110,11 @@ export default class RemoteView {
     if (!this.ready()) return;
     this.waiting = true; this.error = null;
     cx.notify();
-    const args = this.removing
-      ? { root: this.root, on: this.on, name: this.name }
-      : { root: this.root, on: this.on, name: this.name, to: this.nameInput.value().trim(), url: this.urlInput.value().trim(), fetch: this.fetch };
-    askOwner(this, this.removing ? "remote-remove" : "remote-edit", args, "ui.logPanel", cx, (r) => {
+    const args = this.removing ? { root: this.root, on: this.on, name: this.name }
+      : this.adding ? { root: this.root, on: this.on, name: this.nameInput.value().trim(), url: this.urlInput.value().trim(), fetch: this.fetch }
+        : { root: this.root, on: this.on, name: this.name, to: this.nameInput.value().trim(), url: this.urlInput.value().trim(), fetch: this.fetch };
+    const action = this.removing ? "remote-remove" : this.adding ? "remote-add" : "remote-edit";
+    askOwner(this, action, args, "ui.logPanel", cx, (r) => {
       this.waiting = false;
       if (r.ok) close(this.overlay);
       else this.error = sentence(this.t, r.msg, r.err);

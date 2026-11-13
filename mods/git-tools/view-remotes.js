@@ -4,8 +4,8 @@
 //
 // Edit opens the Define Remote dialog and Remove its question (view-remote.js), both
 // owned by the panel that opened this one (props.owner), which runs their writes. The
-// table reads again whenever the repository changes. Add has no dialog to open: the
-// Define Remote dialog edits a remote that is there.
+// table reads again whenever the repository changes. Add opens the same Define Remote
+// dialog, empty.
 //
 // props: { view: "remotes", root, on, owner, lang, overlay }.
 
@@ -14,7 +14,7 @@ import { h_flex, v_flex } from "gpui-base";
 import { exec, theme } from "herdr";
 import { makeGit } from "./git.js";
 import { readRemotes, readRemote } from "./git-refs.js";
-import { openRemoteEdit, openRemoteRemove } from "./view-remote.js";
+import { openRemoteAdd, openRemoteEdit, openRemoteRemove } from "./view-remote.js";
 import { openDialog, dialogFrame, button, iconButton, row, notice, errorStrip, close, WindowedList, writeBlock, sentence } from "./ui.js";
 
 // openRemotes(panel, repo): Manage Remotes… in the panel's copy.
@@ -73,8 +73,15 @@ export default class RemotesView {
     this.list.reveal(i, n);
   }
 
-  // Edit and Remove, on the selected remote. Not while a write runs on the repository.
-  can() { return Boolean(this.root && this.selected && !writeBlock(this, { root: this.root, on: this.on })); }
+  // Edit and Remove, on the selected remote; Add needs none. Not while a write runs on the
+  // repository.
+  free() { return Boolean(this.root && !writeBlock(this, { root: this.root, on: this.on })); }
+  can() { return Boolean(this.selected && this.free()); }
+
+  add() {
+    if (!this.free()) return;
+    openRemoteAdd({ root: this.root, on: this.on, owner: this.owner, lang: this.lang });
+  }
 
   edit() {
     if (!this.can()) return;
@@ -109,7 +116,7 @@ export default class RemotesView {
         : notice(this.t("patch.noRemotes"), t);
     const body = v_flex().size_full().min_h(0)
       .child(h_flex().h(32).flex_none().px(10).gap(2).items_center()
-        .child(iconButton("remotes-add", "plus", t, { title: this.t("patch.addUnavailable"), disabled: true }))
+        .child(iconButton("remotes-add", "plus", t, { title: writing ?? this.t("patch.addRemote"), disabled: !this.free(), onClick: (_e, cx) => { this.add(); cx.notify(); } }))
         .child(iconButton("remotes-remove", "branch-delete", t, { title: writing ?? this.t("patch.removeRemote"), disabled: !can, onClick: (_e, cx) => { this.remove(); cx.notify(); } }))
         .child(iconButton("remotes-edit", "settings", t, { title: writing ?? this.t("patch.editRemote"), disabled: !can, onClick: (_e, cx) => { this.edit(); cx.notify(); } })))
       .child(v_flex().id("remotes-table").flex_1().min_h(0).mx(12).rounded(6).border_1().border_color(t.border).bg(t.background).overflow_hidden()

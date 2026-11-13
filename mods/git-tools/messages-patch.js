@@ -34,7 +34,6 @@ export const en = {
   "patch.addRemote": "Add",
   "patch.removeRemote": "Remove",
   "patch.editRemote": "Edit",
-  "patch.addUnavailable": "Add a remote in a terminal: git remote add <name> <url>",
   "patch.noRemotes": "No remotes",
   // what the module words
   "patch.noFiles": "No files are checked.",
@@ -76,7 +75,6 @@ export const ko = {
   "patch.addRemote": "추가",
   "patch.removeRemote": "제거",
   "patch.editRemote": "편집",
-  "patch.addUnavailable": "원격 추가는 터미널에서 합니다: git remote add <이름> <URL>",
   "patch.noRemotes": "원격 없음",
   "patch.noFiles": "체크한 파일이 없습니다.",
   "patch.noFile": "패치 파일 경로를 입력하세요.",

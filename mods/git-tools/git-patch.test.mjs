@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
 import { makeGit } from "./git.js";
 import { createPatch } from "./git-revision.js";
-import { changesCommit, readPatchFiles } from "./git-patch.js";
+import { changesCommit, readPatchFiles, applyPatch } from "./git-patch.js";
 
 const env = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", GIT_EDITOR: "true" };
 const exec = (cmd, args = [], { cwd } = {}) => new Promise((resolve, reject) => {
@@ -180,6 +180,116 @@ const headers = (text) => text.split("\n").filter((line) => line.startsWith("dif
     assert.equal(r.ok, false, text);
     assert.equal(r.msg.key, "patch.notPatch");
   }
+}
+
+// ---- Apply Patch: only the checked files, on the working tree.
+// One repository and a patch of changes made on a copy of it.
+const patched = (name) => {
+  const repo = init(name);
+  write(repo, "a.txt", "1\n2\n3\n4\n5\n6\n7\n8\n"); write(repo, "b.txt", "b\n"); write(repo, "gone.txt", "bye\n");
+  write(repo, "old.txt", "a long enough line\nanother line\nthird line\n");
+  write(repo, "[x] *.txt", "x\n"); write(repo, "x b.txt", "xb\n2\n3\n4\n5\n6\n");
+  commit(repo, "base");
+  const other = `${repo}-other`;
+  run(base, ["clone", "-q", repo, other]);
+  write(other, "a.txt", "1\n2 patched\n3\n4\n5\n6\n7\n8\n"); write(other, "b.txt", "b patched\n");
+  sh(other, "rm gone.txt && mv old.txt new.txt");
+  write(other, "add.txt", "new\n"); write(other, "[x] *.txt", "x patched\n"); write(other, "x b.txt", "xb patched\n2\n3\n4\n5\n6\n");
+  run(other, ["add", "-A"]);
+  const file = `${base}/${name}.patch`;
+  writeFileSync(file, run(other, ["diff", "--cached", "--binary", "-M", "--no-color"]));
+  return { repo, file };
+};
+const read = (repo, path) => (existsSync(`${repo}/${path}`) ? readFileSync(`${repo}/${path}`, "utf8") : null);
+const unmerged = (repo) => [...new Set(run(repo, ["ls-files", "-u", "-z"]).split("\0").filter(Boolean).map((l) => l.split("\t")[1]))];
+
+{
+  const { repo, file } = patched("apply-some");
+  const index = run(repo, ["ls-files", "-s"]);
+  // "[x] *.txt" is that one file, not a pattern that takes "x b.txt".
+  const r = await applyPatch(git, repo, { file, paths: ["a.txt", "[x] *.txt", "new.txt", "gone.txt"] });
+  assert.equal(r.ok, true, r.err);
+  assert.equal(r.threeWay, false);
+  assert.deepEqual(r.conflicts, []);
+  assert.equal(read(repo, "a.txt"), "1\n2 patched\n3\n4\n5\n6\n7\n8\n");
+  assert.equal(read(repo, "[x] *.txt"), "x patched\n");
+  assert.equal(read(repo, "new.txt"), "a long enough line\nanother line\nthird line\n");
+  assert.equal(read(repo, "old.txt"), null);
+  assert.equal(read(repo, "gone.txt"), null);
+  // Unchecked: as they were.
+  assert.equal(read(repo, "b.txt"), "b\n");
+  assert.equal(read(repo, "x b.txt"), "xb\n2\n3\n4\n5\n6\n");
+  assert.equal(read(repo, "add.txt"), null);
+  // The working tree only: the index is HEAD's.
+  assert.equal(run(repo, ["ls-files", "-s"]), index);
+}
+
+// Every file checked.
+{
+  const { repo, file } = patched("apply-all");
+  const r = await applyPatch(git, repo, { file, paths: ["[x] *.txt", "a.txt", "add.txt", "b.txt", "gone.txt", "new.txt", "x b.txt"], every: true });
+  assert.equal(r.ok, true, r.err);
+  assert.equal(read(repo, "b.txt"), "b patched\n");
+  assert.equal(read(repo, "x b.txt"), "xb patched\n2\n3\n4\n5\n6\n");
+  assert.equal(read(repo, "add.txt"), "new\n");
+}
+
+// A patch that doesn't fit as it is: applied again with a 3-way merge. Lines changed on
+// one side only merge; lines changed on both stay as a conflict for the Conflicts dialog.
+{
+  const { repo, file } = patched("apply-3way");
+  write(repo, "a.txt", "1\n2 here\n3\n4\n5\n6\n7\n8\n"); write(repo, "b.txt", "b here\n");
+  commit(repo, "diverge");
+  write(repo, "x b.txt", "xb\n2\n3\n4\n5\n6\nmore\n");
+  commit(repo, "only here");
+  const r = await applyPatch(git, repo, { file, paths: ["a.txt", "x b.txt"] });
+  assert.equal(r.ok, true, r.err);
+  assert.equal(r.threeWay, true);
+  assert.deepEqual(r.conflicts, ["a.txt"]);
+  assert.equal(r.msg.key, "patch.appliedConflicts");
+  assert.deepEqual(unmerged(repo), ["a.txt"]);
+  assert.match(read(repo, "a.txt"), /<<<<<<< ours\n2 here\n=======\n2 patched\n>>>>>>> theirs/);
+  // The other file merged; b.txt was not checked and stays.
+  assert.equal(read(repo, "x b.txt"), "xb patched\n2\n3\n4\n5\n6\nmore\n");
+  assert.equal(read(repo, "b.txt"), "b here\n");
+}
+{
+  const { repo, file } = patched("apply-3way-clean");
+  // Line 4 is in the patch's context (so it doesn't fit as it is) but not next to line 2.
+  write(repo, "a.txt", "1\n2\n3\n4 here\n5\n6\n7\n8\n");
+  commit(repo, "near");
+  const r = await applyPatch(git, repo, { file, paths: ["a.txt"] });
+  assert.equal(r.ok, true, r.err);
+  assert.equal(r.threeWay, true);
+  assert.deepEqual(r.conflicts, []);
+  assert.equal(r.msg.key, "patch.appliedThreeWay");
+  assert.equal(read(repo, "a.txt"), "1\n2 patched\n3\n4 here\n5\n6\n7\n8\n");
+}
+
+// A 3-way merge git refuses (a local change in the file): nothing changes, git's words.
+{
+  const { repo, file } = patched("apply-3way-dirty");
+  write(repo, "a.txt", "1\n2 dirty\n3\n4\n5\n6\n7\n8\n");
+  const r = await applyPatch(git, repo, { file, paths: ["a.txt"] });
+  assert.equal(r.ok, false);
+  assert.ok(r.err);
+  assert.equal(read(repo, "a.txt"), "1\n2 dirty\n3\n4\n5\n6\n7\n8\n");
+  assert.deepEqual(unmerged(repo), []);
+}
+
+// Nothing checked, no patch in the file, no file: refused, nothing changes.
+{
+  const { repo, file } = patched("apply-refused");
+  const none = await applyPatch(git, repo, { file, paths: [] });
+  assert.equal(none.ok, false);
+  assert.equal(none.msg.key, "patch.noFiles");
+  writeFileSync(`${base}/not.patch`, "hello world\n");
+  for (const bad of [`${base}/not.patch`, `${base}/missing.patch`]) {
+    const r = await applyPatch(git, repo, { file: bad, paths: ["a.txt"], every: true });
+    assert.equal(r.ok, false, bad);
+    assert.ok(r.err);
+  }
+  assert.equal(run(repo, ["status", "--porcelain"]), "");
 }
 
 console.log("ok");

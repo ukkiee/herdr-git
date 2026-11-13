@@ -127,6 +127,59 @@ export function readPatchFiles(text) {
   return { ok: true, files };
 }
 
+// ---- Apply Patch
+
+// A name as a git apply --include pattern that matches that file only.
+const literal = (path) => path.replace(/[\\*?[]/g, (ch) => `\\${ch}`);
+// A big patch on another machine outlasts exec's default 30 s.
+const TIMEOUT = 120000;
+
+// The paths in a conflict in the index, in git's order.
+async function unmerged(git, root) {
+  const r = await git.read(root, ["ls-files", "-u", "-z"]);
+  if (!r.ok) return { ...r, paths: [] };
+  const paths = [];
+  for (const line of r.out.split("\0")) {
+    const tab = line.indexOf("\t");
+    if (tab >= 0 && paths[paths.length - 1] !== line.slice(tab + 1)) paths.push(line.slice(tab + 1));
+  }
+  return { ok: true, paths };
+}
+
+// applyPatch(git, root, { file, paths, every? }) → { ok, code, out, err, msg?, threeWay, conflicts, changed }
+//   Applies the patch in `file` (a path on the repository's machine) to the working tree,
+//   only its files named in `paths` (as readPatchFiles names them). every: they are all
+//   of the patch's files (no list goes to git then).
+//   When it fits as it is, only the working tree changes. When it doesn't, it is applied
+//   again as a 3-way merge, which git does on the index too: lines changed on one side
+//   only merge, and lines changed on both stay in a conflict in the index (conflicts:
+//   those paths, for the Conflicts dialog; ok is still true, msg patch.appliedConflicts).
+//   threeWay: the 3-way merge applied it. A refusal (git's words, ok false) changes nothing.
+//   Which way it went is read from the index's conflicts, never from git's words.
+export async function applyPatch(git, root, { file, paths = [], every = false } = {}) {
+  const out = (r, more) => ({ ok: r.ok, code: r.code, out: r.out ?? "", err: r.err ?? "", ...(r.msg ? { msg: r.msg } : {}), threeWay: false, conflicts: [], changed: false, ...more });
+  const list = paths.filter((path) => typeof path === "string" && path);
+  if (!list.length) return out(refuse("No files chosen to apply.", "patch.noFiles"));
+  if (typeof file !== "string" || !file) return out(refuse("No patch file.", "patch.noFile"));
+  const pick = every ? [] : list.map((path) => `--include=${literal(path)}`);
+  const check = await git.read(root, ["apply", "--check", ...pick, "--", file], { timeout: TIMEOUT });
+  if (check.ok) {
+    const r = await git(root, ["apply", ...pick, "--", file], { timeout: TIMEOUT });
+    return out({ ...r, ...(r.ok ? { msg: { key: "patch.applied", args: {} } } : {}) }, { changed: true });
+  }
+  // git can't even read it: no 3-way would.
+  if (check.code > 1) return out(check);
+  const before = await unmerged(git, root);
+  if (!before.ok) return out(before);
+  const r = await git(root, ["apply", "--3way", ...pick, "--", file], { timeout: TIMEOUT });
+  if (r.ok) return out({ ...r, msg: { key: "patch.appliedThreeWay", args: {} } }, { threeWay: true, changed: true });
+  const after = await unmerged(git, root);
+  const was = new Set(before.paths), conflicts = after.ok ? after.paths.filter((path) => !was.has(path)) : [];
+  if (!conflicts.length) return out({ ...r, err: r.err || check.err }, { changed: true });
+  const n = conflicts.length;
+  return out({ ...r, ok: true, err: "", msg: { key: "patch.appliedConflicts", args: { n } } }, { threeWay: true, conflicts, changed: true });
+}
+
 // ---- Create Patch from local changes
 
 // changesCommit(git, root, { paths, message }) → { ok, code, out, err, msg?, hash }

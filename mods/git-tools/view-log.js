@@ -31,6 +31,10 @@ import { menuItems } from "./log-menus.js";
 import { NONE, pickCommit, pickForMenu, keepPicked, pickedInOrder } from "./log-select.js";
 import { commitWithLocal, commitVersions, fileWithLocal, beforeWithLocal, editSource, repositoryVersion, getFromCommit, changesToParents } from "./view-compare-files.js";
 import { compareWithCurrent, diffWithWorkingTree } from "./view-compare-branches.js";
+import { showRepositoryAt } from "./view-revision-tree.js";
+import { historyUpToHere } from "./view-history-tab.js";
+import { openPatch, openFilePatch } from "./view-patch.js";
+import { goToHash } from "./view-go-to-hash.js";
 
 // Column widths, px. The Commit list takes what the side columns leave and never gets
 // narrower than LIST_MIN: when the panel is too narrow, Commit details goes first, then
@@ -95,6 +99,14 @@ const ACTIONS = {
   "file.getFromRevision": (host, m, cx) => getFromCommit(host, m, cx),
   "file.showChangesToParents": (host, m, cx) => changesToParents(host, m, cx),
   "commit.resetToHere": (host, commits) => { if (host.repo && commits[0] && !host.writeBlock()) openReset({ root: host.repo.root, on: host.repo.on, owner: host.bus.id, commit: commits[0], lang: host.lang }); },
+  "commit.showRepository": (host, commits) => showRepositoryAt(host, commits),
+  "commit.createPatch": (host, commits) => openPatch(host, { commits }),
+  "file.createPatch": (host, m) => openFilePatch(host, m),
+  "file.historyUpToHere": (host, m) => historyUpToHere(host, m),
+  "details.historyUpToHere": (host, m) => historyUpToHere(host, m),
+  "log.goToHash": (host, _t, cx) => goToHash(host, cx),
+  "commit.goToChild": (host, commits, cx) => host.list.goToRelative("children", commits[0], cx),
+  "commit.goToParent": (host, commits, cx) => host.list.goToRelative("parents", commits[0], cx),
 };
 const handled = (id) => Object.prototype.hasOwnProperty.call(ACTIONS, id);
 

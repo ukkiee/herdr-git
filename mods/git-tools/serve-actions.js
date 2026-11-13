@@ -14,6 +14,10 @@ import { acceptRequest, unresolveRequest, resolveSimpleRequest } from "./conflic
 import { writerOn } from "./view-conflicts.js";
 import { runReset } from "./view-reset.js";
 import { applySnapshot } from "./git-snapshot.js";
+import { createPatch } from "./git-revision.js";
+
+const strings = (value) => (Array.isArray(value) ? value.filter((v) => typeof v === "string" && v) : []);
+const text = (value) => (typeof value === "string" && value ? value : null);
 
 export const SERVE_ACTIONS = {
   "conflicts-accept": { work: "conflicts.accepting", run: (git, root, args) => acceptRequest(git, root, args) },
@@ -21,6 +25,9 @@ export const SERVE_ACTIONS = {
   "conflicts-resolve-simple": { work: "conflicts.resolvingSimple", run: (git, root, args) => resolveSimpleRequest(git, root, args, writerOn(typeof args.on === "string" ? args.on : null)) },
   "reset": { work: "reset.running", run: (git, root, args, panel) => runReset(git, root, args, panel) },
   "restore-3way": { work: "restore.running", run: (git, root, args) => applySnapshot(git, root, { snapshot: typeof args.snapshot === "string" ? args.snapshot : "" }) },
+  "patch-create": { work: "revision.creating", run: (git, root, args) => (text(args.file)
+    ? createPatch(git, root, { commits: strings(args.commits), paths: strings(args.paths), reverse: args.reverse === true, base: text(args.base), file: args.file })
+    : { ok: false, err: "No patch file.", msg: { key: "revision.needFile", args: {} } }) },
 };
 
 // serveAction(panel, e, cx) → true when the table has e.action and the panel now runs

@@ -50,6 +50,10 @@ import CompareBranches from "./view-compare-branches.js";
 import Conflicts from "./view-conflicts.js";
 import Reset from "./view-reset.js";
 import ResetHead from "./view-reset-head.js";
+import RevisionTree from "./view-revision-tree.js";
+import HistoryTab from "./view-history-tab.js";
+import Patch from "./view-patch.js";
+import GoToHash from "./view-go-to-hash.js";
 
 // When the system's language isn't known yet, how long to wait before each next ask.
 const ASK_AGAIN = [1000, 3000, 10000];
@@ -76,6 +80,10 @@ export const VIEWS = {
   "conflicts": Conflicts, // Conflicts dialog (view-conflicts.js openConflicts)
   "reset": Reset, // Git Reset dialog (view-reset.js openReset)
   "reset-head": ResetHead, // Reset Head dialog (view-reset-head.js openResetHead)
+  "revision-tree": RevisionTree, // repository at revision tab (space-tabs.js)
+  "history": HistoryTab, // history up to here tab (space-tabs.js)
+  "patch": Patch, // Patch File Settings dialog
+  "go-to-hash": GoToHash, // Go to Hash/Branch/Tag popup
 };
 
 // `mod.open:git-tools` (cmd-k) opens a copy with no view. No single app command both

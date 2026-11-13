@@ -1,5 +1,5 @@
 // Branch compare tab (view "compare-branches"): Compare with '<current>' on a branch.
-// Two commit lists, one above the other: the commits the branch has and the current
+// Two commit lists, one above the other: the commits the current branch has and the
 // branch hasn't, then the other way. Right of them the picked commit's files and
 // message; a double click on a file opens its Diff tab. One per space (space-tabs.js).
 //

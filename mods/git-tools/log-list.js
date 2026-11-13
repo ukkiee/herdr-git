@@ -65,7 +65,8 @@ import { readLog, labelRefs } from "./git-log.js";
 import { formatTime } from "./i18n.js";
 import { layoutGraph, graphWindow, indexSegments, segmentsIn, fitLabels } from "./graph.js";
 import { openCommitMenu } from "./log-details.js";
-import { ROW, row, notice, strokePath, WindowedList } from "./ui.js";
+import { ROW, row, notice, strokePath, WindowedList, openMenu } from "./ui.js";
+import { relatives } from "./git-revision.js";
 
 const BATCH = 1000;
 const LANE = 14, PAD = 5, MID = ROW / 2;
@@ -310,6 +311,30 @@ export default class LogList {
     return false;
   }
 
+  // Go to Parent Commit (which "parents") and Go to Child Commit ("children") from
+  // `commit`: one goes straight there; several open a popup to pick one (each as its
+  // short hash and subject); none does nothing. Children are those of what the list
+  // shows: every branch, or host.branch alone.
+  goToRelative(which, commit, cx) {
+    const host = this.host, repo = host.repo;
+    if (!repo || !commit?.hash) return;
+    const turn = host.beginJump();
+    cx.spawn(async (cx) => {
+      const r = await relatives(repo.git, repo.root, commit.hash, { branch: host.branch ?? null });
+      if (repo !== host.repo || !host.jumpLive(turn)) return;
+      if (!r.ok) { host.fail(r.err || host.t("ui.gitFailed"), cx); cx.notify(); return; }
+      const next = r[which];
+      let hash = next.length === 1 ? next[0].hash : null;
+      if (next.length > 1) {
+        hash = await openMenu(host.bus, next.map((c) => ({ label: `${c.hash.slice(0, 8)}  ${c.subject}`, value: c.hash })), { width: 380, lang: host.lang });
+        this.handle.focus();
+      }
+      if (!hash || repo !== host.repo || !host.jumpLive(turn)) return;
+      await host.goTo(hash, cx, turn);
+      cx.notify();
+    });
+  }
+
   move(by, cx) {
     const n = this.rows.length;
     if (!n) return;
@@ -445,6 +470,8 @@ export default class LogList {
         else if (e.key === "pageup") this.move(-page, cx);
         else if (e.key === "home") this.move(-this.rows.length, cx);
         else if (e.key === "end") this.move(this.rows.length, cx);
+        else if (e.key === "left" && host.selected) host.run("commit.goToChild", [host.selected], cx);
+        else if (e.key === "right" && host.selected) host.run("commit.goToParent", [host.selected], cx);
         else return;
         cx.stop_propagation();
       })

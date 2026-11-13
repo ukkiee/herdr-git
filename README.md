@@ -37,9 +37,9 @@ revisions.
   Commit, Push, New Branch, New Worktree, Checkout Tag or Revision, and every recent,
   local and remote branch and tag with its own menu.
 - **VCS Operations popup** (`cmd-shift-v`): the Git menu in one numbered popup: Commit,
-  Push, Update Project, Pull, Fetch, Merge, Rebase, New Branch, New Tag, Reset HEAD, Show
-  Git Log, Uncommitted Changes (Stash, Unstash, Rollback) and Git Console. Press its
-  number to run one.
+  Push, Update Project, Pull, Fetch, Merge, Rebase, New Branch, New Tag, Reset HEAD, New
+  Worktree, Show Git Log, Uncommitted Changes (Stash, Unstash, Rollback) and Git Console.
+  Press its number to run one.
 - **Diff tab**: one file's unified diff with line numbers, opened from any panel. A
   working file's tab follows the file as it changes.
 
@@ -64,7 +64,8 @@ revisions.
   yours or theirs per file, resolve every simple conflict at once, or open the
   three-pane Merge Revisions dialog and pick chunk by chunk.
 - **Smart operation**: when local changes are in the way of a checkout, merge, pull,
-  rebase, cherry-pick or revert, see the files and let git-tools stash them, run it, and
+  rebase, cherry-pick, revert or a history edit (all but Fixup and Squash Into, which
+  commit your checked changes), see the files and let git-tools stash them, run it, and
   put them back. Force Checkout records your changes before it throws them away.
 - **New Tag, Rename branch, Push All up to Here, Edit and Remove Remote, Push Tag.**
 - **Compare and browse** in space tabs: two branches' own commits, the working tree

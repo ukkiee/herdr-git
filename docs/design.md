@@ -77,7 +77,7 @@
 | 화면 | `view-*.js`, `commit-form.js`, `commit-stash-tab.js`, `log-branches.js`, `log-list.js`, `log-details.js`, `log-filters.js` | 그리기와 사람의 입력 |
 | git | `git.js`, `git-status.js`, `git-commit.js`, `git-rollback.js`, `git-snapshot.js`, `git-diff.js`, `git-push.js`, `git-log.js`, `git-log-filter.js`, `git-branch.js`, `git-show.js`(`readLastCommit` 포함), `files-data.js` | git과 폴더 읽기 명령을 부르고 결과를 해석한다 |
 | git 동작 | `git-operation.js`, `git-conflict.js`, `git-smart.js`, `git-stash.js`, `git-reset.js`, `git-rewrite.js`, `git-changes.js`, `git-remote.js`, `git-refs.js`, `git-compare.js`, `git-revision.js`, `git-worktree.js`, `git-heads.js` | Operation in progress 읽기와 merge·rebase·cherry-pick·revert의 실행·판정, 충돌 파일 쓰기, Smart operation, stash, reset과 하드 전 기록, 히스토리 다시 쓰기, 파일 단위 되돌리기·체리픽, pull·업데이트, 태그·이름 변경·원격, 비교·패치·가져오기, 리비전의 파일과 하위 커밋, 새 워크트리, VCS widget이 보일 브랜치 |
-| 순수 계산 | `graph.js`, `tree.js`, `bus.js`, `lock.js`, `i18n.js`, `icon-theme.js`, `files-tree.js`, `editor-language.js`, `merge-chunks.js`, `conflicts-model.js`, `merge-revisions-model.js`, `rebase-plan.js`, `log-menus.js`, `log-select.js`, `log-options.js`, `branch-order.js`, `vcs-ops.js`, `git-console.js`, `ui-icons.js` | 그래프 배치, 경로 트리와 3상태 체크, 버스와 잠금 값, 언어와 문장, 아이콘 고르기, Files panel의 줄·표시·찾기 순위·키, 미리보기의 구문 색, 병합 덩어리, 두 충돌 창이 보일 것과 켜질 것, 리베이스 계획과 편집 판정, Log panel의 메뉴·툴바 표, 여러 커밋 고르기, 그래프·표시 옵션 값, 브랜치 순서와 즐겨찾기, VCS Operations popup의 항목, 콘솔 기록의 꼴, UI icon 대응 |
+| 순수 계산 | `graph.js`, `tree.js`, `bus.js`, `lock.js`, `i18n.js`, `icon-theme.js`, `files-tree.js`, `editor-language.js`, `merge-chunks.js`, `conflicts-model.js`, `merge-revisions-model.js`, `rebase-plan.js`, `log-menus.js`, `log-select.js`, `log-options.js`, `branch-order.js`, `vcs-ops.js`, `git-console.js`, `ui-icons.js`, `pick-notes.js` | 그래프 배치, 경로 트리와 3상태 체크, 버스와 잠금 값, 언어와 문장, 아이콘 고르기, Files panel의 줄·표시·찾기 순위·키, 미리보기의 구문 색, 병합 덩어리, 두 충돌 창이 보일 것과 켜질 것, 리베이스 계획과 편집 판정, Log panel의 메뉴·툴바 표, 여러 커밋 고르기, 그래프·표시 옵션 값, 브랜치 순서와 즐겨찾기, VCS Operations popup의 항목, 콘솔 기록의 꼴, UI icon 대응, Cherry-Pick·Revert 결과의 알림 |
 | 데이터 | `messages-*.js`, `icon-theme-data.js`, `icons/theme/`, `icons/ui/`(그 밖의 `icons/` 파일 포함) | 문구 표, 생성한 아이콘 규칙, 아이콘 파일 |
 
 저장소 루트에는 레이아웃 변환 `layout.mjs`, 설치 `install.sh`, 키 `keys.json`, 아이콘 생성기
@@ -120,7 +120,7 @@ git 모듈과 순수 계산 모듈은 `herdr`를 import하지 않는다. 그래�
 - **앱 홈의 파일**: 앱 전체의 값은 앱 홈의 `git-tools` 폴더에 둔다(`app-files.js`).
   `console.jsonl`은 Git console의 기록이고, `settings.json`은 JSON 객체 하나다(키
   `updateProject.method`, `updateProject.skipDialog`, `pull.branches`, `rewrite.dropDontAsk`,
-  `log.options`, `branchTree`). 두 파일 모두 `writeTextFile`의 기대값 비교로 쓰고, 그사이 다른
+  `log.options`, `log.detailsOptions`, `branchTree`). 두 파일 모두 `writeTextFile`의 기대값 비교로 쓰고, 그사이 다른
   사본이 썼으면 다시 읽어 합친 뒤 다시 쓴다(세 번까지).
 - **저장소의 설정**: 저장소에 매인 값은 그 저장소의 로컬 git 설정에 `gittools.` 키로 둔다:
   `gittools.favorite`(여러 값, 전체 ref 이름), `gittools.unfavorite`(즐겨찾기를 푼 main·master),
@@ -398,7 +398,11 @@ Rollback은 Rollback dialog의 버튼으로만 실행되고, 쓰기 전에 버�
   계산한다(`git-smart.js`).
   - merge, pull(merge 방식), cherry-pick, revert: 로컬 변경 ∩ 그 동작이 바꿀 파일. 스테이징된
     변경이 하나라도 있으면 그 파일들도 더한다(git은 무관한 스테이징에도 거절한다).
-  - rebase, pull(rebase 방식), 체크아웃하고 리베이스, 히스토리 다시 쓰기: 추적 파일의 로컬 변경 전부.
+  - rebase, pull(rebase 방식), 체크아웃하고 리베이스, 다시 쌓는 히스토리 편집 6종(옛 커밋의 메시지
+    편집, 커밋 삭제, 커밋 스쿼시, 대화식 리베이스, 파일 단위 추출·삭제): 추적 파일의 로컬 변경 전부.
+    히스토리 편집의 stash 메시지는 `Uncommitted changes before Rebase at …`이다.
+  - 픽스업·다음으로 스쿼시는 Smart 대상이 아니다. 체크한 로컬 변경을 커밋하는 동작이라 Smart가 그
+    변경까지 치워 버리기 때문이다.
   - 체크아웃: 로컬 변경 ∩ 두 커밋 사이에서 다른 파일.
   - 추적하지 않는 파일은 세지 않는다. stash가 그 파일을 치우지 않기 때문이다.
 - **Smart 실행**은 추적 파일의 작업 트리와 스테이징을 stash에 넣고(메시지
@@ -457,7 +461,8 @@ Rollback은 Rollback dialog의 버튼으로만 실행되고, 쓰기 전에 버�
 
 - 고른 커밋은 Commit list 순서(새 것부터)로 받는다. cherry-pick은 순서를 뒤집어 오래된 것부터, revert는
   그대로 새 것부터 넘긴다. git은 날짜로 정렬하지 않고 넘긴 순서대로 적용한다. `-x`는 붙이지 않고
-  커밋마다 바로 커밋한다. 이미 적용된 커밋은 건너뛰고 알린다.
+  커밋마다 바로 커밋한다. 이미 적용된 커밋은 건너뛰고 알린다. 무엇을 알릴지는 순수 모듈
+  `pick-notes.js`가 정해서, 바로 실행과 Smart dialog를 거친 실행이 같은 알림을 보인다.
 - merge 커밋과 현재 브랜치에 이미 있는 커밋에서는 꺼진다. 진행 중 동작이 있으면 거절한다.
 - **파일 단위**(`git-changes.js`)는 고른 파일만 바꾸는 커밋을 임시 인덱스
   `<git 폴더>/git-tools-changes-index`(쓴 뒤 비운다)로 만들고 `cherry-pick --no-commit`으로 3-way
@@ -500,6 +505,10 @@ Rollback은 Rollback dialog의 버튼으로만 실행되고, 쓰기 전에 버�
 - 대화식 리베이스의 시작은 넘긴 목록이 고른 커밋부터 HEAD까지와 같은지 확인하고, 그사이 바뀌었으면
   거절한다. 모두 삭제하면 할 일 없음 확인 뒤 고른 커밋의 부모로 간다. 편집 중단(edit)에서 멈추면 rebase
   진행 중이 되고, VCS widget과 Commit panel에서 잇거나 중단한다.
+- 다시 쌓기는 추적 파일에 로컬 변경이 있으면 시작하지 않고 막는 파일과 함께 거절한다(ADR 0004).
+  그러면 그 동작을 연 사본이 Smart dialog를 연다. 요청한 창은 닫히고 Smart dialog가 이어받아, 변경을
+  stash로 치워 두고 다시 쌓은 뒤 되돌린다. 픽스업·다음으로 스쿼시는 체크한 변경을 커밋하는 동작이라
+  여기서 빠진다.
 
 ### 태그, 브랜치 이름 변경, 여기까지 푸시, 원격
 
@@ -512,6 +521,11 @@ Rollback은 Rollback dialog의 버튼으로만 실행되고, 쓰기 전에 버�
   `fetch --prune`한다. 원격 제거는 그 원격 추적 브랜치도 git이 지운다. 태그 푸시는
   `push <원격> refs/tags/T:refs/tags/T`다.
 - 추적된 브랜치와 태그 푸시의 하위 메뉴는 두 번째 메뉴로 연다. 팝업 메뉴에 하위 메뉴가 없기 때문이다.
+  VCS widget 팝업의 브랜치 메뉴도 위치 인자 없이 포인터 자리(Herdr의 기본값)에 연다. 팝업 안에서
+  누른 자리를 넘기면 메뉴가 창 오른쪽 아래 구석으로 밀려났다.
+- VCS widget 팝업의 브랜치 메뉴 항목은 Branch tree와 같은 표(`log-menus.js`)에서 나오고, 처리는
+  `POPUP_ACTIONS`에 따로 있다. `log-menus.test.mjs`가 Branch tree의 브랜치·태그 메뉴 항목마다 두 처리
+  표에 모두 있는지 본다(원격 폴더 메뉴와 툴바는 팝업에 없어서 빼고, 태그 푸시는 팝업에만 있다).
 
 ### 비교와 보기 탭
 
@@ -545,6 +559,9 @@ Rollback은 Rollback dialog의 버튼으로만 실행되고, 쓰기 전에 버�
 
 - 값은 앱 설정 `log.options` 하나다. 잘못된 값은 항목마다 기본값으로 돌아간다. 저장한 뒤 버스 사건
   `log-options`로 다른 Log panel이 다시 읽는다.
+- Commit details 툴바의 옵션 표시는 "그룹화 기준: 디렉터리"(기본 켜짐) 하나이고 앱 설정
+  `log.detailsOptions`에 둔다. 끄면 파일 옆에 폴더를 흐리게 보이는 평면 목록이다. 저장한 뒤 다른 Log
+  panel도 다시 읽는다.
 - 정렬과 첫 번째 상위 항목은 `git log` 인자다. 병합 없음은 git의 `--no-merges`가 부모를 다시 쓰지
   않으므로, 병합을 JS에서 빼고 그 첫 부모로 선을 잇는다.
 - 선형 브랜치 접기는 부모 하나·자식 하나·Ref label 없는 커밋을 숨기고 숨긴 구간을 점선으로 그린다.
@@ -567,7 +584,9 @@ Rollback은 Rollback dialog의 버튼으로만 실행되고, 쓰기 전에 버�
   `checkout: moving from X to Y`에서 최대 5개, 지금 있는 로컬 브랜치만이다. 팝업은 380×520 고정이고
   거르면 항목만 준다.
 - VCS Operations popup의 항목 표는 `vcs-ops.js`의 `VCS_OPS`, 처리는 `view-vcs-ops.js`의 `VCS_ACTIONS`다.
-  처리가 없는 항목은 보이지 않는다. 보이는 앞 10개에 1~9·0이 붙고, 꺼진 항목의 번호는 아무것도 고르지
+  처리가 없는 항목은 보이지 않는다. 지금은 처리할 창이 없는 브랜치…, 패치 ▸(패치 생성, 패치 적용,
+  클립보드에서 패치 적용), 원격 관리…가 그렇고, `vcs-ops.test.mjs`가 그 목록이 정확히 이것인지
+  본다. 보이는 앞 10개에 1~9·0이 붙고, 꺼진 항목의 번호는 아무것도 고르지
   않는다. 팝업은 고른 것을 주인 패널에 버스로 답하고 그 패널이 실행한다(메뉴와 같은 방식). 푸시와
   롤백은 Commit panel만 처리하므로 Log panel이 주인이면 빠진다. 변경 내용 스태시 취소…는 가장 최근
   stash로 연다.
@@ -836,7 +855,7 @@ Herdr는 mod를 QuickJS로 돌린다. JIT가 없고, 한 호출이 너무 오래
   바꿀 때마다 사람이 다시 본다. 확인 절차는 RECIPE의 "Done when"에 있다.
 
 **전체 오프라인 검사:** `node tools/check.mjs`가 한 번에 돌린다. 루트의 `node layout.test.mjs`,
-`mods/git-tools`의 `*.test.mjs` 48개 각각, `node tools/gen-icon-theme.test.mjs`가 모두 `ok`를 찍고,
+`mods/git-tools`의 `*.test.mjs` 49개 각각, `node tools/gen-icon-theme.test.mjs`가 모두 `ok`를 찍고,
 `herdr-app check mods/git-tools`가 통과한다. 테스트는 node 내장 모듈(`node:assert/strict` 등)만 쓴다.
 
 **느린 엔진의 예산:** `icon-theme.test.mjs`가 JIT를 끈 node로 규칙을 꽂는 시간을 재서, 규칙을
@@ -940,7 +959,9 @@ Herdr는 mod를 QuickJS로 돌린다. JIT가 없고, 한 호출이 너무 오래
   알리지 않는다.
 - Git console은 쓰기 흐름 안에서 `READ` 없이 부르는 읽기도 기록한다. 쓰기 명령마다 기록 파일(최대
   512 KiB)을 다시 쓰고 창을 다시 그리므로, 명령이 많은 동작(Rollback 등)은 한 번에 십수 번 다시 그린다.
-- 커밋 리베이스 창은 Esc로 닫으면 닫기 확인 없이 닫힐 수 있다(Herdr가 창을 스스로 닫는다).
+- 커밋 리베이스 창은 Esc로 닫으면 닫기 확인 없이 닫힐 수 있다(Herdr가 창을 스스로 닫는다). 그 창의
+  F2(수정)도 Herdr 전역 키가 먼저 가져갈 수 있다(확인하지 않았다). 셀 더블클릭으로도 고친다.
+- 히스토리 편집의 Smart dialog는 리베이스의 이름("Git 리베이스 문제", "스마트 리베이스")을 쓴다.
 - Windows와 Linux에서는 git 동작의 화면(VCS widget의 Log panel 자리, 원격 쓰기 길 포함)을 확인하지
   않았다.
 - diff는 통합 보기뿐이고 구문 색이 없다. Commit panel은 이름 변경을 감지하지 않아서, 이름이

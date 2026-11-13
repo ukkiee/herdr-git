@@ -13,6 +13,7 @@
 - 같은 mod를 레이아웃에 여러 번 넣고 `props`로 역할을 가를 수 있다. [코드]
 - mod를 탭(`tab.new {mod, props}`), pane(`pane.split {direction, mod, props}`), 오버레이(`openOverlay({mod, kind: "dialog" | "popup" | "window", props})`)로 열 수 있다. [문서]
 - `kind: "popup"` 오버레이는 mod가 그린 내용의 높이를 따른다. 그 안의 `size_full()`·`flex_1()`은 0이 되어, 높이를 px로 주지 않은 목록은 검색 줄 높이로만 열리고 항목이 보이지 않았다. [실험]
+- 팝업 오버레이 안에서 받은 마우스 이벤트의 `e.position`을 다음 오버레이의 위치로 넘기면, 그 오버레이가 창 오른쪽 아래 구석에 붙었다. 위치를 주지 않으면 포인터 자리(Herdr의 기본값)에 뜬다. [실험] 좌표가 어떻게 어긋나는지(배율인지, 기준점이 두 번 더해지는지)는 [미확인].
 - 탭 정보(`TabInfo`)에는 그 탭을 연 mod의 props가 없다. 같은 종류의 탭을 찾으려면 탭 이름으로 찾아야 한다. [문서]
 - space의 마지막 탭을 닫으면 space가 닫힌다고 보고, 탭을 바꿔 열 때는 새 탭을 먼저 열고 옛 탭을 닫는다. [미확인]
 - `space.new {folder, machine, name}`으로 mod가 다른 머신의 폴더에도 새 space를 연다. [문서]

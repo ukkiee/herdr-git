@@ -551,9 +551,14 @@ dialog's own (`openDialog` in its file).
   Branches come in the Branch tree's order with its stars.
 - **VCS Operations popup** (`cmd-shift-v`, 300px wide, as tall as its rows): title `VCS
   Operations`, group `Git`, then Commit…, Push…, Update Project…, Pull…, Fetch │ Merge…,
-  Rebase… │ New Branch…, New Tag…, Reset HEAD… │ Show Git Log, Uncommitted Changes ▸
-  (Stash Changes…, Unstash Changes…, Rollback…) │ Git Console, the first ten numbered 1–9,
-  0. Items without a handler (`VCS_ACTIONS` in `view-vcs-ops.js`) don't show.
+  Rebase… │ New Branch…, New Tag…, Reset HEAD… │ New Worktree… │ Show Git Log,
+  Uncommitted Changes ▸ (Stash Changes…, Unstash Changes…, Rollback…) │ Git Console, the
+  first ten numbered 1–9, 0. Items without a handler (`VCS_ACTIONS` in `view-vcs-ops.js`)
+  don't show: Branches…, Patch ▸ (Create Patch…, Apply Patch…, Apply Patch from
+  Clipboard…) and Manage Remotes… have no dialog yet.
+- **Commit details toolbar**: View Options (an eye) holds `Group By: Directory` (on by
+  default); off, the files are a flat list with each file's folder dim beside it.
+- **The VCS widget popup's branch menus** open at the pointer, beside the row clicked.
 - **Commit panel in progress**: above the tree a row `⚠ <operation>` with Continue (≫),
   Abort and, for a rebase or several picks, Skip Commit; a `Merge Conflicts` node with a
   `Resolve` link and the conflicted files in the conflict color; the files the operation
@@ -1087,8 +1092,8 @@ The rules and their reasons are in `docs/design.md` (section 4); what a person s
   every 10 s while shown; the Conflicts dialog every 2 s; the Stash tab on writes in any
   worktree of the repository and every 10 s.
 - **Remembered.** Update Project's method and Don't show again, the Pull dialog's branch
-  per repository, Drop Commits' Don't ask again, the graph and view options and the
-  Branch tree's settings are app-wide (`git-tools/settings.json`); favorites are in the
+  per repository, Drop Commits' Don't ask again, the graph and view options, Commit
+  details' View Options and the Branch tree's settings are app-wide (`git-tools/settings.json`); favorites are in the
   repository's config.
 - **A remote that asks for a password** fails at once with git's words and `If the remote
   asks for a password or passphrase, set up a credential helper or an SSH agent: there is
@@ -2840,7 +2845,7 @@ Each line is one check: do what it says, see what follows.
 **Offline**
 
 1. Run `node layout.test.mjs` at the root, `node <file>` for every `*.test.mjs` in
-   `mods/git-tools` (48 files) and `node tools/gen-icon-theme.test.mjs`: each prints
+   `mods/git-tools` (49 files) and `node tools/gen-icon-theme.test.mjs`: each prints
    `ok` (the last one after `skip: …` unless `ICON_THEME_SOURCE` is set).
 2. Run `herdr-app check mods/git-tools`: it passes.
 
@@ -3590,3 +3595,25 @@ commit `main` lacks)
      여기로 재설정…`, `여기부터 대화식으로 리베이스…`, `여기까지의 내용을 모두 푸시…`), the
      Commit panel's `커밋` and `스태시`, the `충돌` dialog, the `VCS 작업` popup and the
      widget's `⚠ main 병합 중`.
+
+**History edits through Smart, and the rest** (`feature` with three unpushed commits and
+a changed, staged tracked file)
+
+239. With that change, run each of Edit Commit Message… on an older commit, Drop Commits,
+     Squash Commits…, Interactively Rebase from Here…, Extract Selected Changes to
+     Separate Commit… and Drop Selected Changes: each opens `Git Rebase Problem` listing
+     the file; `Smart Rebase` rewrites the history, the change comes back staged, and the
+     edit's own notification shows (`Dropped 1 commit` and so on). When it stops on a
+     conflict, `Local changes are kept in the stash` shows and the Conflicts dialog opens.
+240. With the same change, Fixup… and Squash Into… don't open the Smart dialog: they
+     commit the checked change into the target.
+241. With a local change in the way, Cherry-Pick a commit `main` already has through Smart
+     Cherry-Pick: `Nothing to cherry-pick` shows; Revert Commit through Smart Revert:
+     `Revert successful` with the hash and subject.
+242. Commit details toolbar → View Options: `Group By: Directory` is checked; uncheck it:
+     the files are a flat list with their folders dim; another Log panel follows, and after
+     restarting Herdr it stays off.
+243. VCS widget popup → a branch: the menu opens beside the row clicked, and holds `Compare
+     with '<current>'` and `Show Diff with Working Tree`, each opening its tab.
+244. `cmd-shift-v` → New Worktree… opens the New Worktree dialog from the Commit panel and
+     from the Log panel alike; Branches…, Patch and Manage Remotes… aren't in the popup.

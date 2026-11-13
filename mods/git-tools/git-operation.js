@@ -260,6 +260,7 @@ const REQUESTS = {
   },
   "cherry-pick": { check: startCheck, run: (git, root, args, before) => pickRun(git, root, "cherry-pick", args, before) },
   revert: { check: startCheck, run: (git, root, args, before) => pickRun(git, root, "revert", args, before) },
+  merge: { check: (_before, args) => mergeCheck(args), run: mergeRun },
 };
 
 // ---- Cherry-Pick and Revert Commit
@@ -305,6 +306,34 @@ async function pickRun(git, root, type, args, before) {
   if (!skipped.length) return r;
   const moved = await git.read(root, ["rev-parse", "--verify", "-q", "HEAD"]);
   return { ...r, skipped, empty: moved.ok && moved.out.trim() === before.head };
+}
+
+// ---- starting a merge
+
+// The options the Merge dialog offers, as git spells them. "-m" takes the message from
+// args.message.
+export const MERGE_OPTIONS = ["--ff-only", "--no-ff", "--squash", "-m", "--no-commit", "--no-verify", "--allow-unrelated-histories"];
+
+const str = (value) => (typeof value === "string" ? value : "");
+const optionsOf = (args) => (Array.isArray(args.options) ? args.options : []);
+const badOption = (allowed, options) => {
+  const odd = options.find((o) => !allowed.includes(o));
+  return odd === undefined ? null : refuse(`Unknown option: ${String(odd)}`, { key: "merge.badOption", args: { option: String(odd) } });
+};
+
+function mergeCheck(args) {
+  if (!str(args.target).trim()) return refuse("Choose a branch to merge.", { key: "merge.noTarget" });
+  const odd = badOption(MERGE_OPTIONS, optionsOf(args));
+  if (odd) return odd;
+  if (optionsOf(args).includes("-m") && !str(args.message).trim()) return refuse("Specify a commit message.", { key: "commit.noMessage" });
+  return null;
+}
+
+// --end-of-options: what follows is the branch or hash, even one spelled like an option.
+function mergeRun(git, root, args) {
+  const options = optionsOf(args).filter((o) => o !== "-m");
+  const message = optionsOf(args).includes("-m") ? ["-m", str(args.message)] : [];
+  return git(root, ["merge", ...options, ...message, "--end-of-options", str(args.target).trim()], { timeout: TIMEOUT, env: NO_EDITOR });
 }
 
 // conflictsLeft(n) → the refusal of a commit or a Continue while n files are in conflict.

@@ -45,6 +45,70 @@ export async function revisionTree(git, root, rev) {
   return { ...r, out: "", hash: at.hash, files };
 }
 
+// ---- Create Patch
+
+// The empty tree, what a first commit's changes start from, by object format.
+const EMPTY_TREE = {
+  sha1: "4b825dc642cb6eb9a060e54bf8d69288fbee4904",
+  sha256: "6ef19b41225c5369f1c104d45d8d85efa9b057b53b14b4b9b939dd74decc5321",
+};
+// The person's git config must not change the patch (colors, an external diff, textconv,
+// other prefixes). Binary changes go in whole so the patch applies.
+const PATCH = ["--no-color", "--no-ext-diff", "--no-textconv", "--binary", "-M", "--src-prefix=a/", "--dst-prefix=b/"];
+
+const slash = (path) => String(path ?? "").replace(/\\/g, "/").replace(/\/+$/, "");
+
+// patchBase(root, base) → { args } | { err, msg }: the diff arguments that make a patch's
+// paths start at `base` (Base Path). The root itself: none. A folder below it:
+// --relative (files outside it are left out). A folder above it: the folders between go
+// before every path. Paths are compared as written.
+export function patchBase(root, base) {
+  const r = slash(root), b = slash(base);
+  if (!b || b === r) return { args: [] };
+  if (r.startsWith(`${b}/`)) {
+    const between = r.slice(b.length + 1);
+    return { args: [`--src-prefix=a/${between}/`, `--dst-prefix=b/${between}/`] };
+  }
+  if (b.startsWith(`${r}/`)) return { args: [`--relative=${b.slice(r.length + 1)}`] };
+  return { err: `The base path ${base} neither holds the repository nor is inside it.`, msg: { key: "revision.baseOutside", args: { path: String(base) } } };
+}
+
+// Where the commits' changes start: the oldest one's first parent, or the empty tree.
+async function before(git, root, oldest) {
+  const r = await git.read(root, ["rev-parse", "--verify", "--quiet", "--end-of-options", `${oldest}^1`]);
+  if (r.ok && r.out.trim()) return { ok: true, rev: r.out.trim() };
+  const format = await git.read(root, ["rev-parse", "--show-object-format"]);
+  const tree = EMPTY_TREE[format.ok ? format.out.trim() : "sha1"];
+  return tree ? { ok: true, rev: tree } : { ...format, ok: false };
+}
+
+// createPatch(git, root, { commits, paths?, reverse?, base?, file? }) → { ok, code, out, err, msg?, text }
+//   The changes `commits` made (newest first, as the Log hands them: from before the
+//   oldest to the newest) as a git patch. paths: only these files (repository paths).
+//   reverse: the patch that undoes them. base: see patchBase (default the root).
+//   file: git writes the patch there, on the repository's machine (an absolute path; its
+//   folder must exist) and text is ""; without it text holds the patch.
+export async function createPatch(git, root, { commits = [], paths = [], reverse = false, base = null, file = null } = {}) {
+  if (!commits.length) return { ok: false, code: -1, out: "", err: "No commits to make a patch of.", msg: { key: "revision.noCommits", args: {} }, text: "" };
+  const place = patchBase(root, base ?? root);
+  if (!place.args) return { ok: false, code: -1, out: "", err: place.err, msg: place.msg, text: "" };
+  const from = await before(git, root, commits[commits.length - 1]);
+  if (!from.ok) return { ...from, text: "" };
+  const args = [LITERAL, "diff", ...PATCH, ...place.args, ...(reverse ? ["-R"] : []), ...(file ? [`--output=${file}`] : []),
+    "--end-of-options", from.rev, String(commits[0]), "--", ...paths];
+  const r = file ? await git(root, args) : await git.read(root, args);
+  return { ...r, out: "", text: r.ok && !file ? r.out : "" };
+}
+
+// patchFileName(branch, subject) → the name the patch file is offered under:
+// "<branch>__<subject>.patch", every run of characters a file name shouldn't hold made one
+// "_" (letters of any script stay). No branch (a detached HEAD): the subject alone.
+export function patchFileName(branch, subject) {
+  const clean = (text) => String(text ?? "").replace(/[^\p{L}\p{N}._-]+/gu, "_").replace(/^_+|_+$/g, "");
+  const name = [clean(branch), clean(subject)].filter(Boolean).join("__").slice(0, 110) || "changes";
+  return `${name}.patch`;
+}
+
 // ---- History up to Here
 
 // historyUpTo(git, root, { rev, path?, skip?, max? }) → { ok, code, out, err, commits, more }

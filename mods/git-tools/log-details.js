@@ -22,6 +22,7 @@ import { v_flex, Scrollbar } from "gpui-base";
 import { theme } from "herdr";
 import { readCommit, readContaining } from "./git-show.js";
 import { checkoutRevision } from "./git-branch.js";
+import { readEditFacts } from "./git-rewrite.js";
 import { buildRows, folderKeys, parentIndex } from "./tree.js";
 import { combineChanges } from "./log-select.js";
 import { openDiff } from "./view-diff.js";
@@ -136,15 +137,29 @@ function openItems(host, items, target, cx, { width, hint, after }) {
 //   The Commit list calls this on a right-click of a commit row: the commit menu's items
 //   (log-menus.js) this panel does, for the commits picked. host: the Log panel; commits:
 //   a commit or the commits picked, newest first, as git-log.js returns them.
+//   The edit facts of the commits (git-rewrite.js readEditFacts) are read first, so the
+//   history edits show on or off with their reason (ctx.edit). Facts that can't be read,
+//   or more commits than EDIT_FACTS_MAX, leave ctx.edit out: those items then check when
+//   picked. A menu whose repository the panel left while reading doesn't open.
 //   The Commit list gets the keyboard back when the menu goes.
 export function openCommitMenu(host, commits, cx) {
   const list = (Array.isArray(commits) ? commits : [commits]).filter((c) => c?.hash);
-  if (!host?.repo || !list.length) return;
-  const head = host.branches.data?.head;
-  const items = host.items("commit", { count: list.length, current: head?.branch ?? "HEAD", writing: writingWords(host) });
-  const hint = list.length === 1 ? { "commit.copyRevision": short(list[0].hash) } : null;
-  openItems(host, items, list, cx, { width: 300, hint, after: () => host.list.handle.focus() });
+  const repo = host?.repo;
+  if (!repo || !list.length) return;
+  cx.spawn(async (cx) => {
+    const facts = list.length <= EDIT_FACTS_MAX ? await readEditFacts(repo.git, repo.root, list.map((c) => c.hash)) : null;
+    if (!host.shows(repo)) return;
+    const head = host.branches.data?.head;
+    const items = host.items("commit", { count: list.length, current: head?.branch ?? "HEAD", writing: writingWords(host), ...(facts?.ok ? { edit: facts } : {}) });
+    const hint = list.length === 1 ? { "commit.copyRevision": short(list[0].hash) } : null;
+    openItems(host, items, list, cx, { width: 300, hint, after: () => host.list.handle.focus() });
+    cx.notify();
+  });
 }
+
+// The most commits whose edit facts a right-click reads before the menu opens: each one
+// costs git calls.
+const EDIT_FACTS_MAX = 50;
 
 // ---- the column
 

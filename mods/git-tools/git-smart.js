@@ -10,6 +10,7 @@ import { readOperation, runOperation, settle } from "./git-operation.js";
 import { createStash, applyStash, dropStash, listStashes } from "./git-stash.js";
 import { checkout } from "./git-branch.js";
 import { record } from "./git-snapshot.js";
+import { pull } from "./git-remote.js";
 
 // The repository setting that marks a stash Smart left behind for a request that
 // stopped: one value per stopped request, "<stash hash> <absolute git folder>". The
@@ -143,6 +144,7 @@ export async function forceCheckout(git, root, { name, remote = false, copy } = 
 // type is a git-operation.js runOperation request ({ type, ...args }).
 export const SMART_RUNS = {
   checkout: (git, root, request) => checkout(git, root, str(request.name), { remote: request.remote === true }),
+  pull: (git, root, request) => pull(git, root, request),
 };
 const runRequest = (git, root, request) => (Object.prototype.hasOwnProperty.call(SMART_RUNS, request.type)
   ? SMART_RUNS[request.type](git, root, request)

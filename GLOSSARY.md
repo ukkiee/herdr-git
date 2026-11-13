@@ -66,6 +66,18 @@ _Avoid_: 스태시 창, 스태시 목록 창
 이 mod가 실행한 git 명령과 그 출력을 보여 주는 space의 탭.
 _Avoid_: 출력 창, 로그(Log panel과 헷갈림)
 
+**Smart dialog**:
+로컬 변경이 git 동작을 막을 때 막는 파일을 보이고, Smart operation으로 할지 그만둘지(체크아웃이면 강제로 할지도) 고르는 창.
+_Avoid_: 충돌 창(Conflicts dialog와 헷갈림), 경고 창
+
+**Update Info tab**:
+Pull이나 프로젝트 업데이트로 들어온 커밋과 파일을 보여 주는 space의 탭.
+_Avoid_: 업데이트 로그, 변경 기록
+
+**Compare tab**:
+두 브랜치, 브랜치나 커밋과 작업 트리, 두 커밋의 차이를 보여 주는 space의 탭. 종류마다 하나만 열리고 다시 열면 내용이 바뀐다.
+_Avoid_: diff 창, Diff tab(파일 하나의 차이)
+
 ### 커밋 창의 개념
 
 **Changes**:
@@ -102,7 +114,7 @@ _Avoid_: undo, revert, 복구, 되돌리기(Rollback과 헷갈린다)
 ### 로그 창의 개념
 
 **Branch tree**:
-HEAD, Local, Remote 세 그룹으로 브랜치를 보여 주는 로그 창의 왼쪽 영역.
+HEAD, Local, Remote, Tags 그룹으로 브랜치와 태그를 보여 주는 로그 창의 왼쪽 영역.
 
 **Commit list**:
 커밋을 그래프와 함께 한 줄씩 보여 주는 로그 창의 가운데 영역.
@@ -168,6 +180,10 @@ _Avoid_: 고정 브랜치, 북마크
 **Operation in progress**:
 Merge, Rebase, Cherry-Pick, Revert Commit이 Conflict 등으로 멈춰 Continue나 Abort를 기다리는 저장소의 상태.
 _Avoid_: 충돌 상태, 멈춤
+
+**Rebase plan**:
+지난 커밋 고치기(메시지 편집, 삭제, 스쿼시, 픽스업, Interactive rebase 등)가 다시 쌓을 커밋마다의 동작과 순서. 모든 고치기가 이것 하나로 Rebase를 돌린다.
+_Avoid_: todo 파일, 편집 목록
 
 ### 모습
 

@@ -160,6 +160,17 @@ const all = (name, ctx = {}, t = ko) => look(menuItems(name, everything, ctx), t
   assert.equal(reason("logTools", "log.fetch", { writing: busy }), busy);
   assert.equal(reason("logTools", "log.refresh", { writing: busy }), null);
   assert.equal(reason("branchTools", "branches.expandAll", { writing: busy }), null);
+  // Update Selected: on only for a branch that tracks one (the toolbar's upstream).
+  assert.equal(reason("branchTools", "branches.updateSelected", { loaded: true, name: "topic" }), "");
+  assert.equal(reason("branchTools", "branches.updateSelected", { loaded: true }), "");
+  assert.equal(reason("branchTools", "branches.updateSelected", { loaded: true, name: "feature", upstream: "origin/feature" }), null);
+  assert.equal(reason("branchTools", "branches.updateSelected", { loaded: true, name: "feature", upstream: "origin/feature", writing: busy }), busy);
+  // Mark/Unmark As Favorite: on a branch row (not HEAD detached, not a tag). Navigate Log:
+  // on any row with a head (a branch, HEAD, a tag).
+  assert.equal(reason("branchTools", "branches.favorite", { loaded: true, name: "v1", favoritable: false }), "");
+  assert.equal(reason("branchTools", "branches.favorite", { loaded: true, name: "main", favoritable: true, writing: busy }), null);
+  assert.equal(reason("branchTools", "branches.navigateLog", { loaded: true }), "");
+  assert.equal(reason("branchTools", "branches.navigateLog", { loaded: true, name: "v1" }), null);
   // Commit details' Expand All and Collapse All wait for files to show.
   assert.equal(reason("detailsTools", "details.expandAll", { loaded: false }), "");
   assert.equal(reason("detailsTools", "details.collapseAll", { loaded: true, writing: busy }), null);

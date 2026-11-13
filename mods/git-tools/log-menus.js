@@ -21,7 +21,9 @@
 //                  files picked), edit? (the edit facts of the commit shown) }
 //   branch menus:  { name, current, upstream, writing, deleteBlock, scope (the row's:
 //                  "local" | "remote" | "head", a detached HEAD) }
-//   toolbars:      { loaded, name, writing, deleteBlock, fixed (a Log tab on a chosen folder),
+//   toolbars:      { loaded, name, upstream (the cursor's local branch tracks one),
+//                  favoritable (the cursor is on a local or remote branch), writing,
+//                  deleteBlock, fixed (a Log tab on a chosen folder),
 //                  picked (the Log toolbar: how many commits the Commit list has picked) }
 
 import { editCheck } from "./rebase-plan.js";
@@ -131,7 +133,8 @@ const ITEMS = {
   // ---- the Branch tree's vertical toolbar
   "branches.hide": { key: "branches.hide" },
   "branches.new": { key: "log.newBranch", write: true, when: unread },
-  "branches.updateSelected": { key: "branches.updateSelected", write: true, work: "remote.updating" },
+  // On the cursor's branch, when it tracks one (ctx.upstream).
+  "branches.updateSelected": { key: "branches.updateSelected", write: true, work: "remote.updating", when: (ctx) => (ctx.upstream ? null : { text: "" }) },
   "branches.delete": { key: "log.deleteBranch", args: name, write: true, when: deleteBlock, work: "log.deleting" },
   // The branches deleted here, kept to restore: after Delete Branch, its neighbor.
   "branches.deleted": { key: "branches.openDeleted", when: unread },
@@ -139,8 +142,9 @@ const ITEMS = {
   "branches.compareWithCurrent": { key: "branches.compareWithCurrent", when: (ctx) => (ctx.name ? null : { text: "" }) },
   "branches.showMine": { key: "branches.showMine" },
   "branches.fetch": { key: "log.fetch", write: true, work: "log.fetching" },
-  "branches.favorite": { key: "branches.favorite" },
-  "branches.navigateLog": { key: "branches.navigateLog" },
+  // On the cursor's branch, local or remote (ctx.favoritable).
+  "branches.favorite": { key: "branches.favorite", when: (ctx) => (ctx.favoritable ? null : { text: "" }) },
+  "branches.navigateLog": { key: "branches.navigateLog", when: (ctx) => (ctx.name ? null : { text: "" }) },
   "branches.settings": { key: "branches.settings" },
   "branches.expandAll": { key: "log.expandAll" },
   "branches.collapseAll": { key: "log.collapseAll" },

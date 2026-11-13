@@ -29,7 +29,8 @@ import { readOperation, continueOperation, abortOperation, skipOperation, operat
 import { checkout, deleteBranch } from "./git-branch.js";
 import { shortenMiddle } from "./git-log.js";
 import { menuItems } from "./log-menus.js";
-import { location, uiGlyph, iconButton, darkLook, broadcast, openDialog, openCommitPanel, openMenu, takeWrite, releaseWrite, writeBlock, readBlocked, sentence } from "./ui.js";
+import { openConflicts, openConflictsIfStopped } from "./view-conflicts.js";
+import { location, uiGlyph, iconButton, darkLook, broadcast, openCommitPanel, openMenu, takeWrite, releaseWrite, writeBlock, readBlocked, sentence } from "./ui.js";
 import { openPush, servePush } from "./view-push.js";
 import { openBranchNew, openBranchDelete, serveBranch } from "./view-branch-new.js";
 import { serveAction } from "./serve-actions.js";
@@ -39,8 +40,11 @@ const POLL = 10000;
 const stop = (_e, cx) => cx.stop_propagation();
 
 export class VcsWidget {
-  init(host) {
+  // who: the host as the person knows it, a message key ("ui.logPanel"), for a dialog's
+  // "didn't answer" sentences.
+  init(host, { who } = {}) {
     this.host = host;
+    this.who = who;
     this.repo = null; // { git, root, on } once the followed folder is a repository
     this.heads = null; // readHeads' result
     this.op = null; // readOperation's result, null when not read
@@ -116,7 +120,8 @@ export class VcsWidget {
       try { r = await run(repo); } catch (error) { r = { ok: false, err: String(error?.message ?? error) }; }
       host.setBusy(null, cx);
       broadcast({ type: "changed", root: repo.root });
-      if (r.ok) this.told(r);
+      // Stopped on a conflict again: the Conflicts dialog opens, as after any request.
+      if (r.ok) { if (!openConflictsIfStopped(r, this.conflictArgs(repo))) this.told(r); }
       else if (!r.quiet) notify({ title: host.t("ui.gitFailed"), body: sentence(host.t, r.msg, r.err) || "", level: "error" });
       cx.notify();
     });
@@ -153,10 +158,11 @@ export class VcsWidget {
     this.write({ key: "ops.skipping" }, (repo) => skipOperation(repo.git, repo.root), cx);
   }
 
+  // The Conflicts dialog's writes are the host copy's (serve-actions.js, served by both hosts).
+  conflictArgs(repo) { return { root: repo.root, on: repo.on, owner: this.host.bus.id, lang: this.host.lang, who: this.who }; }
+
   openConflicts() {
-    const repo = this.repo, host = this.host;
-    if (!repo) return;
-    openDialog("conflicts", { root: repo.root, on: repo.on, owner: host.bus.id, lang: host.lang }, { width: 760, height: 460 });
+    if (this.repo) openConflicts(this.conflictArgs(this.repo));
   }
 
   openCommit() { openCommitPanel(); }
@@ -277,7 +283,7 @@ export default class VcsWidgetBlock {
     this.busy = null; // the work of this copy's git write (ui.js takeWrite)
     this.held = null;
     this.widget = new VcsWidget();
-    this.widget.init(this);
+    this.widget.init(this, { who: "vcs.widget" });
     this.widget.refresh(cx);
     cx.timer.every(POLL, (cx) => this.widget.refresh(cx));
   }

@@ -160,7 +160,7 @@ export default class LogView {
     for (const part of [this.branches, this.filters, this.list, this.details]) part.init(this, cx);
     // Reads only while drawn: it follows the folder from render (view-vcs-widget.js).
     this.widget = new VcsWidget();
-    this.widget.init(this);
+    this.widget.init(this, { who: "ui.logPanel" });
     this.refresh(cx);
     // The watch below covers this computer; this covers other machines and a watch that
     // could not start. Cheap: one for-each-ref, and only while the panel shows.

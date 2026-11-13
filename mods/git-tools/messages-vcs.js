@@ -26,6 +26,7 @@ export const en = {
   "vcs.abortRevertAsk": "Are you sure you want to abort the revert?",
   "vcs.abort": "Abort",
   "vcs.detachedHead": "Detached HEAD",
+  "vcs.widget": "VCS widget",
 };
 
 export const ko = {
@@ -53,4 +54,5 @@ export const ko = {
   "vcs.abortRevertAsk": "되돌리기을(를) 중단하시겠어요?",
   "vcs.abort": "중단",
   "vcs.detachedHead": "분리된 HEAD",
+  "vcs.widget": "VCS 위젯",
 };

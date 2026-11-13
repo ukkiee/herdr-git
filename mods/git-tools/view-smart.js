@@ -22,6 +22,7 @@ import { h_flex, v_flex } from "gpui-base";
 import { theme, notify } from "herdr";
 import { checkoutBranch, smartRun, forceCheckout, readSmartMark, settleSmartStash } from "./git-smart.js";
 import { buildRows, folderKeys } from "./tree.js";
+import { pickNotes, commitsOf, noteText } from "./pick-notes.js";
 import { openConflicts } from "./view-conflicts.js";
 import { openDialog, dialogFrame, button, iconButton, row, notice, errorStrip, uiGlyph, ICON, fileGlyph, folderGlyph, darkLook, close, WindowedList, askOwner, writeBlock, sentence, broadcast, copyId } from "./ui.js";
 
@@ -75,12 +76,18 @@ export async function smartCheckout(repo, { name, remote = false }, { owner = nu
 }
 
 // What came of a Smart run, said where the person sees it: the Conflicts dialog for files
-// left in conflict, a notification when the changes stay in the stash.
-function tell(r, { root, on, panel, who, type }) {
+// left in conflict, a notification when the changes stay in the stash, and a Cherry-Pick's
+// or Revert's own notifications as the run without Smart has them (pick-notes.js).
+// request: the request run, when there is one.
+function tell(r, { root, on, panel, who, type, request = null }) {
   const t = panel?.t ?? ((key) => key), words = wordsFor(t, type);
   const ref = r.stash?.ref ?? r.stash?.hash?.slice(0, 7) ?? "";
   const conflicts = r.operation?.conflicts?.length > 0;
   const stopped = r.outcome === "stopped" && r.operation?.kind;
+  // Stopped with nothing in progress: the request went through, only the changes came back
+  // in conflict.
+  const ran = { ...r, outcome: r.outcome === "stopped" && !stopped ? "done" : r.outcome };
+  if (request) for (const n of pickNotes(type, commitsOf(request), ran)) notify(noteText(t, n));
   if (stopped) notify({ title: t("smart.kept"), body: t("smart.keptBody", { ref, op: words.op }), level: "warning" });
   else if (r.outcome === "stopped" && r.kept) notify({ title: t("smart.backConflict"), body: t("smart.backConflictBody", { ref }), level: "warning" });
   else if (r.kept) notify({ title: t("smart.backFailed"), body: t("smart.backFailedBody", { ref }), level: "error" });
@@ -102,7 +109,7 @@ export async function runSmartRequest(git, root, args, panel) {
     return forceCheckout(git, root, { name: str(request.name), remote: request.remote === true, copy });
   }
   const r = await smartRun(git, root, { request });
-  tell(r, { root, on, panel, who, type: request.type });
+  tell(r, { root, on, panel, who, type: request.type, request });
   return r.outcome === "stopped" ? { ...r, ok: true } : r;
 }
 

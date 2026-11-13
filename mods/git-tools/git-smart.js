@@ -184,7 +184,7 @@ async function bringBack(git, root, hash) {
 }
 
 // smartRun(git, root, { request, run?, now? })
-//   → { ok, code, out, err, msg?, outcome, operation, stash, kept, changed }
+//   → { ok, code, out, err, msg?, skipped?, outcome, operation, stash, kept, changed }
 //   Smart for a request local changes stood in the way of: the tracked changes and their
 //   staging go into a stash ("Uncommitted changes before <request> at <time>"), the
 //   request runs, and the stash comes back with its staging and is dropped.
@@ -200,6 +200,7 @@ async function bringBack(git, root, hash) {
 //       changes are back (git's words in err), or they couldn't come back.
 //   operation: readOperation afterwards. stash: { hash, ref } while it stays, else null.
 //   kept: the stash stays in the list. changed: the repository may have changed.
+//   skipped: as runOperation's, the commits a Cherry-Pick or Revert found already in.
 export async function smartRun(git, root, { request = {}, run, now = new Date() } = {}) {
   const go = run ?? ((g, r) => runRequest(g, r, request));
   const before = await readOperation(git, root);
@@ -215,7 +216,7 @@ export async function smartRun(git, root, { request = {}, run, now = new Date() 
   try { r = await go(git, root); } catch (error) { r = { ok: false, code: -1, out: "", err: String(error?.message ?? error) }; }
   const after = await readOperation(git, root);
   const word = settle(before, after, r ?? { ok: false });
-  const said = { code: r?.code ?? -1, out: r?.out ?? "", err: r?.err ?? "", ...(r?.msg ? { msg: r.msg } : {}) };
+  const said = { code: r?.code ?? -1, out: r?.out ?? "", err: r?.err ?? "", ...(r?.msg ? { msg: r.msg } : {}), ...(r?.skipped?.length ? { skipped: r.skipped } : {}) };
   if (!hash) return { ...said, ok: word !== "failed", outcome: word === "failed" ? "failed" : word === "stopped" ? "stopped" : "done", operation: after.ok ? after : null, stash: null, kept: false, changed: true };
   if (after.ok && after.kind) {
     const marked = await setMark(git, root, hash);

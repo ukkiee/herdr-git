@@ -175,6 +175,24 @@ const marks = (repo) => sh(repo, "git config --local --get-all gittools.smart-st
   }
 }
 
+// A Smart Cherry-Pick or Revert says which commits it found already in, as the run
+// without Smart does, so the screen can say there was nothing to pick.
+{
+  const repo = init("smart-skipped");
+  const side = sh(repo, "git rev-parse side").trim();
+  sh(repo, "git cherry-pick side");
+  edit(repo, "b.txt", 0, "mine-b1");
+  const before = status(repo), at = head(repo);
+  const r = await smartRun(git, repo, { request: { type: "cherry-pick", commits: [side] } });
+  assert.equal(r.outcome, "done", r.err);
+  assert.deepEqual(r.skipped, [side]);
+  assert.equal(head(repo), at);
+  assert.deepEqual(status(repo), before);
+  const moved = await smartRun(git, repo, { request: { type: "revert", commits: [at] } });
+  assert.equal(moved.outcome, "done", moved.err);
+  assert.equal(moved.skipped, undefined);
+}
+
 // main and side both change a.txt's last line: merging them stops on it.
 const diverge = (name) => {
   const repo = init(name);

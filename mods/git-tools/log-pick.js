@@ -16,6 +16,7 @@ import { menuItems } from "./log-menus.js";
 import { broadcast, sentence } from "./ui.js";
 import { openConflictsIfStopped } from "./view-conflicts.js";
 import { offerSmart } from "./view-smart.js";
+import { pickNotes, noteText } from "./pick-notes.js";
 
 const SHORT = 8; // a hash as the notifications show it
 const short = (hash) => String(hash ?? "").slice(0, SHORT);
@@ -37,26 +38,15 @@ function runHere(host, repo, work, write, then, cx) {
   });
 }
 
-// The commits a cherry-pick or revert skipped as already in, each in its own notification.
-function sayNothingToPick(host, skipped = []) {
-  for (const hash of skipped) notify({ title: host.t("pick.nothingTitle"), body: host.t("pick.nothingBody", { hash: short(hash) }), level: "info" });
-}
-function sayNothingToRevert(host, skipped = []) {
-  for (const hash of skipped) notify({ title: host.t("pick.nothingToRevert"), body: host.t("pick.revertedAlready", { hash: short(hash) }), level: "info" });
-}
-
-// What a Cherry-Pick or Revert Commit ended in, for the commits asked (newest first).
+// What a Cherry-Pick or Revert Commit ended in, for the commits asked (newest first). The
+// Smart dialog's request carries their subjects too, for the notification after it.
 function finishCommits(host, repo, request, commits, r, cx) {
-  const at = where(host, repo), skipped = r.skipped ?? [];
-  if (request.type === "cherry-pick") sayNothingToPick(host, skipped);
-  else sayNothingToRevert(host, skipped);
-  const reverted = commits.filter((c) => !skipped.includes(c.hash));
-  if (r.outcome === "done" && request.type === "revert" && reverted.length) {
-    notify({ title: host.t("pick.revertDone"), body: reverted.map((c) => `${short(c.hash)} ${c.subject ?? ""}`.trim()).join("\n"), level: "info" });
-  } else if (r.outcome === "stopped") {
+  const at = where(host, repo);
+  for (const n of pickNotes(request.type, commits, r)) notify(noteText(host.t, n));
+  if (r.outcome === "stopped") {
     if (!openConflictsIfStopped(r, at)) notify({ title: host.t("ops.stopped"), body: r.operation?.current?.subject ?? "", level: "warning" });
   } else if (r.outcome === "refused") {
-    if (!offerSmart(r, { ...at, request })) host.failedOn(repo, sentence(host.t, r.msg, r.err) || host.t("ui.gitFailed"), cx);
+    if (!offerSmart(r, { ...at, request: { ...request, subjects: commits.map((c) => c.subject ?? "") } })) host.failedOn(repo, sentence(host.t, r.msg, r.err) || host.t("ui.gitFailed"), cx);
   } else if (!r.ok) {
     host.failedOn(repo, sentence(host.t, r.msg, r.err) || host.t("ui.gitFailed"), cx);
   }
@@ -107,7 +97,7 @@ function changesHere(host, rows, type, cx) {
   runHere(host, repo, work, write, (r, cx) => {
     if (r.outcome === "empty") {
       if (revert) notify({ title: host.t("pick.nothingToRevert"), body: host.t("pick.nothingToRevertBody", { hash: short(commit) }), level: "info" });
-      else sayNothingToPick(host, [commit]);
+      else for (const n of pickNotes("cherry-pick", [], { skipped: [commit] })) notify(noteText(host.t, n));
     } else if (r.outcome === "stopped") {
       openConflictsIfStopped(r, where(host, repo));
     } else if (!r.ok) {

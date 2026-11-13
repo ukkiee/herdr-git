@@ -18,7 +18,7 @@ import { div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { exec, theme, notify } from "herdr";
 import { makeGit } from "./git.js";
-import { pull, updateProject, resetToRemote, updateBranch, updateBranches, checkoutAndUpdate, splitRemoteBranch, readTracking } from "./git-remote.js";
+import { pull, updateProject, resetToRemote, updateBranch, updateBranches, checkoutAndUpdate, splitRemoteBranch, readTracking, failureText } from "./git-remote.js";
 import { operationName } from "./git-operation.js";
 import { appSetting, saveAppSetting } from "./app-files.js";
 import { offerSmart, tellUnstaged } from "./view-smart.js";
@@ -35,13 +35,6 @@ const str = (value) => (typeof value === "string" ? value : "");
 
 // ---- what came of a request
 
-// The words for a failure: git's (or the module's) sentence, then the credential hint
-// when the fetch itself failed.
-function failure(t, r) {
-  const said = sentence(t, r.msg, r.err) || t("ui.gitFailed");
-  return r.fetchFailed ? `${said}\n\n${t("remote.credentialHint")}` : said;
-}
-
 // tellRemote(r, { root, on, panel, who, title, quietFailure }): says what came of a
 // remote request where the person sees it. panel: the serving copy ({ bus, lang, t }).
 // title: the failure notification's title key. quietFailure: a dialog shows the failure
@@ -51,7 +44,7 @@ export function tellRemote(r, { root, on = null, panel, who = "ui.commitPanel", 
   tellUnstaged(r, t);
   if (Array.isArray(r?.results)) {
     const bad = r.results.filter((x) => x.outcome === "failed" || x.outcome === "refused");
-    if (bad.length) notify({ title: t(bad.some((x) => x.outcome === "failed") ? title : "remote.notUpdated"), body: bad.map((x) => t("remote.branchSaid", { name: x.name, text: x.outcome === "failed" ? failure(t, x) : sentence(t, x.msg, x.err) })).join("\n"), level: "warning" });
+    if (bad.length) notify({ title: t(bad.some((x) => x.outcome === "failed") ? title : "remote.notUpdated"), body: bad.map((x) => t("remote.branchSaid", { name: x.name, text: x.outcome === "failed" ? failureText(t, x) : sentence(t, x.msg, x.err) })).join("\n"), level: "warning" });
     else if (r.results.every((x) => x.outcome === "empty")) notify({ title: t("remote.nothing"), level: "info" });
     const moved = r.results.find((x) => x.updated);
     if (moved) openUpdateInfo(t, { root, on, ...moved.updated });
@@ -65,7 +58,7 @@ export function tellRemote(r, { root, on = null, panel, who = "ui.commitPanel", 
     }
     return;
   }
-  if (r.outcome === "failed") { if (!quietFailure) notify({ title: t(title), body: failure(t, r), level: "error" }); return; }
+  if (r.outcome === "failed") { if (!quietFailure) notify({ title: t(title), body: failureText(t, r), level: "error" }); return; }
   if (r.outcome === "refused") { if (!quietFailure) notify({ title: t("remote.notUpdated"), body: sentence(t, r.msg, r.err), level: "warning" }); return; }
   if (r.outcome === "empty") { notify({ title: t("remote.nothing"), level: "info" }); return; }
   if (r.updated) openUpdateInfo(t, { root, on, ...r.updated });
@@ -106,7 +99,9 @@ export async function runRemote(git, root, args, panel) {
   const t = panel?.t ?? ((key) => key);
   tellRemote(r, { root, on, panel, who, quietFailure: true });
   if (r.outcome === "failed" || (r.outcome === "refused" && !r.blocked?.length)) {
-    return { ok: false, code: r.code, out: "", err: failure(t, r), changed: r.changed };
+    // The words whole, without msg or fetchFailed: the dialog and the strip show them as
+    // they are (ui.js serveRequest).
+    return { ok: false, code: r.code, out: "", err: failureText(t, r), changed: r.changed };
   }
   return { ...r, ok: true };
 }

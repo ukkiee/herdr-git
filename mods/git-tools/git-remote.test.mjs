@@ -8,8 +8,9 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
 import { makeGit } from "./git.js";
-import { pull, readPullTargets, pullDefault, togglePullOption, splitRemoteBranch, readTracking, updateBranch, updateBranches, checkoutAndUpdate, updateProject, resetToRemote, readUpdate } from "./git-remote.js";
+import { pull, readPullTargets, pullDefault, togglePullOption, splitRemoteBranch, readTracking, updateBranch, updateBranches, checkoutAndUpdate, updateProject, resetToRemote, readUpdate, failureText } from "./git-remote.js";
 import { smartRun } from "./git-smart.js";
+import { translator } from "./i18n.js";
 import { listSnapshots } from "./git-snapshot.js";
 
 // The user's own git settings stay out of every git these tests start.
@@ -286,6 +287,40 @@ const commitMine = (mine, path, at, word) => { edit(mine, path, at, word); sh(mi
   assert.equal(p.outcome, "failed");
   assert.equal(p.fetchFailed, true);
   server.close();
+}
+
+// The words a failed pull or update is shown with, wherever it shows (the Pull dialog,
+// the Commit panel's strip, a notification): git's, then the credential hint once when
+// the fetch itself failed; git's alone when a later step failed.
+{
+  const en = translator("en"), ko = translator("ko");
+  const { mine, theirs } = setup();
+  sh(mine, `git remote add gone ${base}/no-such-remote.git`);
+  const r = await pull(git, mine, { remote: "gone", branch: "main", options: [] });
+  assert.equal(r.fetchFailed, true);
+  const words = failureText(en, r);
+  assert.ok(words.startsWith(r.err.trim()), words);
+  assert.ok(words.endsWith(en("remote.credentialHint")), words);
+  assert.equal(words.split(en("remote.credentialHint")).length, 2, "the hint once");
+  assert.ok(failureText(ko, r).endsWith(ko("remote.credentialHint")));
+
+  // Put aside by Smart and run again: still the fetch that failed.
+  edit(mine, "a.txt", 0, "local-a1");
+  const again = await smartRun(git, mine, { request: { type: "pull", remote: "gone", branch: "main", options: [], rebase: false, target: "gone/main" } });
+  assert.equal(again.outcome, "failed");
+  assert.ok(failureText(en, again).endsWith(en("remote.credentialHint")), failureText(en, again));
+
+  // The merge step failed (diverged, --ff-only): git's words alone.
+  sh(mine, "git checkout -q -- a.txt");
+  push(theirs, "a.txt", 4, "their-a5");
+  commitMine(mine, "b.txt", 0, "my-b1");
+  const ff = await pull(git, mine, { remote: "origin", branch: "main", options: ["--ff-only"] });
+  assert.equal(ff.outcome, "failed");
+  assert.equal(failureText(en, ff), ff.err.trim());
+  // A sentence of the module's own, in the screen's language.
+  const picked = await pull(git, mine, { remote: "", branch: "", options: [] });
+  assert.equal(failureText(ko, picked), ko("remote.pickBranch"));
+  assert.equal(failureText(en, { ok: false, err: "" }), en("ui.gitFailed"));
 }
 
 // ---- updating a branch that isn't checked out: fast-forward only

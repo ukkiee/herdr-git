@@ -25,6 +25,7 @@ import { readOperation, settle } from "./git-operation.js";
 import { blockedBy, checkoutBranch, smartRun } from "./git-smart.js";
 import { fetchAll } from "./git-branch.js";
 import { resetTo } from "./git-reset.js";
+import { sentence } from "./i18n.js";
 
 const FETCH = { timeout: 5 * 60 * 1000, env: { GIT_TERMINAL_PROMPT: "0" } };
 // The merge or rebase step may run hooks for minutes; an editor would wait forever.
@@ -59,7 +60,18 @@ export function togglePullOption(options, option) {
 const ACCEPTED = new Set([...PULL_OPTIONS, "--no-rebase"]);
 
 const str = (value) => (typeof value === "string" ? value : "");
-const refuse = (err, msg, extra = {}) => ({ ok: false, code: -1, out: "", err, msg, outcome: "refused", operation: null, updated: null, changed: false, ...extra });
+
+// failureText(t, r) → the words a failed or refused result `r` is shown with, in t's
+// language: the module's sentence (msg) or git's own, then the credential hint when the
+// fetch itself failed (fetchFailed: the remote may want a password nobody can type here).
+// Every screen that shows such a result takes its words from here, once: text that came
+// from here carries no fetchFailed, so it isn't given the hint again.
+export function failureText(t, r) {
+  const said = sentence(t, r?.msg, r?.err).trim() || t("ui.gitFailed");
+  return r?.fetchFailed ? `${said}\n\n${t("remote.credentialHint")}` : said;
+}
+
+const refuse =(err, msg, extra = {}) => ({ ok: false, code: -1, out: "", err, msg, outcome: "refused", operation: null, updated: null, changed: false, ...extra });
 const failedWith = (r, extra = {}) => ({ ok: false, code: r.code ?? -1, out: r.out ?? "", err: r.err ?? "", ...(r.msg ? { msg: r.msg } : {}), outcome: "failed", operation: null, updated: null, changed: false, ...extra });
 
 async function hashOf(git, root, ref) {

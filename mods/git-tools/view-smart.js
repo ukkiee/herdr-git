@@ -21,6 +21,7 @@ import { div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { theme, notify } from "herdr";
 import { checkoutBranch, smartRun, forceCheckout, readSmartMark, settleSmartStash } from "./git-smart.js";
+import { failureText } from "./git-remote.js";
 import { buildRows, folderKeys } from "./tree.js";
 import { pickNotes, commitsOf, noteText } from "./pick-notes.js";
 import { openConflicts } from "./view-conflicts.js";
@@ -127,7 +128,11 @@ export async function runSmartRequest(git, root, args, panel) {
   }
   const r = await smartRun(git, root, { request });
   tell(r, { root, on, panel, who, type: request.type, request });
-  return r.outcome === "stopped" ? { ...r, ok: true } : r;
+  if (r.outcome === "stopped") return { ...r, ok: true };
+  // A pull whose fetch failed: its words whole, with the credential hint, as the Pull
+  // dialog's own request says it (view-update-project.js runRemote).
+  if (r.fetchFailed) return { ...r, err: failureText(panel?.t ?? ((key) => key), r), msg: undefined, fetchFailed: undefined };
+  return r;
 }
 
 // settleSmartMark(panel, repo, op, cx): after the Commit panel read `op` (readOperation)

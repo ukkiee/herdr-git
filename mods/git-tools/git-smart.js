@@ -234,7 +234,9 @@ export async function smartRun(git, root, { request = {}, run, now = new Date() 
   try { r = await go(git, root); } catch (error) { r = { ok: false, code: -1, out: "", err: String(error?.message ?? error) }; }
   const after = await readOperation(git, root);
   const word = settle(before, after, r ?? { ok: false });
-  const said = { code: r?.code ?? -1, out: r?.out ?? "", err: r?.err ?? "", ...(r?.msg ? { msg: r.msg } : {}), ...(r?.skipped?.length ? { skipped: r.skipped } : {}) };
+  // fetchFailed: a pull's fetch failed, which its words tell with the credential hint
+  // (git-remote.js failureText).
+  const said = { code: r?.code ?? -1, out: r?.out ?? "", err: r?.err ?? "", ...(r?.msg ? { msg: r.msg } : {}), ...(r?.skipped?.length ? { skipped: r.skipped } : {}), ...(r?.fetchFailed ? { fetchFailed: true } : {}) };
   if (!hash) return { ...said, ok: word !== "failed", outcome: word === "failed" ? "failed" : word === "stopped" ? "stopped" : "done", operation: after.ok ? after : null, stash: null, kept: false, changed: true };
   if (after.ok && after.kind) {
     const marked = await setMark(git, root, hash);

@@ -282,15 +282,24 @@ function startCheck(before, args) {
 // A commit that comes out empty (its changes are already in) is skipped, as many times as
 // the sequence meets one, so nothing is left in progress for it: skipped names them.
 // empty: every commit was skipped (HEAD didn't move).
+// git stops on an empty commit with exit 1, nothing in conflict and nothing staged: a
+// cherry-pick with CHERRY_PICK_HEAD, a revert in a sequence with only the sequencer, a
+// single revert with nothing in progress at all. Which commit it was is counted: the
+// commits made since, plus those skipped, are the ones before it in the order.
 async function pickRun(git, root, type, args, before) {
   const commits = commitsOf(args);
   const order = type === "cherry-pick" ? [...commits].reverse() : commits;
   let r = await git(root, [type, ...(type === "revert" ? ["--no-edit"] : []), ...order], { timeout: TIMEOUT, env: NO_EDITOR });
   const skipped = [];
-  for (let n = 0; !r.ok && n < commits.length; n++) {
+  while (!r.ok && r.code === 1) {
     const now = await readOperation(git, root);
-    if (!now.ok || now.kind !== type || now.conflicts.length || now.staged.length || !now.current) break;
-    skipped.push(now.current.hash);
+    if (!now.ok || (now.kind && now.kind !== type) || now.conflicts.length || now.staged.length) break;
+    const made = before.head ? await git.read(root, ["rev-list", "--count", `${before.head}..HEAD`]) : { ok: false };
+    const at = (made.ok ? Number(made.out.trim()) : 0) + skipped.length;
+    if (!made.ok || at >= order.length) break;
+    skipped.push(order[at]);
+    // Nothing in progress: that was the last one (git ends there without a sequence).
+    if (!now.kind) { r = { ok: true, code: 0, out: r.out, err: r.err }; break; }
     r = await git(root, [type, "--skip"], { timeout: TIMEOUT, env: NO_EDITOR });
   }
   if (!skipped.length) return r;

@@ -18,6 +18,7 @@ export const en = {
   "pick.nothingBody": "All changes from {hash} have already been applied",
   "pick.nothingToRevert": "Nothing to revert",
   "pick.nothingToRevertBody": "The selected files are already as they were before {hash}",
+  "pick.revertedAlready": "The changes of {hash} are already reverted",
 };
 
 export const ko = {
@@ -35,4 +36,5 @@ export const ko = {
   "pick.nothingBody": "{hash}의 모든 변경 내용이 이미 적용되었습니다",
   "pick.nothingToRevert": "되돌릴 항목이 없습니다",
   "pick.nothingToRevertBody": "선택한 파일이 이미 {hash} 이전과 같습니다",
+  "pick.revertedAlready": "{hash}의 변경 내용이 이미 되돌려져 있습니다",
 };

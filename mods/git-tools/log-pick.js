@@ -37,17 +37,22 @@ function runHere(host, repo, work, write, then, cx) {
   });
 }
 
-// The commits already in that a cherry-pick skipped, each in its own notification.
+// The commits a cherry-pick or revert skipped as already in, each in its own notification.
 function sayNothingToPick(host, skipped = []) {
   for (const hash of skipped) notify({ title: host.t("pick.nothingTitle"), body: host.t("pick.nothingBody", { hash: short(hash) }), level: "info" });
+}
+function sayNothingToRevert(host, skipped = []) {
+  for (const hash of skipped) notify({ title: host.t("pick.nothingToRevert"), body: host.t("pick.revertedAlready", { hash: short(hash) }), level: "info" });
 }
 
 // What a Cherry-Pick or Revert Commit ended in, for the commits asked (newest first).
 function finishCommits(host, repo, request, commits, r, cx) {
-  const at = where(host, repo);
-  sayNothingToPick(host, request.type === "cherry-pick" ? r.skipped : []);
-  if (r.outcome === "done" && request.type === "revert") {
-    notify({ title: host.t("pick.revertDone"), body: commits.map((c) => `${short(c.hash)} ${c.subject ?? ""}`.trim()).join("\n"), level: "info" });
+  const at = where(host, repo), skipped = r.skipped ?? [];
+  if (request.type === "cherry-pick") sayNothingToPick(host, skipped);
+  else sayNothingToRevert(host, skipped);
+  const reverted = commits.filter((c) => !skipped.includes(c.hash));
+  if (r.outcome === "done" && request.type === "revert" && reverted.length) {
+    notify({ title: host.t("pick.revertDone"), body: reverted.map((c) => `${short(c.hash)} ${c.subject ?? ""}`.trim()).join("\n"), level: "info" });
   } else if (r.outcome === "stopped") {
     if (!openConflictsIfStopped(r, at)) notify({ title: host.t("ops.stopped"), body: r.operation?.current?.subject ?? "", level: "warning" });
   } else if (r.outcome === "refused") {

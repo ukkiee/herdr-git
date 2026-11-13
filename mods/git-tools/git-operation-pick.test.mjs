@@ -205,6 +205,33 @@ git checkout -q main && printf 'main\\n' > f.txt && git commit -q -am m`);
   assert.deepEqual(r.operation.conflicts.map((c) => c.path), ["f.txt"]);
 }
 
+// A commit already reverted: nothing committed, nothing left in progress.
+{
+  const repo = init("revert-empty");
+  const m = head(repo);
+  sh(repo, "git revert --no-edit HEAD >/dev/null");
+  const before = head(repo);
+  const r = await runOperation(git, repo, { type: "revert", commits: [m] });
+  assert.equal(r.outcome, "empty", r.err);
+  assert.deepEqual(r.skipped, [m]);
+  assert.equal(head(repo), before);
+  assert.deepEqual(states(repo), []);
+}
+
+// Already reverted, first or last among several: skipped, the others committed, nothing
+// left in progress.
+for (const [name, first] of [["revert-empty-first", true], ["revert-empty-last", false]]) {
+  const repo = init(name);
+  const m = head(repo);
+  sh(repo, "echo k > k.txt && git add k.txt && git commit -q -m k && git revert --no-edit HEAD~1 >/dev/null");
+  const k = hash(repo, "HEAD~1");
+  const r = await runOperation(git, repo, { type: "revert", commits: first ? [m, k] : [k, m] });
+  assert.equal(r.outcome, "done", `${name}: ${r.err}`);
+  assert.deepEqual(r.skipped, [m], name);
+  assert.equal(subjects(repo)[0], 'Revert "k"', name);
+  assert.deepEqual(states(repo), [], name);
+}
+
 // ---- the menu items: on or off from the edit facts of the commits picked
 
 // item(id, hashes) → the commit menu's item for the commits, with the facts git reads.

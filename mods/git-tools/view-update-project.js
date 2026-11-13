@@ -18,7 +18,7 @@ import { div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { exec, theme, notify } from "herdr";
 import { makeGit } from "./git.js";
-import { pull, updateProject, resetToRemote, updateBranch, updateBranches, checkoutAndUpdate, splitRemoteBranch, readTracking, failureText } from "./git-remote.js";
+import { pull, updateProject, resetToRemote, updateBranch, updateBranches, checkoutAndUpdate, splitRemoteBranch, readTracking, failureText, branchesFailureText } from "./git-remote.js";
 import { operationName } from "./git-operation.js";
 import { appSetting, saveAppSetting } from "./app-files.js";
 import { offerSmart, tellUnstaged } from "./view-smart.js";
@@ -44,7 +44,7 @@ export function tellRemote(r, { root, on = null, panel, who = "ui.commitPanel", 
   tellUnstaged(r, t);
   if (Array.isArray(r?.results)) {
     const bad = r.results.filter((x) => x.outcome === "failed" || x.outcome === "refused");
-    if (bad.length) notify({ title: t(bad.some((x) => x.outcome === "failed") ? title : "remote.notUpdated"), body: bad.map((x) => t("remote.branchSaid", { name: x.name, text: x.outcome === "failed" ? failureText(t, x) : sentence(t, x.msg, x.err) })).join("\n"), level: "warning" });
+    if (bad.length) notify({ title: t(bad.some((x) => x.outcome === "failed") ? title : "remote.notUpdated"), body: branchesFailureText(t, r.results), level: "warning" });
     else if (r.results.every((x) => x.outcome === "empty")) notify({ title: t("remote.nothing"), level: "info" });
     const moved = r.results.find((x) => x.updated);
     if (moved) openUpdateInfo(t, { root, on, ...moved.updated });

@@ -73,6 +73,16 @@ export function failureText(t, r) {
   return r?.fetchFailed ? `${t("remote.credentialHint")}\n\n${said}` : said;
 }
 
+// branchesFailureText(t, results) → the words for updateBranches' results that failed or
+// were refused, a line per branch. The credential hint goes once, first, when any of them
+// failed on its fetch: branches on one remote would repeat it, and a notification shows
+// only its first lines.
+export function branchesFailureText(t, results = []) {
+  const bad = results.filter((x) => x.outcome === "failed" || x.outcome === "refused");
+  const lines = bad.map((x) => t("remote.branchSaid", { name: x.name, text: failureText(t, { ...x, fetchFailed: false }) }));
+  return bad.some((x) => x.outcome === "failed" && x.fetchFailed) ? `${t("remote.credentialHint")}\n\n${lines.join("\n")}` : lines.join("\n");
+}
+
 const refuse = (err, msg, extra = {}) => ({ ok: false, code: -1, out: "", err, msg, outcome: "refused", operation: null, updated: null, changed: false, ...extra });
 const failedWith = (r, extra = {}) => ({ ok: false, code: r.code ?? -1, out: r.out ?? "", err: r.err ?? "", ...(r.msg ? { msg: r.msg } : {}), outcome: "failed", operation: null, updated: null, changed: false, ...extra });
 
@@ -288,8 +298,11 @@ export async function resetToRemote(git, root, { copy } = {}) {
 //   the remote branch (git refuses a branch checked out in any worktree). One that
 //   diverged from its tracked branch is refused with the reason. The current branch
 //   updates as the project does (updateProject, by `method`).
-//   fetched: a Set of the remotes fetched already (updateBranches fetches each once).
-export async function updateBranch(git, root, { name, method } = {}, fetched = new Set()) {
+//   fetched: a Map of the remotes tried already to their fetch's result (updateBranches
+//   tries each once). A remote whose fetch failed fails the next branch on it the same
+//   way, without another fetch: one that waits for a password would otherwise run into
+//   the time limit again for every branch.
+export async function updateBranch(git, root, { name, method } = {}, fetched = new Map()) {
   const branch = str(name);
   const t = await readTracking(git, root, branch);
   if (!t.ok) return { ...failedWith(t), name: branch };
@@ -297,11 +310,12 @@ export async function updateBranch(git, root, { name, method } = {}, fetched = n
   const current = await readTracking(git, root);
   if (current.ok && current.branch === branch) return { ...await updateProject(git, root, { method }), name: branch };
   let changed = false;
-  if (t.upstream.remote !== "." && !fetched.has(t.upstream.remote)) {
-    const f = await fetchRemote(git, root, t.upstream.remote);
-    if (!f.ok) return { ...failedWith(f, { fetchFailed: true, changed: true }), name: branch };
-    fetched.add(t.upstream.remote);
-    changed = true;
+  if (t.upstream.remote !== ".") {
+    const tried = fetched.get(t.upstream.remote);
+    const f = tried ?? await fetchRemote(git, root, t.upstream.remote);
+    if (!tried) fetched.set(t.upstream.remote, f);
+    if (!f.ok) return { ...failedWith(f, { fetchFailed: true, changed: !tried }), name: branch };
+    changed = !tried;
   }
   const from = await hashOf(git, root, `refs/heads/${branch}`);
   const to = await hashOf(git, root, t.upstream.ref);
@@ -318,7 +332,7 @@ export async function updateBranch(git, root, { name, method } = {}, fetched = n
 // updateBranches(git, root, { names, method }) → { ok, results: [updateBranch's], changed }
 //   The Branch tree's "Update Selected": each branch in turn, each remote fetched once.
 export async function updateBranches(git, root, { names = [], method } = {}) {
-  const fetched = new Set(), results = [];
+  const fetched = new Map(), results = [];
   for (const name of (Array.isArray(names) ? names : []).filter((x) => typeof x === "string" && x)) {
     results.push(await updateBranch(git, root, { name, method }, fetched));
   }

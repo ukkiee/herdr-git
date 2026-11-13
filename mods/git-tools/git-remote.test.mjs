@@ -8,7 +8,7 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
 import { makeGit } from "./git.js";
-import { pull, readPullTargets, pullDefault, togglePullOption, splitRemoteBranch, readTracking, updateBranch, updateBranches, checkoutAndUpdate, updateProject, resetToRemote, readUpdate, failureText } from "./git-remote.js";
+import { pull, readPullTargets, pullDefault, togglePullOption, splitRemoteBranch, readTracking, updateBranch, updateBranches, checkoutAndUpdate, updateProject, resetToRemote, readUpdate, failureText, branchesFailureText } from "./git-remote.js";
 import { smartRun } from "./git-smart.js";
 import { translator } from "./i18n.js";
 import { listSnapshots } from "./git-snapshot.js";
@@ -367,6 +367,27 @@ const commitMine = (mine, path, at, word) => { edit(mine, path, at, word); sh(mi
   sh(mine, "git branch --track main2 origin/main");
   const all = await updateBranches(git, mine, { names: ["feature", "work"] });
   assert.deepEqual(all.results.map((x) => [x.name, x.outcome]), [["feature", "refused"], ["work", "refused"]]);
+}
+{
+  // Several branches on a remote that can't be fetched: one fetch, every one of them
+  // failed for it, and the notification's words give the credential hint once, first.
+  const en = translator("en");
+  const { mine } = setup();
+  sh(mine, `git remote add gone ${base}/no-such-remote.git`);
+  for (const b of ["b1", "b2"]) sh(mine, `git branch ${b} && git config branch.${b}.remote gone && git config branch.${b}.merge refs/heads/main`);
+  let fetches = 0;
+  const counting = Object.assign(async (cwd, args, options) => {
+    if (args[0] === "fetch" && args.includes("gone")) fetches += 1;
+    return git(cwd, args, options);
+  }, { read: (cwd, args, options) => git.read(cwd, args, options) });
+  const all = await updateBranches(counting, mine, { names: ["b1", "b2"] });
+  assert.equal(fetches, 1);
+  assert.deepEqual(all.results.map((x) => [x.name, x.outcome, x.fetchFailed]), [["b1", "failed", true], ["b2", "failed", true]]);
+  assert.ok(all.results[1].err, "the second branch carries git's words too");
+  const words = branchesFailureText(en, all.results);
+  assert.ok(words.startsWith(`${en("remote.credentialHint")}\n\n`), words);
+  assert.equal(words.split(en("remote.credentialHint")).length, 2, "the hint once");
+  assert.ok(words.includes("\nb1: ") && words.includes("\nb2: "), words);
 }
 {
   // The current branch updates as the project does, with the method given.

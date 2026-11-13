@@ -121,9 +121,9 @@ const ITEMS = {
   "branch.trackedBranch": { key: "branches.trackedBranch", args: (ctx) => ({ upstream: ctx.upstream }), shown: (ctx) => Boolean(ctx.upstream) },
   "branch.pullRebase": { key: "branches.pullRebase", args: current, write: true },
   "branch.pullMerge": { key: "branches.pullMerge", args: current, write: true },
-  // F2 on the Branch tree's cursor row does the same (log-branches.js). A detached HEAD
-  // has no branch name to change.
-  "branch.rename": { key: "branches.rename", write: true, hint: "F2", shown: (ctx) => ctx.scope !== "head" },
+  // No F2: the app's own F2 (rename the tab) takes the key before the panel sees it. A
+  // detached HEAD has no branch name to change.
+  "branch.rename": { key: "branches.rename", write: true, shown: (ctx) => ctx.scope !== "head" },
   "branch.delete": { key: "log.delete", write: true, when: deleteBlock },
   "remote.edit": { key: "branches.editRemote", write: true },
   "remote.remove": { key: "branches.removeRemote", write: true },

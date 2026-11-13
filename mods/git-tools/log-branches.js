@@ -659,8 +659,6 @@ export default class LogBranches {
             else if (e.key === "left") this.fold(true, cx);
             else if (e.key === "right") this.fold(false, cx);
             else if (e.key === "enter") this.activate(this.cursorRow(), cx);
-            // Rename… on the cursor's local branch, as its menu says.
-            else if (e.key === "f2" && this.cursorRow()?.kind !== "tag") this.host.run("branch.rename", this.target(this.cursorRow()), cx);
             else return;
             cx.stop_propagation();
           })

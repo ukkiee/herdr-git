@@ -38,6 +38,7 @@ import { historyUpToHere } from "./view-history-tab.js";
 import { openPatch, openFilePatch } from "./view-patch.js";
 import { goToHash } from "./view-go-to-hash.js";
 import { undoHere, editMessageHere, dropHere, squashHere } from "./log-rewrite.js";
+import { cherryPickHere, revertHere, cherryPickPicked, revertChangesHere, cherryPickChangesHere } from "./log-pick.js";
 import { OPTIONS_KEY, readOptions, toggleOption, readArgs, graphMenu, displayMenu, columnsMenu } from "./log-options.js";
 import { appSetting, saveAppSetting } from "./app-files.js";
 import { readMe } from "./git-log-filter.js";
@@ -142,6 +143,12 @@ const ACTIONS = {
   "commit.squashInto": (host, commits, cx) => aimHere(host, commits, true, cx),
   "file.extractSelected": (host, m, cx) => extractHere(host, m, cx),
   "file.dropSelected": (host, m, cx) => dropChangesHere(host, m, cx),
+  "commit.cherryPick": (host, commits, cx) => cherryPickHere(host, commits, cx),
+  "commit.revert": (host, commits, cx) => revertHere(host, commits, cx),
+  "log.cherryPick": (host, _t, cx) => cherryPickPicked(host, cx),
+  "file.revertSelected": (host, m, cx) => revertChangesHere(host, m, cx),
+  "file.cherryPickSelected": (host, m, cx) => cherryPickChangesHere(host, m, cx),
+  "details.revertSelected": (host, m, cx) => revertChangesHere(host, m, cx),
 };
 
 // The bus event that tells every Log panel the options file changed.
@@ -739,7 +746,7 @@ export default class LogView {
           // so a cut keeps it; the full sentence is the tooltip.
           .when(Boolean(writing), (el) => el.child(div().id("log-writing").flex_initial().min_w(0).max_w(320).truncate().px(6).text_size(12).text_color(t.muted)
             .tooltip(writing ?? "").child(writeLabel ?? "")))
-          .children(this.items("logTools", { writing }).map((it) => this.toolButton(it, t, it.id === "log.refresh" && loading))))
+          .children(this.items("logTools", { writing, picked: this.picks.picked.size }).map((it) => this.toolButton(it, t, it.id === "log.refresh" && loading))))
         .child(div().flex_1().min_h(0).w_full().child(this.list.render(cx))))
       .when(c.showDetails, (el) => el
         .child(this.split("log-split-details", "details", t))

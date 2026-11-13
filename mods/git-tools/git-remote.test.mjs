@@ -378,11 +378,23 @@ const commitMine = (mine, path, at, word) => { edit(mine, path, at, word); sh(mi
   const r = await updateProject(git, mine, { method: "merge" });
   assert.equal(r.outcome, "done", r.err);
   assert.equal(parents(mine, "HEAD"), 2);
+  // git's own message for the short name, though the full ref is what is merged.
+  assert.equal(sh(mine, "git log -1 --format=%B").trim(), "Merge remote-tracking branch 'origin/main'");
   assert.deepEqual(r.updated, { from: before, to: head(mine) });
   const info = await readUpdate(git, mine, r.updated);
   assert.deepEqual(info.commits.map((c) => c.subject).filter((s) => !s.startsWith("Merge")), ["their-c1", "their-a1"]);
   assert.equal(info.files, 2);
   assert.equal((await updateProject(git, mine, { method: "merge" })).outcome, "empty", "nothing to update");
+}
+{
+  // A local branch named like the tracked one ("origin/main") doesn't take its place.
+  const { mine, theirs } = setup();
+  push(theirs, "a.txt", 0, "their-a1");
+  commitMine(mine, "b.txt", 0, "my-b1");
+  sh(mine, "git branch origin/main HEAD~1");
+  const r = await updateProject(git, mine, { method: "merge" });
+  assert.equal(r.outcome, "done", r.err);
+  assert.equal(rev(mine, "HEAD^2"), rev(mine, "refs/remotes/origin/main"));
 }
 {
   // Rebase, with local changes put away and brought back (Smart), staging kept.

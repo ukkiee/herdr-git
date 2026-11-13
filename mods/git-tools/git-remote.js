@@ -234,7 +234,12 @@ export async function updateProject(git, root, { method, now = new Date() } = {}
     return { ok: true, code: 0, out: "", err: "", outcome: "empty", operation: before, updated: null, changed: true };
   }
   const how = methodOf(method);
-  const step = (g, r) => g(r, how === "rebase" ? ["rebase", NO_AUTOSTASH, t.upstream.ref] : ["merge", NO_AUTOSTASH, t.upstream.ref], STEP);
+  // git writes the merge message from the name it is given ("Merge remote-tracking branch
+  // 'origin/main'", plus " into <branch>" by merge.suppressDest). The short name is given
+  // when it means the same commit; a local branch or tag of that name would win the
+  // lookup, and then the full ref is merged (its message names the full ref).
+  const merged = how === "merge" && await hashOf(git, root, t.upstream.name) === incoming ? t.upstream.name : t.upstream.ref;
+  const step = (g, r) => g(r, how === "rebase" ? ["rebase", NO_AUTOSTASH, t.upstream.ref] : ["merge", NO_AUTOSTASH, merged], STEP);
   const status = await readStatus(git, root);
   const local = status.ok && status.changes.some((c) => c.status !== "conflict" && c.status !== "unversioned" && c.xy);
   if (!local) return settled(git, root, before, await step(git, root), { type: how, target: t.upstream.ref }, before.head);

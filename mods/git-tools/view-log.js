@@ -22,6 +22,7 @@ import { sameRepo } from "./lock.js";
 import { serveBranch } from "./view-branch-new.js";
 import { serveDeletedBranches } from "./view-deleted-branches.js";
 import { serveAction } from "./serve-actions.js";
+import { openReset } from "./view-reset.js";
 import LogBranches from "./log-branches.js";
 import LogFilters from "./log-filters.js";
 import LogList from "./log-list.js";
@@ -93,6 +94,7 @@ const ACTIONS = {
   "file.openRepositoryVersion": (host, m) => repositoryVersion(host, m),
   "file.getFromRevision": (host, m, cx) => getFromCommit(host, m, cx),
   "file.showChangesToParents": (host, m, cx) => changesToParents(host, m, cx),
+  "commit.resetToHere": (host, commits) => { if (host.repo && commits[0] && !host.writeBlock()) openReset({ root: host.repo.root, on: host.repo.on, owner: host.bus.id, commit: commits[0], lang: host.lang }); },
 };
 const handled = (id) => Object.prototype.hasOwnProperty.call(ACTIONS, id);
 

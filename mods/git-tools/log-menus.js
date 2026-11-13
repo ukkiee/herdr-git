@@ -37,7 +37,7 @@ const ITEMS = {
   "commit.showRepository": { key: "log.showRepositoryAtRevision" },
   "commit.compareVersions": { key: "log.compareVersions", shown: (ctx) => ctx.count === 2 },
   "commit.compareWithLocal": { key: "log.compareWithLocal", shown: (ctx) => (ctx.count ?? 1) === 1 },
-  "commit.resetToHere": { key: "log.resetToHere" },
+  "commit.resetToHere": { key: "log.resetToHere", write: true, when: one },
   "commit.revert": { key: "log.revertCommit" },
   "commit.undo": { key: "log.undoCommit" },
   "commit.editMessage": { key: "log.editMessage" },

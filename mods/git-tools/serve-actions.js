@@ -12,11 +12,15 @@ import { makeGit } from "./git.js";
 import { serveRequest } from "./ui.js";
 import { acceptRequest, unresolveRequest, resolveSimpleRequest } from "./conflicts-model.js";
 import { writerOn } from "./view-conflicts.js";
+import { runReset } from "./view-reset.js";
+import { applySnapshot } from "./git-snapshot.js";
 
 export const SERVE_ACTIONS = {
   "conflicts-accept": { work: "conflicts.accepting", run: (git, root, args) => acceptRequest(git, root, args) },
   "conflicts-unresolve": { work: "conflicts.unresolving", run: (git, root, args) => unresolveRequest(git, root, args) },
   "conflicts-resolve-simple": { work: "conflicts.resolvingSimple", run: (git, root, args) => resolveSimpleRequest(git, root, args, writerOn(typeof args.on === "string" ? args.on : null)) },
+  "reset": { work: "reset.running", run: (git, root, args, panel) => runReset(git, root, args, panel) },
+  "restore-3way": { work: "restore.running", run: (git, root, args) => applySnapshot(git, root, { snapshot: typeof args.snapshot === "string" ? args.snapshot : "" }) },
 };
 
 // serveAction(panel, e, cx) → true when the table has e.action and the panel now runs

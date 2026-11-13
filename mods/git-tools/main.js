@@ -48,6 +48,8 @@ import Console from "./view-console.js";
 import CompareFiles, { FileDiff, FileView } from "./view-compare-files.js";
 import CompareBranches from "./view-compare-branches.js";
 import Conflicts from "./view-conflicts.js";
+import Reset from "./view-reset.js";
+import ResetHead from "./view-reset-head.js";
 
 // When the system's language isn't known yet, how long to wait before each next ask.
 const ASK_AGAIN = [1000, 3000, 10000];
@@ -72,6 +74,8 @@ export const VIEWS = {
   "compare-file": FileView, // one file read only: tab.new { mod, props }
   "compare-branches": CompareBranches, // branch compare tab (space-tabs.js)
   "conflicts": Conflicts, // Conflicts dialog (view-conflicts.js openConflicts)
+  "reset": Reset, // Git Reset dialog (view-reset.js openReset)
+  "reset-head": ResetHead, // Reset Head dialog (view-reset-head.js openResetHead)
 };
 
 // `mod.open:git-tools` (cmd-k) opens a copy with no view. No single app command both

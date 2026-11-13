@@ -45,6 +45,8 @@ import Files from "./view-files.js";
 import { recordWith } from "./git.js";
 import { recordGit } from "./app-files.js";
 import Console from "./view-console.js";
+import CompareFiles, { FileDiff, FileView } from "./view-compare-files.js";
+import CompareBranches from "./view-compare-branches.js";
 
 // When the system's language isn't known yet, how long to wait before each next ask.
 const ASK_AGAIN = [1000, 3000, 10000];
@@ -64,6 +66,10 @@ export const VIEWS = {
   "deleted-branches": DeletedBranches, // Deleted Branches dialog
   "files": Files, // Files panel: the `files` block of the main-git layout
   "console": Console, // Git console tab: tab.new { mod, props } (view-console.js openConsole)
+  "compare-files": CompareFiles, // working tree, local and version compare tabs (space-tabs.js)
+  "compare-diff": FileDiff, // one file between two revisions: tab.new { mod, props }
+  "compare-file": FileView, // one file read only: tab.new { mod, props }
+  "compare-branches": CompareBranches, // branch compare tab (space-tabs.js)
 };
 
 // `mod.open:git-tools` (cmd-k) opens a copy with no view. No single app command both

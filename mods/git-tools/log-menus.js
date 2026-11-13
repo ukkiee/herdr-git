@@ -65,7 +65,7 @@ const ITEMS = {
   "file.extractSelected": { key: "log.extractSelectedChanges" },
   "file.dropSelected": { key: "log.dropSelectedChanges" },
   "file.createPatch": { key: "log.createPatch" },
-  "file.getFromRevision": { key: "log.getFromRevision" },
+  "file.getFromRevision": { key: "log.getFromRevision", write: true },
   "file.historyUpToHere": { key: "log.historyUpToHere" },
   "file.showChangesToParents": { key: "log.showChangesToParents" },
   "details.showDiff": { key: "log.showDiff" },
@@ -102,7 +102,8 @@ const ITEMS = {
   "branches.delete": { key: "log.deleteBranch", args: name, write: true, when: deleteBlock, work: "log.deleting" },
   // The branches deleted here, kept to restore: after Delete Branch, its neighbor.
   "branches.deleted": { key: "branches.openDeleted", when: unread },
-  "branches.compareWithCurrent": { key: "branches.compareWithCurrent" },
+  // On the cursor's branch: off without one.
+  "branches.compareWithCurrent": { key: "branches.compareWithCurrent", when: (ctx) => (ctx.name ? null : { text: "" }) },
   "branches.showMine": { key: "branches.showMine" },
   "branches.fetch": { key: "log.fetch", write: true, work: "log.fetching" },
   "branches.favorite": { key: "branches.favorite" },

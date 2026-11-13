@@ -28,6 +28,8 @@ import LogList from "./log-list.js";
 import LogDetails, { copyRevision, checkoutCommit, newBranchAt } from "./log-details.js";
 import { menuItems } from "./log-menus.js";
 import { NONE, pickCommit, pickForMenu, keepPicked, pickedInOrder } from "./log-select.js";
+import { commitWithLocal, commitVersions, fileWithLocal, beforeWithLocal, editSource, repositoryVersion, getFromCommit, changesToParents } from "./view-compare-files.js";
+import { compareWithCurrent, diffWithWorkingTree } from "./view-compare-branches.js";
 
 // Column widths, px. The Commit list takes what the side columns leave and never gets
 // narrower than LIST_MIN: when the panel is too narrow, Commit details goes first, then
@@ -78,6 +80,19 @@ const ACTIONS = {
   "log.refresh": (host, _t, cx) => host.refresh(cx),
   "log.fetch": (host, _t, cx) => host.fetch(cx),
   "log.hide": () => toggleLogPanel(),
+  "commit.compareWithLocal": (host, commits) => commitWithLocal(host, commits),
+  "commit.compareVersions": (host, commits) => commitVersions(host, commits),
+  "branch.compareWith": (host, b) => compareWithCurrent(host, b),
+  "branch.showDiffWithWorkingTree": (host, b) => diffWithWorkingTree(host, b),
+  "branches.compareWithCurrent": (host, b) => compareWithCurrent(host, b),
+  "details.showDiff": (host, m) => host.details.showDiff(m),
+  "file.showDiffNewTab": (host, m) => host.details.showDiff(m),
+  "file.compareWithLocal": (host, m) => fileWithLocal(host, m),
+  "file.compareBeforeWithLocal": (host, m, cx) => beforeWithLocal(host, m, cx),
+  "file.editSource": (host, m) => editSource(host, m),
+  "file.openRepositoryVersion": (host, m) => repositoryVersion(host, m),
+  "file.getFromRevision": (host, m, cx) => getFromCommit(host, m, cx),
+  "file.showChangesToParents": (host, m, cx) => changesToParents(host, m, cx),
 };
 const handled = (id) => Object.prototype.hasOwnProperty.call(ACTIONS, id);
 

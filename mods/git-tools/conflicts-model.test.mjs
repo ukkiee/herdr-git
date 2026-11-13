@@ -1,9 +1,14 @@
 // node conflicts-model.test.mjs: what the Conflicts dialog shows and allows, from the
 // operation in progress (git-operation.js readOperation), with no app. The words are
 // checked in both languages through the message tables, the way the dialog words them.
+import { execFile, execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
-import { heading, columns, sortFiles, controls, pick } from "./conflicts-model.js";
+import { heading, columns, sortFiles, controls, pick, editedSince } from "./conflicts-model.js";
 import { translator } from "./i18n.js";
+import { makeGit } from "./git.js";
+import { readVersions } from "./git-conflict.js";
 
 const en = translator("en"), ko = translator("ko");
 // A line of the heading as the dialog writes it: a message, or text shown as it is.
@@ -135,6 +140,95 @@ const picked = { hash: "0acda529c3f0e1d2b3a4958677a8b9c0d1e2f3a4", subject: "fea
   assert.equal(pick(files, "gone"), "a");
   assert.equal(pick(done, null), "a");
   assert.equal(pick({ unresolved: [], resolved: [] }, "a"), null);
+}
+
+// Was the file edited since git left it? Accepting a side overwrites the file, so the
+// dialog asks first when it was. Checked on real conflicts: the file as git wrote it, in
+// each conflict style, and after edits of different kinds.
+{
+  const base = realpathSync(mkdtempSync(`${tmpdir()}/git-tools-conflicts-model-`));
+  const env = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", GIT_EDITOR: "true" };
+  const exec = (cmd, args = [], { cwd } = {}) => new Promise((resolve, reject) => {
+    execFile(cmd, args, { cwd, env, maxBuffer: 64 * 1024 * 1024 }, (err, stdout, stderr) => {
+      if (err && typeof err.code !== "number") return reject(err);
+      resolve({ code: err ? err.code : 0, stdout, stderr });
+    });
+  });
+  const git = makeGit(exec, null);
+  const sh = (cwd, cmd) => { try { return execFileSync("sh", ["-c", cmd], { cwd, env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }); } catch (e) { return e.stdout; } };
+  const put = (repo, path, text) => writeFileSync(`${repo}/${path}`, text);
+  const read = async (p) => readFileSync(p, "utf8");
+  const edited = async (repo, path) => {
+    const v = await readVersions(git, repo, path, { read });
+    assert.equal(v.ok, true, v.err);
+    return editedSince(v);
+  };
+
+  // m: both changed one line; w: a conflict and, further down, a change only theirs made
+  // (git applies it outside the markers); h: CRLF; d1, d2: one side deleted; bin: binary.
+  const files = {
+    m: ["a\nb\n", "a\nM\n", "a\nF\n"],
+    w: ["1\n2\n3\n4\n5\n6\n", "ONE\n2\n3\n4\n5\n6\n", "uno\n2\n3\n4\n5\nsix\n"],
+    h: ["a\r\nb\r\n", "a\r\nM\r\n", "a\r\nF\r\n"],
+    d1: ["k\n", "km\n", null],
+    d2: ["k\n", null, "kf\n"],
+    bin: ["x\0base", "x\0main", "x\0feature"],
+  };
+  const setUp = (name, style) => {
+    const repo = `${base}/${name}`;
+    mkdirSync(repo, { recursive: true });
+    sh(repo, "git init -q -b main && git config user.email t@t && git config user.name t");
+    if (style) sh(repo, `git config merge.conflictStyle ${style}`);
+    for (const [path, [b]] of Object.entries(files)) put(repo, path, b);
+    sh(repo, "git add -A && git commit -qm base && git checkout -qb feature");
+    for (const [path, [, , t]] of Object.entries(files)) t === null ? sh(repo, `git rm -q ${path}`) : put(repo, path, t);
+    sh(repo, "git add -A && git commit -qm feature && git checkout -q main");
+    for (const [path, [, o]] of Object.entries(files)) o === null ? sh(repo, `git rm -q ${path}`) : put(repo, path, o);
+    sh(repo, "git add -A && git commit -qm main");
+    return repo;
+  };
+
+  for (const style of [null, "diff3", "zdiff3"]) {
+    const repo = setUp(`merge-${style ?? "merge"}`, style);
+    sh(repo, "git merge feature");
+    for (const path of Object.keys(files)) assert.equal(await edited(repo, path), false, `${style ?? "merge"}: ${path} as git left it`);
+  }
+
+  // A rebase writes other labels on the markers; the sides swap.
+  {
+    const repo = setUp("rebase");
+    sh(repo, "git checkout -q feature && git rebase main");
+    for (const path of Object.keys(files)) assert.equal(await edited(repo, path), false, `rebase: ${path} as git left it`);
+  }
+
+  const repo = setUp("edits");
+  sh(repo, "git merge feature");
+  const left = readFileSync(`${repo}/w`, "utf8");
+  // A line outside the markers changed.
+  put(repo, "w", left.replace("4\n", "four\n"));
+  assert.equal(await edited(repo, "w"), true, "a line outside the conflict");
+  // A line inside one side of the markers changed.
+  put(repo, "w", left.replace("ONE\n", "ONE!\n"));
+  assert.equal(await edited(repo, "w"), true, "a line inside the conflict");
+  // Resolved by hand, not marked resolved yet.
+  put(repo, "w", "ONE uno\n2\n3\n4\n5\nsix\n");
+  assert.equal(await edited(repo, "w"), true, "resolved by hand");
+  // Made one side's version by hand: still something the person wrote.
+  put(repo, "m", "a\nM\n");
+  assert.equal(await edited(repo, "m"), true, "one side's text by hand");
+  // A marker taken out.
+  put(repo, "w", left.replace(/^=======\n/m, ""));
+  assert.equal(await edited(repo, "w"), true, "a marker taken out");
+  // The file deleted: there's nothing of it to lose when one side deleted it too.
+  sh(repo, "rm -f m d1");
+  assert.equal(await edited(repo, "m"), true, "a file both sides kept, deleted");
+  assert.equal(await edited(repo, "d1"), false, "a file one side deleted, deleted");
+  // The kept side changed.
+  put(repo, "d2", "kf edited\n");
+  assert.equal(await edited(repo, "d2"), true, "the kept side changed");
+  // A binary file can't be compared as text: never asked about.
+  put(repo, "bin", "x\0mine");
+  assert.equal(await edited(repo, "bin"), false, "binary");
 }
 
 console.log("ok");

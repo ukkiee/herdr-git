@@ -6,6 +6,8 @@
 // Words come back as { key, args } for messages-conflicts.js (the dialog words them in
 // its own language) or { text } for what is shown as it is (a commit's subject).
 
+import { merge } from "./merge-chunks.js";
+
 // A commit as the heading names it.
 const short = (hash) => String(hash ?? "").slice(0, 8);
 
@@ -93,6 +95,58 @@ export function controls(files, { selected = null, busy = false, loaded = false 
     unresolve: free && files.resolved.includes(selected),
     allResolved,
   };
+}
+
+// The text with every conflict block taken to one side: { ours, theirs }, or null when
+// there is no block or the markers don't pair up. A block is git's
+//   <<<<<<< label / ours lines / [||||||| label / base lines] / ======= / theirs lines / >>>>>>> label
+const MARK = { open: /^<{7}(?: |\r?\n|$)/, base: /^\|{7}(?: |\r?\n|$)/, middle: /^={7}\r?\n?$/, close: /^>{7}(?: |\r?\n|$)/ };
+function takeSides(text) {
+  const lines = String(text).match(/[^\n]*\n|[^\n]+$/g) ?? [];
+  const out = { ours: "", theirs: "" };
+  let at = "out", blocks = 0;
+  for (const line of lines) {
+    if (at === "out" && MARK.open.test(line)) { at = "ours"; blocks++; }
+    else if (at === "ours" && MARK.base.test(line)) at = "base";
+    else if ((at === "ours" || at === "base") && MARK.middle.test(line)) at = "theirs";
+    else if (at === "theirs" && MARK.close.test(line)) at = "out";
+    else if (at === "out") { out.ours += line; out.theirs += line; }
+    else if (at === "ours") out.ours += line;
+    else if (at === "theirs") out.theirs += line;
+    else if (at !== "base") return null;
+  }
+  return at === "out" && blocks ? out : null;
+}
+
+// The merge with every conflict taken to `side` and every other change applied: what the
+// file reads as when each of git's conflict blocks is taken to that side.
+function mergedTo(state, side) {
+  return state.chunks.map((c) => (c.kind === "conflict" ? c[side] : c.kind === "theirs" ? c.theirs : c.kind === "same" ? c.base : c.ours).join("")).join("");
+}
+
+// Line ends and a last newline aside: git ends the last line of a block with one.
+const sameText = (a, b) => String(a).replace(/\r/g, "").replace(/\n$/, "") === String(b).replace(/\r/g, "").replace(/\n$/, "");
+
+// editedSince(versions) → true when the file on disk isn't what git left: accepting a side
+// would lose what the person wrote. versions: git-conflict.js readVersions with `read`
+// (base, ours, theirs, worktree, binary).
+//   Both sides kept: git left conflict blocks; the file is as git left it when taking every
+//   block to one side gives the merge taken to that side, for both sides. A file without
+//   blocks was written by the person (git writes blocks into every text conflict; a file
+//   with merge=binary in .gitattributes is the exception and asks needlessly).
+//   One side deleted: git left the other side's version.
+//   A binary file can't be compared as text and counts as not edited.
+//   The merge here is merge-chunks.js's, not git's: where the two cut a change differently,
+//   a file as git left it counts as edited, and the dialog asks once more than it must.
+export function editedSince(v) {
+  if (!v || v.binary) return false;
+  const disk = typeof v.worktree === "string" ? v.worktree : null;
+  if (v.ours === null || v.theirs === null) return disk !== null && !sameText(disk, v.ours ?? v.theirs ?? "");
+  if (disk === null) return true;
+  const sides = takeSides(disk);
+  if (!sides) return true;
+  const state = merge(v.base ?? "", v.ours, v.theirs);
+  return !(sameText(sides.ours, mergedTo(state, "ours")) && sameText(sides.theirs, mergedTo(state, "theirs")));
 }
 
 // pick(files, selected) → the path to select: `selected` while it is shown, else the first

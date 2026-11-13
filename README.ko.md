@@ -192,7 +192,7 @@ cd herdr-git && ./install.sh
 
 | 키 | 하는 일 |
 |---|---|
-| `cmd-k` | Commit panel을 엽니다 |
+| `cmd-k` | Commit panel을 열고, 키 입력을 그 목록으로 보냅니다 |
 | `cmd-shift-g` | Log panel을 보이거나 숨깁니다 |
 | `cmd-shift-v` | VCS 작업 팝업을 엽니다(Commit panel이나 Log panel이 보일 때) |
 

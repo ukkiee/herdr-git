@@ -127,9 +127,18 @@ export const toggleLogPanel = () => { run("layout.toggle", { id: LOG_NODE }); };
 // Whether the shown layout has the tab bar's Git button (main-git on macOS).
 export const gitButtonPlaced = () => findNode(layout(), "git-log-button") !== null;
 
+// The id of the space this copy's window shows, or null.
+export const activeSpaceId = () => spaces().find((s) => s.active)?.id ?? null;
+
+// Shows the Commit panel and gives its list the keyboard. The mod isn't focusable, so
+// Herdr gives a shown panel no keys of its own: the panel focuses its list when it takes
+// "commit-focus" in its own timer (view-commit.js event), after the copy that sent it
+// is done (cmd-k's popup closes itself at once). `space` keeps it to the panel of the
+// window that asked: another window's panel would take the keys from its terminal.
 export function openCommitPanel() {
   run("layout.select", { stack: "panel-body", child: "changes" });
   run("layout.show", { id: "panel" });
+  broadcast({ type: "commit-focus", space: activeSpaceId() });
 }
 
 // ---- screens talking to each other

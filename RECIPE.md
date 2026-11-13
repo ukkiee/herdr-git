@@ -656,8 +656,8 @@ another machine runs every git command on that machine. A panel opened with
 ### Keys and buttons
 
 - **Changes** button (Herdr's tab bar): shows and hides the Commit panel.
-- **`cmd-k`**: opens the Commit panel when the side panel is hidden or shows Files.
-  Pressing it again leaves it open.
+- **`cmd-k`**: opens the Commit panel when the side panel is hidden or shows Files, and
+  gives its list the keyboard. Pressing it again leaves it open.
 - **Git** button (right of Changes, macOS only), **`cmd-shift-g`**, the Commit panel's
   Git Log button (only where the Git button isn't) and the Log panel's Hide: show and hide
   the Log panel. Drag its top
@@ -693,7 +693,9 @@ another machine runs every git command on that machine. A panel opened with
 - **Checkboxes** start off. A group or folder checks all its files, or unchecks all when
   every one is checked; it shows all / some / none. Checked files stay checked across
   reads while they are still listed.
-- **Keys** (after a click in the list): ↑ ↓ move, ← folds (or goes to the parent), →
+- **Keys** (after a click in the list, or once `cmd-k`, Commit in the VCS widget or the VCS
+  Operations popup, or Fixup… / Squash Into… opened the panel; not the Changes button):
+  ↑ ↓ move, ← folds (or goes to the parent), →
   unfolds (or goes to the first child), Space checks, Enter opens the Diff tab or folds.
 - **Right-click** a row: selects it and opens its menu.
 - **View Options**: the menu toggles Group By: Directory. The choice is kept.
@@ -2467,7 +2469,8 @@ in English.
   settle in whichever copy pumped first. `openMenu` therefore takes the opening copy's
   `bus`, and a pick settles in that copy's own timer.
 - Every event costs one write of `shared.json` and one re-render of the whole window,
-  so events go out only after git writes and carry nothing large.
+  so events go out only after git writes or a person's own action and carry nothing
+  large.
 - `close(cx)` gets 250 ms, and isn't called when a copy crashes or is killed. `main.js`
   releases the copy's locks first, synchronously, before the screen's own `close`.
 - Herdr closes a dialog on Esc whatever the mod does (`on_key_down` can't stop it; Cancel
@@ -2548,7 +2551,11 @@ in English.
   app command selects a stack child and shows its hidden parent
   (`layout.show {id: "changes"}` answers ok and changes nothing while `panel` is hidden),
   so the key runs `mod.open:git-tools`, a 1×1 popup that does `layout.select` +
-  `layout.show` and closes in `init`.
+  `layout.show`, posts `{ type: "commit-focus", space }` and closes in `init`. The mod
+  isn't focusable, so the panel gets no keys from Herdr: the Commit panel of the window
+  showing `space` focuses its list when it takes the event in its own timer, after the
+  popup has closed. Commit in the VCS widget and the VCS Operations popup, and Fixup… /
+  Squash Into…, open the panel the same way (`ui.js` `openCommitPanel`).
 - In a command name the text after `:` arrives as typed (`branches-filter:<text>`).
 - `overlay.close` closes the topmost overlay, toasts included. Saving any file of the mod
   (and so an `install.sh` that changes one) restarts every copy: open dialogs close and

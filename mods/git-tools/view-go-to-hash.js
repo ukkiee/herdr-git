@@ -38,7 +38,7 @@ export function goToHash(host, cx) {
 }
 
 export default class GoToHash {
-  init(p) {
+  init(p, cx) {
     this.key = p.key;
     this.overlay = p.overlay;
     this.input = InputState.new({});
@@ -49,6 +49,8 @@ export default class GoToHash {
       closeOverlay(this.overlay);
     });
     this.input.focus();
+    // The popup takes the keyboard as it opens; ask for it once more after that.
+    cx.timer.after(300, () => this.input.focus());
   }
 
   // Dismissed without an answer: the opener's promise still settles.

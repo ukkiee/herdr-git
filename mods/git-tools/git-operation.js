@@ -27,7 +27,8 @@ const NAMES = ["MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "REBASE_HEAD", "
 // What is read inside the folders: rebase-merge is the default backend, rebase-apply the
 // --apply one (`git am` uses it too, without `onto`).
 const INSIDE = {
-  "rebase-merge": ["head-name", "onto", "msgnum", "end"],
+  // current-fixups: there while a squash or fixup is being folded in (never empty).
+  "rebase-merge": ["head-name", "onto", "msgnum", "end", "current-fixups"],
   "rebase-apply": ["head-name", "onto", "next", "last"],
   sequencer: ["todo"],
 };
@@ -423,9 +424,22 @@ async function continueRun(git, root, { message = "", files = [] }, before) {
     if (!String(message ?? "").trim() || String(message).trim() === before.message.trim()) {
       return git(root, ["rebase", "--continue"], { timeout: TIMEOUT, env: NO_EDITOR });
     }
-    // A changed message goes in through the editor git asks for, which writes it from a
-    // variable: exec has no stdin and a file can't be written on another machine. Lines
-    // starting with "#" are the person's (an issue number), so git keeps them.
+    // Lines starting with "#" are the person's (an issue number), so git keeps them.
+    const files = await readStateFiles(git, root);
+    if (!files.ok) return files;
+    if (files.read.has("rebase-merge/head-name") && !files.read.has("rebase-merge/current-fixups")) {
+      // The stopped commit is committed here, then the rebase goes on without an editor:
+      // an editor git opens later (a squash further on) gets git's own message. The
+      // --apply backend takes no commit made at a stop, so it goes the editor's way below.
+      const made = await git(root, ["commit", "--cleanup=whitespace", "-m", text], { timeout: TIMEOUT, env: NO_EDITOR });
+      if (!made.ok) return made;
+      return git(root, ["rebase", "--continue"], { timeout: TIMEOUT, env: NO_EDITOR });
+    }
+    // A stopped squash or fixup: committing here would make it a commit of its own, so the
+    // message goes in through the editor git asks for when it folds the commit in, written
+    // from a variable (exec has no stdin and a file can't be written on another machine).
+    // A further squash right after it in the plan opens no editor of its own: this message
+    // is the folded commit's last word.
     return git(root, ["-c", "commit.cleanup=whitespace", "rebase", "--continue"], {
       timeout: TIMEOUT,
       env: { GITTOOLS_MESSAGE: text, GIT_EDITOR: `sh -c 'printf "%s\\n" "$GITTOOLS_MESSAGE" > "$1"' -` },

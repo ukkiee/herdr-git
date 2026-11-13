@@ -336,6 +336,31 @@ for (const [name, cmd] of [["merge", "git merge side"], ["rebase", "git checkout
   assert.deepEqual(subjects(again), ["s2", "s1, fixed", "m", "base"]);
 }
 
+// A message changed at a stopped pick is that commit's alone: a squash later in the plan
+// still gets its own message added. At a stopped squash, the changed message is the
+// combined commit's, and the plan's commits stay one commit.
+{
+  const plan = (repo, edit) => start(repo, `git checkout -q side && printf 'x\\n' > x.txt && git add x.txt && git commit -q -m 'x message' && GIT_SEQUENCE_EDITOR="sed -i.bak -e '${edit}'" git rebase -i main`);
+  const picked = init("continue-rebase-then-squash");
+  // [pick s1 (stops), pick s2, squash x]
+  plan(picked, "3s/^pick/squash/");
+  resolve(picked);
+  const r = await continueOperation(git, picked, { message: "s1 edited" });
+  assert.equal(r.outcome, "done", r.err);
+  assert.deepEqual(subjects(picked), ["s2", "s1 edited", "m", "base"]);
+  assert.equal(sh(picked, "git log -1 --format=%B side"), "s2\n\nx message\n\n");
+
+  const squashed = init("continue-rebase-squash-stop");
+  // [pick x, squash s1 (stops), pick s2]
+  writeFileSync(`${squashed}/.git/reorder.sh`, "t=$(grep -v '^#' \"$1\")\n{ echo \"$t\" | sed -n 3p; echo \"$t\" | sed -n 1p | sed 's/^pick/squash/'; echo \"$t\" | sed -n 2p; } > \"$1\"\n");
+  start(squashed, "git checkout -q side && printf 'x\\n' > x.txt && git add x.txt && git commit -q -m 'x message' && GIT_SEQUENCE_EDITOR='sh .git/reorder.sh' git rebase -i main");
+  assert.equal(sh(squashed, "git rev-parse -q --verify REBASE_HEAD >/dev/null && echo stopped || true").trim(), "stopped");
+  resolve(squashed);
+  const s = await continueOperation(git, squashed, { message: "together" });
+  assert.equal(s.outcome, "done", s.err);
+  assert.deepEqual(subjects(squashed), ["s2", "together", "m", "base"]);
+}
+
 // A rebase that stops again at the next commit: stopped, with where it is now.
 {
   const repo = init("continue-rebase-stops");

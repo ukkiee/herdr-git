@@ -49,8 +49,10 @@ const tab = (pane) => ({ pane, terminal: null, mod: "git-tools", tab: `tab-${pan
   assert.deepEqual(kept, { p2: { root: "/r2", on: null }, p5: { root: "/r5", on: "box" } });
   // Nothing new (tab.new didn't apply yet): only the pruning.
   assert.deepEqual(rememberTab({ gone: { root: "/old", on: null } }, [], { root: "/r", on: null }, after), {});
-  // A tab without a repository records nothing.
-  assert.deepEqual(rememberTab({}, ["p5"], { root: null, on: null }, after), {});
+  // A tab without a repository (root null) is noted as having none; no root given at
+  // all notes nothing.
+  assert.deepEqual(rememberTab({}, ["p5"], { root: null, on: "box" }, after), { p5: { root: null, on: null } });
+  assert.deepEqual(rememberTab({}, ["p5"], {}, after), {});
   // Bad stored values are dropped, not trusted.
   assert.deepEqual(rememberTab("junk", [], {}, after), {});
   assert.deepEqual(rememberTab({ p2: { root: 3 } }, [], {}, after), {});
@@ -68,16 +70,34 @@ const tab = (pane) => ({ pane, terminal: null, mod: "git-tools", tab: `tab-${pan
   assert.deepEqual(registerTab({ p5: { root: "/x", on: null } }, { props: { view: "diff", root: "/r5", pane: "p5" }, focused: null, panes }).record, { p5: { root: "/r5", on: null } });
 }
 
-// Not a tab of a repository: a dialog (overlay), a layout block or the console (no root).
+// Not a tab's screen: a dialog (overlay), a layout block (no root).
 {
   const panes = [tab("p5")], focused = { pane: "p5" };
   assert.equal(registerTab({}, { props: { view: "push", root: "/r", overlay: "o1" }, focused, panes }), null);
   assert.equal(registerTab({}, { props: { view: "log" }, focused, panes }), null);
-  assert.equal(registerTab({}, { props: { view: "console" }, focused, panes }), null);
   assert.equal(isTabScreen({ view: "push", root: "/r", overlay: "o1" }), false);
+  assert.equal(isTabScreen({ view: "console", overlay: "o1" }), false);
   assert.equal(isTabScreen({ view: "log" }), false);
   assert.equal(isTabScreen(undefined), false);
   assert.equal(isTabScreen({ view: "update-info", root: "/r", on: null }), true);
+}
+
+// A tab with no repository (the Git console, the icon sheet) records itself as having
+// none, so a tab opened next never takes its pane for its own; the panels follow the
+// folder there as before.
+{
+  const panes = [term("p1", "/a"), tab("p4"), tab("p5")];
+  assert.equal(isTabScreen({ view: "console" }), true);
+  assert.equal(isTabScreen({ view: "icon-sheet" }), true);
+  const own = registerTab({}, { props: { view: "console" }, focused: { pane: "p4" }, panes });
+  assert.deepEqual(own, { pane: "p4", record: { p4: { root: null, on: null } } });
+  // Kept by the next record, and skipped by a guess.
+  const props = { view: "diff", root: "/r5", on: null };
+  assert.equal(registerTab(own.record, { props, focused: { pane: "p4" }, panes }), null);
+  assert.deepEqual(rememberTab(own.record, ["p5"], { root: "/r5", on: null }, panes), { p4: { root: null, on: null }, p5: { root: "/r5", on: null } });
+  assert.deepEqual(whereFocused({ space, focused: { pane: "p4" }, panes, tabs: own.record }), { folder: "/home/me/practice", on: null, space: "s1" });
+  // Recorded already: nothing to store.
+  assert.equal(registerTab(own.record, { props: { view: "console" }, focused: { pane: "p4" }, panes }), null);
 }
 
 // No pane id from Herdr: the focused pane, when it is the only screen of this mod in its
@@ -94,6 +114,9 @@ const tab = (pane) => ({ pane, terminal: null, mod: "git-tools", tab: `tab-${pan
   // Two screens of this mod in the focused tab: which one is this copy is not known.
   const split = [tab("p5"), { ...tab("p6"), tab: "tab-p5" }];
   assert.equal(registerTab({}, { props, focused: { pane: "p5" }, panes: split }), null);
+  // A tab that holds a terminal too was split by hand: no tab this mod opens looks so.
+  const mixed = [tab("p5"), term("p7", "/a", { tab: "tab-p5" })];
+  assert.equal(registerTab({}, { props, focused: { pane: "p5" }, panes: mixed }), null);
 }
 
 // A tab's screen that closes takes its entry out; nothing to take: nothing to store.

@@ -34,22 +34,32 @@ export function newPanes(before = [], after = []) {
   return after.filter((p) => p.mod === MOD && !had.has(p.pane)).map((p) => p.pane);
 }
 
+// An entry: { root, on } for a tab of a repository, { root: null, on: null } for a tab of
+// this mod with none (it is recorded only so no other tab takes its pane for its own).
+const entryOf = (root, on) => (str(root) ? { root, on: str(on) } : root === null ? { root: null, on: null } : null);
+
 // rememberTab(record, added, { root, on }, panes) → the record to store: entries for panes
 // that are gone dropped, malformed ones too, and each added pane noted with the tab's
-// repository (none when the tab has no root).
+// repository (root null: a tab with none; undefined: not noted).
 export function rememberTab(record, added, { root, on } = {}, panes = []) {
   const live = new Set(panes.map((p) => p.pane)), out = {};
   for (const [pane, v] of Object.entries(record && typeof record === "object" ? record : {})) {
-    if (live.has(pane) && v && str(v.root)) out[pane] = { root: v.root, on: str(v.on) };
+    const kept = live.has(pane) && v && typeof v === "object" ? entryOf(v.root, v.on) : null;
+    if (kept) out[pane] = kept;
   }
-  if (str(root)) for (const pane of added) out[pane] = { root, on: str(on) };
+  const noted = entryOf(root, on);
+  if (noted) for (const pane of added) out[pane] = { ...noted };
   return out;
 }
 
-// isTabScreen(props) → whether a copy with these props is a tab's screen of a repository:
-// it has a root and is no dialog or menu (props.overlay).
+// The screens only ever opened as a tab of their own that have no repository.
+const TAB_ONLY = new Set(["console", "icon-sheet"]);
+
+// isTabScreen(props) → whether a copy with these props is a tab's screen: no dialog or
+// menu (props.overlay), and either of a repository (a root) or a tab-only screen. Layout
+// blocks (the panels) have neither.
 export function isTabScreen(p) {
-  return Boolean(p && !p.overlay && str(p.root));
+  return Boolean(p && !p.overlay && (str(p.root) || TAB_ONLY.has(p.view)));
 }
 
 // registerTab(record, { props, focused, panes }) → { pane, record } to store for a copy
@@ -58,12 +68,13 @@ export function isTabScreen(p) {
 //   menu (props.overlay) and a screen without a root (a layout block, the console) are
 //   no tab of a repository.
 //   The copy's pane: props.pane when Herdr gives one, and that replaces whatever is
-//   recorded for it. Without it, a guess: the focused pane, when it is this mod's only
-//   pane in its tab and nothing is recorded for it (a tab just opened has the focus).
-//   Never a recorded pane: right after tab.new the focus may still be on the tab before.
+//   recorded for it. Without it, a guess: the focused pane, when it is the only pane of
+//   its tab, this mod's, and nothing is recorded for it (a tab just opened has the focus).
+//   Never a recorded pane: right after tab.new the focus may still be on the tab before,
+//   which is why the tabs with no repository record themselves too.
 export function registerTab(record, { props: p, focused, panes = [] } = {}) {
   if (!isTabScreen(p)) return null;
-  const repo = { root: p.root, on: str(p.on) };
+  const repo = entryOf(str(p.root) ? p.root : null, p.on);
   const tabs = record && typeof record === "object" ? record : {};
   const pane = str(p.pane) ?? guessPane(tabs, focused, panes);
   if (!pane) return null;
@@ -82,5 +93,5 @@ export function forgetTab(record, pane) {
 function guessPane(tabs, focused, panes) {
   const f = focused?.pane ? panes.find((p) => p.pane === focused.pane) : null;
   if (!f || f.mod !== MOD || tabs[f.pane]) return null;
-  return panes.filter((p) => p.mod === MOD && p.tab === f.tab).length === 1 ? f.pane : null;
+  return panes.filter((p) => p.tab === f.tab).length === 1 ? f.pane : null;
 }

@@ -6,7 +6,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, chmodSync, realpathSync } from "
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
 import { makeGit } from "./git.js";
-import { runOperation } from "./git-operation.js";
+import { runOperation, requestProblem } from "./git-operation.js";
 
 // The person's own git settings (an editor, gpgSign, hooks path) stay out of every repository here.
 process.env.GIT_CONFIG_GLOBAL = "/dev/null";
@@ -198,6 +198,17 @@ git checkout -q -b ahead && echo a > a.txt && git add -A && git commit -q -m a1 
   assert.equal(odd.outcome, "refused");
   assert.equal(odd.msg.key, "merge.badOption");
   assert.equal(head(repo), main);
+}
+
+// What the dialogs turn their button off by: the same refusals, without a repository.
+{
+  assert.equal(requestProblem({ type: "merge", target: "side" }), null);
+  assert.equal(requestProblem({ type: "merge", target: "" }).msg.key, "merge.noTarget");
+  assert.equal(requestProblem({ type: "merge", target: "side", options: ["-m"] }).msg.key, "commit.noMessage");
+  assert.equal(requestProblem({ type: "rebase", target: "" }).msg.key, "merge.noTarget");
+  assert.equal(requestProblem({ type: "rebase", target: "", options: ["--root"] }), null);
+  assert.equal(requestProblem({ type: "rebase", target: "main", options: ["--interactive"] }).msg.key, "merge.badOption");
+  assert.equal(requestProblem({ type: "continue" }).msg.key, "ops.unknownRequest");
 }
 
 // A name that looks like an option is taken as a name.

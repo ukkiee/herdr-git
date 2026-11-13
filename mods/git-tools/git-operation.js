@@ -364,17 +364,19 @@ function rebaseRun(git, root, args) {
 
 // ---- Checkout and Rebase onto the current branch
 
-// args: { name (the branch to check out, local or "origin/feature"), remote?, onto (the
-// current branch) }. git's rebase checks the branch out itself, after it has checked for
-// local changes. A remote branch with no local one gets a local branch tracking it first,
-// as a checkout would; with tracked local changes nothing is made: the rebase would refuse.
+// args: { name (the branch to check out, local or "origin/feature"), remote?, onto? (the
+// current branch when not given) }. git's rebase checks the branch out itself, after it
+// has checked for local changes. A remote branch with no local one gets a local branch
+// tracking it first, as a checkout would; with tracked local changes nothing is made: the
+// rebase would refuse.
 function checkoutRebaseCheck(args) {
-  if (!str(args.name).trim() || !str(args.onto).trim()) return refuse("Choose a branch to check out and rebase.", { key: "merge.noTarget" });
+  if (!str(args.name).trim()) return refuse("Choose a branch to check out and rebase.", { key: "merge.noTarget" });
   return null;
 }
 
-async function checkoutRebaseRun(git, root, args) {
-  const name = str(args.name).trim(), onto = str(args.onto).trim();
+async function checkoutRebaseRun(git, root, args, before) {
+  const name = str(args.name).trim(), onto = str(args.onto).trim() || before.branch;
+  if (!onto) return refuse("There is no current branch to rebase onto.", { key: "merge.noCurrent" });
   let local = name;
   if (args.remote === true) {
     local = await localNameOf(git, root, name);
@@ -460,6 +462,14 @@ async function continueRun(git, root, { message = "", files = [] }, before) {
 //   operation: readOperation afterwards, so the screen shows where things are now.
 //   A refusal before anything ran (nothing in progress, conflicts left) has outcome
 //   "refused" and changed nothing.
+// requestProblem(request) → the refusal runOperation would give a merge, rebase or
+// checkout-rebase before running anything (no target, an unknown option, -m without a
+// message), or null: what the Merge and Rebase dialogs turn their button off by.
+export function requestProblem({ type, ...args } = {}) {
+  if (!["merge", "rebase", "checkout-rebase"].includes(type)) return refuse(`Unknown request: ${type}`, { key: "ops.unknownRequest", args: { type: String(type) } });
+  return REQUESTS[type].check(null, args);
+}
+
 export async function runOperation(git, root, { type, ...args } = {}) {
   const request = Object.prototype.hasOwnProperty.call(REQUESTS, type) ? REQUESTS[type] : null;
   if (!request) return refuse(`Unknown request: ${type}`, { key: "ops.unknownRequest", args: { type: String(type) } }, { outcome: "failed", operation: null });

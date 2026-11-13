@@ -192,10 +192,11 @@ git checkout -q main && echo m > m.txt && echo main > f.txt && git add -A && git
 
 // ---- Checkout and Rebase onto the current branch
 
-// A local branch: checked out and put on top of the current one.
+// A local branch: checked out and put on top of the current one (onto: the current
+// branch when not given).
 {
   const repo = init();
-  const r = await checkoutRebase(repo, { name: "feature", onto: "main" });
+  const r = await checkoutRebase(repo, { name: "feature" });
   assert.equal(r.outcome, "done", r.err);
   assert.equal(branch(repo), "feature");
   assert.deepEqual(subjects(repo), ["e1", "m1", "base"]);
@@ -260,7 +261,11 @@ git checkout -q main && echo m > m.txt && echo main > f.txt && git add -A && git
 {
   const repo = init();
   assert.equal((await checkoutRebase(repo, { name: "", onto: "main" })).msg.key, "merge.noTarget");
-  assert.equal((await checkoutRebase(repo, { name: "feature", onto: "" })).msg.key, "merge.noTarget");
+  sh(repo, "git checkout -q --detach");
+  const detached = await checkoutRebase(repo, { name: "feature" });
+  assert.equal(detached.msg.key, "merge.noCurrent");
+  assert.equal(branch(repo), "DETACHED");
+  sh(repo, "git checkout -q main");
   const odd = await checkoutRebase(repo, { name: "nowhere/feature", remote: true, onto: "main" });
   assert.equal(odd.outcome, "failed");
   assert.equal(odd.msg.key, "log.notRemoteBranch");

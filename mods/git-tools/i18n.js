@@ -20,6 +20,7 @@ import * as revision from "./messages-revision.js";
 import * as stash from "./messages-stash.js";
 import * as vcs from "./messages-vcs.js";
 import * as vcsOps from "./messages-vcs-ops.js";
+import * as rewrite from "./messages-rewrite.js";
 
 export const LANGS = ["en", "ko"];
 
@@ -69,7 +70,7 @@ export function systemLang(platform, read) {
 // screen's words go into its own area's file, and this list stays as it is. A table
 // that isn't listed is never used: i18n.test.mjs finds every
 // messages-*.js in the folder and fails when one of its keys doesn't come out of `t`.
-export const TABLES = [ui, restore, branches, filters, commit, log, dialogs, files, gitConsole, conflicts, ops, compare, reset, revision, stash, vcs, vcsOps];
+export const TABLES = [ui, restore, branches, filters, commit, log, dialogs, files, gitConsole, conflicts, ops, compare, reset, revision, stash, vcs, vcsOps, rewrite];
 
 // One value per key and language: a sentence, or for English words that change with a
 // count, { one, other } (chosen by args.n: one when it is 1). Placeholders are {name},

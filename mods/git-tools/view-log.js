@@ -17,12 +17,14 @@ import { exec, theme, watchFolder } from "herdr";
 import { makeGit, repoRoot } from "./git.js";
 import { readRefsState, readGitDir, refsChanged, resolveCommit } from "./git-log.js";
 import { fetchAll, restoreBranch } from "./git-branch.js";
-import { location, panelFrame, toolbar, spacer, iconButton, notice, notRepository, errorStrip, noteBar, sentence, toggleLogPanel, logPanelShown, broadcast, scriptedRepo, takeWrite, releaseWrite, writeBlock, writeName, writingOn, readBlocked, fromRepo } from "./ui.js";
+import { location, panelFrame, toolbar, spacer, iconButton, notice, notRepository, errorStrip, noteBar, sentence, toggleLogPanel, logPanelShown, broadcast, scriptedRepo, takeWrite, releaseWrite, writeBlock, writeName, writingOn, readBlocked, fromRepo, gitButtonPlaced } from "./ui.js";
 import { sameRepo } from "./lock.js";
 import { serveBranch } from "./view-branch-new.js";
 import { serveDeletedBranches } from "./view-deleted-branches.js";
 import { serveAction } from "./serve-actions.js";
 import { openReset } from "./view-reset.js";
+import { servePush } from "./view-push.js";
+import { VcsWidget } from "./view-vcs-widget.js";
 import LogBranches from "./log-branches.js";
 import LogFilters from "./log-filters.js";
 import LogList from "./log-list.js";
@@ -156,6 +158,9 @@ export default class LogView {
     this.list = new LogList();
     this.details = new LogDetails();
     for (const part of [this.branches, this.filters, this.list, this.details]) part.init(this, cx);
+    // Reads only while drawn: it follows the folder from render (view-vcs-widget.js).
+    this.widget = new VcsWidget();
+    this.widget.init(this);
     this.refresh(cx);
     // The watch below covers this computer; this covers other machines and a watch that
     // could not start. Cheap: one for-each-ref, and only while the panel shows.
@@ -332,7 +337,11 @@ export default class LogView {
 
   // The New Branch, Delete Branch and Deleted Branches dialogs this panel opened ask it
   // to run their writes, so the branches and the result outlive the dialog.
-  serve(e, cx) { return serveBranch(this, e, cx) || serveDeletedBranches(this, e, cx) || serveAction(this, e, cx); }
+  serve(e, cx) {
+    // The VCS widget's Push… opens the Push dialog with this panel as its owner.
+    if (e.action === "push") { servePush(this, e, cx); return true; }
+    return serveBranch(this, e, cx) || serveDeletedBranches(this, e, cx) || serveAction(this, e, cx);
+  }
 
   // noteDeleted(repo, deleted): a Delete on `repo` deleted a branch (git-branch.js
   // deleteBranch's `deleted`); its notice replaces the one before. A refused or
@@ -485,6 +494,7 @@ export default class LogView {
   // call and nothing is redrawn. A repository that couldn't be found is looked for again;
   // a details read or a next batch of the list that failed is read again.
   poll(cx) {
+    if (this.drawsWidget() && this.shown()) this.widget.refresh(cx);
     const repo = this.repo;
     if (this.readBlocked() || !this.shown()) { this.stale = Boolean(repo) || this.lost; return; }
     if (this.lost) { this.stale = false; this.refresh(cx); return; }
@@ -543,7 +553,13 @@ export default class LogView {
     });
   }
 
+  // The VCS widget at the left end of the Commit list's toolbar: in the panel that
+  // follows the focused pane, where the layout has no widget block of its own beside the
+  // Git button (every OS but macOS; layout.mjs).
+  drawsWidget() { return !this.fixed && !gitButtonPlaced(); }
+
   event(e, cx) {
+    if (this.drawsWidget()) this.widget.event(e, cx);
     if (e.type !== "changed" || (e.root && e.root !== this.repo?.root)) return;
     if (this.repo) this.poll(cx);
     else this.refresh(cx);
@@ -605,6 +621,7 @@ export default class LogView {
         .child(this.split("log-split-branches", "branches", t)))
       .child(v_flex().id("log-center").flex_1().min_w(0).h_full().min_h(0)
         .child(toolbar(t)
+          .when(this.drawsWidget(), (el) => el.child(div().id("log-vcs-widget").flex_none().max_w(260).min_w(0).child(this.widget.render(cx))))
           // The filter row keeps FILTERS_MIN while the column has it (what the toolbar's
           // padding and three buttons leave, TOOLBAR_REST): the write's words below are
           // cut short first, so the search box stays wide enough to read.

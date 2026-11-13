@@ -22,6 +22,7 @@ import { div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { theme } from "herdr";
 import { readBranches, checkout, deleteBranch } from "./git-branch.js";
+import { readOperation } from "./git-operation.js";
 import { shortenMiddle } from "./git-log.js";
 import { buildRows, folderKeys, parentIndex } from "./tree.js";
 import { openBranchNew, openBranchDelete } from "./view-branch-new.js";
@@ -92,6 +93,12 @@ export default class LogBranches {
     if (key !== this.key) { this.key = key; this.data = null; this.read = false; this.picked = null; this.cursor = null; this.collapsed = new Set(); this.list.top = 0; this.stale = true; }
     cx.spawn(async (cx) => {
       const r = await readBranches(repo.git, repo.root);
+      // A rebase runs on a detached HEAD, and the HEAD row says so then. Asked only while
+      // HEAD is detached: reading the operation also reads the working tree's status.
+      if (r.ok && !r.head.branch && r.head.hash) {
+        const op = await readOperation(repo.git, repo.root);
+        r.rebasing = op.ok && op.kind === "rebase";
+      }
       if (turn !== this.turn) return;
       this.read = true;
       if (!r.ok) { this.failed = r.err; host.fail(r.err, cx); cx.notify(); return; }
@@ -154,7 +161,8 @@ export default class LogBranches {
     const match = (name) => !words || name.toLowerCase().includes(words);
     const current = tr("log.headCurrent");
     if (match(current) || (d.head.branch && match(d.head.branch))) {
-      rows.push({ key: "head", kind: "head", depth: 0, label: d.head.branch ? current : d.head.hash ? `HEAD (${d.head.hash.slice(0, 7)})` : "HEAD" });
+      const label = d.head.branch ? current : d.rebasing ? `⚠ ${tr("vcs.detachedHead")}` : d.head.hash ? `HEAD (${d.head.hash.slice(0, 7)})` : "HEAD";
+      rows.push({ key: "head", kind: "head", depth: 0, label });
     }
     for (const [scope, key] of GROUPS) {
       const label = tr(key);

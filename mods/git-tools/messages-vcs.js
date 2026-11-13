@@ -25,8 +25,7 @@ export const en = {
   "vcs.abortCherryPickAsk": "Are you sure you want to abort the cherry-pick?",
   "vcs.abortRevertAsk": "Are you sure you want to abort the revert?",
   "vcs.abort": "Abort",
-  "vcs.continuing": "Continuing",
-  "vcs.checkingOut": "Checking out",
+  "vcs.detachedHead": "Detached HEAD",
 };
 
 export const ko = {
@@ -53,6 +52,5 @@ export const ko = {
   "vcs.abortCherryPickAsk": "체리픽을(를) 중단하시겠어요?",
   "vcs.abortRevertAsk": "되돌리기을(를) 중단하시겠어요?",
   "vcs.abort": "중단",
-  "vcs.continuing": "이어 가는 중",
-  "vcs.checkingOut": "체크아웃하는 중",
+  "vcs.detachedHead": "분리된 HEAD",
 };

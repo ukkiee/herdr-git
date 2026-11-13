@@ -44,7 +44,8 @@ import { theme, props, notify } from "herdr";
 import { commit, lastMessage, headIsPushed } from "./git-commit.js";
 import { abortOperation, skipOperation, operationName } from "./git-operation.js";
 import { openPush } from "./view-push.js";
-import { broadcast, button, checkbox, errorStrip, textBox, writingOn, fromRepo, sentence, openMenu } from "./ui.js";
+import { broadcast, button, checkbox, errorStrip, textBox, writingOn, fromRepo, sentence } from "./ui.js";
+import { askAbort } from "./view-vcs-popup.js";
 import { sameRepo } from "./lock.js";
 
 // The repository a message and Amend belong to.
@@ -239,17 +240,13 @@ export default class CommitForm {
     return name ? this.host.t(name.key, name.args) : "";
   }
 
-  // Abort or Skip, under the repository's lock like a commit. Abort asks first, by its
-  // name in a one-item menu: it throws away the resolution work.
+  // Abort or Skip, under the repository's lock like a commit. Abort asks first, as the
+  // VCS widget's ■ does (view-vcs-popup.js askAbort): it throws away the resolution work.
   operate(type, cx) {
     const host = this.host, repo = host.repo, op = this.inProgress();
     if (!repo || !op || host.writeBlock()) return;
-    const abortKey = { merge: "ops.abortMerge", rebase: "ops.abortRebase", "cherry-pick": "ops.abortCherryPick", revert: "ops.abortRevert" }[op.kind];
     cx.spawn(async (cx) => {
-      if (type === "abort") {
-        const sure = await openMenu(host.bus, [{ label: host.t(abortKey), value: "abort" }], { lang: host.lang });
-        if (sure !== "abort") return;
-      }
+      if (type === "abort" && !(await askAbort(host.bus, op.kind, host.lang))) return;
       if (!sameRepo(repo, host.repo) || !host.setBusy({ key: type === "abort" ? "ops.aborting" : "ops.skipping" }, cx)) return;
       this.error = null;
       let r;

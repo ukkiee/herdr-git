@@ -57,6 +57,8 @@ import GoToHash from "./view-go-to-hash.js";
 import MergeRevisions from "./view-merge-revisions.js";
 import Stash from "./view-stash.js";
 import Unstash from "./view-unstash.js";
+import VcsWidget from "./view-vcs-widget.js";
+import VcsPopup from "./view-vcs-popup.js";
 
 // When the system's language isn't known yet, how long to wait before each next ask.
 const ASK_AGAIN = [1000, 3000, 10000];
@@ -90,6 +92,8 @@ export const VIEWS = {
   "merge-revisions": MergeRevisions, // Merge Revisions dialog (Resolve Manually in the Conflicts dialog)
   "stash": Stash, // Stash dialog, and the Drop and Clear questions (view-stash.js openStash, openStashConfirm)
   "unstash": Unstash, // Unstash dialog (view-unstash.js openUnstash)
+  "vcs-widget": VcsWidget, // VCS widget: the `git-vcs-widget` block left of the Git button
+  "vcs-popup": VcsPopup, // VCS widget popup, and the question before an abort
 };
 
 // `mod.open:git-tools` (cmd-k) opens a copy with no view. No single app command both

@@ -19,6 +19,7 @@
 import { readOperation, settle } from "./git-operation.js";
 import { PROTECTED } from "./git-push.js";
 import { editCheck, todoList } from "./rebase-plan.js";
+import { commit as commitFiles } from "./git-commit.js";
 import { translator } from "./i18n.js";
 
 // The English of a refusal's reason, for err (the screen words msg in its own language).
@@ -69,14 +70,17 @@ async function tracked(git, root, branch) {
 //     null when they aren't all on one line from HEAD.
 //   mergeAbove: a merge commit between `oldest` and HEAD.
 //   pushed: `oldest` is on some remote branch: rewriting it needs a force push next.
+//   localChanges: the working tree or the index has anything to commit, untracked files
+//     included (the Commit panel commits those too); null when git couldn't say.
 export async function readEditFacts(git, root, hashes) {
   const wanted = [...new Set((hashes ?? []).filter((h) => typeof h === "string"))];
   const bad = wanted.find((h) => !HASH.test(h));
   if (!wanted.length || bad) return unknown(bad ?? "");
-  const [headR, branchR, op] = await Promise.all([
+  const [headR, branchR, op, changes] = await Promise.all([
     git.read(root, ["rev-parse", "--verify", "-q", "HEAD"]),
     git.read(root, ["symbolic-ref", "-q", "--short", "HEAD"]),
     readOperation(git, root),
+    git.read(root, ["status", "--porcelain=v1", "-z", "--untracked-files=normal"]),
   ]);
   if (!headR.ok) return result(headR);
   const head = headR.out.trim(), branch = branchR.ok ? branchR.out.trim() : null;
@@ -109,6 +113,7 @@ export async function readEditFacts(git, root, hashes) {
   return {
     ok: true, code: 0, out: "", err: "", head, branch, operation: op.ok ? op.kind : null,
     protected: upstream?.protected ? upstream.name : null, mergeAbove, pushed, oldest, commits,
+    localChanges: changes.ok ? changes.out !== "" : null,
   };
 }
 
@@ -138,10 +143,11 @@ function unknown(hash) {
 }
 
 // Reads the facts and checks `action` on them: { facts } to go on, or { no } (a result).
-async function checked(git, root, hashes, action) {
+// files: rebase-plan.js editCheck's, for the file actions.
+async function checked(git, root, hashes, action, files = null) {
   const facts = await readEditFacts(git, root, hashes);
   if (!facts.ok) return { no: { ...result(facts), outcome: "failed", operation: null, changed: false } };
-  const { why } = editCheck(action, facts, hashes.length);
+  const { why } = editCheck(action, facts, hashes.length, files);
   if (why) return { no: refused(english(why.key, why.args), why) };
   return { facts };
 }
@@ -161,6 +167,12 @@ async function trackedChanges(git, root) {
     for (const path of r.out.split("\0")) if (path) found.add(path);
   }
   return { ok: true, paths: [...found].sort() };
+}
+
+// The refusal for changes to tracked files that would stop the replay, naming them.
+function localRefusal(paths) {
+  const files = paths.length > FILES_SHOWN ? `${paths.slice(0, FILES_SHOWN).join(", ")}, …` : paths.join(", ");
+  return { ...refused(english("rewrite.localChanges", { files }), { key: "rewrite.localChanges", args: { files } }), blocked: paths };
 }
 
 // The commits from `oldest` to HEAD, oldest first.
@@ -198,10 +210,7 @@ async function movingRefs(git, root, hashes) {
 export async function runPlan(git, root, { oldest, steps } = {}) {
   const local = await trackedChanges(git, root);
   if (!local.ok) return { ...result(local), outcome: "failed", operation: null, changed: false };
-  if (local.paths.length) {
-    const files = local.paths.length > FILES_SHOWN ? `${local.paths.slice(0, FILES_SHOWN).join(", ")}, …` : local.paths.join(", ");
-    return { ...refused(english("rewrite.localChanges", { files }), { key: "rewrite.localChanges", args: { files } }), blocked: local.paths };
-  }
+  if (local.paths.length) return localRefusal(local.paths);
   const parents = HASH.test(String(oldest ?? "")) ? await git.read(root, ["rev-list", "--no-walk", "--parents", oldest, "--"]) : { ok: false };
   if (!parents.ok) return { ...unknown(oldest ?? ""), outcome: "failed", operation: null, changed: false };
   const isRoot = lines(parents.out)[0]?.split(" ").length === 1;
@@ -283,3 +292,77 @@ export async function squashCommits(git, root, { commits, message } = {}) {
     return steps;
   });
 }
+
+// fixupInto(git, root, { commit, files, squash, message }) → a result
+//   Fixup… and Squash Into…: the checked files (`files`, [{ path, status }] as the Commit
+//   panel's Included, git-commit.js commit) go into `commit`, an older commit of the
+//   current branch: committed first as a `fixup! <subject>` (`squash!`) commit, then
+//   melded into it by a replay. Fixup keeps the commit's message; Squash Into gives it
+//   `message`. The commit keeps its author.
+//   Changes to tracked files left unchecked would stop the replay: refused before the
+//   commit is made, naming them (`blocked`). Untracked files left unchecked stay as
+//   they are.
+export async function fixupInto(git, root, { commit, files, squash = false, message } = {}) {
+  const list = (Array.isArray(files) ? files : []).filter((f) => typeof f?.path === "string" && f.path);
+  if (squash && (typeof message !== "string" || !message.trim())) return refused("Specify a commit message.", { key: "commit.noMessage", args: {} });
+  const { facts, no } = await checked(git, root, [commit], squash ? "squashInto" : "fixup");
+  if (no) return no;
+  if (!list.length) return refused(english("rewrite.nothingToCommit"), { key: "rewrite.nothingToCommit", args: {} });
+  const local = await trackedChanges(git, root);
+  if (!local.ok) return { ...result(local), outcome: "failed", operation: null, changed: false };
+  const picked = new Set(list.map((f) => f.path));
+  const left = local.paths.filter((path) => !picked.has(path));
+  if (left.length) return localRefusal(left);
+  const said = await readMessages(git, root, [commit]);
+  if (!said.ok) return { ...result(said), outcome: "failed", operation: null, changed: false };
+  const subject = (said.messages[commit] ?? "").split("\n")[0].trim() || commit.slice(0, 8);
+  const made = await commitFiles(git, root, { files: list, message: `${squash ? "squash" : "fixup"}! ${subject}` });
+  // A refused commit (a hook) may still have touched the index.
+  if (!made.ok) return { ...result(made), outcome: "failed", operation: null, changed: true };
+  const added = await git.read(root, ["rev-parse", "--verify", "-q", "HEAD"]);
+  if (!added.ok) return { ...result(added), outcome: "failed", operation: null, changed: true };
+  const mine = added.out.trim();
+  const r = await runPlan(git, root, {
+    oldest: facts.oldest,
+    steps: (hashes) => hashes.filter((h) => h !== mine).flatMap((hash) => (hash === commit
+      ? [{ hash, action: "pick" }, { hash: mine, action: squash ? "squash" : "fixup", ...(squash ? { message } : {}) }]
+      : [{ hash, action: "pick" }])),
+  });
+  // The fixup commit is in either way: the screens read the repository again.
+  return { ...r, changed: true };
+}
+
+// The paths `commit` changes from its first parent (all of them for the first commit),
+// a rename as its two paths: { ok, paths }.
+async function changedPaths(git, root, commit) {
+  const r = await git.read(root, ["diff-tree", "--root", "--no-commit-id", "--no-renames", "-r", "--name-only", "-z", commit, "--"]);
+  return r.ok ? { ok: true, paths: new Set(r.out.split("\0").filter(Boolean)) } : r;
+}
+
+// Extract and Drop Selected Changes: `action` on `paths` of `commit`.
+async function fileEdit(git, root, { commit, paths, message }, action) {
+  const wanted = [...new Set((Array.isArray(paths) ? paths : []).filter((p) => typeof p === "string" && p))];
+  if (action === "extractChanges" && (typeof message !== "string" || !message.trim())) return refused("Specify a commit message.", { key: "commit.noMessage", args: {} });
+  const changed = HASH.test(String(commit ?? "")) ? await changedPaths(git, root, commit) : { ok: false };
+  const picked = changed.ok ? wanted.filter((p) => changed.paths.has(p)) : [];
+  const { facts, no } = await checked(git, root, [commit], action, changed.ok ? { picked: picked.length, total: changed.paths.size } : null);
+  if (no) return no;
+  if (!changed.ok) return { ...result(changed), outcome: "failed", operation: null, changed: false };
+  const first = facts.commits[0]?.parents === 0;
+  return replay(git, root, facts, (hashes) => hashes.map((hash) => (hash === commit
+    ? { hash, action, paths: picked, ...(first ? { root: true } : {}), ...(action === "extractChanges" ? { message } : {}) }
+    : { hash, action: "pick" })));
+}
+
+// extractChanges(git, root, { commit, paths, message }) → a result
+//   Extract Selected Changes to Separate Commit…: `commit` splits in two, first without
+//   the changes to `paths` (its message), then a new commit of them with `message`; both
+//   keep its author. The tree at the end is the same. Off when `paths` are all of the
+//   commit's files, or none of them.
+export const extractChanges = (git, root, args = {}) => fileEdit(git, root, args, "extractChanges");
+
+// dropChanges(git, root, { commit, paths }) → a result
+//   Drop Selected Changes: the changes to `paths` leave `commit` (those files as its
+//   parent had them); the commits after it are replayed with their own changes. Off when
+//   `paths` are all of the commit's files, or none of them.
+export const dropChanges = (git, root, args = {}) => fileEdit(git, root, args, "dropChanges");

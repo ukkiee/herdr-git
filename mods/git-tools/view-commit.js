@@ -17,7 +17,8 @@
 // Commands (`git-tools.<name>`, for keys and scripts; they reach shown copies only):
 //   refresh, commit-group-by-directory, commit-expand-all, commit-collapse-all,
 //   commit-up, commit-down, commit-left, commit-right, commit-toggle (the Space key),
-//   commit-show-diff, commit-rollback, commit-restore (opens the Restore dialog).
+//   commit-show-diff, commit-rollback, commit-restore (opens the Restore dialog),
+//   commit-stash (opens the Stash dialog), commit-unstash (shows the Stash tab).
 //   Anything else is passed on to the commit form.
 
 import { div } from "gpui-kit";
@@ -36,6 +37,7 @@ import { openRestore, serveRestore } from "./view-restore.js";
 import { servePush } from "./view-push.js";
 import { serveAction } from "./serve-actions.js";
 import { openDiff } from "./view-diff.js";
+import StashTab from "./commit-stash-tab.js";
 
 // The groups' names are worded when drawn (groupName): rows outlive a change of language.
 // "last" is the Last commit group: only while Amend is on (see items).
@@ -103,6 +105,9 @@ export default class CommitView {
     this.handle = cx.focus_handle();
     this.form = new CommitForm();
     this.form.init(this, cx);
+    // The head's "Commit | Stash" tabs and the Stash tab (commit-stash-tab.js).
+    this.stashTab = new StashTab();
+    this.stashTab.init(this);
     this.refresh(cx);
     // The watch can miss things (a remote space has none at all), so the timer stays on.
     cx.timer.every(POLL, (cx) => this.refresh(cx));
@@ -273,6 +278,7 @@ export default class CommitView {
         }
         else this.error = sentence(this.t, status.msg, status.err);
         this.watch(cx);
+        this.stashTab.refresh(cx);
       } finally {
         this.loading = false;
         if (!held) this.read = true;
@@ -539,6 +545,7 @@ export default class CommitView {
     else if (name === "commit-rollback") this.rollback();
     else if (name === "commit-restore") this.restore();
     else if (/^commit-(up|down|left|right)$/.test(name)) this.act(name.slice(7));
+    else if (this.stashTab.command(name)) return;
     else this.form.command?.(name, cx);
   }
 
@@ -548,6 +555,7 @@ export default class CommitView {
     // rollback's own "changed" (by its request's key) doesn't. A "changed" without a root
     // stands for events that went unseen, which may hold such a write: it ends it too.
     if (e.type === "changed" && this.note && (!e.root || e.root === this.note.repo?.root) && (!e.by || e.by !== this.note.by)) this.note = null;
+    this.stashTab.event(e, cx);
   }
 
   // ---- drawing
@@ -643,6 +651,7 @@ export default class CommitView {
       cx.timer.after(0, (cx) => { this.moving = false; if (this.waiting && !this.readBlocked()) this.refresh(cx); });
     }
     const t = theme(), shown = logPanelShown(), r = this.current();
+    if (this.stashTab.showing()) return this.stashTab.render(cx, t);
     this.dark = darkLook();
     const note = this.note && sameRepo(this.note.repo, this.repo) ? this.note : null;
     const body = this.notRepo ? notice(notRepository(this.folder, this.t), t)
@@ -651,6 +660,7 @@ export default class CommitView {
       : this.list.render(this.rows.length, (i) => this.renderRow(i, t), t);
     const redraw = (fn) => (_e, cx) => { fn(cx); cx.notify(); };
     return panelFrame("commit-panel", t)
+      .when(this.stashTab.any(), (el) => el.child(this.stashTab.header(t)))
       .child(toolbar(t)
         .child(iconButton("commit-refresh", "refresh", t, { title: this.t("commit.refresh"), busy: Boolean(this.loading && this.read), onClick: redraw((cx) => this.refresh(cx)) }))
         .child(iconButton("commit-rollback", "rollback", t, { title: this.repo && this.writeBlock() || this.t("commit.rollback"), disabled: !this.canRollback(), onClick: redraw(() => this.rollback()) }))

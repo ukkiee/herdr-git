@@ -33,13 +33,18 @@ revisions.
   operations below.
 - **VCS widget** (left of the Git button on macOS, left end of the Log panel's toolbar
   elsewhere): the current branch with the commits to pull (↓) and to push (↑), or the
-  operation in progress with continue ≫ and abort ■. Click it for Update Project,
-  Commit, Push, New Branch, New Worktree, Checkout Tag or Revision, and every recent,
-  local and remote branch and tag with its own menu.
+  operation in progress with continue ≫ and abort ■. On macOS its block is as wide as
+  the branch name. Click it for a popup right below it: Update Project, Commit, Push, New
+  Branch, New Worktree, Checkout Tag or Revision, and every recent, local and remote
+  branch (favorites first) and tag, each branch's menu opening beside its row inside
+  the popup.
 - **VCS Operations popup** (`cmd-shift-v`): the Git menu in one numbered popup: Commit,
-  Push, Update Project, Pull, Fetch, Merge, Rebase, New Branch, New Tag, Reset HEAD, New
-  Worktree, Show Git Log, Uncommitted Changes (Stash, Unstash, Rollback) and Git Console.
-  Press its number to run one.
+  Push, Update Project, Pull, Fetch, Merge, Rebase, Branches, New Branch, New Tag, Reset
+  HEAD, New Worktree, Show Git Log, Patch (Create Patch, Apply Patch, Apply Patch from
+  Clipboard), Uncommitted Changes (Stash, Unstash, Rollback), Manage Remotes and Git
+  Console. Press its number to run one.
+- **Progress bar**: while git-tools runs a git write (a commit, a pull, a push, a fetch…)
+  the bottom of the Commit panel and the Log panel names it over a sliding bar.
 - **Diff tab**: one file's unified diff with line numbers, opened from any panel. A
   working file's tab follows the file as it changes.
 
@@ -67,13 +72,20 @@ revisions.
   rebase, cherry-pick, revert or a history edit (all but Fixup and Squash Into, which
   commit your checked changes), see the files and let git-tools stash them, run it, and
   put them back. Force Checkout records your changes before it throws them away.
-- **New Tag, Rename branch, Push All up to Here, Edit and Remove Remote, Push Tag.**
+- **New Tag, Rename branch, Push All up to Here, Push Tag.**
+- **Remotes**: Manage Remotes lists every remote with its URL; add, edit or remove one
+  there (or edit and remove from a remote's folder in the Branch tree).
+- **Patches**: Create Patch from commits (Log panel) or from the local changes you check
+  (VCS Operations popup), to a file or the clipboard; Apply Patch from a file or the
+  clipboard, picking which of its files to apply. A patch that doesn't fit is applied
+  with a 3-way merge, and conflicts open the Conflicts dialog.
 - **Compare and browse** in space tabs: two branches' own commits, the working tree
-  against a branch or a commit, two commits, the repository at a revision, history up to
-  a commit, Create Patch (to a file or the clipboard), Get from Revision or Branch.
+  against a branch or a commit, two commits, a file against its commit's parents, the
+  repository at a revision, history up to a commit, Get from Revision or Branch. While
+  one of these tabs has the focus, the panels show the repository it was opened on.
 - **New Worktree** from a branch, opened as a new space.
-- **Git console**: a tab with every git command git-tools ran and its output. Every error
-  strip has View in Console.
+- **Git console**: a tab with every git command git-tools ran and its output, with
+  passwords and tokens in URLs shown as `***`. Every error strip has View in Console.
 
 ### Undo a rollback or a branch delete
 
@@ -167,15 +179,18 @@ layout and its Changes and Files panels are left as they are.
   writes back its `branch.<name>.remote` and `.merge` config.
 - **Files in Herdr's app home** (`~/.config/herdr-app`, or `$HERDR_APP_HOME`):
   `install.sh` writes `mods/git-tools/` and `layouts/main-git.json`, and adds three keys to
-  `keys.json`. The mod keeps three small values in `shared.json`: `git-tools.bus` (how its
+  `keys.json`. The mod keeps five small values in `shared.json`: `git-tools.bus` (how its
   screens tell each other the repository changed), `git-tools.lock` (which
-  repository a git-tools write is running on) and `git-tools.lang` (the system language
-  last read, `"en"` or `"ko"`). In a `git-tools` folder there it keeps `console.jsonl`
+  repository a git-tools write is running on), `git-tools.lang` (the system language
+  last read, `"en"` or `"ko"`), `git-tools.menus` (how many of its menus are open, so no
+  tooltip covers them) and `git-tools.tabs` (its open tabs and the repository each was
+  opened on). In a `git-tools` folder there it keeps `console.jsonl`
   (the Git console, at most 512 KiB) and `settings.json` (Update Project's method, the
   Pull dialog's branches, graph and view options, Branch tree settings, "don't ask
-  again"), and briefly a `git-tools-result.*` file while a merge result is saved. It
-  writes to the clipboard only for Copy Revision Number, Copy Path, Copy Relative Path and
-  Create Patch to the clipboard.
+  again"), and briefly a `git-tools-result.*` file while a merge result is saved or a
+  patch from the clipboard is applied. It writes to the clipboard only for Copy Revision
+  Number, Copy Path, Copy Relative Path and Create Patch to the clipboard, and reads it
+  only for Apply Patch from Clipboard.
 
 How it's built and what to watch for: [RECIPE.md](RECIPE.md).
 
@@ -223,7 +238,8 @@ unchanged. Press it until `main-git` shows, or run `./install.sh`, to come back.
 Switch to `main` first, then delete `mods/git-tools/`, `git-tools/` and
 `layouts/main-git.json` in the app home, and the `layout:main-git` section of
 `keys.json`. Herdr may also have left `layouts/.state/main-git.json` and the
-`git-tools.bus`, `git-tools.lock` and `git-tools.lang` keys in `shared.json`; all are safe
+`git-tools.bus`, `git-tools.lock`, `git-tools.lang`, `git-tools.menus` and `git-tools.tabs`
+keys in `shared.json`; all are safe
 to delete. Rollback and deleted-branch records stay in each repository until git expires
 them; `git update-ref -d refs/git-tools/rollback` and
 `git update-ref -d refs/git-tools/deleted-branches` there drop them at once (they can't be
@@ -280,10 +296,18 @@ restored after that). `git config --remove-section gittools` drops the favorites
   on (the VCS widget or the Commit panel) instead of offering Continue and Abort.
 - F2 belongs to Herdr (renaming a tab) before the Branch tree sees it: rename a branch
   from its right-click menu.
-- Menus have no submenus: a current branch's Tracked Branch and a tag's Push Tag open a
-  second menu.
+- The Branch tree's and the Commit list's menus have no submenus: a current branch's
+  Tracked Branch and a tag's Push Tag open a second menu. Only the VCS widget popup
+  draws a branch's menu beside its row.
 - The VCS widget popup's stars only show favorites; mark them in the Branch tree. The
-  widget is 240px wide on macOS and cuts long branch names short.
+  widget cuts a branch name that would make it wider than 360px.
+- After editing the message at a stopped squash or fixup, when another squash follows
+  right after it, the message you wrote also stands in for that next commit's message.
+- Apply Patch has no file picker (Herdr offers a folder picker only): type the patch's
+  path, or pick its folder with 📁 in a space on this computer. A patch file over 1 MiB
+  is refused. Create Patch and Apply Patch have no diff pane.
+- The panels follow a git-tools tab's repository only once that tab has recorded itself
+  (when it opens, or when it gets the focus); until then they follow the space's folder.
 - The Merge Revisions dialog's middle pane is drawn, not an editor with colored lines: to
   type in the result, switch to Edit Result Directly (a plain editor without colors) and
   switch back.

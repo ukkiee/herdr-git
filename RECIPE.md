@@ -104,15 +104,13 @@ The right side panel, in place of Herdr's own Changes. A card: 10px corners, 1px
     tooltips are `Commit (⌘Enter)` and `Commit, then review and push` (with Amend on,
     `Amend Commit (⌘Enter)` and `Amend the last commit, then review and push`). The
     button that started a commit shows a 12px spinner.
-  - Under the buttons, at 12px `muted`, while a write the buttons don't show runs: another
-    screen's write on this repository, `Another git operation is running: Committing…`
-    (the label is that write's: `Amending…`, `Pushing…`, `Force Pushing…`,
-    `Rolling back…`, `Restoring…`, `Checking out…`, `Creating branch…`, `Deleting…`,
-    `Fetching…`);
-    this panel's own write on another repository,
-    `Another git operation is running in another repository: Committing…` (and no
-    spinner on the buttons); or this panel's own write that a dialog asked for, by its
-    label alone (`Pushing…`, `Rolling back…`, `Restoring…`).
+  - At the panel's bottom, while a write runs on this repository (any screen's), the
+    Progress bar: the write's label (`Committing…`, `Amending…`, `Pushing…`, `Force
+    Pushing…`, `Rolling back…`, `Restoring…`, `Checking out…`, `Creating branch…`,
+    `Deleting…`, `Fetching…`, `Updating…` …) over a bar sliding back and forth, a line
+    above it; its tooltip is the whole sentence (`Another git operation is running:
+    Committing…`). This panel's own write on another repository reads `Committing…
+    (another repository)`, with no spinner on the buttons.
 - **Rollback notice**, right after a rollback this panel ran, under the form and above
   the error strips: one row, line above it, `raised`, 10px by 5px padding, 12.5px text in
   `foreground` (not an error color): `Rolled back N files.` (`Rolled back 1 file.`), a
@@ -232,16 +230,15 @@ toolbar (`Git` semibold, `Log` 12px `muted`, Refresh, Hide) and the notice.
 
 **Commit list** (the middle column):
 
-- **Toolbar**, 34px, holding the **filter row** (below), then the name of the write that
-  keeps writes from starting, at 12px `muted`, up to 320px and cut from the end with `…`
-  (it gives way first: the filter row keeps at least 420px, or all but 100px of a
-  narrower list). Any write on this repository shows its label alone, the panel's own
-  (`Fetching…`, `Checking out…`, `Creating branch…`, `Deleting…`) or another screen's
-  (`Committing…`, `Pushing…`); the panel's own write on another repository shows
-  `Checking out… (another repository)`. Its tooltip is the full sentence: the label for
-  the panel's own write here, `Another git operation is running: Committing…`, or
-  `Another git operation is running in another repository: Checking out…`. Then
-  Refresh, Fetch (`fetch`), and Hide (`x`).
+- **Toolbar**, 34px, holding the **filter row** (below), then Refresh, Fetch (`fetch`),
+  and Hide (`x`).
+- **Progress bar**, at the Log panel's bottom while a write runs on this repository: the
+  write's label, the panel's own (`Fetching…`, `Checking out…`, `Creating branch…`,
+  `Deleting…`) or another screen's (`Committing…`, `Pushing…`), over a bar sliding back
+  and forth; the panel's own write on another repository reads `Checking out… (another
+  repository)`. Its tooltip is the full sentence: the label for the panel's own write
+  here, `Another git operation is running: Committing…`, or `Another git operation is
+  running in another repository: Checking out…`.
 - **Rows**: the graph, the subject (`dim` for a merge commit), the Ref labels, the
   author (120px, 12px `muted`) and the time (124px, 12px `muted`). Below 520px of list
   width the author goes; below 380px the time too.
@@ -2371,13 +2368,15 @@ in English.
   is written only by a deleted branch's Restore, putting back that branch's
   `branch.<name>.remote` and `.merge`. The Files panel writes nothing.
 - **Outside the mod folder**: the clipboard (Copy Revision Number, Copy Path, Copy
-  Relative Path, Create Patch to the clipboard), three keys of the app
+  Relative Path, Create Patch to the clipboard), five keys of the app
   home's `shared.json` (through `setShared`): `git-tools.bus` (the last 8 events),
-  `git-tools.lock` (`{}` when nothing writes) and `git-tools.lang` (`"en"` or `"ko"`),
-  `localStorage`, and the app home's `git-tools/` folder: `console.jsonl` (at most
-  512 KiB), `settings.json`, and a `git-tools-result.XXXXXXXX` file (mode 0600) while a
-  merge result is saved, removed after. Create Patch to a file writes where the person
-  says, on the space's machine.
+  `git-tools.lock` (`{}` when nothing writes), `git-tools.lang` (`"en"` or `"ko"`),
+  `git-tools.menus` (the open menus' count) and `git-tools.tabs` (the open git-tools tabs'
+  panes and repositories), `localStorage`, and the app home's `git-tools/` folder:
+  `console.jsonl` (at most 512 KiB), `settings.json`, and a `git-tools-result.XXXXXXXX`
+  file (mode 0600) while a merge result is saved or a clipboard patch is applied, removed
+  after. Create Patch to a file writes where the person says, on the space's machine. The
+  mod reads the clipboard only for Apply Patch from Clipboard.
   The mod reads a file directly only for the Files panel's preview (`readTextFile`, up to
   1 MiB); `watchFolder` watches the repository root and its git folder, and the Files
   panel's folder.

@@ -217,15 +217,15 @@ export class VcsWidget {
       // this copy's work and outlives the popup.
       const pick = await openVcsPopup(host.bus, { root: repo.root, on: repo.on, lang: host.lang, at });
       if (!pick) return;
-      if (pick.id === "branch") this.branchMenu(pick.target, pick.at, cx);
+      if (pick.id === "branch") this.branchMenu(pick.target, cx);
       else if (popupHandles(pick.id)) POPUP_ACTIONS[pick.id](this, pick, cx);
       cx.notify();
     });
   }
 
   // A branch's menu, as the Branch tree has it for that kind of branch (log-menus.js),
-  // with the items the popup does.
-  branchMenu(b, at, cx) {
+  // with the items the popup does, at the pointer (view-vcs-popup.js says why).
+  branchMenu(b, cx) {
     const host = this.host, tr = host.t, which = branchMenu(b);
     if (!which || !this.repo) return;
     const head = this.heads?.head;
@@ -237,7 +237,7 @@ export class VcsWidget {
     if (!items.length) return;
     const rows = items.map((it) => ({ label: tr(it.key, it.args), value: it.id, rule: it.rule, disabled: it.disabled, title: it.why ? (it.why.text ?? tr(it.why.key, it.why.args)) || undefined : undefined }));
     cx.spawn(async (cx) => {
-      const pick = await openMenu(host.bus, rows, { width: 300, at, lang: host.lang });
+      const pick = await openMenu(host.bus, rows, { width: 300, lang: host.lang });
       if (pick && popupHandles(pick)) POPUP_ACTIONS[pick](this, b, cx);
       cx.notify();
     });

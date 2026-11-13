@@ -7,8 +7,10 @@
 // The popup only reads. A pick goes back to the widget that opened it (openVcsPopup
 // resolves in the widget's copy, like ui.js openMenu), which runs it as its own work:
 // Herdr closes a popup on any click outside it, and what a closed copy started stops.
-// A branch row's pick comes back as { id: "branch", target, at }; the widget then opens
-// that branch's menu (log-menus.js) where the row was.
+// A branch row's pick comes back as { id: "branch", target }; the widget then opens that
+// branch's menu (log-menus.js) at the pointer, still on the row. Not at the press's
+// position: a press inside this popup reports one Herdr doesn't place an overlay by (the
+// menu went to the window's far corner).
 //
 // POPUP_ACTIONS is what each action and branch menu item does; an item shows only when
 // it is there. Each gets (widget, target, cx): the widget part (view-vcs-widget.js) and
@@ -53,7 +55,7 @@ export const POPUP_ACTIONS = {
   "branch.delete": (w, b, cx) => w.remove(b, cx),
   "branch.rename": (w, b) => renameFrom(w.host, w.repo, b),
   "branch.push": (w, b) => pushBranch(w.host, w.repo, b),
-  "branch.trackedBranch": (w, b, cx) => { if (b?.upstream) w.branchMenu({ name: b.upstream, scope: "remote", current: false }, null, cx); },
+  "branch.trackedBranch": (w, b, cx) => { if (b?.upstream) w.branchMenu({ name: b.upstream, scope: "remote", current: false }, cx); },
   "tag.push": (w, b, cx) => pushTagMenu(w, b, null, cx),
   "vcs.updateProject": (w, _p, cx) => startUpdateProject(w.host, w.repo, w.who, cx),
   "branch.update": (w, b, cx) => updateHere(w.host, w.repo, w.who, b, cx),
@@ -88,7 +90,7 @@ const LIST_H = HEIGHT - 2 * PAD - SEARCH_H - GAP;
 const newKey = (what) => `${what}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
 // openVcsPopup(bus, { root, on, lang, at }) → resolves in the opener's copy with the pick
-// ({ id, run? } or { id: "branch", target, at }), or null when the popup closes without one.
+// ({ id, run? } or { id: "branch", target }), or null when the popup closes without one.
 // bus: the opener's (`this.bus`); at: where the popup's top left goes, window coordinates.
 export function openVcsPopup(bus, { root, on = null, lang, at } = {}) {
   const key = newKey("vcs-popup");
@@ -181,7 +183,7 @@ export default class VcsPopup {
 
   close() { if (!this.answered) answerMenu(this.bus, this.key, null); }
 
-  activate(r, at, cx) {
+  activate(r, cx) {
     if (!r) return;
     if (r.kind === "group") {
       if (this.folded.has(r.id)) this.folded.delete(r.id); else this.folded.add(r.id);
@@ -189,7 +191,7 @@ export default class VcsPopup {
     } else if (r.kind === "action") this.answer({ id: r.id, ...(r.run ? { run: r.run } : {}) });
     else if (r.kind === "branch") {
       const scope = r.scope === "recent" ? "local" : r.scope;
-      this.answer({ id: "branch", target: { name: r.name, scope, current: r.current, upstream: r.upstream }, ...(at ? { at: { x: at.x, y: at.y } } : {}) });
+      this.answer({ id: "branch", target: { name: r.name, scope, current: r.current, upstream: r.upstream } });
     }
   }
 
@@ -208,11 +210,11 @@ export default class VcsPopup {
     if (r.kind === "rule") return div().id(`vcs-popup-row-${i}`).h(ROW_H).flex_none().flex().items_center().child(div().mx(6).h(1).w_full().bg(t.border));
     const pressed = (handler) => (e, cx) => { this.at = i; handler(e, cx); };
     if (r.kind === "action") {
-      return el.hover((s) => s.bg(t.hover)).on_click(pressed((_e, cx) => this.activate(r, null, cx)))
+      return el.hover((s) => s.bg(t.hover)).on_click(pressed((_e, cx) => this.activate(r, cx)))
         .child(div().flex_1().min_w(0).truncate().child(r.label));
     }
     if (r.kind === "group") {
-      return el.hover((s) => s.bg(t.hover)).on_click(pressed((_e, cx) => this.activate(r, null, cx)))
+      return el.hover((s) => s.bg(t.hover)).on_click(pressed((_e, cx) => this.activate(r, cx)))
         .child(uiGlyph(r.open ? "chevron-down" : "chevron-right", { dark }).text_color(t.muted))
         .child(div().flex_1().min_w(0).truncate().font_semibold().child(r.label));
     }
@@ -226,7 +228,7 @@ export default class VcsPopup {
       : r.current ? uiGlyph(favorite ? "current-branch-favorite" : "current-branch", { dark })
         : uiGlyph(favorite ? "favorite" : "branch-item", { dark });
     return el.pl(depth).hover((s) => s.bg(t.hover))
-      .on_mouse_down("left", (e, cx) => { this.at = i; this.activate(r, e.position, cx); cx.stop_propagation(); })
+      .on_mouse_down("left", (_e, cx) => { this.at = i; this.activate(r, cx); cx.stop_propagation(); })
       .child(glyph)
       .child(div().flex_1().min_w(0).truncate().when(r.current, (el) => el.font_semibold()).child(r.label))
       // Commits to pull (blue ↓) and to push (green ↑), and the branch it tracks.
@@ -264,7 +266,7 @@ export default class VcsPopup {
       .on_key_down((e, cx) => {
         if (e.key === "down") this.move(1, rows);
         else if (e.key === "up") this.move(-1, rows);
-        else if (e.key === "enter") this.activate(rows[this.at] ?? rows.find((r) => r.kind === "action" || r.kind === "branch"), null, cx);
+        else if (e.key === "enter") this.activate(rows[this.at] ?? rows.find((r) => r.kind === "action" || r.kind === "branch"), cx);
         else if (e.key === "escape") closeOverlay(this.overlay);
         else return;
         cx.stop_propagation();

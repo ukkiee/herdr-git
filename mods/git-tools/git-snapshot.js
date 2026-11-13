@@ -442,7 +442,9 @@ export async function restore(git, root, { snapshot, paths = [], copy } = {}) {
 //   it was. When git refuses the staging alone (the staged change doesn't fit the index
 //   HEAD has now), the changes are applied without it, and staged is false. When git
 //   refuses outright (a local change is in the way), nothing changed: ok is false with
-//   its words. Untracked files and the snapshot itself are left alone.
+//   its words. Untracked files and the snapshot itself are left alone. A success comes
+//   with msg saying which of the three it was (restore.applied, restore.appliedUnstaged,
+//   restore.appliedConflicts with n and the paths' list).
 //   Which way a refusal went is read from the index's conflicts, never from git's words:
 //   git exits 1 both when it refuses before writing and when it leaves conflicts.
 export async function applySnapshot(git, root, { snapshot } = {}) {
@@ -456,12 +458,15 @@ export async function applySnapshot(git, root, { snapshot } = {}) {
   let first = null;
   for (const index of tries) {
     const r = await git(root, ["stash", "apply", "-q", ...(index ? ["--index"] : []), snapshot]);
-    if (r.ok) return out({ ...r, err: "" }, { staged: index, changed: true });
+    if (r.ok) return out({ ...r, err: "", msg: index ? { key: "restore.applied" } : { key: "restore.appliedUnstaged" } }, { staged: index, changed: true });
     first ??= r;
     // With conflicts already in the index git refuses at once: any failure is a refusal.
     const after = before.paths.length ? before : await unmerged(git, root);
     if (!after.ok) return out(r, { changed: true });
-    if (after.paths.length && !before.paths.length) return out({ ...r, ok: true, err: "" }, { conflicts: after.paths, staged: false, changed: true });
+    if (after.paths.length && !before.paths.length) {
+      const msg = { key: "restore.appliedConflicts", args: { n: after.paths.length, list: after.paths.join("\n") } };
+      return out({ ...r, ok: true, err: "", msg }, { conflicts: after.paths, staged: false, changed: true });
+    }
   }
   return out({ ...first, ok: false });
 }

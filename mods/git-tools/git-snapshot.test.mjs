@@ -791,6 +791,7 @@ const resetAway = async (name, local) => {
   assert.equal(r.ok, true, r.err);
   assert.deepEqual(r.conflicts, []);
   assert.equal(r.staged, true);
+  assert.deepEqual(r.msg, { key: "restore.applied" });
   assert.equal(r.changed, true);
   assert.deepEqual(status(repo), before.status);
   assert.equal(text(repo, "f.txt"), "1\n2\n3\n4\n5\n6\n7\nEIGHT\n");
@@ -809,6 +810,7 @@ const resetAway = async (name, local) => {
   const r = await applySnapshot(git, repo, { snapshot });
   assert.equal(r.ok, true, r.err);
   assert.deepEqual(r.conflicts, ["f.txt"]);
+  assert.deepEqual(r.msg, { key: "restore.appliedConflicts", args: { n: 1, list: "f.txt" } });
   assert.equal(r.changed, true);
   assert.deepEqual(status(repo), ["M  g.txt", "UU f.txt"]);
   assert.match(text(repo, "f.txt"), /^1\n<<<<<<< [^\n]*\n2\n=======\nTWO-mine\n>>>>>>> [^\n]*\n3\n/);
@@ -822,6 +824,7 @@ const resetAway = async (name, local) => {
   const r = await applySnapshot(git, repo, { snapshot });
   assert.equal(r.ok, true, r.err);
   assert.equal(r.staged, false);
+  assert.deepEqual(r.msg, { key: "restore.appliedUnstaged" });
   assert.deepEqual(r.conflicts, []);
   assert.deepEqual(status(repo), [" M f.txt", " M g.txt"]);
   assert.equal(text(repo, "f.txt"), "1\n2\n3\nFOUR\n5\n6\n7\n8\n");

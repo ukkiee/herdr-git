@@ -29,6 +29,9 @@ const SIZE = { width: 760, height: 460 };
 const POLL = 2000;
 // Width of each side's column.
 const COLUMN = 190;
+const QUESTION_WIDTH = 460;
+// "#rrggbb" plus an alpha byte: a tint of a theme color that works in light and dark.
+const tint = (color, alpha) => (/^#[0-9a-f]{6}$/i.test(color ?? "") ? color + alpha : color);
 
 // openConflicts({ root, on, owner, lang, stash, who })
 //   Opens the Conflicts dialog on a repository.
@@ -306,30 +309,51 @@ export default class ConflictsView {
         .child(line.key ? this.t(line.key, line.args) : line.text)));
   }
 
-  renderConfirm(t) {
+  // The question (this.confirm) as a small card over the dialog, which stays drawn behind
+  // it; the card's buttons are the only ones that take a click.
+  renderConfirm(t, behind) {
     const { path, column } = this.confirm;
     const cancel = (_e, cx) => { this.confirm = null; cx.notify(); };
-    const body = v_flex().size_full().min_h(0).px(14).py(12).gap(8)
+    const stopPress = (_e, cx) => cx.stop_propagation();
+    const body = v_flex().w_full().px(14).py(12).gap(8)
       .child(div().w_full().child(this.t("conflicts.overwriteBody", { path, column: this.columnLabel(column) })));
-    return dialogFrame("conflicts-overwrite", this.t("conflicts.overwriteTitle"), t, {
+    const card = dialogFrame("conflicts-overwrite", this.t("conflicts.overwriteTitle"), t, {
       body,
+      width: QUESTION_WIDTH,
       onClose: cancel,
       footer: [
         button("conflicts-overwrite-cancel", this.t("dialogs.cancel"), t, { onClick: cancel }),
         button("conflicts-overwrite-ok", this.t("conflicts.discardAccept"), t, { kind: "primary", onClick: (_e, cx) => this.take(path, column, cx) }),
       ],
-    }).track_focus(this.handle).on_key_down((e, cx) => {
-      if (e.key === "escape") this.confirm = null;
-      else if (e.key === "enter") this.take(path, column, cx);
-      else return;
-      cx.stop_propagation();
-      cx.notify();
     });
+    return div().relative().size_full()
+      .child(behind)
+      .child(div().id("conflicts-question").absolute().inset_0().bg(tint(t.canvas, "99"))
+        .on_mouse_down("left", stopPress)
+        .on_mouse_down("right", stopPress)
+        .child(card))
+      .track_focus(this.handle).on_key_down((e, cx) => {
+        if (e.key === "escape") this.confirm = null;
+        else if (e.key === "enter") this.take(path, column, cx);
+        else return;
+        cx.stop_propagation();
+        cx.notify();
+      });
   }
 
   render() {
     const t = theme();
-    if (this.confirm) return this.renderConfirm(t);
+    const main = this.renderMain(t);
+    if (this.confirm) return this.renderConfirm(t, main);
+    return main.track_focus(this.handle).on_key_down((e, cx) => {
+      if (e.key === "escape") this.shut();
+      else if (e.key === "enter") this.resolveManually();
+      else return;
+      cx.stop_propagation();
+    });
+  }
+
+  renderMain(t) {
     const can = this.can(), dark = darkLook(), rows = this.rows();
     const said = this.error ?? this.writing();
     const body = v_flex().size_full().min_h(0)
@@ -356,11 +380,6 @@ export default class ConflictsView {
         button("conflicts-finish", this.t("conflicts.finish"), t, { disabled: !can.finish, onClick: () => this.shut() }),
         button("conflicts-manual", this.t("conflicts.resolveManually"), t, { kind: "primary", disabled: !can.resolveManually, onClick: () => this.resolveManually() }),
       ],
-    }).track_focus(this.handle).on_key_down((e, cx) => {
-      if (e.key === "escape") this.shut();
-      else if (e.key === "enter") this.resolveManually();
-      else return;
-      cx.stop_propagation();
     });
   }
 }

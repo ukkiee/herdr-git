@@ -626,10 +626,11 @@ export function noteBar(id, text, t, { action, onDismiss } = {}) {
 // centered in the overlay's room (the room around it is see-through and, the dialog
 // being modal, takes no click). A dialog built around a list fills the room
 // (ui-size.js dialogFills); the Merge Revisions dialog's questions ("mr-…") sit in a
-// card of their own and draw no second one.
-export function dialogFrame(id, title, t, { body, footer = [], note, onClose } = {}) {
+// card of their own and draw no second one. `width` narrows a form's card: a question
+// drawn over a larger dialog (its room is that dialog's whole overlay).
+export function dialogFrame(id, title, t, { body, footer = [], note, onClose, width } = {}) {
   const fills = dialogFills(id), inner = String(id).startsWith("mr-");
-  const frame = v_flex().id(id).w_full().min_h(0).bg(t.popover).text_color(t.foreground).text_size(13)
+  const frame = v_flex().id(id).min_h(0).when(width == null, (el) => el.w_full()).when(width != null, (el) => el.w(width).max_w_full()).bg(t.popover).text_color(t.foreground).text_size(13)
     .when(fills, (el) => el.h_full())
     .when(!inner, (el) => el.rounded(10).border_1().border_color(t.border).shadow_lg().overflow_hidden())
     .child(h_flex().h(40).flex_none().px(14).gap(8).items_center().border_b(1).border_color(t.border)

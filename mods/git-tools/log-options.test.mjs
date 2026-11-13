@@ -1,6 +1,6 @@
 // node log-options.test.mjs: the Commit list's graph options and display options (pure).
 import assert from "node:assert/strict";
-import { OPTIONS_KEY, readOptions, toggleOption, graphMenu, displayMenu, columnsMenu, readArgs } from "./log-options.js";
+import { OPTIONS_KEY, readOptions, toggleOption, graphMenu, displayMenu, columnsMenu, readArgs, DETAILS_KEY, readDetailsOptions, toggleDetailsOption, detailsMenu } from "./log-options.js";
 
 // Nothing saved yet: the reference's defaults. Sort by commit date, no graph option on;
 // compact references, author and date columns, and three of the four highlights.
@@ -81,6 +81,20 @@ import { OPTIONS_KEY, readOptions, toggleOption, graphMenu, displayMenu, columns
     "# graph.highlight", "✓ highlight.mine", "✓ highlight.merges", "✓ highlight.current", "  highlight.notPicked",
   ]);
   assert.deepEqual(columnsMenu(readOptions(undefined)).map((it) => [it.id, it.checked]), [["column.author", true], ["column.date", true], ["column.hash", false]]);
+}
+
+// Commit details' View Options: the commit's files grouped by directory unless turned off,
+// kept app-wide under their own key. A picked item flips; anything else changes nothing.
+{
+  assert.equal(DETAILS_KEY, "log.detailsOptions");
+  assert.deepEqual(readDetailsOptions(undefined), { groupByDirectory: true });
+  assert.deepEqual(readDetailsOptions({ groupByDirectory: false, extra: 1 }), { groupByDirectory: false });
+  assert.deepEqual(readDetailsOptions({ groupByDirectory: "no" }), { groupByDirectory: true });
+  assert.deepEqual(toggleDetailsOption(undefined, "groupByDirectory"), { groupByDirectory: false });
+  assert.deepEqual(toggleDetailsOption({ groupByDirectory: false }, "groupByDirectory"), { groupByDirectory: true });
+  assert.deepEqual(toggleDetailsOption({ groupByDirectory: false }, "nonsense"), { groupByDirectory: false });
+  assert.deepEqual(detailsMenu(undefined), [{ id: "groupByDirectory", key: "commit.groupByDirectory", checked: true }]);
+  assert.deepEqual(detailsMenu({ groupByDirectory: false }).map((it) => it.checked), [false]);
 }
 
 console.log("ok");

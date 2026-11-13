@@ -28,7 +28,7 @@ import { VcsWidget } from "./view-vcs-widget.js";
 import LogBranches, { TOOLS_WIDTH } from "./log-branches.js";
 import LogFilters from "./log-filters.js";
 import LogList from "./log-list.js";
-import LogDetails, { copyRevision, checkoutCommit, newBranchAt } from "./log-details.js";
+import LogDetails, { copyRevision, checkoutCommit, newBranchAt, DETAILS_EVENT } from "./log-details.js";
 import { menuItems } from "./log-menus.js";
 import { NONE, pickCommit, pickForMenu, keepPicked, pickedInOrder } from "./log-select.js";
 import { commitWithLocal, commitVersions, fileWithLocal, beforeWithLocal, editSource, repositoryVersion, getFromCommit, changesToParents } from "./view-compare-files.js";
@@ -89,6 +89,7 @@ const ACTIONS = {
   "file.showDiff": (host, m) => host.details.showDiff(m),
   "details.expandAll": (host, _m, cx) => host.details.expandAll(cx),
   "details.collapseAll": (host, _m, cx) => host.details.collapseAll(cx),
+  "details.displayOptions": (host, _m, cx) => host.details.displayOptions(cx),
   "branch.checkout": (host, b, cx) => host.branches.checkout(b, cx),
   "branch.newFrom": (host, b, cx) => host.branches.newBranch(b, cx),
   "branch.delete": (host, b, cx) => host.branches.remove(b, cx),
@@ -690,6 +691,7 @@ export default class LogView {
   event(e, cx) {
     if (this.drawsWidget()) this.widget.event(e, cx);
     if (e.type === OPTIONS_EVENT) { this.loadOptions(cx); return; }
+    if (e.type === DETAILS_EVENT) { this.details.loadOptions(cx); return; }
     if (e.type !== "changed" || (e.root && e.root !== this.repo?.root)) return;
     if (this.repo) this.poll(cx);
     else this.refresh(cx);

@@ -115,6 +115,31 @@ export function displayMenu(options) {
   ];
 }
 
+// ---- Commit details' View Options (its toolbar's eye), kept under DETAILS_KEY
+//   { groupByDirectory }   the commit's files in their folders; off, one flat list
+
+export const DETAILS_KEY = "log.detailsOptions";
+const DETAILS_DEFAULTS = { groupByDirectory: true };
+
+// readDetailsOptions(saved) → full options, each wrong or missing value its default.
+export function readDetailsOptions(saved) {
+  const s = isObject(saved) ? saved : {};
+  return Object.fromEntries(Object.keys(DETAILS_DEFAULTS).map((name) => [name, flag(s[name], DETAILS_DEFAULTS[name])]));
+}
+
+// toggleDetailsOption(options, id) → new options with item `id` flipped (unknown: none).
+export function toggleDetailsOption(options, id) {
+  const o = readDetailsOptions(options);
+  if (Object.prototype.hasOwnProperty.call(DETAILS_DEFAULTS, id)) o[id] = !o[id];
+  return o;
+}
+
+// detailsMenu(options) → the View Options popup's items.
+export function detailsMenu(options) {
+  const o = readDetailsOptions(options);
+  return [item("groupByDirectory", "commit.groupByDirectory", o.groupByDirectory)];
+}
+
 // columnsMenu(options) → the Columns list the display popup's Columns ▸ opens.
 export function columnsMenu(options) {
   const o = readOptions(options);

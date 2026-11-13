@@ -29,6 +29,11 @@ import { openDiff } from "./view-diff.js";
 import { openBranchNew } from "./view-branch-new.js";
 import { ROW, ICON, icon, uiGlyph, fileGlyph, folderGlyph, darkLook, row, toolbar, spacer, iconButton, notice, broadcast, openMenu, WindowedList, runningText, workName } from "./ui.js";
 import { formatDateTime } from "./i18n.js";
+import { DETAILS_KEY, readDetailsOptions, toggleDetailsOption, detailsMenu } from "./log-options.js";
+import { appSetting, saveAppSetting } from "./app-files.js";
+
+// What a panel broadcasts after saving Commit details' View Options.
+export const DETAILS_EVENT = "log-details-options";
 
 const INDENT = 14;
 const SHORT = 7; // as the Branch tree's HEAD row and the Diff tab's header show a hash
@@ -175,6 +180,8 @@ export default class LogDetails {
     this.collapsed = new Set(); // folder keys
     this.cursor = null; // key of the row last clicked or reached with the arrow keys
     this.rows = [];
+    this.options = readDetailsOptions(undefined); // View Options (log-options.js)
+    this.loadOptions(cx);
     this.text = null; // the words under the tree, worked out when the data arrives
     this.height = 0;
     this.list = new WindowedList("log-detail-files");
@@ -298,7 +305,7 @@ export default class LogDetails {
   }
 
   build() {
-    this.rows = buildRows(this.info?.files ?? [], { grouped: true, compact: true, collapsed: this.collapsed });
+    this.rows = buildRows(this.info?.files ?? [], { grouped: this.options.groupByDirectory, compact: true, collapsed: this.collapsed });
   }
 
   describe() {
@@ -386,6 +393,40 @@ export default class LogDetails {
 
   expandAll(cx) { this.collapsed = new Set(); this.build(); cx.notify(); }
 
+  // ---- View Options, kept app-wide (app-files.js) and read again when another panel
+  // saved them (DETAILS_EVENT)
+
+  loadOptions(cx) {
+    cx.spawn(async (cx) => {
+      this.useOptions(readDetailsOptions(await appSetting(DETAILS_KEY)), cx);
+    });
+  }
+
+  useOptions(next, cx) {
+    if (JSON.stringify(next) === JSON.stringify(this.options)) return;
+    this.options = next;
+    this.build();
+    if (this.cursor && !this.rows.some((m) => m.key === this.cursor)) this.cursor = null;
+    cx.notify();
+  }
+
+  // The toolbar's View Options: picked at once, then saved, then the other panels told.
+  displayOptions(cx) {
+    const host = this.host;
+    const rows = detailsMenu(this.options).map((it) => ({ label: host.t(it.key), value: it.id, hint: it.checked ? "✓" : "" }));
+    cx.spawn(async (cx) => {
+      const id = await openMenu(host.bus, rows, { width: 220, lang: host.lang });
+      this.handle.focus();
+      if (!id) return;
+      const next = toggleDetailsOption(this.options, id);
+      this.useOptions(next, cx);
+      const r = await saveAppSetting(DETAILS_KEY, next);
+      if (r.ok) broadcast({ type: DETAILS_EVENT });
+      else host.fail(host.t("graph.saveFailed", { err: r.err }), cx);
+      cx.notify();
+    });
+  }
+
   collapseAll(cx) {
     this.collapsed = new Set(folderKeys(this.info?.files ?? [], { compact: true }));
     this.build();
@@ -462,11 +503,15 @@ export default class LogDetails {
         .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.dim).child(this.host.t("log.files", { n: m.count })));
     }
     const { status, from } = m.item;
+    // A flat list says where each file is; in the tree its folders already do.
+    const where = this.options.groupByDirectory ? "" : m.dir;
+    const name = div().truncate().text_color(statusColor(status, t)).when(status === "deleted", (el) => el.line_through()).child(m.name);
     return el.when(this.menuRow !== m.key, (el) => el.tooltip(status === "renamed" && from ? this.host.t("log.renamedFrom", { path: m.path, from }) : m.path))
       // The arrow's place is kept so a file lines up with the folders beside it.
       .child(div().size(ICON).flex_none())
       .child(fileGlyph(m.path, { dark: this.dark, size: 13 }))
-      .child(div().flex_1().min_w(0).truncate().text_color(statusColor(status, t)).when(status === "deleted", (el) => el.line_through()).child(m.name));
+      .child(where ? name.flex_none().max_w("70%") : name.flex_1().min_w(0))
+      .when(Boolean(where), (el) => el.child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.dim).child(where)));
   }
 
   // One item of the message column. Called by the lazy list from inside layout: no

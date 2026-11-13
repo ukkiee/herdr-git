@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
 import { makeGit } from "./git.js";
 import { translator } from "./i18n.js";
-import { readBranches, checkout, checkoutRevision, checkBranchName, createBranch, fetchAll, deleteBranch, restoreBranch, readDeletedBranches, restoreBranches } from "./git-branch.js";
+import { readBranches, checkout, checkoutRevision, checkBranchName, createBranch, fetchAll, deleteBranch, restoreBranch, readDeletedBranches, restoreBranches, readFavorites, setFavorite, readMyBranches } from "./git-branch.js";
 
 const tmp = realpathSync(mkdtempSync(`${tmpdir()}/git-tools-branch-`));
 // Same shape as herdr's exec: resolves with { code, stdout, stderr }, rejects when it can't start.
@@ -1068,6 +1068,98 @@ for (const [days, kept] of [[29, true], [31, false]]) {
   assert.equal(translator("en")(r.msg.key, r.msg.args), r.err);
   assert.doesNotMatch(translator("ko")(r.msg.key, r.msg.args), /Restored/);
   assert.equal(translator("ko")("branches.notAllRestoredUpstream", { n: 1, list: "x: y", untracked: "u: z" }), "브랜치 1개를 복원했습니다. 복원하지 않은 브랜치:\nx: y\n추적 브랜치는 되돌리지 못한 브랜치:\nu: z");
+}
+
+// ---- favorites and Show My Branches. From here the functions under test read no user
+// or system git config: user.email below is the repository's own.
+process.env.GIT_CONFIG_GLOBAL = "/dev/null";
+process.env.GIT_CONFIG_NOSYSTEM = "1";
+const favorites = (cwd, key) => (ask(cwd, ["config", "--local", "--get-all", key]) ?? "").split("\n").filter(Boolean);
+
+// Marked and unmarked branches live in the repository's own config, one value each.
+{
+  const dir = placed("favorites");
+  assert.deepEqual(await readFavorites(git, dir), { ok: true, code: 0, out: "", err: "", favorite: [], unfavorite: [] });
+
+  assert.equal((await setFavorite(git, dir, "refs/heads/topic", true)).ok, true);
+  assert.deepEqual(favorites(dir, "gittools.favorite"), ["refs/heads/topic"]);
+  // Marked again: still once.
+  assert.equal((await setFavorite(git, dir, "refs/heads/topic", true)).ok, true);
+  assert.deepEqual(favorites(dir, "gittools.favorite"), ["refs/heads/topic"]);
+
+  // main is one without being marked: unmarking it is kept as such; marking it again
+  // leaves nothing behind.
+  assert.equal((await setFavorite(git, dir, "refs/heads/main", false)).ok, true);
+  assert.deepEqual(favorites(dir, "gittools.unfavorite"), ["refs/heads/main"]);
+  assert.deepEqual(favorites(dir, "gittools.favorite"), ["refs/heads/topic"]);
+  const read = await readFavorites(git, dir);
+  assert.deepEqual([read.favorite, read.unfavorite], [["refs/heads/topic"], ["refs/heads/main"]]);
+  assert.equal((await setFavorite(git, dir, "refs/heads/main", true)).ok, true);
+  assert.deepEqual(favorites(dir, "gittools.unfavorite"), []);
+  assert.equal(ask(dir, ["config", "--local", "--get-regexp", "^gittools\\.unfavorite$"]), null);
+
+  // A remote branch by its own full name.
+  assert.equal((await setFavorite(git, dir, "refs/remotes/origin/main", false)).ok, true);
+  assert.deepEqual(favorites(dir, "gittools.unfavorite"), ["refs/remotes/origin/main"]);
+
+  // A name is matched as written, never as a pattern: unmarking "a.b" leaves "aab".
+  await setFavorite(git, dir, "refs/heads/aab", true);
+  await setFavorite(git, dir, "refs/heads/a.b", true);
+  assert.equal((await setFavorite(git, dir, "refs/heads/a.b", false)).ok, true);
+  assert.deepEqual(favorites(dir, "gittools.favorite"), ["refs/heads/topic", "refs/heads/aab"]);
+  // Unmarking what isn't marked is no failure.
+  assert.equal((await setFavorite(git, dir, "refs/heads/never", false)).ok, true);
+  assert.deepEqual(favorites(dir, "gittools.favorite"), ["refs/heads/topic", "refs/heads/aab"]);
+  // Branches and the working tree are not touched.
+  assert.equal(raw(dir, ["status", "--porcelain"]), "");
+  assert.equal(current(dir), "main");
+
+  // Not a repository: a failure with git's words, no throw.
+  const outside = `${tmp}/not-a-repo`;
+  mkdirSync(outside);
+  const bad = await setFavorite(git, outside, "refs/heads/x", true);
+  assert.equal(bad.ok, false);
+  assert.notEqual(bad.err, "");
+  assert.equal((await readFavorites(git, outside)).ok, false);
+}
+
+// Show My Branches: the local and remote branches holding a commit whose author email is
+// the repository's user.email (any case), and nothing else.
+{
+  const dir = placed("mine");
+  const commitBy = (email, file, text) => {
+    writeFileSync(`${dir}/${file}`, `${text}\n`);
+    raw(dir, ["add", "-A"]);
+    execFileSync("git", ["commit", "-q", "-m", text], { cwd: dir, env: { ...process.env, GIT_AUTHOR_NAME: "Me", GIT_AUTHOR_EMAIL: email, GIT_COMMITTER_NAME: "Ann Lee", GIT_COMMITTER_EMAIL: "ann@example.com" } });
+  };
+  // Without user.email nothing is anyone's.
+  assert.deepEqual(await readMyBranches(git, dir), { ok: true, code: 0, out: "", err: "", email: null, mine: [] });
+
+  raw(dir, ["config", "user.email", "me@example.com"]);
+  // main: only Ann's commit. theirs: Ann's again. near: someone whose email ends the same.
+  raw(dir, ["checkout", "-q", "-b", "theirs"]);
+  commit(dir, "t.txt", "theirs");
+  raw(dir, ["checkout", "-q", "-b", "near", "main"]);
+  commitBy("notme@example.com", "n.txt", "near");
+  // mine: my commit. later: grown from mine, so it holds it too. upper: my email in capitals.
+  raw(dir, ["checkout", "-q", "-b", "mine", "main"]);
+  commitBy("me@example.com", "m.txt", "mine");
+  raw(dir, ["checkout", "-q", "-b", "later"]);
+  commit(dir, "l.txt", "later");
+  raw(dir, ["checkout", "-q", "-b", "upper", "main"]);
+  commitBy("ME@Example.COM", "u.txt", "upper");
+  // pushed: my commit, only on the remote now.
+  raw(dir, ["checkout", "-q", "-b", "pushed", "main"]);
+  commitBy("me@example.com", "p.txt", "pushed");
+  raw(dir, ["push", "-q", "origin", "pushed"]);
+  raw(dir, ["checkout", "-q", "main"]);
+  raw(dir, ["branch", "-q", "-D", "pushed"]);
+
+  const r = await readMyBranches(git, dir);
+  assert.equal(r.ok, true, r.err);
+  assert.equal(r.email, "me@example.com");
+  assert.deepEqual([...r.mine].sort(), ["refs/heads/later", "refs/heads/mine", "refs/heads/upper", "refs/remotes/origin/pushed"]);
+  assert.equal(raw(dir, ["status", "--porcelain"]), "");
 }
 
 console.log("ok");

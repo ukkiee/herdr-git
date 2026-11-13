@@ -34,7 +34,7 @@ import { makeGit } from "./git.js";
 import { PROTECTED, readPushPlan, readPushFiles, push } from "./git-push.js";
 import { formatTime } from "./i18n.js";
 import { buildRows } from "./tree.js";
-import { openDialog, openMenu, dialogFrame, button, notice, errorStrip, row, icon, uiGlyph, ICON, fileGlyph, folderGlyph, darkLook, close, scriptedRepo, WindowedList, askOwner, serveRequest, writeBlock, sentence } from "./ui.js";
+import { tip, openDialog, openMenu, dialogFrame, button, notice, errorStrip, row,icon, uiGlyph, ICON, fileGlyph, folderGlyph, darkLook, close, scriptedRepo, WindowedList, askOwner, serveRequest, writeBlock, sentence } from "./ui.js";
 
 // openPush({ root, on, owner, lang })
 //   Opens the Push dialog for the repository's current branch. commit-form.js calls it
@@ -392,9 +392,9 @@ export default class PushView {
     let main = half("push-run").px(14).gap(6)
       .when(busy, (el) => el.child(svg(icon("spinner")).size(12).spin(900)))
       .child(this.t(this.pushing === "force" ? "dialogs.push.forcePushing" : busy ? "dialogs.push.pushing" : "dialogs.push.push"))
-      .tooltip(why ?? this.t("dialogs.push.pushTo", { branch: this.plan.branch, remote: this.plan.remote, target: this.plan.target }));
+      .map((el) => tip(el, why ?? this.t("dialogs.push.pushTo", { branch: this.plan.branch, remote: this.plan.remote, target: this.plan.target })));
     let more = half("push-more").w(24).child(uiGlyph("chevron-down"));
-    if (!this.menuOpen) more = more.tooltip(why ?? this.t("dialogs.push.more"));
+    if (!this.menuOpen) more = tip(more, why ?? this.t("dialogs.push.more"));
     if (on) {
       main = live(main, (_e, cx) => this.run(false, cx));
       // A click carries no position: the press before it does.

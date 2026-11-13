@@ -20,7 +20,7 @@ import { makeGit } from "./git.js";
 import { readOperation } from "./git-operation.js";
 import { readVersions, remoteWriter } from "./git-conflict.js";
 import { heading, columns, sortFiles, controls, pick, editedSince, editedAmong, stoppedOnConflicts } from "./conflicts-model.js";
-import { openDialog, dialogFrame, button, close, askOwner, writeBlock, scrollText, sentence, openMenu, uiGlyph, fileGlyph, darkLook, WindowedList, ROW } from "./ui.js";
+import { tip, openDialog, dialogFrame, button, close, askOwner, writeBlock, scrollText, sentence, openMenu, uiGlyph, fileGlyph, darkLook, WindowedList, ROW } from "./ui.js";
 
 // The dialog's size; the Commit panel's "Resolve" link opens it the same size.
 const SIZE = { width: 760, height: 460 };
@@ -256,7 +256,7 @@ export default class ConflictsView {
       .when(open, (el) => el.child(
         div().id(id).flex_none().px(8).h(20).flex().items_center().rounded(4).text_size(12)
           .text_color(can.accept ? t.accent : t.dim)
-          .tooltip(this.t("conflicts.acceptTitle", { path: r.path, column: this.columnLabel(column) }))
+          .map((el) => tip(el, this.t("conflicts.acceptTitle", { path: r.path, column: this.columnLabel(column) })))
           .when(can.accept, (el) => el.cursor_pointer().hover((s) => s.bg(t.hover))
             .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
             .on_click((_e, cx) => { cx.stop_propagation(); this.selected = r.path; this.accept(r.path, column, cx); cx.notify(); }))

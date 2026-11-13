@@ -16,7 +16,7 @@ import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { exec, theme } from "herdr";
 import { makeGit } from "./git.js";
 import { checkCommit, currentBranch } from "./git-reset.js";
-import { openDialog, openMenu, dialogFrame, button, close, askOwner, writeBlock, scrollText, sentence, uiGlyph } from "./ui.js";
+import { tip, openDialog, openMenu, dialogFrame, button, close, askOwner, writeBlock, scrollText, sentence, uiGlyph } from "./ui.js";
 
 const TYPES = [
   { mode: "soft", key: "reset.soft", hint: "reset.softHint" },
@@ -119,7 +119,7 @@ export default class ResetHeadView {
         .child(h_flex().id("reset-head-type").w(160).h(28).px(8).gap(6).flex_none().items_center().rounded(6).border_1()
           .border_color(this.typeOpen ? t.accent : t.input).bg(t.background)
           .text_color(this.waiting ? t.dim : t.foreground)
-          .when(!this.waiting && !this.typeOpen, (el) => el.tooltip(this.t(type.hint)))
+          .when(!this.waiting && !this.typeOpen, (el) => tip(el, this.t(type.hint)))
           .when(!this.waiting, (el) => el.cursor_pointer().hover((s) => s.bg(t.hover))
             .on_mouse_down("left", (e, cx) => { cx.stop_propagation(); this.pickType(cx, e.position); }))
           .child(div().flex_1().min_w(0).truncate().child(this.t(type.key)))

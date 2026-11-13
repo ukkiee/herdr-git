@@ -404,6 +404,8 @@ export function openMenu(bus, items, { width = 220, at, lang } = {}) {
   const key = `menu-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   const height = MENU_PAD * 2 + items.length * MENU_ROW + items.filter((it, i) => it.rule && i > 0).length * MENU_RULE;
   const answer = bus.wait(key);
+  menuShown(key, true);
+  answer.then(() => menuShown(key, false), () => menuShown(key, false));
   const spot = at && Number.isFinite(at.x) && Number.isFinite(at.y) ? { x: at.x, y: at.y } : undefined;
   openOverlay({ mod: MOD, kind: "popup", width: menuWidth(items, { min: width }), height, ...(spot ? { at: spot } : {}), props: { view: "menu", key, items, lang: openingLang(lang) } });
   return answer;
@@ -429,6 +431,26 @@ export function answerMenu(bus, key, value) {
 }
 
 export const menuMetrics = { row: MENU_ROW, pad: MENU_PAD, rule: MENU_RULE };
+
+// The menus openMenu has open, by key. Module state, so shared by every copy of this
+// source: while any is open, no screen draws a tooltip. The pointer is still resting on
+// the element that opened the menu, and its tooltip would sit over the menu's first items
+// (Herdr has no call that hides a tooltip; leaving it off the element does).
+const openMenus = new Set();
+// The count goes in a shared value too: setting it redraws every copy, so the opener
+// drops its tooltip as the menu opens and gets it back once it closes.
+const MENUS = "git-tools.menus";
+function menuShown(key, open) {
+  if (open) openMenus.add(key);
+  else openMenus.delete(key);
+  if (shared(MENUS) !== openMenus.size) setShared(MENUS, openMenus.size);
+}
+
+// tip(el, text) → el with the tooltip `text`, unless a menu is open or text is empty.
+// Screens attach every tooltip with it (ui-ids.test.mjs); the menu screens draw their own.
+export function tip(el, text) {
+  return text && !openMenus.size ? el.tooltip(text) : el;
+}
 
 // ---- small parts
 
@@ -498,7 +520,7 @@ export function iconButton(id, name, t, { title, disabled = false, active = fals
     .when(active, (el) => el.bg(t.selected))
     .when(disabled, (el) => el.opacity(0.5))
     .child(busy ? svg(icon("spinner")).size(15).spin(900) : uiGlyph(name, { dark: darkLook(t.background), disabled, size: Math.min(ICON, size - 2) }));
-  if (title) el = el.tooltip(title);
+  el = tip(el, title);
   if (disabled) return el;
   return el.cursor_pointer().hover((s) => s.bg(t.hover).text_color(t.foreground))
     .on_mouse_down("left", stop)
@@ -527,7 +549,7 @@ export function button(id, label, t, { kind = "plain", disabled = false, busy = 
     .text_color(disabled ? t.dim : primary ? t.solid_foreground : t.foreground)
     .when(busy, (el) => el.child(svg(icon("spinner")).size(12).spin(900)))
     .child(label);
-  if (title) el = el.tooltip(title);
+  el = tip(el, title);
   if (disabled || busy) return el;
   return el.cursor_pointer().hover((s) => s.opacity(0.88))
     .on_mouse_down("left", stop)
@@ -544,7 +566,7 @@ export function progressBar(id, t, { label, title, state }) {
   const width = state?.width ?? 240, piece = Math.max(40, Math.round(width * 0.3));
   return v_flex().id(id).flex_none().w_full().min_w(0).px(10).pt(6).pb(8).gap(5).border_t(1).border_color(t.border)
     .when(Boolean(label), (el) => el.child(div().id(`${id}-label`).w_full().min_w(0).truncate().text_size(12).text_color(t.foreground)
-      .when(Boolean(title), (el) => el.tooltip(title ?? "")).child(label ?? "")))
+      .map((el) => tip(el, title)).child(label ?? "")))
     .child(div().id(`${id}-track`).relative().w_full().h(4).rounded(2).bg(t.border).overflow_hidden()
       .on_size_change((size, cx) => {
         if (!state || size.width === state.width) return;

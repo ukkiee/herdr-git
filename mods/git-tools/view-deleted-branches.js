@@ -25,7 +25,7 @@ import { makeGit } from "./git.js";
 import { readDeletedBranches, restoreBranches } from "./git-branch.js";
 import { formatTime } from "./i18n.js";
 import { checkState } from "./tree.js";
-import { openDialog, dialogFrame, button, checkbox, row, notice, errorStrip, scrollText, uiGlyph, darkLook, close, scriptedRepo, sentence, WindowedList, askOwner, serveRequest, writeBlock } from "./ui.js";
+import { tip, openDialog, dialogFrame, button, checkbox, row, notice, errorStrip,scrollText, uiGlyph, darkLook, close, scriptedRepo, sentence, WindowedList, askOwner, serveRequest, writeBlock } from "./ui.js";
 
 const SHORT = 7; // a hash as the Branch tree's HEAD row shows it
 
@@ -202,7 +202,7 @@ export default class DeletedBranchesView {
       .child(div().flex_1().min_w(0).truncate().text_size(12).text_color(off ? t.ansi3 : t.muted).child(off ? why : b.subject))
       .child(div().flex_none().text_size(12).text_color(t.dim).whitespace_nowrap().child(formatTime(b.time, this.lang)));
     // The reason takes the subject's place on a row that can't be restored.
-    if (off) el = el.opacity(0.6).tooltip(b.subject || why);
+    if (off) el = tip(el.opacity(0.6), b.subject || why);
     return el;
   }
 

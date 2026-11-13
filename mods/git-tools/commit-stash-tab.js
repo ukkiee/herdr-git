@@ -20,7 +20,7 @@ import { h_flex, v_flex } from "gpui-base";
 import { listStashes, stashFiles } from "./git-stash.js";
 import { buildRows, folderKeys } from "./tree.js";
 import { formatDateTime } from "./i18n.js";
-import { uiGlyph, ICON, fileGlyph, folderGlyph, darkLook, panelFrame, toolbar, spacer, iconButton, button, row, notice, errorStrip, WindowedList, openMenu, broadcast, sentence } from "./ui.js";
+import { tip, uiGlyph, ICON, fileGlyph, folderGlyph, darkLook, panelFrame, toolbar, spacer, iconButton, button, row, notice, errorStrip, WindowedList, openMenu, broadcast, sentence } from "./ui.js";
 import { sameRepo } from "./lock.js";
 import { openDiff } from "./view-diff.js";
 import { openStash, openStashConfirm } from "./view-stash.js";
@@ -240,7 +240,7 @@ export default class StashTab {
         cx.notify();
       })
       .on_mouse_down("right", (_e, cx) => { this.choose(s.hash, cx); this.stashMenu(s, cx); cx.notify(); })
-      .tooltip(`${s.ref}  ${s.hash.slice(0, 8)}\n${s.subject}`)
+      .map((el) => tip(el, `${s.ref}  ${s.hash.slice(0, 8)}\n${s.subject}`))
       .child(div().flex_initial().min_w(0).truncate().child(s.message || s.hash.slice(0, 8)))
       .child(div().flex_none().text_size(12).text_color(t.dim).child(formatDateTime(s.time, this.host.lang)))
       .child(spacer())

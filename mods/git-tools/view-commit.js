@@ -29,7 +29,7 @@ import { readStatus } from "./git-status.js";
 import { readOperation } from "./git-operation.js";
 import { readLastCommit } from "./git-show.js";
 import { buildRows, checkState, toggleIncluded, keepIncluded, folderKeys, parentIndex } from "./tree.js";
-import { location, uiGlyph, ICON, fileGlyph, folderGlyph, darkLook, panelFrame, toolbar, spacer, iconButton, checkbox, row, notice, notRepository, errorStrip, noteBar, WindowedList, logPanelShown, toggleLogPanel, gitButtonPlaced, openMenu, openDialog, takeWrite, releaseWrite, writeBlock, writeName, readBlocked, sentence, copyId, progressBar } from "./ui.js";
+import { tip, location, uiGlyph, ICON, fileGlyph, folderGlyph, darkLook, panelFrame, toolbar, spacer, iconButton, checkbox, row, notice, notRepository, errorStrip, noteBar, WindowedList, logPanelShown, toggleLogPanel, gitButtonPlaced, openMenu, openDialog, takeWrite, releaseWrite, writeBlock, writeName, readBlocked, sentence, copyId, progressBar } from "./ui.js";
 import { sameRepo } from "./lock.js";
 import CommitForm from "./commit-form.js";
 import { openRollback, serveRollback } from "./view-rollback.js";
@@ -611,7 +611,7 @@ export default class CommitView {
       const last = this.last;
       // A commit made with an empty message has no subject: its short hash stands in.
       // A subject can be long, so it is the one cut and the file count stays whole.
-      return el.tooltip(last?.hash ?? "")
+      return tip(el, last?.hash ?? "")
         .child(div().flex_initial().min_w(0).truncate().font_semibold().child(last?.subject || (last?.hash ?? "").slice(0, 8)))
         .child(div().flex_none().text_size(12).text_color(t.dim).child(count));
     }
@@ -634,7 +634,7 @@ export default class CommitView {
       .when(status === "conflict", (el) => el.font_semibold())
       .child(r.name);
     const from = status === "renamed" ? r.item.from : null;
-    return el.when(Boolean(from), (el) => el.tooltip(this.t("log.renamedFrom", { path: r.path, from })))
+    return el.when(Boolean(from), (el) => tip(el, this.t("log.renamedFrom", { path: r.path, from })))
       .child(fileGlyph(r.path, { dark: this.dark }))
       // A name alone takes the rest of the row and is cut there; next to its folder it
       // keeps its own width up to 70% so both stay readable at the panel's 280px.

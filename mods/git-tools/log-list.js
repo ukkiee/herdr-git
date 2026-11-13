@@ -69,7 +69,7 @@ import { formatTime } from "./i18n.js";
 import { layoutGraph, collapseLinear, reachableFrom, longEdges, graphWindow, indexSegments, segmentsIn, fitLabels } from "./graph.js";
 import { readArgs } from "./log-options.js";
 import { openCommitMenu } from "./log-details.js";
-import { ROW, row, notice, strokePath, WindowedList, openMenu, uiGlyph } from "./ui.js";
+import { tip, ROW, row, notice, strokePath, WindowedList, openMenu, uiGlyph } from "./ui.js";
 import { relatives } from "./git-revision.js";
 
 const BATCH = 1000;
@@ -561,7 +561,7 @@ export default class LogList {
     // Tags without their names (Tag Names off): one tag mark, the names as its tooltip.
     if (label.names) {
       return h_flex().id(id).flex_none().h(16).px(3).items_center().rounded(4).border_1().border_color(color)
-        .tooltip(label.names.join(", ")).child(uiGlyph("tag", { size: 12 }));
+        .map((el) => tip(el, label.names.join(", "))).child(uiGlyph("tag", { size: 12 }));
     }
     return h_flex().flex_none().h(16).px(5).items_center().rounded(4).border_1().border_color(color).text_size(11).text_color(color).whitespace_nowrap()
       .when(label.current, (el) => el.font_semibold())

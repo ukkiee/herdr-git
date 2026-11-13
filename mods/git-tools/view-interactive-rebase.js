@@ -27,7 +27,7 @@
 import { div } from "gpui-kit";
 import { h_flex, v_flex, TextareaState } from "gpui-base";
 import { theme, exec, notify } from "herdr";
-import { openDialog, dialogFrame, button, close, askOwner, writeBlock, scrollText, sentence, textBox, row, spacer, notice, WindowedList, fileGlyph, darkLook, strokePath, openMenu, ROW } from "./ui.js";
+import { tip, openDialog, dialogFrame, button, close, askOwner, writeBlock, scrollText, sentence, textBox, row, spacer, notice, WindowedList, fileGlyph, darkLook, strokePath, openMenu, ROW } from "./ui.js";
 import { makeGit } from "./git.js";
 import { readCommit } from "./git-show.js";
 import { readEditFacts, readRebaseCommits, interactiveRebase } from "./git-rewrite.js";
@@ -353,7 +353,7 @@ export default class InteractiveRebaseView {
   tool(id, label, t, { off, title, onClick }) {
     let el = h_flex().id(id).h(24).px(8).flex_none().items_center().rounded(4).text_size(12.5)
       .text_color(off ? t.dim : t.foreground);
-    if (title) el = el.tooltip(title);
+    el = tip(el, title);
     if (off) return el.child(label);
     return el.cursor_pointer().hover((s) => s.bg(t.hover))
       .on_click((e, cx) => { cx.stop_propagation(); onClick(e, cx); })
@@ -439,7 +439,7 @@ export default class InteractiveRebaseView {
     const name = cut < 0 ? f.path : f.path.slice(cut + 1), dir = cut < 0 ? "" : f.path.slice(0, cut);
     const colorOf = { modified: t.ansi4, renamed: t.ansi4, added: t.ansi2, deleted: t.muted }[f.status] ?? t.foreground;
     return row(`ir-file-${i}`, t, { selected: i === this.fileAt })
-      .tooltip(f.path)
+      .map((el) => tip(el, f.path))
       .on_click((e, cx) => {
         this.fileAt = i;
         if (e.click_count === 2 && this.root) openDiff({ root: this.root, on: this.on, path: f.path, commit: this.cursor, oldPath: f.from ?? null });

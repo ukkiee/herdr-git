@@ -36,7 +36,7 @@ import { shortenMiddle } from "./git-log.js";
 import { buildRows, folderKeys, parentIndex } from "./tree.js";
 import { openBranchNew, openBranchDelete } from "./view-branch-new.js";
 import { openDeletedBranches } from "./view-deleted-branches.js";
-import { uiGlyph, darkLook, ICON, row, iconButton, notice, broadcast, openMenu, sentence, WindowedList } from "./ui.js";
+import { tip, uiGlyph, darkLook, ICON, row, iconButton, notice, broadcast, openMenu, sentence, WindowedList } from "./ui.js";
 
 const GROUPS = [["local", "log.local"], ["remote", "log.remote"]];
 const INDENT = 12;
@@ -577,7 +577,7 @@ export default class LogBranches {
     }
     const dark = darkLook(t.background);
     if (m.kind === "tag") {
-      if (this.menuRow !== m.key) el = el.tooltip(m.branch.name);
+      if (this.menuRow !== m.key) el = tip(el, m.branch.name);
       return el.child(uiGlyph("tag", { dark })).child(div().flex_1().min_w(0).truncate().child(m.label));
     }
     const b = m.branch, here = m.scope === "local" && b.current;
@@ -597,7 +597,7 @@ export default class LogBranches {
       if (was !== this.hovered) cx.notify();
     });
     // No tooltip while this row's menu is open.
-    if (this.menuRow !== m.key) el = el.tooltip(m.scope === "local" && b.upstream ? `${b.name} → ${b.upstream}` : b.name);
+    if (this.menuRow !== m.key) el = tip(el, m.scope === "local" && b.upstream ? `${b.name} → ${b.upstream}` : b.name);
     return el
       .child(star)
       .child(div().flex_1().min_w(0).truncate().when(here, (el) => el.font_semibold()).child(m.label))

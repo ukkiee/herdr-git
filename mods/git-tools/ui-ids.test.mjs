@@ -34,4 +34,23 @@ export function closeIdClashes(text) {
   assert.deepEqual(clashes, []);
 }
 
+// A tooltip stays up over the menu its element opened (the pointer is still on the
+// element), so screens attach tooltips with ui.js tip(el, text), which leaves them off
+// while a menu is open. The menu screens draw their own items' tooltips.
+export function bareTooltips(text) {
+  return text.split("\n").filter((line) => !/^\s*\/\//.test(line) && /\.tooltip\(/.test(line)).length;
+}
+{
+  assert.equal(bareTooltips(`el.tooltip("x")`), 1);
+  assert.equal(bareTooltips(`tip(el, "x")\n// .tooltip( in a comment`), 0);
+  const MENUS = new Set(["ui.js", "view-menu.js", "view-vcs-popup.js"]);
+  const bare = [];
+  for (const name of readdirSync(here)) {
+    if (!name.endsWith(".js") || MENUS.has(name)) continue;
+    const n = bareTooltips(readFileSync(join(here, name), "utf8"));
+    if (n) bare.push(`${name}: ${n}`);
+  }
+  assert.deepEqual(bare, []);
+}
+
 console.log("ok");

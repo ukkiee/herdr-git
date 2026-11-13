@@ -17,7 +17,7 @@ import { exec, theme } from "herdr";
 import { makeGit } from "./git.js";
 import { readPullTargets, pullDefault, togglePullOption, PULL_OPTIONS } from "./git-remote.js";
 import { appSetting, saveAppSetting } from "./app-files.js";
-import { openDialog, dialogFrame, button, close, askOwner, writeBlock, scrollText, sentence, openMenu, uiGlyph, darkLook, notice } from "./ui.js";
+import { tip, openDialog, dialogFrame, button, close, askOwner, writeBlock, scrollText, sentence, openMenu, uiGlyph, darkLook, notice } from "./ui.js";
 
 // App setting: { "<machine>\t<root>\t<branch>": "<remote>/<branch>" }.
 const MEMORY_KEY = "pull.branches";
@@ -144,7 +144,7 @@ export default class PullView {
           .child(div().flex_1().min_w(0).child(this.picker("pull-branch", pick.branch, t, (cx) => this.chooseBranch(cx)))))
         .when(this.options.length > 0, (el) => el.child(h_flex().w_full().gap(6).flex_wrap().children(this.options.map((o) =>
           h_flex().id(`pull-option-${o.slice(2)}`).h(22).px(8).items_center().rounded(4).bg(t.raised).text_size(12).cursor_pointer()
-            .tooltip(OPTION_WORDS[o](this.t))
+            .map((el) => tip(el, OPTION_WORDS[o](this.t)))
             .on_click((_e, cx) => { if (!this.waiting) { this.options = togglePullOption(this.options, o); cx.notify(); } })
             .child(`${o} ×`)))));
     }

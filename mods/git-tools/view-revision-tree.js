@@ -9,7 +9,7 @@
 import { div } from "gpui-kit";
 import { v_flex, Editor, EditorState } from "gpui-base";
 import { exec, theme, settings } from "herdr";
-import { ICON, uiGlyph, fileGlyph, folderGlyph, darkLook, row, toolbar, notice, errorStrip, WindowedList, panelFrame } from "./ui.js";
+import { tip, ICON, uiGlyph, fileGlyph, folderGlyph, darkLook, row, toolbar, notice, errorStrip, WindowedList, panelFrame } from "./ui.js";
 import { makeGit } from "./git.js";
 import { buildRows } from "./tree.js";
 import { openSpaceTab } from "./space-tabs.js";
@@ -144,7 +144,7 @@ export default class RevisionTree {
         .child(folderGlyph(m.name, { open: m.open, size: 13 }))
         .child(div().flex_1().min_w(0).truncate().child(m.name));
     }
-    return el.tooltip(m.path).child(div().size(ICON).flex_none()).child(fileGlyph(m.path, { dark, size: 13 }))
+    return tip(el, m.path).child(div().size(ICON).flex_none()).child(fileGlyph(m.path, { dark, size: 13 }))
       .child(div().flex_1().min_w(0).truncate().child(m.name));
   }
 
@@ -169,7 +169,7 @@ export default class RevisionTree {
       .child(toolbar(t).px(10).gap(8)
         // The mod has no left arrow icon: the arrow is a glyph, as the Files panel draws it.
         .when(Boolean(file), (el) => el.child(div().id("revision-back").size(24).flex_none().flex().items_center().justify_center().rounded(5)
-          .text_color(t.muted).cursor_pointer().hover((s) => s.bg(t.hover).text_color(t.foreground)).tooltip(this.t("revision.back"))
+          .text_color(t.muted).cursor_pointer().hover((s) => s.bg(t.hover).text_color(t.foreground)).map((el) => tip(el, this.t("revision.back")))
           .on_click((_e, cx) => { this.show(null, cx); cx.notify(); })
           .child("←")))
         .child(div().flex_none().font_semibold().child(this.t("revision.repositoryTab", { folder: this.folder, rev: short(this.rev) })))

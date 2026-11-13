@@ -27,7 +27,7 @@ import { buildRows, folderKeys, parentIndex } from "./tree.js";
 import { combineChanges } from "./log-select.js";
 import { openDiff } from "./view-diff.js";
 import { openBranchNew } from "./view-branch-new.js";
-import { ROW, ICON, icon, uiGlyph, fileGlyph, folderGlyph, darkLook, row, toolbar, spacer, iconButton, notice, broadcast, openMenu, WindowedList, runningText, workName } from "./ui.js";
+import { tip, ROW, ICON, icon, uiGlyph, fileGlyph, folderGlyph, darkLook, row, toolbar, spacer, iconButton, notice, broadcast, openMenu, WindowedList, runningText, workName } from "./ui.js";
 import { formatDateTime } from "./i18n.js";
 import { DETAILS_KEY, readDetailsOptions, toggleDetailsOption, detailsMenu } from "./log-options.js";
 import { appSetting, saveAppSetting } from "./app-files.js";
@@ -506,7 +506,7 @@ export default class LogDetails {
     // A flat list says where each file is; in the tree its folders already do.
     const where = this.options.groupByDirectory ? "" : m.dir;
     const name = div().truncate().text_color(statusColor(status, t)).when(status === "deleted", (el) => el.line_through()).child(m.name);
-    return el.when(this.menuRow !== m.key, (el) => el.tooltip(status === "renamed" && from ? this.host.t("log.renamedFrom", { path: m.path, from }) : m.path))
+    return el.when(this.menuRow !== m.key, (el) => tip(el,status === "renamed" && from ? this.host.t("log.renamedFrom", { path: m.path, from }) : m.path))
       // The arrow's place is kept so a file lines up with the folders beside it.
       .child(div().size(ICON).flex_none())
       .child(fileGlyph(m.path, { dark: this.dark, size: 13 }))

@@ -26,7 +26,7 @@ import { h_flex, v_flex, InputState, Input, Popover } from "gpui-base";
 import { theme, props } from "herdr";
 import { resolveCommit } from "./git-log.js";
 import { filterArgs, isHash, isDate, readMe, userOf, readBranchNames, readAuthors, matchAuthors, DATE_PRESETS, datePreset, dateText } from "./git-log-filter.js";
-import { uiGlyph, darkLook, ICON, iconButton, sentence, WindowedList } from "./ui.js";
+import { tip as tipOn, uiGlyph, darkLook, ICON, iconButton, sentence, WindowedList } from "./ui.js";
 
 const EMPTY = { text: "", regex: false, matchCase: false, users: [], since: "", until: "", dateLabel: "", path: "" };
 const POPUP_W = 260, ITEM = 26, BRANCH_ROWS = 10, USER_ROWS = 10;
@@ -626,7 +626,7 @@ export default class LogFilters {
       .cursor_pointer().text_color(set ? t.foreground : t.muted)
       .when(open || set, (el) => el.bg(t.selected))
       // A long value is cut short in the button: the tooltip has all of it.
-      .when(set && !open, (el) => el.tooltip(`${label}: ${tip}`))
+      .when(set && !open, (el) => tipOn(el, `${label}: ${tip}`))
       .hover((s) => s.bg(t.hover).text_color(t.foreground))
       .when(set && !narrow, (el) => el.child(div().flex_none().text_color(t.muted).child(`${label}:`)))
       .child(div().max_w(narrow ? 84 : 150).truncate().child(set ? value : label))

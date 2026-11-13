@@ -25,7 +25,7 @@ import { columns, editedSince } from "./conflicts-model.js";
 import { writerOn, readerOn } from "./view-conflicts.js";
 import { decide, applyNonConflicting, resolveSimple, resultText, edit } from "./merge-chunks.js";
 import { paneTitles, openFile, layoutRows, chunkButtons, toolbar, countWords, seekConflict, nextFile, leftToDecide, saveQuestion, stageSave } from "./merge-revisions-model.js";
-import { dialogFrame, button, iconButton, close, askOwner, writeBlock, scrollText, sentence, notice, WindowedList } from "./ui.js";
+import { tip, dialogFrame, button, iconButton, close, askOwner, writeBlock, scrollText, sentence, notice, WindowedList } from "./ui.js";
 
 // Where a local space's result is staged for the panel: the app's own git-tools folder
 // (app-files.js).
@@ -291,7 +291,7 @@ export default class MergeRevisionsView {
     const ignoreTitle = left ? "conflicts.mrIgnoreLeftSide" : "conflicts.mrIgnoreRightSide";
     const ok = this.free();
     const glyph = (id, text, title, onClick) => div().id(id).w(18).h(16).flex().items_center().justify_center().rounded(3)
-      .text_size(12).text_color(ok ? t.muted : t.dim).tooltip(this.t(title))
+      .text_size(12).text_color(ok ? t.muted : t.dim).map((el) => tip(el, this.t(title)))
       .when(ok, (el) => el.cursor_pointer().hover((s) => s.bg(t.hover).text_color(t.foreground))
         .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
         .on_click((_e, cx) => { cx.stop_propagation(); onClick(); cx.notify(); }))
@@ -326,7 +326,7 @@ export default class MergeRevisionsView {
     const bar = toolbar(this.file.state);
     const on = this.free() && !this.editor;
     const glyphButton = (id, text, title, enabled, onClick) => div().id(id).h(24).px(6).flex_none().flex().items_center().justify_center().rounded(5)
-      .text_color(enabled ? t.muted : t.dim).tooltip(title)
+      .text_color(enabled ? t.muted : t.dim).map((el) => tip(el, title))
       .when(enabled, (el) => el.cursor_pointer().hover((s) => s.bg(t.hover).text_color(t.foreground))
         .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
         .on_click((_e, cx) => { cx.stop_propagation(); onClick(); cx.notify(); }))

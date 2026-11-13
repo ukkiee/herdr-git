@@ -10,7 +10,7 @@
 import { div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { exec, theme } from "herdr";
-import { ICON, fileGlyph, folderGlyph, darkLook, row, toolbar, spacer, iconButton, notice, errorStrip, WindowedList, panelFrame } from "./ui.js";
+import { tip, ICON, fileGlyph, folderGlyph, darkLook, row, toolbar, spacer, iconButton, notice, errorStrip, WindowedList, panelFrame } from "./ui.js";
 import { makeGit } from "./git.js";
 import { readCommit } from "./git-show.js";
 import { readUpdate } from "./git-remote.js";
@@ -99,7 +99,7 @@ export default class UpdateInfoTab {
     const c = this.commits[i];
     return row(`update-info-${i}`, t, { selected: this.picked === c.hash, height: ROW_H }).px(10).gap(8)
       .on_click((_e, cx) => this.pick(c.hash, cx))
-      .tooltip(c.subject)
+      .map((el) => tip(el, c.subject))
       .child(div().flex_none().text_size(12).text_color(t.dim).child(short(c.hash)))
       .child(div().flex_1().min_w(0).truncate().child(c.subject))
       .child(div().flex_none().max_w(140).truncate().text_size(12).text_color(t.dim).child(c.author))
@@ -112,7 +112,7 @@ export default class UpdateInfoTab {
       .on_click((e, cx) => { this.cursor = m.key; if (e.click_count === 2) this.openFile(m); cx.notify(); });
     if (m.folder) return el.child(div().size(ICON).flex_none()).child(folderGlyph(m.name, { open: true, size: 13 })).child(div().flex_1().min_w(0).truncate().child(m.name));
     const color = { modified: t.ansi4, renamed: t.ansi4, added: t.ansi2, deleted: t.muted }[m.item.status] ?? t.foreground;
-    return el.tooltip(m.path).child(div().size(ICON).flex_none()).child(fileGlyph(m.path, { dark, size: 13 }))
+    return tip(el, m.path).child(div().size(ICON).flex_none()).child(fileGlyph(m.path, { dark, size: 13 }))
       .child(div().flex_1().min_w(0).truncate().text_color(color).child(m.name));
   }
 

@@ -47,7 +47,7 @@ import { theme, props, notify } from "herdr";
 import { commit, lastMessage, headIsPushed } from "./git-commit.js";
 import { abortOperation, skipOperation, operationName } from "./git-operation.js";
 import { openPush } from "./view-push.js";
-import { broadcast, button, checkbox, errorStrip, textBox, writingOn, fromRepo, sentence } from "./ui.js";
+import { tip, broadcast, button, checkbox, errorStrip, textBox, writingOn, fromRepo, sentence } from "./ui.js";
 import { askAbort } from "./view-vcs-popup.js";
 import { openConflictsIfStopped } from "./view-conflicts.js";
 import { sameRepo } from "./lock.js";
@@ -273,7 +273,7 @@ export default class CommitForm {
     const host = this.host, writing = host.writeBlock();
     const words = host.t(target.squash ? "rewrite.squashTarget" : "rewrite.fixupTarget", { hash: target.commit.slice(0, SHORT), subject: target.subject });
     return h_flex().id("commit-target").w_full().min_w(0).gap(6).items_center()
-      .child(div().id("commit-target-name").flex_1().min_w(0).truncate().font_semibold().tooltip(target.commit).child(words))
+      .child(div().id("commit-target-name").flex_1().min_w(0).truncate().font_semibold().map((el) => tip(el, target.commit)).child(words))
       .child(button("commit-target-cancel", host.t("dialogs.cancel"), t, {
         disabled: Boolean(this.running), title: writing ?? undefined,
         onClick: (_e, cx) => { if (!this.running) this.dropTarget(); cx.notify(); },
@@ -447,7 +447,7 @@ export default class CommitForm {
       .child(v_flex().w_full().min_w(0).gap(6).p(8)
         .child(h_flex().w_full().min_w(0).items_center()
           .child(canAmend ? amendRow.cursor_pointer().on_click((_e, cx) => this.toggleAmend(cx))
-            : whyNoAmend ? amendRow.tooltip(whyNoAmend) : amendRow))
+            : whyNoAmend ? tip(amendRow, whyNoAmend) : amendRow))
         // Under the checkbox, not beside it: at the panel's 280px the sentence needs the
         // whole width to be read.
         .when(this.amending() && this.pushed, (el) => el.child(

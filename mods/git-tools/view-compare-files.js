@@ -22,7 +22,7 @@
 import { div } from "gpui-kit";
 import { h_flex, v_flex, Editor, EditorState } from "gpui-base";
 import { exec, theme, settings, readTextFile } from "herdr";
-import { ROW, ICON, uiGlyph, fileGlyph, folderGlyph, darkLook, row, toolbar, spacer, iconButton, notice, errorStrip, openMenu, openTab, broadcast, takeWrite, releaseWrite, writeBlock, copyId, sentence, WindowedList, panelFrame } from "./ui.js";
+import { tip, ROW, ICON, uiGlyph, fileGlyph, folderGlyph, darkLook, row, toolbar,spacer, iconButton, notice, errorStrip, openMenu, openTab, broadcast, takeWrite, releaseWrite, writeBlock, copyId, sentence, WindowedList, panelFrame } from "./ui.js";
 import { makeGit } from "./git.js";
 import { buildRows } from "./tree.js";
 import DiffView, { openDiff } from "./view-diff.js";
@@ -300,9 +300,9 @@ export default class CompareFiles {
     }
     const { shown, status } = m.item;
     const color = shown ? stateColor(shown, t) : statusColor(status, t);
-    const tip = shown === "only-ref" ? this.t("compare.onlyRef", { ref: this.swapped ? this.current : this.refName })
+    const said = shown === "only-ref" ? this.t("compare.onlyRef", { ref: this.swapped ? this.current : this.refName })
       : shown === "only-local" ? this.t("compare.onlyLocal") : m.path;
-    return el.tooltip(tip)
+    return tip(el, said)
       .child(div().size(ICON).flex_none())
       .child(fileGlyph(m.path, { dark, size: 13 }))
       .child(div().flex_none().max_w("60%").truncate().text_color(color).when(status === "deleted", (el) => el.line_through()).child(m.name))

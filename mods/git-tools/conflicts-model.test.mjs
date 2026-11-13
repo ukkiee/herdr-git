@@ -5,10 +5,11 @@ import { execFile, execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
-import { heading, columns, sortFiles, controls, pick, editedSince } from "./conflicts-model.js";
+import { heading, columns, sortFiles, controls, pick, editedSince, stoppedOnConflicts } from "./conflicts-model.js";
 import { translator } from "./i18n.js";
 import { makeGit } from "./git.js";
 import { readVersions } from "./git-conflict.js";
+import { continueOperation } from "./git-operation.js";
 
 const en = translator("en"), ko = translator("ko");
 // A line of the heading as the dialog writes it: a message, or text shown as it is.
@@ -229,6 +230,32 @@ const picked = { hash: "0acda529c3f0e1d2b3a4958677a8b9c0d1e2f3a4", subject: "fea
   // A binary file can't be compared as text: never asked about.
   put(repo, "bin", "x\0mine");
   assert.equal(await edited(repo, "bin"), false, "binary");
+
+  // The dialog opens by itself when a request stopped on conflicts, not when it stopped
+  // without any (a rebase's edit stop), ended, or failed. A rebase of two commits that
+  // both conflict: Continue after the first stops on the second.
+  {
+    const r2 = `${base}/rebase-two`;
+    mkdirSync(r2, { recursive: true });
+    sh(r2, "git init -q -b main && git config user.email t@t && git config user.name t");
+    put(r2, "a", "0\n"); put(r2, "b", "0\n");
+    sh(r2, "git add -A && git commit -qm base && git checkout -qb feature");
+    put(r2, "a", "f\n"); sh(r2, "git commit -qam fa");
+    put(r2, "b", "f\n"); sh(r2, "git commit -qam fb");
+    sh(r2, "git checkout -q main");
+    put(r2, "a", "m\n"); put(r2, "b", "m\n"); sh(r2, "git commit -qam m && git checkout -q feature && git rebase main");
+    put(r2, "a", "resolved\n"); sh(r2, "git add a");
+    const r = await continueOperation(git, r2);
+    assert.equal(r.outcome, "stopped", r.err);
+    assert.equal(stoppedOnConflicts(r), true);
+    put(r2, "b", "resolved\n"); sh(r2, "git add b");
+    const end = await continueOperation(git, r2);
+    assert.equal(end.outcome, "done", end.err);
+    assert.equal(stoppedOnConflicts(end), false);
+  }
+  assert.equal(stoppedOnConflicts({ ok: true, outcome: "stopped", operation: { kind: "rebase", conflicts: [] } }), false);
+  assert.equal(stoppedOnConflicts({ ok: false, outcome: "failed", operation: null }), false);
+  assert.equal(stoppedOnConflicts(null), false);
 }
 
 console.log("ok");

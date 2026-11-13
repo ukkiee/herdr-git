@@ -149,6 +149,13 @@ export function editedSince(v) {
   return !(sameText(sides.ours, mergedTo(state, "ours")) && sameText(sides.theirs, mergedTo(state, "theirs")));
 }
 
+// stoppedOnConflicts(result) → true when a request (git-operation.js runOperation, or one
+// that starts an operation) stopped with files in conflict: the screen that ran it opens
+// the Conflicts dialog. A stop without conflicts (a rebase's edit) doesn't open it.
+export function stoppedOnConflicts(result) {
+  return result?.outcome === "stopped" && (result.operation?.conflicts?.length ?? 0) > 0;
+}
+
 // pick(files, selected) → the path to select: `selected` while it is shown, else the first
 // unresolved file, else the first resolved one, else null.
 export function pick(files, selected) {

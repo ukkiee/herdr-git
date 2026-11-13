@@ -20,7 +20,7 @@ const A = "a".repeat(40), B = "b".repeat(40), C = "c".repeat(40), D = "d".repeat
   assert.deepEqual(r.lines, [
     `pick ${A}`,
     `pick ${B}`,
-    `exec git commit --amend --allow-empty -q -m "$${MESSAGE_VAR}0"`,
+    `exec git commit --amend --allow-empty -q --cleanup=whitespace -m "$${MESSAGE_VAR}0"`,
     `edit ${C}`,
     `drop ${D}`,
   ]);
@@ -55,7 +55,7 @@ const A = "a".repeat(40), B = "b".repeat(40), C = "c".repeat(40), D = "d".repeat
   assert.equal(r.ok, true, r.err);
   assert.deepEqual(r.lines, [
     `pick ${A}`, `fixup ${B}`, `fixup ${C}`,
-    `exec git commit --amend --allow-empty -q -m "$${MESSAGE_VAR}0"`,
+    `exec git commit --amend --allow-empty -q --cleanup=whitespace -m "$${MESSAGE_VAR}0"`,
     `pick ${D}`,
   ]);
   assert.deepEqual(r.env, { [`${MESSAGE_VAR}0`]: "both" });
@@ -65,7 +65,7 @@ const A = "a".repeat(40), B = "b".repeat(40), C = "c".repeat(40), D = "d".repeat
 // A reworded head of a group: its message is the group's, set after the group.
 {
   const r = todoList([{ hash: A, action: "reword", message: "m" }, { hash: B, action: "fixup" }]);
-  assert.deepEqual(r.lines, [`pick ${A}`, `fixup ${B}`, `exec git commit --amend --allow-empty -q -m "$${MESSAGE_VAR}0"`]);
+  assert.deepEqual(r.lines, [`pick ${A}`, `fixup ${B}`, `exec git commit --amend --allow-empty -q --cleanup=whitespace -m "$${MESSAGE_VAR}0"`]);
 }
 
 // Two messages: one variable each, numbered in order.

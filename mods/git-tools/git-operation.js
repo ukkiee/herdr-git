@@ -449,7 +449,7 @@ async function continueRun(git, root, { message = "", files = [] }, before) {
   // A sequence stopped between commits has nothing of its own to commit.
   if (before.kind === "merge" || before.current) {
     if (!text.trim()) return refuse("Specify a commit message.", { key: "commit.noMessage" });
-    r = await git(root, ["commit", "-m", text], { timeout: TIMEOUT, env: NO_EDITOR });
+    r = await git(root, ["commit", "--cleanup=whitespace", "-m", text], { timeout: TIMEOUT, env: NO_EDITOR });
     if (!r.ok) {
       // The resolution left nothing to commit: the commit is already in. It is skipped,
       // as an empty cherry-pick is, and the sequence (if any) goes on.

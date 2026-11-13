@@ -57,7 +57,9 @@ export async function commit(git, root, { files = [], message = "", amend = fals
     if (!added.ok) return added;
   }
   // With --amend, --only needs no paths: the message changes and staged files stay out.
-  const args = [LITERAL, "commit", ...(amend ? ["--amend"] : []), "--only", "-m", message, "--", ...paths];
+  // --cleanup=whitespace: a line starting with "#" is the person's (an issue number), also
+  // where commit.cleanup=strip is set.
+  const args = [LITERAL, "commit", ...(amend ? ["--amend"] : []), "--only", "--cleanup=whitespace", "-m", message, "--", ...paths];
   const r = await git(root, args, { timeout: COMMIT_TIMEOUT });
   // A refused commit (a hook, a merge in progress) leaves git's own index alone, so the
   // only trace is the registration above: take it back and the files are untracked again.

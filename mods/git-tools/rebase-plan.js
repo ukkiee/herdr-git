@@ -40,6 +40,9 @@ function pathLine(path) {
 const restore = (list, root, where, source = root ? "\"$(git hash-object -t tree /dev/null)\"" : "HEAD~1") =>
   `printf '%s\\n' "$${list}" | GIT_LITERAL_PATHSPECS=1 git restore -q --source=${source} ${where} --pathspec-from-file=-`;
 const AMEND_SAME = "git commit --amend --no-edit --allow-empty -q";
+// Followed by the message: a line starting with "#" is the person's (an issue number), also
+// where commit.cleanup=strip is set.
+const AMEND_MESSAGE = "git commit --amend --allow-empty -q --cleanup=whitespace -m";
 
 // todoList(steps, { refs }) → { ok, err?, msg?, lines, env, groups }
 //   steps: [{ hash, action, message? }] in the order to replay, oldest first; action is
@@ -73,7 +76,7 @@ export function todoList(steps, { refs = {} } = {}) {
     if (group.message != null) {
       const name = `${MESSAGE_VAR}${Object.keys(env).length}`;
       env[name] = group.message;
-      lines.push(`exec git commit --amend --allow-empty -q -m "$${name}"`);
+      lines.push(`exec ${AMEND_MESSAGE} "$${name}"`);
     }
     if (group.members.length > 1) groups.push({ head: group.head, members: group.members });
     for (const ref of group.refs) lines.push(`update-ref ${ref}`);
@@ -110,7 +113,7 @@ export function todoList(steps, { refs = {} } = {}) {
         env[name] = given;
         lines.push(`exec c=$(git rev-parse HEAD) && ${restore(list, step.root, "--staged")} && ${AMEND_SAME}`
           + ` && ${restore(list, null, "--staged", "\"$c\"")} && git commit -q --allow-empty -C "$c"`
-          + ` && git commit --amend --allow-empty -q -m "$${name}"`);
+          + ` && ${AMEND_MESSAGE} "$${name}"`);
       }
       picked = true;
       group = { head: hash, members: [hash], message: null, refs: [...own] };

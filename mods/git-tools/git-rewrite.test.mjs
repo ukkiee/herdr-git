@@ -104,6 +104,21 @@ const TRICKY = "it's \"quoted\"\n\n#12 costs $HOME `x` \\ end";
   assert.deepEqual(status(repo), ["A  staged.txt"]);
 }
 
+// A repository set to strip comment lines from messages (commit.cleanup=strip) still keeps
+// the "#" line the person typed: on the last commit, an older one, and a squash.
+{
+  const { repo, hashes } = fourCommits("reword-strip");
+  sh(repo, "git config commit.cleanup strip");
+  assert.equal((await editMessage(git, repo, { commit: hashes[3], message: TRICKY })).ok, true);
+  assert.equal(history(repo)[3].message, TRICKY);
+  const r = await editMessage(git, repo, { commit: run(repo, ["rev-parse", "HEAD~2"]).trim(), message: `${TRICKY} old` });
+  assert.equal(r.ok, true, r.err);
+  assert.equal(history(repo)[1].message, `${TRICKY} old`);
+  const s = await squashCommits(git, repo, { commits: [head(repo), run(repo, ["rev-parse", "HEAD~1"]).trim()], message: `${TRICKY} squashed` });
+  assert.equal(s.ok, true, s.err);
+  assert.equal(history(repo).at(-1).message, `${TRICKY} squashed`);
+}
+
 // An older commit: replayed with the new message; every other commit keeps its message,
 // author and files, and the files left out of the commits stay.
 {

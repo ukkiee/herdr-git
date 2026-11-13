@@ -79,6 +79,12 @@ git add -A && git commit -q -m first`);
   assert.equal(r.ok, true, r.err);
   assert.equal(message(repo), `${typed}\n`);
   assert.deepEqual(status(repo), []);
+  // A repository set to strip comment lines keeps it all the same.
+  sh(repo, "git config commit.cleanup strip");
+  writeFileSync(`${repo}/a.txt`, "3\n");
+  const again = await commit(git, repo, { files: [{ path: "a.txt", status: "modified" }], message: typed });
+  assert.equal(again.ok, true, again.err);
+  assert.equal(message(repo), `${typed}\n`);
 }
 
 // File names are names, not patterns or options: spaces, Korean, glob characters and a

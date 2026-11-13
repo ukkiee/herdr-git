@@ -256,7 +256,7 @@ export async function editMessage(git, root, { commit, message } = {}) {
   const { facts, no } = await checked(git, root, [commit], "editMessage");
   if (no) return no;
   if (commit === facts.head) {
-    const r = await git(root, ["commit", "--amend", "--only", "--allow-empty", "-q", "-m", message], { timeout: TIMEOUT, env: { GIT_EDITOR: "true" } });
+    const r = await git(root, ["commit", "--amend", "--only", "--allow-empty", "-q", "--cleanup=whitespace", "-m", message],{ timeout: TIMEOUT, env: { GIT_EDITOR: "true" } });
     return result(r, { outcome: r.ok ? "done" : "failed", operation: null, changed: r.ok });
   }
   return replay(git, root, facts, (hashes) => hashes.map((hash) => (hash === commit ? { hash, action: "reword", message } : { hash, action: "pick" })));

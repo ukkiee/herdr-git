@@ -334,6 +334,16 @@ for (const [name, cmd] of [["merge", "git merge side"], ["rebase", "git checkout
   assert.equal(said.outcome, "done", said.err);
   assert.equal(sh(again, "git log -1 --format=%B side~1"), "s1, fixed\n\n#42 and \"quotes\" $HOME\n\n");
   assert.deepEqual(subjects(again), ["s2", "s1, fixed", "m", "base"]);
+
+  // A repository set to strip comment lines keeps the "#" line too, for a cherry-pick's
+  // commit as for the rebase's.
+  const strip = init("continue-pick-strip");
+  sh(strip, "git config commit.cleanup strip");
+  start(strip, "git cherry-pick side~1");
+  resolve(strip);
+  const picked = await continueOperation(git, strip, { message: "s1 here\n\n#42" });
+  assert.equal(picked.outcome, "done", picked.err);
+  assert.equal(sh(strip, "git log -1 --format=%B"), "s1 here\n\n#42\n\n");
 }
 
 // A message changed at a stopped pick is that commit's alone: a squash later in the plan

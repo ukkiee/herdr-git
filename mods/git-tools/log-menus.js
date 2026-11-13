@@ -17,6 +17,8 @@
 // ctx, as each screen hands it:
 //   commit menu:   { count (commits selected), current (branch name), writing, edit? (the
 //                  edit facts of the commits selected, git-rewrite.js readEditFacts) }
+//   file menu:     { writing, count (commits shown), files? ({ picked, total }: the commit's
+//                  files picked), edit? (the edit facts of the commit shown) }
 //   branch menus:  { name, current, upstream, writing, deleteBlock, scope (the row's:
 //                  "local" | "remote" | "head", a detached HEAD) }
 //   toolbars:      { loaded, name, writing, deleteBlock, fixed (a Log tab on a chosen folder) }
@@ -38,6 +40,9 @@ const tracked = (ctx) => (ctx.upstream ? null : { text: "" });
 // facts of the commits picked (git-rewrite.js readEditFacts) when the menu has them; without
 // them only the number picked is checked, and the item checks the rest when picked.
 const edit = (action) => (ctx) => editCheck(action, ctx.edit ?? null, ctx.count ?? 1).why;
+// The same for Commit details' file edits, which also need how many of the commit's files
+// are picked (ctx.files).
+const fileEdit = (action) => (ctx) => editCheck(action, ctx.edit ?? null, ctx.count ?? 1, ctx.files ?? null).why;
 
 const ITEMS = {
   // ---- the commit row's menu
@@ -52,8 +57,8 @@ const ITEMS = {
   "commit.revert": { key: "log.revertCommit" },
   "commit.undo": { key: "log.undoCommit", write: true, when: edit("undo") },
   "commit.editMessage": { key: "log.editMessage", write: true, when: edit("editMessage") },
-  "commit.fixup": { key: "log.fixup" },
-  "commit.squashInto": { key: "log.squashInto" },
+  "commit.fixup": { key: "log.fixup", write: true, when: edit("fixup") },
+  "commit.squashInto": { key: "log.squashInto", write: true, when: edit("squashInto") },
   "commit.drop": { key: "log.dropCommits", args: (ctx) => ({ n: ctx.count ?? 1 }), write: true, when: edit("drop") },
   "commit.squash": { key: "log.squashCommits", shown: (ctx) => (ctx.count ?? 1) >= 2, write: true, when: edit("squash") },
   "commit.interactiveRebase": { key: "log.interactiveRebase" },
@@ -74,8 +79,8 @@ const ITEMS = {
   "file.openRepositoryVersion": { key: "log.openRepositoryVersion" },
   "file.revertSelected": { key: "log.revertSelectedChanges" },
   "file.cherryPickSelected": { key: "log.cherryPickSelectedChanges" },
-  "file.extractSelected": { key: "log.extractSelectedChanges" },
-  "file.dropSelected": { key: "log.dropSelectedChanges" },
+  "file.extractSelected": { key: "log.extractSelectedChanges", write: true, when: fileEdit("extractChanges") },
+  "file.dropSelected": { key: "log.dropSelectedChanges", write: true, when: fileEdit("dropChanges") },
   "file.createPatch": { key: "log.createPatch" },
   "file.getFromRevision": { key: "log.getFromRevision", write: true },
   "file.historyUpToHere": { key: "log.historyUpToHere" },

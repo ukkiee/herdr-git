@@ -201,6 +201,29 @@ const all = (name, ctx = {}, t = ko) => look(menuItems(name, everything, ctx), t
   assert.equal(reason("commit.squash", { count: 2 }), null);
   assert.equal(reason("commit.squash", { count: 2, edit: facts({ operation: "merge", commits: [facts().commits[0], { hash: P, parents: 1, onBranch: true, pushedProtected: false }] }) }), "병합 중에는 커밋을 편집할 수 없습니다");
   assert.equal(menuItems("commit", everything, { count: 1 }).some((x) => x.id === "commit.squash"), false);
+
+  // Fixup and Squash Into: off without local changes, and while a write runs.
+  for (const id of ["commit.fixup", "commit.squashInto"]) {
+    assert.equal(reason(id, { count: 1, edit: facts({ localChanges: true }) }), null, id);
+    assert.equal(reason(id, { count: 1, edit: facts({ localChanges: false }) }), "커밋할 항목이 없습니다", id);
+    assert.equal(reason(id, { count: 2 }), "커밋을 하나만 선택하세요", id);
+    assert.equal(reason(id, { count: 1, writing: "busy" }), "busy", id);
+  }
+
+  // Commit details' Extract and Drop Selected Changes: off when every file of the commit
+  // is picked (ctx.files), with the commit's own reasons when the menu has the facts.
+  const fileReason = (id, ctx) => {
+    const it = menuItems("file", everything, ctx).find((x) => x.id === id);
+    return it.disabled ? (it.why.text ?? ko(it.why.key, it.why.args)) : null;
+  };
+  assert.equal(fileReason("file.dropSelected", { count: 1, files: { picked: 1, total: 1 } }), "커밋의 모든 변경 사항을 삭제할 수 없습니다");
+  assert.equal(fileReason("file.extractSelected", { count: 1, files: { picked: 1, total: 1 } }), "커밋의 모든 변경 사항을 추출할 수 없습니다");
+  for (const id of ["file.extractSelected", "file.dropSelected"]) {
+    assert.equal(fileReason(id, { count: 1, files: { picked: 1, total: 3 }, edit: facts() }), null, id);
+    assert.equal(fileReason(id, { count: 1, files: { picked: 1, total: 3 }, edit: pushed }), "현재 브랜치의 커밋이 이미 보호된 브랜치 origin/main에 푸시되었습니다", id);
+    assert.equal(fileReason(id, { count: 2, files: { picked: 1, total: 3 } }), "커밋을 하나만 선택하세요", id);
+    assert.equal(fileReason(id, { count: 1, files: { picked: 1, total: 3 }, writing: "busy" }), "busy", id);
+  }
 }
 
 console.log("ok");

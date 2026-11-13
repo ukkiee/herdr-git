@@ -206,6 +206,17 @@ const commitMine = (mine, path, at, word) => { edit(mine, path, at, word); sh(mi
   push(theirs, "a.txt", 0, "their-a1");
   sh(mine, "git config pull.rebase true");
   edit(mine, "b.txt", 4, "local-b5");
+  // Where the repository stashes by itself (rebase.autoStash, merge.autoStash), git's own
+  // stash stays out: the pull is refused the same way and no stash is left.
+  for (const [config, options] of [["rebase.autoStash", ["--rebase"]], ["merge.autoStash", ["--no-rebase"]]]) {
+    const { mine: m, theirs: t } = setup();
+    push(t, "a.txt", 0, "their-a1");
+    sh(m, `git config ${config} true`);
+    edit(m, "a.txt", 4, "local-a5");
+    const r = await pull(git, m, { remote: "origin", branch: "main", options });
+    assert.equal(r.outcome, "refused", `${config}: ${r.err}`);
+    assert.deepEqual([status(m), sh(m, "git stash list")], [[" M a.txt"], ""], config);
+  }
   const merged = await pull(git, mine, { remote: "origin", branch: "main", options: ["--no-rebase"] });
   assert.equal(merged.outcome, "done", merged.err);
   assert.equal(merged.request?.rebase ?? false, false);

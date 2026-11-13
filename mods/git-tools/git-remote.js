@@ -29,6 +29,9 @@ import { resetTo } from "./git-reset.js";
 const FETCH = { timeout: 5 * 60 * 1000, env: { GIT_TERMINAL_PROMPT: "0" } };
 // The merge or rebase step may run hooks for minutes; an editor would wait forever.
 const STEP = { timeout: 10 * 60 * 1000, env: { GIT_TERMINAL_PROMPT: "0", GIT_EDITOR: "true" } };
+// On every pull, merge and rebase step: the person's merge.autoStash or rebase.autoStash
+// would stash local changes outside Smart, which puts them aside itself.
+const NO_AUTOSTASH = "--no-autostash";
 
 // The pull dialog's options, in its order. Anything else is never passed on to git.
 export const PULL_OPTIONS = ["--rebase", "--ff-only", "--no-ff", "--squash", "--no-commit", "--no-verify"];
@@ -181,7 +184,7 @@ export async function pull(git, root, { remote, branch, options = [] } = {}) {
   if (!before.ok) return failedWith(before);
   const fetched = await fetchRemote(git, root, request.remote);
   if (!fetched.ok) return failedWith(fetched, { fetchFailed: true, changed: true });
-  const run = await git(root, ["pull", ...opts, "--end-of-options", request.remote, `refs/heads/${request.branch}`], STEP);
+  const run = await git(root, ["pull", NO_AUTOSTASH, ...opts, "--end-of-options", request.remote, `refs/heads/${request.branch}`], STEP);
   return settled(git, root, before, run, request, before.head);
 }
 
@@ -231,7 +234,7 @@ export async function updateProject(git, root, { method, now = new Date() } = {}
     return { ok: true, code: 0, out: "", err: "", outcome: "empty", operation: before, updated: null, changed: true };
   }
   const how = methodOf(method);
-  const step = (g, r) => g(r, how === "rebase" ? ["rebase", t.upstream.ref] : ["merge", t.upstream.ref], STEP);
+  const step = (g, r) => g(r, how === "rebase" ? ["rebase", NO_AUTOSTASH, t.upstream.ref] : ["merge", NO_AUTOSTASH, t.upstream.ref], STEP);
   const status = await readStatus(git, root);
   const local = status.ok && status.changes.some((c) => c.status !== "conflict" && c.status !== "unversioned" && c.xy);
   if (!local) return settled(git, root, before, await step(git, root), { type: how, target: t.upstream.ref }, before.head);

@@ -333,10 +333,12 @@ function mergeCheck(args) {
 }
 
 // --end-of-options: what follows is the branch or hash, even one spelled like an option.
+// --no-autostash (here and on every rebase): the person's merge.autoStash or
+// rebase.autoStash would stash local changes outside Smart, which puts them aside itself.
 function mergeRun(git, root, args) {
   const options = optionsOf(args).filter((o) => o !== "-m");
   const message = optionsOf(args).includes("-m") ? ["-m", str(args.message)] : [];
-  return git(root, ["merge", ...options, ...message, "--end-of-options", str(args.target).trim()], { timeout: TIMEOUT, env: NO_EDITOR });
+  return git(root, ["merge", "--no-autostash", ...options, ...message, "--end-of-options", str(args.target).trim()], { timeout: TIMEOUT, env: NO_EDITOR });
 }
 
 // ---- starting a rebase
@@ -360,7 +362,7 @@ function rebaseRun(git, root, args) {
   const options = optionsOf(args);
   const onto = str(args.onto).trim(), other = str(args.branch).trim();
   const upstream = options.includes("--root") ? [] : [str(args.target).trim()];
-  return git(root, ["rebase", ...options, ...(onto ? [`--onto=${onto}`] : []), "--end-of-options", ...upstream, ...(other ? [other] : [])], { timeout: TIMEOUT, env: NO_EDITOR });
+  return git(root, ["rebase", "--no-autostash", ...options, ...(onto ? [`--onto=${onto}`] : []), "--end-of-options", ...upstream, ...(other ? [other] : [])], { timeout: TIMEOUT, env: NO_EDITOR });
 }
 
 // ---- Checkout and Rebase onto the current branch
@@ -391,7 +393,7 @@ async function checkoutRebaseRun(git, root, args, before) {
       if (!made.ok) return made;
     }
   }
-  return git(root, ["rebase", "--end-of-options", onto, local], { timeout: TIMEOUT, env: NO_EDITOR });
+  return git(root, ["rebase", "--no-autostash", "--end-of-options", onto, local],{ timeout: TIMEOUT, env: NO_EDITOR });
 }
 
 // "origin/feature/login" → "feature/login". A remote's own name may hold slashes, so the

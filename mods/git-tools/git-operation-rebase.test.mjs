@@ -163,6 +163,16 @@ git checkout -q main && echo m > m.txt && echo main > f.txt && git add -A && git
   assert.equal(head(repo), main);
   assert.deepEqual([status(repo), states(repo)], [[" M m.txt", "A  n.txt", "?? untracked.txt"], []]);
 }
+// The same where the repository stashes by itself (rebase.autoStash): git's own stash stays
+// out, so the changes are refused the same way and no stash is left behind.
+for (const run of [(repo) => rebase(repo, { target: "side" }), (repo) => checkoutRebase(repo, { name: "feature", onto: "side" })]) {
+  const repo = init(), main = head(repo);
+  sh(repo, "git config rebase.autoStash true && echo mine > m.txt");
+  const r = await run(repo);
+  assert.equal(r.outcome, "refused", r.err);
+  assert.equal(head(repo), main);
+  assert.deepEqual([status(repo), states(repo), sh(repo, "git stash list")], [[" M m.txt"], [], ""]);
+}
 
 // An editor that fails, in the repository and in the environment: nothing waits for it.
 {

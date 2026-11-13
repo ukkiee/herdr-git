@@ -178,6 +178,15 @@ git checkout -q -b ahead && echo a > a.txt && git add -A && git commit -q -m a1 
   assert.equal(head(repo), main);
   assert.deepEqual([status(repo), states(repo)], [[" M f.txt"], []]);
 }
+// The same where the repository stashes by itself (merge.autoStash): no stash is left.
+{
+  const repo = init(), main = head(repo);
+  sh(repo, "git config merge.autoStash true && echo mine > f.txt");
+  const r = await merge(repo, { target: "clash" });
+  assert.equal(r.outcome, "refused", r.err);
+  assert.equal(head(repo), main);
+  assert.deepEqual([status(repo), states(repo), sh(repo, "git stash list")], [[" M f.txt"], [], ""]);
+}
 
 // An editor that fails, set in the repository: the merge doesn't wait for it.
 {

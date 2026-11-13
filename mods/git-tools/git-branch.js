@@ -218,6 +218,19 @@ export async function setFavorite(git, root, ref, on) {
   return { ok: true, code: 0, out: "", err: "", ...after };
 }
 
+// readTags(git, root) → { ok, code, out, err, tags }: tags [{ name, hash }] by name, hash
+// the commit the tag points at (an annotated tag's own object is looked through).
+export async function readTags(git, root) {
+  const r = await git.read(root, ["for-each-ref", "--format=%(refname)%00%(objectname)%00%(*objectname)", "--sort=refname", "refs/tags/"]);
+  if (!r.ok) return { ...r, tags: [] };
+  const tags = [];
+  for (const line of r.out.split("\n")) {
+    const [ref, hash, peeled] = line.split("\0");
+    if (ref) tags.push({ name: ref.slice("refs/tags/".length), hash: peeled || hash });
+  }
+  return { ok: true, code: 0, out: "", err: "", tags };
+}
+
 // How many commits one for-each-ref is handed at a time: well under the argument limit.
 const CONTAINS_CHUNK = 1000;
 

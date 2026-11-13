@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
 import { makeGit } from "./git.js";
 import { translator } from "./i18n.js";
-import { readBranches, checkout, checkoutRevision, checkBranchName, createBranch, fetchAll, deleteBranch, restoreBranch, readDeletedBranches, restoreBranches, readFavorites, setFavorite, readMyBranches } from "./git-branch.js";
+import { readBranches, checkout, checkoutRevision, checkBranchName, createBranch, fetchAll, deleteBranch, restoreBranch, readDeletedBranches, restoreBranches, readFavorites, setFavorite, readMyBranches, readTags } from "./git-branch.js";
 
 const tmp = realpathSync(mkdtempSync(`${tmpdir()}/git-tools-branch-`));
 // Same shape as herdr's exec: resolves with { code, stdout, stderr }, rejects when it can't start.
@@ -1154,6 +1154,14 @@ const favorites = (cwd, key) => (ask(cwd, ["config", "--local", "--get-all", key
   raw(dir, ["push", "-q", "origin", "pushed"]);
   raw(dir, ["checkout", "-q", "main"]);
   raw(dir, ["branch", "-q", "-D", "pushed"]);
+
+  // The Tags group: by name, each at its commit, an annotated tag looked through.
+  const mineAt = raw(dir, ["rev-parse", "mine"]);
+  raw(dir, ["tag", "v2", "main"]);
+  raw(dir, ["tag", "-a", "-m", "one", "v1.0", "mine"]);
+  const tagged = await readTags(git, dir);
+  assert.equal(tagged.ok, true, tagged.err);
+  assert.deepEqual(tagged.tags, [{ name: "v1.0", hash: mineAt }, { name: "v2", hash: raw(dir, ["rev-parse", "main"]) }]);
 
   const r = await readMyBranches(git, dir);
   assert.equal(r.ok, true, r.err);

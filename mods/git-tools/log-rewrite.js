@@ -84,9 +84,11 @@ function runHere(host, repo, work, write, done, cx) {
 
 // Undo Commit…: no dialog; what the commit held stays as changes not committed.
 export function undoHere(host, commits, cx) {
-  prepare(host, commits, "undo", cx, (facts) => {
+  // The commit picked, not HEAD as read now: if HEAD moved, the undo refuses.
+  const [commit] = hashesOf(commits);
+  prepare(host, commits, "undo", cx, () => {
     const repo = host.repo;
-    runHere(host, repo, { key: "rewrite.undoing" }, () => undoCommit(repo.git, repo.root, { commit: facts.head }), null, cx);
+    runHere(host, repo, { key: "rewrite.undoing" }, () => undoCommit(repo.git, repo.root, { commit }), null, cx);
   });
 }
 

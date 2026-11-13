@@ -42,8 +42,8 @@ const WHO = { commit: "ui.commitPanel", log: "ui.logPanel" };
 const repoOf = (panel) => (panel.repo?.root && !panel.writeBlock() ? panel.repo : null);
 export const VCS_ACTIONS = {
   "commit": { run: () => openCommitPanel() },
-  // The Commit panel runs the push (view-push.js servePush).
-  "push": { by: ["commit"], run: (panel) => { const r = repoOf(panel); if (r) openPush({ root: r.root, on: r.on ?? null, owner: panel.bus.id, lang: panel.lang }); } },
+  // The owning panel runs the push (view-push.js servePush; both panels serve it).
+  "push": { run: (panel) => { const r = repoOf(panel); if (r) openPush({ root: r.root, on: r.on ?? null, owner: panel.bus.id, lang: panel.lang }); } },
   "fetch": { run: (panel, cx, how) => fetchFrom(panel, how.kind, cx) },
   "branches": { run: (panel, cx, how) => openBranches(panel, cx, how) },
   "newBranch": { run: (panel, cx, how) => {

@@ -132,7 +132,7 @@ const en = translator("en"), ko = translator("ko");
     const m = /by: \[([^\]]*)\]/.exec(line);
     return m ? m[1].split(",").map((s) => s.trim().replace(/"/g, "")) : null;
   };
-  assert.deepEqual(by("push"), ["commit"]);
+  assert.equal(by("push"), null);
   assert.deepEqual(by("rollback"), ["commit"]);
 }
 

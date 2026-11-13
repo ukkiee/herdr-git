@@ -1307,7 +1307,11 @@ with `dialogFrame` (10px corners, a 1px `border` line, a shadow). The size above
 most: a form dialog is as tall as what it holds, centered; the dialogs that fill with a
 list (`dialogFills` in `ui-size.js`: conflicts, deleted-branches, interactive-rebase,
 merge-revisions, restore, push, rollback, smart, create-patch, apply-patch, remotes, and
-the Merge Revisions dialog's questions) fill the height they were opened with. The
+the Merge Revisions dialog's questions) fill the height they were opened with. An overlay
+can't grow once open, so a form dialog opens 80px taller than the height above
+(`dialogRoom`, `ERROR_ROOM`): room for git's words under its rows (at most 60px,
+`ERROR_BOX`, scrolling past that), so an error never covers the rows or cuts the buttons;
+unseen until an error shows, as the card is only as tall as what it holds. The
 conflict dialogs' questions are a 460px card over the dialog on a dark veil, as tall as
 what it holds.
 
@@ -1590,7 +1594,7 @@ the git ones run against real temporary repositories):
 | `git-compare.js`, `git-revision.js`, `git-worktree.js` | comparisons, patches, Get from, Show Changes to Parents (`parentDiffs`); a revision's files, history, child commits; new worktrees and Checkout Tag or Revision |
 | `git-patch.js` | `readPatchFiles(text)` (pure: a patch's files, statuses and names as `git apply -p1` takes them), `applyPatch(git, root, { file, paths })` (checked files only, always named with `--include`, in parts when there are many; a 3-way retry; conflicts from `ls-files -u`), `READ_LIMIT`, `readMayBeCut(text)` (the 1 MiB read limit in UTF-8 bytes), `homePath(typed, home)` (a leading `~` or `~/` as that machine's home), `changesCommit(git, root, { paths, message })` (a commit of the checked local changes on HEAD, no ref) |
 | `git-console.js`, `log-menus.js`, `log-select.js`, `log-options.js`, `branch-order.js`, `vcs-ops.js`, `ui-icons.js` | console records, with a URL's credentials hidden; the Log panel's menus; picking commits; graph and view options; branch order and favorites (the widget popup's favorites first); the VCS Operations popup's items; UI icons |
-| `ui-size.js`, `focus-repo.js` | `textWidth`, `menuWidth`, `belowSpot`, `pressSpot`, `sideOf`, `dialogFills`, `widgetBlockWidth`; `whereFocused`, `newPanes`, `rememberTab`, `isTabScreen`, `registerTab`, `forgetTab` |
+| `ui-size.js`, `focus-repo.js` | `textWidth`, `menuWidth`, `belowSpot`, `pressSpot`, `sideOf`, `dialogFills`, `dialogRoom`, `widgetBlockWidth`; `whereFocused`, `newPanes`, `rememberTab`, `isTabScreen`, `registerTab`, `forgetTab` |
 
 Each of these files' header says what it exports and why.
 
@@ -2394,7 +2398,8 @@ in English.
   file (mode 0600) while a merge result is saved or a clipboard patch is applied, removed
   after. Create Patch to a file writes where the person says, on the space's machine. The
   mod reads the clipboard only for Apply Patch from Clipboard.
-  The mod reads a file directly only for the Files panel's preview, a compare Diff tab's
+  Besides its own files in the app home (`console.jsonl` and `settings.json`), the mod
+  reads a file directly only for the Files panel's preview, a compare Diff tab's
   working-tree side, the Conflicts dialog's working-tree file and Apply Patch's patch file
   (`readTextFile`, up to 1 MiB); `watchFolder` watches the repository root and its git
   folder, and the Files panel's folder.

@@ -909,7 +909,10 @@ Herdr는 mod를 QuickJS로 돌린다. JIT가 없고, 한 호출이 너무 오래
   선, 그림자를 그린다. `openDialog`의 height는 상한이다. 양식 창은 내용 높이만큼 그려 가운데에
   놓이고, 목록을 채우는 창(충돌, 삭제된 브랜치, 커밋 리베이스, Merge Revisions, Restore, Push,
   Rollback, Smart, Create Patch, Apply Patch, Git Remotes)만 연 높이를 채운다(`ui-size.js`의 `dialogFills`).
-  Herdr 테두리 안에서는 양식 아래에 빈 공간이 남기 때문이다.
+  Herdr 테두리 안에서는 양식 아래에 빈 공간이 남기 때문이다. 오버레이는 연 뒤에 자라지 않으므로,
+  양식 창은 준 높이에 git의 오류 글 자리 80px를 더해 연다(`ui-size.js`의 `dialogRoom`). 오류 글은
+  60px까지 보이고 넘치면 스크롤한다. 카드는 내용 높이라 오류가 없을 때 그 자리는 보이지 않고,
+  오류가 떠도 위의 줄이나 아래 단추를 가리지 않는다.
 - **툴팁.** Herdr에는 떠 있는 툴팁을 숨기는 호출이 없다. 메뉴를 연 요소 위에 포인터가 머물러 있으면
   그 툴팁이 메뉴의 첫 항목을 가린다. 그래서 화면은 툴팁을 `ui.js`의 `tip()`으로만 달고
   (`ui-ids.test.mjs`가 직접 다는 자리를 막는다), 메뉴가 열려 있는 동안 `tip()`은 툴팁을 달지 않는다.

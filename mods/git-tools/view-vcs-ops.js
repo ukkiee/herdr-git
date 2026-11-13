@@ -20,6 +20,9 @@ import { openPush } from "./view-push.js";
 import { openBranchNew } from "./view-branch-new.js";
 import { openResetHead } from "./view-reset-head.js";
 import { openConsole } from "./view-console.js";
+import { openStash } from "./view-stash.js";
+import { openUnstash } from "./view-unstash.js";
+import { listStashes } from "./git-stash.js";
 
 // What each item does, run in the owning panel's copy: run(panel, cx, how).
 //   panel: the Log panel (kind "log") or the Commit panel (kind "commit"): repo, bus, t,
@@ -42,12 +45,30 @@ export const VCS_ACTIONS = {
   } },
   "resetHead": { run: (panel, _cx, how) => { const r = repoOf(panel); if (r) openResetHead({ root: r.root, on: r.on ?? null, owner: panel.bus.id, who: WHO[how.kind], lang: panel.lang }); } },
   "showLog": { run: () => run("layout.show", { id: LOG_NODE }) },
+  "stash": { run: (panel, _cx, how) => { const r = repoOf(panel); if (r) openStash({ root: r.root, on: r.on ?? null, owner: panel.bus.id, lang: panel.lang, who: WHO[how.kind] }); } },
+  // The Unstash dialog is for one stash: the newest. Off while there is none.
+  "unstash": {
+    off: async (panel) => !(await newestStash(panel)),
+    run: (panel, cx) => cx.spawn(async (cx) => {
+      const r = repoOf(panel), stash = r ? await newestStash(panel) : null;
+      if (stash && r === repoOf(panel)) openUnstash({ root: r.root, on: r.on ?? null, owner: panel.bus.id, lang: panel.lang, stash: { hash: stash.hash, ref: stash.ref, message: stash.message } });
+      cx.notify();
+    }),
+  },
   // The Commit panel's Rollback with nothing selected: every changed file, checked.
   "rollback": { by: ["commit"], run: (panel) => panel.rollback(null) },
   "console": { run: (panel) => openConsole(panel.t) },
 };
 
 const handledBy = (kind) => (id) => Object.prototype.hasOwnProperty.call(VCS_ACTIONS, id) && (!VCS_ACTIONS[id].by || VCS_ACTIONS[id].by.includes(kind));
+
+// The panel's repository's newest stash ({ hash, ref, message }), or null.
+async function newestStash(panel) {
+  const r = panel.repo;
+  if (!r?.root) return null;
+  const list = await listStashes(makeGit(exec, r.on ?? null), r.root);
+  return list.ok ? list.stashes[0] ?? null : null;
+}
 
 // Fetch as the panel's own write: the Log panel's toolbar Fetch (its button spins), or in
 // the Commit panel the same write under the lock, with its failure in the panel's strip.
@@ -65,10 +86,16 @@ const WIDTH = 300, TITLE = 34, CAPTION = 24, ROW = 26, RULE = 9, PAD = 5;
 const heightOf = (items, group) => TITLE + (group ? 0 : CAPTION) + PAD * 2 + items.length * ROW + items.filter((it, i) => it.rule && i > 0).length * RULE;
 
 // ask(panel, kind, group) → Promise<{ id, alt } | null>: opens the popup over the panel's
-// copy and resolves with the pick. Await it inside cx.spawn.
-function ask(panel, kind, group) {
-  const items = vcsOpsItems(handledBy(kind), group).map((it) => ({ ...it, label: panel.t(it.key) }));
-  if (!items.length) return Promise.resolve(null);
+// copy and resolves with the pick. Items with an `off` check are asked first (a read).
+// Await it inside cx.spawn.
+async function ask(panel, kind, group) {
+  const shown = vcsOpsItems(handledBy(kind), group), off = new Set();
+  for (const it of shown) {
+    const check = VCS_ACTIONS[it.id]?.off;
+    if (check && (await check(panel))) off.add(it.id);
+  }
+  const items = vcsOpsItems(handledBy(kind), group, (id) => off.has(id)).map((it) => ({ ...it, label: panel.t(it.key) }));
+  if (!items.length) return null;
   const key = `vcs-ops-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   const answer = panel.bus.wait(key);
   openOverlay({ mod: MOD, kind: "popup", width: WIDTH, height: heightOf(items, group), props: { view: "vcs-ops", key, group: group ?? null, items, lang: panel.lang } });
@@ -95,14 +122,14 @@ export default class VcsOps {
     this.overlay = p.overlay;
     this.group = p.group ?? null;
     this.items = Array.isArray(p.items) ? p.items : [];
-    this.at = 0;
+    this.at = Math.max(0, this.items.findIndex((it) => !it.disabled));
     this.handle = cx.focus_handle();
     this.handle.focus();
   }
 
   pick(i, alt) {
     const item = this.items[i];
-    if (!item) return;
+    if (!item || item.disabled) return;
     answerMenu(this.bus, this.key, { id: item.id, alt: Boolean(alt) });
     closeOverlay(this.overlay);
   }
@@ -112,7 +139,10 @@ export default class VcsOps {
 
   move(by) {
     const n = this.items.length;
-    if (n) this.at = (((this.at + by) % n) + n) % n;
+    for (let step = 1; step <= n; step++) {
+      const i = (((this.at + by * step) % n) + n) % n;
+      if (!this.items[i].disabled) { this.at = i; return; }
+    }
   }
 
   key_down(e) {
@@ -141,12 +171,12 @@ export default class VcsOps {
         .children(this.items.map((item, i) =>
           v_flex().flex_none()
             .when(Boolean(item.rule) && i > 0, (el) => el.child(div().mx(7).my(4).h(1).bg(t.border)))
-            .child(h_flex().id(`vcs-ops-${item.id}`).h(ROW).px(8).gap(8).rounded(6).items_center().cursor_pointer()
-              .when(i === this.at, (el) => el.bg(t.selected))
-              .hover((s) => s.bg(t.hover))
-              .on_click((e, cx) => { cx.stop_propagation(); this.pick(i, e.modifiers?.alt); })
+            .child(h_flex().id(`vcs-ops-${item.id}`).h(ROW).px(8).gap(8).rounded(6).items_center()
+              .when(i === this.at && !item.disabled, (el) => el.bg(t.selected))
+              .when(!item.disabled, (el) => el.cursor_pointer().hover((s) => s.bg(t.hover))
+                .on_click((e, cx) => { cx.stop_propagation(); this.pick(i, e.modifiers?.alt); }))
               .child(div().w(12).flex_none().text_size(11.5).text_color(t.dim).child(item.number ?? ""))
-              .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(item.label))
+              .child(div().flex_1().min_w(0).truncate().text_color(item.disabled ? t.dim : t.foreground).child(item.label))
               .when(Boolean(item.sub), (el) => el.child(uiGlyph("chevron-right", { dark, size: 12 })))))));
   }
 }

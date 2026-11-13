@@ -23,13 +23,15 @@ export const VCS_OPS = [
 // The reference product numbers the first ten rows 1 … 9, 0.
 const NUMBERS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"];
 
-// vcsOpsItems(handled, group?) → [{ id, key, rule, sub, number }] in order.
-//   handled(id): whether the opening copy can do that item now.
+// vcsOpsItems(handled, group?, off?) → [{ id, key, rule, sub, number, disabled }] in order.
+//   handled(id): whether the opening copy can do that item at all.
 //   group: a group's id for that group's own list; omitted for the top list.
+//   off(id): true for an item that shows but is off now (Unstash with no stash); it
+//   keeps its number, which then picks nothing.
 //   rule: a separator goes above it (never first, never last, never two in a row).
 //   sub: a ▸ item; picking it opens its group's list.
 //   number: "1" … "0" for the first ten shown, else null.
-export function vcsOpsItems(handled, group) {
+export function vcsOpsItems(handled, group, off) {
   const list = group === undefined ? VCS_OPS : VCS_OPS.find((it) => typeof it === "object" && it.group === group)?.items ?? [];
   const out = [];
   let ruled = false;
@@ -38,14 +40,14 @@ export function vcsOpsItems(handled, group) {
     const sub = typeof it === "object";
     const id = sub ? it.group : it;
     if (sub ? !it.items.some((child) => handled(child)) : !handled(id)) continue;
-    out.push({ id, key: `vcs-ops.${id}`, rule: ruled, sub, number: NUMBERS[out.length] ?? null });
+    out.push({ id, key: `vcs-ops.${id}`, rule: ruled, sub, number: NUMBERS[out.length] ?? null, disabled: Boolean(off?.(id)) });
     ruled = false;
   }
   return out;
 }
 
 // The index of the item a typed digit picks, or -1.
-export const numberedPick = (items, char) => items.findIndex((it) => it.number !== null && it.number === char);
+export const numberedPick = (items, char) => items.findIndex((it) => it.number !== null && it.number === char && !it.disabled);
 
 // takesVcsOps(kind, { commitShown, logShown, folder }) → whether this copy opens the
 // popup. The key is a mod command, which reaches every shown copy at once, so exactly

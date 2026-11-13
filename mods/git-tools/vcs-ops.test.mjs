@@ -45,6 +45,16 @@ const en = translator("en"), ko = translator("ko");
   assert.deepEqual(vcsOpsItems(all, "nothing"), []);
 }
 
+// An item that is off now (Unstash with no stash) still shows and keeps its number, but
+// a digit doesn't pick it.
+{
+  const items = vcsOpsItems(all, "uncommitted", (id) => id === "unstash");
+  assert.deepEqual(items.map((it) => [it.id, it.disabled, it.number]), [["stash", false, "1"], ["unstash", true, "2"], ["rollback", false, "3"]]);
+  assert.equal(numberedPick(items, "2"), -1);
+  assert.equal(numberedPick(items, "3"), 2);
+  assert.ok(vcsOpsItems(all).every((it) => it.disabled === false));
+}
+
 // The names, as the reference product's English and Korean menus have them.
 {
   const label = (t, id) => t(vcsOpsItems(all).concat(vcsOpsItems(all, "uncommitted"), vcsOpsItems(all, "patch")).find((it) => it.id === id).key);

@@ -76,6 +76,20 @@ export async function addRemote(git, root, { name, url }) {
   return git(root, ["remote", "add", "--end-of-options", next, where]);
 }
 
+// defineRemote(git, root, { name, to?, url, fetch }) → addRemote's or editRemote's result
+//   (an edit when `to` is given), then, when `fetch` is true, a fetch from the remote
+//   under its new name. A fetch that fails after a done add or edit leaves the result ok
+//   with fetchFailed { code, err, msg? }: the remote is defined, and asking again would
+//   only find its name taken.
+export async function defineRemote(git, root, { name, to, url, fetch = false }) {
+  const editing = to !== undefined;
+  const r = editing ? await editRemote(git, root, { name, to, url }) : await addRemote(git, root, { name, url });
+  if (!r.ok || fetch !== true) return r;
+  const fetched = await fetchRemote(git, root, String(editing ? to : name).trim());
+  if (fetched.ok) return r;
+  return { ...r, fetchFailed: { code: fetched.code, err: fetched.err ?? "", ...(fetched.msg ? { msg: fetched.msg } : {}) } };
+}
+
 // fetchRemote(git, root, name) → { ok, code, out, err }: fetches that one remote and
 // prunes its remote branches that are gone, as the Log panel's Fetch does for all.
 export async function fetchRemote(git, root, name) {

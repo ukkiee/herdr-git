@@ -28,6 +28,7 @@ export const en = {
   "refs.remoteUrlEmpty": "The remote URL is empty.",
   "refs.notOnBranch": "This commit is not on the current branch.",
   "refs.noSuchCommit": "There is no commit {commit}.",
+  "refs.fetchFailedAfter": "The remote {name} is defined, but fetching from it failed",
   "refs.noSuchBranch": "There is no local branch named \"{name}\" with commits.",
 };
 
@@ -58,5 +59,6 @@ export const ko = {
   "refs.remoteUrlEmpty": "원격 URL이 비어 있습니다.",
   "refs.notOnBranch": "이 커밋은 현재 브랜치에 없습니다.",
   "refs.noSuchCommit": "커밋 {commit}이(가) 없습니다.",
+  "refs.fetchFailedAfter": "원격 {name}을(를) 정의했지만 가져오지 못했습니다",
   "refs.noSuchBranch": "커밋이 있는 로컬 브랜치 \"{name}\"이(가) 없습니다.",
 };

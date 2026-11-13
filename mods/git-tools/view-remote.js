@@ -12,9 +12,9 @@
 
 import { div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
-import { exec, theme } from "herdr";
+import { exec, theme, notify } from "herdr";
 import { makeGit } from "./git.js";
-import { readRemote, addRemote, editRemote, fetchRemote, removeRemote } from "./git-refs.js";
+import { readRemote, defineRemote, removeRemote } from "./git-refs.js";
 import { openDialog, dialogFrame, button, checkbox, close, askOwner, writeBlock, scrollText, sentence, notice } from "./ui.js";
 
 // openRemoteEdit({ root, on, name, owner, lang }) / openRemoteRemove(…): name: the remote.
@@ -38,25 +38,22 @@ export function remoteDialog(host, repo, name, mode) {
 
 const text = (v) => (typeof v === "string" ? v : "");
 
-// The panel's side of "remote-edit" { name, to, url, fetch }: the edit, then a fetch from
-// the remote under its new name when asked. A failed fetch after a done edit still says
-// the repository changed.
-export async function runRemoteEdit(git, root, args) {
-  const to = text(args.to).trim();
-  const r = await editRemote(git, root, { name: text(args.name), to, url: text(args.url) });
-  if (!r.ok || args.fetch !== true) return r;
-  const fetched = await fetchRemote(git, root, to);
-  return fetched.ok ? fetched : { ...fetched, changed: true };
+// The panel's side of "remote-edit" { name, to, url, fetch } and "remote-add" { name, url,
+// fetch }: the remote, then a fetch from it when asked. A fetch that fails after the
+// remote is defined lets the dialog close (asking again would find the name taken) and
+// shows as a notification of its own.
+export async function runRemoteEdit(git, root, args, panel) {
+  return defined(await defineRemote(git, root, { name: text(args.name), to: text(args.to).trim(), url: text(args.url), fetch: args.fetch === true }), text(args.to).trim(), panel);
 }
-
-// The panel's side of "remote-add" { name, url, fetch }: the new remote, then a fetch
-// from it when asked, as an edit's.
-export async function runRemoteAdd(git, root, args) {
-  const name = text(args.name).trim();
-  const r = await addRemote(git, root, { name, url: text(args.url) });
-  if (!r.ok || args.fetch !== true) return r;
-  const fetched = await fetchRemote(git, root, name);
-  return fetched.ok ? fetched : { ...fetched, changed: true };
+export async function runRemoteAdd(git, root, args, panel) {
+  return defined(await defineRemote(git, root, { name: text(args.name).trim(), url: text(args.url), fetch: args.fetch === true }), text(args.name).trim(), panel);
+}
+function defined(r, name, panel) {
+  if (r.fetchFailed) {
+    const t = panel.t;
+    notify({ title: t("refs.fetchFailedAfter", { name }), body: sentence(t, r.fetchFailed.msg, r.fetchFailed.err) || "", level: "error" });
+  }
+  return r;
 }
 
 // The panel's side of "remote-remove" { name }.

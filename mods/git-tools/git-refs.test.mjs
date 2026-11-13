@@ -6,7 +6,7 @@ import { mkdirSync, mkdtempSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
 import { makeGit } from "./git.js";
-import { createTag, renameBranch, readRemotes, readRemote, editRemote, addRemote, fetchRemote, removeRemote, pushTag } from "./git-refs.js";
+import { createTag, renameBranch, readRemotes, readRemote, editRemote, addRemote, fetchRemote, defineRemote, removeRemote, pushTag } from "./git-refs.js";
 import { translator } from "./i18n.js";
 
 // The user's own git settings stay out of every git these tests start.
@@ -173,6 +173,30 @@ git branch -q feature && git checkout -q feature && echo 3 > a && git commit -q 
   const r = await fetchRemote(git, repo, "origin");
   assert.equal(r.ok, true, r.err);
   assert.ok(rev(repo, "refs/remotes/origin/extra"));
+}
+
+// Define with "Fetch from the remote": a fetch that fails after a done add or edit leaves
+// the remote defined and says so apart (fetchFailed), so the dialog closes and asking
+// again doesn't fail on a name that is taken now.
+{
+  const { repo, remote } = setup("remote-define-fetch");
+  const added = await defineRemote(git, repo, { name: "up", url: `${base}/nowhere`, fetch: true });
+  assert.equal(added.ok, true, added.err);
+  assert.ok(added.fetchFailed?.err, "the fetch's failure");
+  assert.equal(sh(repo, "git remote get-url up").trim(), `${base}/nowhere`);
+  const edited = await defineRemote(git, repo, { name: "up", to: "far", url: `${base}/nowhere2`, fetch: true });
+  assert.equal(edited.ok, true, edited.err);
+  assert.ok(edited.fetchFailed?.err);
+  assert.deepEqual(lines(repo, "git remote"), ["far", "origin"]);
+  // A fetch that works: no fetchFailed. One not asked for: nothing fetched.
+  const fine = await defineRemote(git, repo, { name: "near", url: remote, fetch: true });
+  assert.deepEqual([fine.ok, fine.fetchFailed], [true, undefined]);
+  assert.ok(rev(repo, "refs/remotes/near/main"));
+  const quiet = await defineRemote(git, repo, { name: "near2", url: remote, fetch: false });
+  assert.deepEqual([quiet.ok, rev(repo, "refs/remotes/near2/main")], [true, ""]);
+  // The add or edit itself failing is the result: nothing fetched, no fetchFailed.
+  const taken = await defineRemote(git, repo, { name: "far", url: remote, fetch: true });
+  assert.deepEqual([taken.ok, taken.fetchFailed], [false, undefined]);
 }
 
 // Remove: the remote, its remote branches and the tracking settings that named it go.

@@ -1,9 +1,7 @@
 // Update Project dialog (VCS widget popup and VCS Operations popup: Update Project…):
-// merge incoming changes into the current branch, or rebase it on top of them; Don't show
-// again; Reset to the Remote Branch (asked first: local commits are dropped); Cancel, OK.
-// The method and Don't show again are app settings (app-files.js): with Don't show again
-// on, Update Project runs at once by the last method. Picking it with Option held in the
-// VCS Operations popup shows the dialog again.
+// merge incoming changes into the current branch, or rebase it on top of them; Reset to
+// the Remote Branch (asked first: local commits are dropped); Cancel, OK. It shows every
+// time; the method last used is an app setting (app-files.js) the dialog starts on.
 //
 // Also the screen side of every remote request (git-remote.js does the git part): the
 // panels' and the VCS widget's menu items (Update, Checkout and Update, Pull into …,
@@ -27,12 +25,11 @@ import { offerSmart } from "./view-smart.js";
 import { openConflictsIfStopped } from "./view-conflicts.js";
 import { openUpdateInfo } from "./view-update-info.js";
 import { radio } from "./view-reset.js";
-import { openDialog, dialogFrame, button, checkbox, close, askOwner, writeBlock, scrollText, sentence, broadcast, copyId } from "./ui.js";
+import { openDialog, dialogFrame, button, close, askOwner, writeBlock, scrollText, sentence, broadcast, copyId } from "./ui.js";
 
 const COPY_KEY = "commit.copy";
 // App settings (app-files.js).
 export const METHOD_KEY = "updateProject.method";
-export const SKIP_KEY = "updateProject.skipDialog";
 const methodOf = (value) => (value === "rebase" ? "rebase" : "merge");
 const str = (value) => (typeof value === "string" ? value : "");
 
@@ -150,17 +147,11 @@ export function pullHere(host, repo, who, b, rebase, cx) {
   }, cx, { title: "remote.pullFailed" });
 }
 
-// startUpdateProject(host, repo, who, cx, { alt }): Update Project… from the VCS widget
-// popup or the VCS Operations popup. With Don't show again on it runs at once by the
-// saved method, unless Option was held (alt): then the dialog shows again.
-export function startUpdateProject(host, repo, who, cx, { alt = false } = {}) {
+// startUpdateProject(host, repo, who, cx): Update Project… from the VCS widget popup or
+// the VCS Operations popup: the dialog, every time.
+export function startUpdateProject(host, repo, who, _cx) {
   if (!repo?.root || host.writeBlock?.()) return;
-  cx.spawn(async (cx) => {
-    const skip = (await appSetting(SKIP_KEY, false)) === true;
-    if (skip && !alt) remoteWrite(host, repo, who, { key: "remote.updating" }, async (git, root) => updateProject(git, root, { method: await savedMethod() }), cx);
-    else openUpdateProject({ root: repo.root, on: repo.on ?? null, owner: host.bus.id, lang: host.lang, who });
-    cx.notify();
-  });
+  openUpdateProject({ root: repo.root, on: repo.on ?? null, owner: host.bus.id, lang: host.lang, who });
 }
 
 // openUpdateProject({ root, on, owner, lang, who })
@@ -176,13 +167,11 @@ export default class UpdateProjectView {
     this.owner = p.owner ?? null;
     this.who = str(p.who) || "ui.commitPanel";
     this.method = "merge";
-    this.skip = false;
     this.asking = null; // the Reset to the Remote Branch question: { name, upstream }
     this.waiting = false;
     this.error = null;
     cx.spawn(async (cx) => {
       this.method = await savedMethod();
-      this.skip = (await appSetting(SKIP_KEY, false)) === true;
       cx.notify();
     });
   }
@@ -201,12 +190,11 @@ export default class UpdateProjectView {
   run(cx) {
     if (this.waiting || !this.root || this.writing()) return;
     if (this.asking) { this.ask("remote-reset", {}, cx); return; }
-    const method = this.method, skip = this.skip;
+    const method = this.method;
     this.waiting = true;
     cx.spawn(async (cx) => {
-      // Saved before the request: the next Update Project goes by them whatever comes of this one.
+      // Saved before the request: the next Update Project starts on it whatever comes of this one.
       await saveAppSetting(METHOD_KEY, method);
-      await saveAppSetting(SKIP_KEY, skip);
       this.waiting = false;
       this.ask("remote-update", { method }, cx);
       cx.notify();
@@ -250,11 +238,6 @@ export default class UpdateProjectView {
         button("update-project-reset", this.t("remote.resetButton"), t, { kind: "primary", disabled: Boolean(writing), busy: this.waiting, title: writing ?? undefined, onClick: (_e, cx) => this.run(cx) }),
       ]
       : [
-        h_flex().id("update-project-skip").gap(6).items_center().cursor_pointer()
-          .on_click((_e, cx) => { if (!this.waiting) { this.skip = !this.skip; cx.notify(); } })
-          .child(checkbox("update-project-skip-box", this.skip, t, { disabled: this.waiting, onClick: (_e, cx) => { this.skip = !this.skip; cx.notify(); } }))
-          .child(this.t("remote.dontShow")),
-        div().flex_1(),
         button("update-project-to-remote", this.t("remote.resetToRemote"), t, { disabled: this.waiting || !this.root, onClick: (_e, cx) => this.askReset(cx) }),
         button("update-project-cancel", this.t("dialogs.cancel"), t, { disabled: this.waiting, onClick: () => this.shut() }),
         button("update-project-ok", this.t("remote.ok"), t, { kind: "primary", disabled: Boolean(writing) || !this.root, busy: this.waiting, title: writing ?? undefined, onClick: (_e, cx) => this.run(cx) }),

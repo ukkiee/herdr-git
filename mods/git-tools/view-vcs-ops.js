@@ -1,0 +1,152 @@
+// VCS Operations popup (view "vcs-ops"): cmd-shift-v's list of the menu bar Git menu's
+// operations, numbered 1 … 9, 0. The items, their order and which copy opens it are in
+// vcs-ops.js; what each item does is VCS_ACTIONS below.
+//
+// The key is a mod command (`git-tools.vcs-ops`), so it reaches every shown copy and no
+// opener is known. The Log panel and the Commit panel hand it to vcsOpsCommand, and
+// exactly one of them opens the popup (vcs-ops.js takesVcsOps). That panel is the owner:
+// the popup answers it with the pick (as a popup menu does, ui.js answerMenu), and the
+// panel runs the item as its own work, so the dialogs it opens ask it to run their writes.
+// props: { key, group?, items, overlay }.
+
+import { div } from "gpui-kit";
+import { v_flex, h_flex } from "gpui-base";
+import { exec, theme, layout, run, openOverlay, closeOverlay } from "herdr";
+import { MOD, LOG_NODE, answerMenu, logPanelShown, openCommitPanel, serveRequest, uiGlyph, darkLook } from "./ui.js";
+import { vcsOpsItems, numberedPick, takesVcsOps, commitPanelShown } from "./vcs-ops.js";
+import { makeGit } from "./git.js";
+import { fetchAll } from "./git-branch.js";
+import { openPush } from "./view-push.js";
+import { openBranchNew } from "./view-branch-new.js";
+import { openResetHead } from "./view-reset-head.js";
+import { openConsole } from "./view-console.js";
+
+// What each item does, run in the owning panel's copy: run(panel, cx, how).
+//   panel: the Log panel (kind "log") or the Commit panel (kind "commit"): repo, bus, t,
+//   lang, writeBlock(), setBusy(), writeFailed().
+//   how: { kind, alt }. alt: Option was held while picking (Update Project then shows its
+//   dialog even after "Don't show again").
+//   by: the panel kinds that can serve the item's write; without it, both.
+// A new operation is one line here; an id with no line never shows.
+const WHO = { commit: "ui.commitPanel", log: "ui.logPanel" };
+const repoOf = (panel) => (panel.repo?.root && !panel.writeBlock() ? panel.repo : null);
+export const VCS_ACTIONS = {
+  "commit": { run: () => openCommitPanel() },
+  // The Commit panel runs the push (view-push.js servePush).
+  "push": { by: ["commit"], run: (panel) => { const r = repoOf(panel); if (r) openPush({ root: r.root, on: r.on ?? null, owner: panel.bus.id, lang: panel.lang }); } },
+  "fetch": { run: (panel, cx, how) => fetchFrom(panel, how.kind, cx) },
+  "newBranch": { run: (panel, cx, how) => {
+    if (how.kind === "log") { panel.branches.newBranch(null, cx); return; }
+    const r = repoOf(panel);
+    if (r) openBranchNew({ root: r.root, on: r.on ?? null, owner: panel.bus.id, lang: panel.lang });
+  } },
+  "resetHead": { run: (panel, _cx, how) => { const r = repoOf(panel); if (r) openResetHead({ root: r.root, on: r.on ?? null, owner: panel.bus.id, who: WHO[how.kind], lang: panel.lang }); } },
+  "showLog": { run: () => run("layout.show", { id: LOG_NODE }) },
+  // The Commit panel's Rollback with nothing selected: every changed file, checked.
+  "rollback": { by: ["commit"], run: (panel) => panel.rollback(null) },
+  "console": { run: (panel) => openConsole(panel.t) },
+};
+
+const handledBy = (kind) => (id) => Object.prototype.hasOwnProperty.call(VCS_ACTIONS, id) && (!VCS_ACTIONS[id].by || VCS_ACTIONS[id].by.includes(kind));
+
+// Fetch as the panel's own write: the Log panel's toolbar Fetch (its button spins), or in
+// the Commit panel the same write under the lock, with its failure in the panel's strip.
+function fetchFrom(panel, kind, cx) {
+  if (kind === "log") { panel.fetch(cx); return; }
+  const r = repoOf(panel);
+  if (!r) return;
+  // serveRequest wants a request: this one's key is answered to nobody.
+  const e = { key: `vcs-ops-fetch-${Date.now().toString(36)}`, args: { root: r.root, on: r.on ?? null } };
+  serveRequest(panel, e, { key: "log.fetching" }, (repo) => fetchAll(makeGit(exec, repo.on), repo.root), cx);
+}
+
+// Popup size, px: title row, the group's caption, rows and separators.
+const WIDTH = 300, TITLE = 34, CAPTION = 24, ROW = 26, RULE = 9, PAD = 5;
+const heightOf = (items, group) => TITLE + (group ? 0 : CAPTION) + PAD * 2 + items.length * ROW + items.filter((it, i) => it.rule && i > 0).length * RULE;
+
+// ask(panel, kind, group) → Promise<{ id, alt } | null>: opens the popup over the panel's
+// copy and resolves with the pick. Await it inside cx.spawn.
+function ask(panel, kind, group) {
+  const items = vcsOpsItems(handledBy(kind), group).map((it) => ({ ...it, label: panel.t(it.key) }));
+  if (!items.length) return Promise.resolve(null);
+  const key = `vcs-ops-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  const answer = panel.bus.wait(key);
+  openOverlay({ mod: MOD, kind: "popup", width: WIDTH, height: heightOf(items, group), props: { view: "vcs-ops", key, group: group ?? null, items, lang: panel.lang } });
+  return answer;
+}
+
+// vcsOpsCommand(panel, kind, cx, { folder }): the panel's `vcs-ops` command. kind: "log"
+// or "commit". folder: the copy's props.folder (a tab on a chosen folder never opens it).
+export function vcsOpsCommand(panel, kind, cx, { folder = null } = {}) {
+  if (!takesVcsOps(kind, { commitShown: commitPanelShown(layout()), logShown: logPanelShown() === true, folder })) return;
+  const open = (group) => cx.spawn(async (cx) => {
+    const pick = await ask(panel, kind, group);
+    if (!pick || typeof pick.id !== "string") return;
+    if (vcsOpsItems(handledBy(kind), pick.id).length) { open(pick.id); return; }
+    if (handledBy(kind)(pick.id)) VCS_ACTIONS[pick.id].run(panel, cx, { kind, alt: pick.alt === true });
+    cx.notify();
+  });
+  open(undefined);
+}
+
+export default class VcsOps {
+  init(p, cx) {
+    this.key = p.key;
+    this.overlay = p.overlay;
+    this.group = p.group ?? null;
+    this.items = Array.isArray(p.items) ? p.items : [];
+    this.at = 0;
+    this.handle = cx.focus_handle();
+    this.handle.focus();
+  }
+
+  pick(i, alt) {
+    const item = this.items[i];
+    if (!item) return;
+    answerMenu(this.bus, this.key, { id: item.id, alt: Boolean(alt) });
+    closeOverlay(this.overlay);
+  }
+
+  // Dismissed without a pick: the owner's promise still settles.
+  close() { answerMenu(this.bus, this.key, null); }
+
+  move(by) {
+    const n = this.items.length;
+    if (n) this.at = (((this.at + by) % n) + n) % n;
+  }
+
+  key_down(e) {
+    const alt = Boolean(e.modifiers?.alt);
+    if (e.key === "down") this.move(1);
+    else if (e.key === "up") this.move(-1);
+    else if (e.key === "enter" || (e.key === "right" && this.items[this.at]?.sub)) this.pick(this.at, alt);
+    else if (e.key === "escape") closeOverlay(this.overlay);
+    else {
+      // A digit picks its row (Option-digit types a character on many Mac keyboards).
+      const i = numberedPick(this.items, e.key);
+      if (i < 0) return false;
+      this.pick(i, alt);
+    }
+    return true;
+  }
+
+  render() {
+    const t = theme(), dark = darkLook(t.popover);
+    return v_flex().id("vcs-ops").track_focus(this.handle).size_full().min_h(0).bg(t.popover).text_size(12.8)
+      .on_key_down((e, cx) => { if (this.key_down(e)) { cx.stop_propagation(); cx.notify(); } })
+      .child(h_flex().h(TITLE).flex_none().px(12).items_center().border_b(1).border_color(t.border).font_semibold()
+        .child(div().flex_1().min_w(0).truncate().child(this.group ? this.t(`vcs-ops.${this.group}`) : this.t("vcs-ops.title"))))
+      .child(v_flex().flex_1().min_h(0).p(PAD)
+        .when(!this.group, (el) => el.child(div().h(CAPTION).flex_none().px(8).flex().items_center().text_size(11.5).text_color(t.dim).child(this.t("vcs-ops.group"))))
+        .children(this.items.map((item, i) =>
+          v_flex().flex_none()
+            .when(Boolean(item.rule) && i > 0, (el) => el.child(div().mx(7).my(4).h(1).bg(t.border)))
+            .child(h_flex().id(`vcs-ops-${item.id}`).h(ROW).px(8).gap(8).rounded(6).items_center().cursor_pointer()
+              .when(i === this.at, (el) => el.bg(t.selected))
+              .hover((s) => s.bg(t.hover))
+              .on_click((e, cx) => { cx.stop_propagation(); this.pick(i, e.modifiers?.alt); })
+              .child(div().w(12).flex_none().text_size(11.5).text_color(t.dim).child(item.number ?? ""))
+              .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(item.label))
+              .when(Boolean(item.sub), (el) => el.child(uiGlyph("chevron-right", { dark, size: 12 })))))));
+  }
+}

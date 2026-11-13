@@ -12,6 +12,7 @@ import { makeLocks, BEAT, sameRepo, repoName } from "./lock.js";
 import { LANGS, translator, systemLang, sentence } from "./i18n.js";
 import { fileIcon, folderIcon, darkColor } from "./icon-theme.js";
 import { iconShape, iconDraw } from "./ui-icons.js";
+import { en as consoleEn, ko as consoleKo } from "./messages-console.js";
 
 export const MOD = "git-tools";
 export const ROW = 24;
@@ -551,11 +552,28 @@ export function scrollText(id, text, t, { maxHeight, color } = {}) {
     .child(Scrollbar.vertical(id).absolute().inset_0());
 }
 
+// Shows the shown space's Git console tab, or opens one: the strip's link. The same tab
+// view-console.js openConsole finds (a tab named Console | 콘솔 whose only pane is ours);
+// written here because view-console.js imports this file.
+const CONSOLE_NAMES = new Set([consoleEn["console.title"], consoleKo["console.title"]]);
+function showConsole() {
+  const space = spaces().find((s) => s.active);
+  const ours = new Set(panes().filter((p) => p.mod === MOD).map((p) => p.tab));
+  const found = space?.tabs?.find((tab) => tab.panes === 1 && ours.has(tab.id) && CONSOLE_NAMES.has(tab.name));
+  if (found) run("tab.select", { id: found.id });
+  else run("tab.new", { name: words()("console.title"), mod: MOD, props: { view: "console" } });
+}
+
 // git's own words under a panel or inside a dialog, with a way to dismiss them.
-// What was read before stays on screen above it.
+// What was read before stays on screen above it. "View in Console" opens the Git
+// console, where a failed write's whole command and output are kept (git.js records it).
 export function errorStrip(id, text, t, onDismiss) {
   return h_flex().id(id).w_full().flex_none().max_h(120).gap(8).px(10).py(6).items_start().border_t(1).border_color(t.border).bg(t.raised)
     .child(div().flex_1().min_w(0).child(scrollText(`${id}-text`, text, t, { maxHeight: 108 })))
+    .child(div().id(`${id}-console`).flex_none().text_size(12).text_color(t.accent).cursor_pointer().hover((s) => s.underline())
+      .on_mouse_down("left", stop)
+      .on_click((_e, cx) => { cx.stop_propagation(); showConsole(); })
+      .child(words()("vcs-ops.viewInConsole")))
     .when(Boolean(onDismiss), (el) => el.child(iconButton(`${id}-close`, "x", t, { title: words()("ui.dismiss"), size: 20, onClick: onDismiss })));
 }
 

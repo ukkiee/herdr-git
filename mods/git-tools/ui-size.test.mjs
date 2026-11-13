@@ -1,7 +1,7 @@
 // node ui-size.test.mjs: how wide a popup menu is drawn for its labels, and where the
 // VCS widget's popup and a branch row's menu go.
 import assert from "node:assert/strict";
-import { textWidth, menuWidth, belowSpot, sideOf, dialogFills } from "./ui-size.js";
+import { textWidth, menuWidth, belowSpot, sideOf, dialogFills, widgetBlockWidth } from "./ui-size.js";
 
 // ---- text: a Hangul syllable is as wide as the font size, Latin letters narrower
 {
@@ -67,6 +67,17 @@ import { textWidth, menuWidth, belowSpot, sideOf, dialogFills } from "./ui-size.
     "create-patch", "apply-patch", "remotes", "mr-overwrite", "mr-unresolved"]) {
     assert.equal(dialogFills(id), true, id);
   }
+}
+
+// ---- the VCS widget's block: as wide as the widget plus its padding, whole pixels,
+// never 0; null when it already is (no layout.resize then)
+{
+  // 2px of padding each side.
+  assert.equal(widgetBlockWidth(151.3, 0, 2), 156);
+  assert.equal(widgetBlockWidth(151.3, 156, 2), null);
+  assert.equal(widgetBlockWidth(0, 240, 2), 4, "no widget (not a repository): the padding only");
+  assert.equal(widgetBlockWidth(NaN, 240, 2), null, "not measured: left alone");
+  assert.equal(widgetBlockWidth(80, 240, 2), 84);
 }
 
 console.log("ok");

@@ -67,6 +67,16 @@ const FILLING = new Set([
 // questions ("mr-…") sit in a card of their own inside it and fill that card.
 export const dialogFills = (id) => FILLING.has(id) || String(id).startsWith("mr-");
 
+// widgetBlockWidth(content, current, pad) → the px the VCS widget's layout block is
+// resized to so it is as wide as the widget (`content`, measured) plus `pad` on each
+// side, or null when it already is or nothing was measured: the resize then isn't asked
+// for again.
+export function widgetBlockWidth(content, current, pad) {
+  if (!Number.isFinite(content)) return null;
+  const px = Math.max(1, Math.ceil(content + 2 * pad));
+  return px === current ? null : px;
+}
+
 // sideOf(side) → which side of the popup a branch row's menu opens on: "right" as the
 // reference product does, or "left" when the popup sits at the window's right edge.
 export const sideOf = (side) => (side === "left" ? "left" : "right");

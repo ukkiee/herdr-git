@@ -25,12 +25,12 @@
 
 import { div } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { exec, theme, notify } from "herdr";
+import { exec, theme, notify, run } from "herdr";
 import { makeGit, repoRoot } from "./git.js";
 import { readHeads, widgetFace } from "./git-heads.js";
 import { readOperation, continueOperation, abortOperation, skipOperation, operationName } from "./git-operation.js";
 import { checkout, deleteBranch } from "./git-branch.js";
-import { belowSpot } from "./ui-size.js";
+import { belowSpot, widgetBlockWidth } from "./ui-size.js";
 import { openConflicts, openConflictsIfStopped } from "./view-conflicts.js";
 import { location, uiGlyph, iconButton, darkLook, broadcast, openCommitPanel, openMenu, takeWrite, releaseWrite, writeBlock, readBlocked, sentence } from "./ui.js";
 import { openPush, servePush } from "./view-push.js";
@@ -39,7 +39,10 @@ import { serveAction } from "./serve-actions.js";
 import { openVcsPopup, askAbort, branchMenuRows, deleteBlockOf, popupHandles, POPUP_ACTIONS, POPUP_WIDTH } from "./view-vcs-popup.js";
 
 const POLL = 10000;
-const PAD = 2; // the block's padding left of the widget
+const PAD = 2; // the block's padding each side of the widget
+// The layout block install.sh gives the widget (macOS main-git), sized to the widget.
+const BLOCK_ID = "git-vcs-widget";
+const WIDGET_MAX = 360; // px: a longer branch name is cut rather than widen the block further
 const stop = (_e, cx) => cx.stop_propagation();
 
 export class VcsWidget {
@@ -315,10 +318,21 @@ export default class VcsWidgetBlock {
   render(cx) {
     const t = theme();
     // The strip continues the tab bar: its color and the line under it. The widget sits at
-    // its left, right after the tab bar's Changes button; the block's width is fixed by the
-    // layout, so what the name leaves stays empty on the right, by the Git button.
-    return h_flex().id("vcs-widget-strip").size_full().min_w(0).pl(PAD).items_center().bg(t.chrome).border_b(1).border_color(t.border)
+    // its left, right after the tab bar's Changes button. The block is resized to the
+    // widget's own width (measured on the wrapper, which doesn't shrink with the block), so
+    // no empty space is left by the Git button; a long name is cut at WIDGET_MAX.
+    return h_flex().id("vcs-widget-strip").size_full().min_w(0).px(PAD).items_center().overflow_hidden().bg(t.chrome).border_b(1).border_color(t.border)
       .on_size_change((size, cx) => { if (size.width !== this.width) { this.width = size.width; cx.notify(); } })
-      .child(this.widget.render(cx, { background: t.chrome }));
+      .child(h_flex().id("vcs-widget-fit").flex_none().max_w(WIDGET_MAX).min_w(0).items_center()
+        .on_size_change((size) => this.fit(size.width))
+        .child(this.widget.render(cx, { background: t.chrome })));
+  }
+
+  // The layout block to the widget's width plus the padding; asked only when that changes.
+  fit(content) {
+    const px = widgetBlockWidth(content, this.fitted ?? null, PAD);
+    if (px === null) return;
+    this.fitted = px;
+    run("layout.resize", { id: BLOCK_ID, px });
   }
 }

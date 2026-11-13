@@ -17,7 +17,7 @@ import { exec, theme, watchFolder } from "herdr";
 import { makeGit, repoRoot } from "./git.js";
 import { readRefsState, readGitDir, refsChanged, resolveCommit } from "./git-log.js";
 import { fetchAll, restoreBranch } from "./git-branch.js";
-import { location, panelFrame, toolbar, spacer, iconButton, notice, notRepository, errorStrip, noteBar, sentence, toggleLogPanel, logPanelShown, broadcast, scriptedRepo, takeWrite, releaseWrite, writeBlock, writeName, writingOn, readBlocked, fromRepo, gitButtonPlaced } from "./ui.js";
+import { location, panelFrame, toolbar, spacer, iconButton, notice, notRepository, errorStrip, noteBar, sentence, toggleLogPanel, logPanelShown, broadcast, scriptedRepo, takeWrite, releaseWrite, writeBlock, writeName, writingOn, readBlocked, fromRepo, gitButtonPlaced, openMenu } from "./ui.js";
 import { sameRepo } from "./lock.js";
 import { serveBranch } from "./view-branch-new.js";
 import { serveDeletedBranches } from "./view-deleted-branches.js";
@@ -38,6 +38,9 @@ import { historyUpToHere } from "./view-history-tab.js";
 import { openPatch, openFilePatch } from "./view-patch.js";
 import { goToHash } from "./view-go-to-hash.js";
 import { undoHere, editMessageHere, dropHere, squashHere } from "./log-rewrite.js";
+import { OPTIONS_KEY, readOptions, toggleOption, readArgs, graphMenu, displayMenu, columnsMenu } from "./log-options.js";
+import { appSetting, saveAppSetting } from "./app-files.js";
+import { readMe } from "./git-log-filter.js";
 
 // Column widths, px. The Commit list takes what the side columns leave and never gets
 // narrower than LIST_MIN: when the panel is too narrow, Commit details goes first, then
@@ -114,7 +117,20 @@ const ACTIONS = {
   "commit.editMessage": (host, commits, cx) => editMessageHere(host, commits, cx),
   "commit.drop": (host, commits, cx) => dropHere(host, commits, cx),
   "commit.squash": (host, commits, cx) => squashHere(host, commits, cx),
+  "log.graphOptions": (host, _t, cx) => host.openOptions("graph", cx),
+  "log.displayOptions": (host, _t, cx) => host.openOptions("display", cx),
 };
+
+// The bus event that tells every Log panel the options file changed.
+const OPTIONS_EVENT = "log-options";
+
+// A log-options.js popup item as an openMenu item: group names are dim lines nothing
+// can pick, a check mark goes before what is on, "▸" after an item that opens a list.
+// The unchecked label starts with a space as wide as the mark, so names line up.
+const menuItem = (it, t, first) => (it.header
+  ? { label: t(it.key), value: null, disabled: true, rule: !first }
+  : { label: `${it.checked ? "✓" : " "}  ${t(it.key)}`, value: it.id, disabled: Boolean(it.disabled), hint: it.more ? "▸" : undefined });
+const popupItems = (items, t) => items.map((it, i) => menuItem(it, t, i === 0));
 const handled = (id) => Object.prototype.hasOwnProperty.call(ACTIONS, id);
 
 // The Log toolbar's buttons, by item (log-menus.js logTools): element id and icon. Written
@@ -158,6 +174,10 @@ export default class LogView {
     this.refs = null; // the refs' state the list was last read at
     this.lost = false; // finding the repository failed (not "not a repository"): the poll asks again
     this.jumpTurn = 0; // one per hash jump; a search, a filter or a pick makes older ones void
+    // The graph and display options (log-options.js): the defaults until the settings
+    // file is read, app-wide, saved on every change.
+    this.options = readOptions(undefined);
+    this.me = null; // the email of the user git is configured with in this.repo
     this.branches = new LogBranches();
     this.filters = new LogFilters();
     this.list = new LogList();
@@ -166,6 +186,7 @@ export default class LogView {
     // Reads only while drawn: it follows the folder from render (view-vcs-widget.js).
     this.widget = new VcsWidget();
     this.widget.init(this, { who: "ui.logPanel" });
+    this.loadOptions(cx);
     this.refresh(cx);
     // The watch below covers this computer; this covers other machines and a watch that
     // could not start. Cheap: one for-each-ref, and only while the panel shows.
@@ -250,6 +271,57 @@ export default class LogView {
       else this.details.show(commits[0] ?? null, cx);
     }
     cx.notify();
+  }
+
+  // ---- the graph and display options (log-options.js)
+
+  // Reads the options from the settings file (at start, and when another panel saved).
+  loadOptions(cx) {
+    cx.spawn(async (cx) => {
+      const saved = await appSetting(OPTIONS_KEY);
+      this.useOptions(readOptions(saved), cx);
+    });
+  }
+
+  // Takes `next` as the options now: the list reads again when what it reads changed,
+  // else it only draws its rows again.
+  useOptions(next, cx) {
+    const before = this.options;
+    if (JSON.stringify(next) === JSON.stringify(before)) return;
+    this.options = next;
+    if (JSON.stringify(readArgs(next)) !== JSON.stringify(readArgs(before))) {
+      this.jumpTurn++;
+      if (this.repo) this.list.reload(cx);
+    } else this.list.restyle(cx);
+    cx.notify();
+  }
+
+  // An item picked in a popup: shown at once, then saved, then the other panels told.
+  setOption(id, cx) {
+    const next = toggleOption(this.options, id);
+    this.useOptions(next, cx);
+    cx.spawn(async (cx) => {
+      const r = await saveAppSetting(OPTIONS_KEY, next);
+      if (r.ok) broadcast({ type: OPTIONS_EVENT });
+      else this.fail(this.t("graph.saveFailed", { err: r.err }), cx);
+      cx.notify();
+    });
+  }
+
+  // which: "graph" (Graph Options) or "display" (Display Options, and its Columns list).
+  openOptions(which, cx) {
+    const items = which === "graph" ? graphMenu(this.options, { collapsed: this.list.collapsed }) : displayMenu(this.options);
+    cx.spawn(async (cx) => {
+      const id = await openMenu(this.bus, popupItems(items, this.t), { width: 260, lang: this.lang });
+      if (!id) { this.list.handle.focus(); return; }
+      if (id === "collapseLinear" || id === "expandLinear") this.list.setCollapsed(id === "collapseLinear", cx);
+      else if (id === "columns") {
+        const column = await openMenu(this.bus, popupItems(columnsMenu(this.options), this.t), { width: 200, lang: this.lang });
+        if (column) this.setOption(column, cx);
+      } else this.setOption(id, cx);
+      this.list.handle.focus();
+      cx.notify();
+    });
   }
 
   // ---- menus and toolbars (log-menus.js, ACTIONS)
@@ -465,8 +537,16 @@ export default class LogView {
     this.branch = null;
     this.refs = null;
     if (this.picks.picked.size || this.selected) { this.picks = NONE; this.selected = null; this.detailsOf = ""; this.details.show(null, cx); }
+    this.me = null;
     if (!repo) { this.list.reload(cx); return; }
     this.watch(repo, cx);
+    // Whose commits My Commits highlights.
+    cx.spawn(async (cx) => {
+      const r = await readMe(repo.git, repo.root);
+      if (repo !== this.repo) return;
+      this.me = r.ok && r.email ? r.email : null;
+      cx.notify();
+    });
   }
 
   // On this computer: wake when a ref or HEAD moves (commit, checkout, fetch).
@@ -565,6 +645,7 @@ export default class LogView {
 
   event(e, cx) {
     if (this.drawsWidget()) this.widget.event(e, cx);
+    if (e.type === OPTIONS_EVENT) { this.loadOptions(cx); return; }
     if (e.type !== "changed" || (e.root && e.root !== this.repo?.root)) return;
     if (this.repo) this.poll(cx);
     else this.refresh(cx);

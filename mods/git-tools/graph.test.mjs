@@ -309,6 +309,14 @@ assert.deepEqual(layoutGraph([]), { rows: [], carry: { lanes: [], next: 0 } });
   assert.equal(reachableFrom(list, null).size, 0);
 }
 
+// A tag mark without a name is counted as two characters wide.
+{
+  const look = { char: 6, pad: 10, gap: 4, most: 3 };
+  const mark = { text: "", kind: "tag", names: ["v1", "v2"] };
+  assert.deepEqual(fitLabels([mark], 22, look), { shown: [mark], rest: 0 });
+  assert.deepEqual(fitLabels([mark], 21, look).shown.length, 0);
+}
+
 // Long edges off: a line that runs `long` rows or more between its two dots shows only
 // `part` rows at each end, with an arrow where it is cut ("down" at the bottom of its top
 // part, "up" at the top of its bottom part). A line still open below the rows read is cut

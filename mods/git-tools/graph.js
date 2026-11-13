@@ -179,13 +179,14 @@ export function longEdges(rows, { long = 30, part = 1 } = {}) {
 //   font's real average, or the last label overflows. A first label too long on its own
 //   loses its middle (shortenMiddle) rather than being cut at an edge.
 const MIN_TEXT = 4;
+//   A tag mark without a name (labelRefs' `names`) takes two characters' room.
 export function fitLabels(labels, room, { char, pad, gap, most }) {
-  const width = (text) => pad + text.length * char;
+  const width = (label) => pad + (label.names ? 2 : label.text.length) * char;
   const count = (n) => (n > 0 ? gap + `+${n}`.length * char : 0);
   const shown = [];
   let used = 0;
   for (const label of labels.slice(0, most)) {
-    const next = used + (shown.length ? gap : 0) + width(label.text);
+    const next = used + (shown.length ? gap : 0) + width(label);
     if (next + count(labels.length - shown.length - 1) > room) break;
     shown.push(label);
     used = next;

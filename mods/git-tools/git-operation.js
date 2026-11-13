@@ -258,7 +258,45 @@ const REQUESTS = {
     check: (before) => before.canSkip ? null : refuse("There is no commit to skip.", { key: "ops.nothingToSkip" }),
     run: (git, root, _args, before) => git(root, [before.kind, "--skip"], { timeout: TIMEOUT, env: NO_EDITOR }),
   },
+  "cherry-pick": { check: startCheck, run: (git, root, args, before) => pickRun(git, root, "cherry-pick", args, before) },
+  revert: { check: startCheck, run: (git, root, args, before) => pickRun(git, root, "revert", args, before) },
 };
+
+// ---- Cherry-Pick and Revert Commit
+
+const COMMIT = /^[0-9a-f]{7,64}$/;
+const commitsOf = (args) => (Array.isArray(args?.commits) ? args.commits.filter((c) => typeof c === "string" && COMMIT.test(c)) : []);
+
+// A cherry-pick or revert starts only with nothing in progress: git would refuse anyway,
+// and a refusal met while a cherry-pick is stopped would read as that one's empty commit.
+function startCheck(before, args) {
+  if (before.kind) return refuse("Another operation is in progress: finish or abort it first.", { key: "pick.busy" });
+  if (!commitsOf(args).length || commitsOf(args).length !== (args.commits?.length ?? 0)) return refuse("No commits to apply.", { key: "pick.noCommits" });
+  return null;
+}
+
+// Cherry-Pick: the commits oldest first, each committed with its own message and author
+// (no "cherry picked from" line). Revert Commit: newest first, a commit for each with
+// git's own message. `commits` come newest first, as the Commit list picks them; git
+// applies them in the order given.
+// A commit that comes out empty (its changes are already in) is skipped, as many times as
+// the sequence meets one, so nothing is left in progress for it: skipped names them.
+// empty: every commit was skipped (HEAD didn't move).
+async function pickRun(git, root, type, args, before) {
+  const commits = commitsOf(args);
+  const order = type === "cherry-pick" ? [...commits].reverse() : commits;
+  let r = await git(root, [type, ...(type === "revert" ? ["--no-edit"] : []), ...order], { timeout: TIMEOUT, env: NO_EDITOR });
+  const skipped = [];
+  for (let n = 0; !r.ok && n < commits.length; n++) {
+    const now = await readOperation(git, root);
+    if (!now.ok || now.kind !== type || now.conflicts.length || now.staged.length || !now.current) break;
+    skipped.push(now.current.hash);
+    r = await git(root, [type, "--skip"], { timeout: TIMEOUT, env: NO_EDITOR });
+  }
+  if (!skipped.length) return r;
+  const moved = await git.read(root, ["rev-parse", "--verify", "-q", "HEAD"]);
+  return { ...r, skipped, empty: moved.ok && moved.out.trim() === before.head };
+}
 
 // conflictsLeft(n) → the refusal of a commit or a Continue while n files are in conflict.
 export const conflictsLeft = (n) => refuse(`Resolve the conflicts first: ${n} file(s) still in conflict.`, { key: "ops.conflictsLeft", args: { n } });
@@ -306,7 +344,9 @@ async function continueRun(git, root, { message = "", files = [] }, before) {
 }
 
 // runOperation(git, root, { type, ...args }) → { ok, code, out, err, msg?, outcome, operation }
-//   type: "continue" | "abort" | "skip". args: Continue's { message, files }.
+//   type: "continue" | "abort" | "skip" | "cherry-pick" | "revert". args: Continue's
+//   { message, files }; Cherry-Pick's and Revert's { commits } (full or short hashes,
+//   newest first). skipped: the commits a Cherry-Pick or Revert found already in.
 //   outcome: settle's word (above); "empty" also when Continue found the resolved commit
 //   already in and skipped it. ok: the outcome is done, stopped or empty.
 //   operation: readOperation afterwards, so the screen shows where things are now.
@@ -325,7 +365,7 @@ export async function runOperation(git, root, { type, ...args } = {}) {
   const settled = settle(before, after, run, { blocked });
   // A Continue whose commit came out empty skipped it: said so, unless it stopped again.
   const outcome = run.empty && settled === "done" ? "empty" : settled;
-  return { ok: outcome === "done" || outcome === "stopped" || outcome === "empty", code: run.code, out: run.out ?? "", err: run.err ?? "", ...(run.msg ? { msg: run.msg } : {}), outcome, operation: after.ok ? after : null, ...(blocked.length ? { blocked } : {}) };
+  return { ok: outcome === "done" || outcome === "stopped" || outcome === "empty", code: run.code, out: run.out ?? "", err: run.err ?? "", ...(run.msg ? { msg: run.msg } : {}), outcome, operation: after.ok ? after : null, ...(blocked.length ? { blocked } : {}), ...(run.skipped?.length ? { skipped: run.skipped } : {}) };
 }
 
 export const continueOperation = (git, root, args = {}) => runOperation(git, root, { ...args, type: "continue" });

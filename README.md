@@ -212,7 +212,7 @@ which part is missing and changes nothing.
 
 | key | does |
 |---|---|
-| `cmd-k` | opens the Commit panel |
+| `cmd-k` | opens the Commit panel, with the keys going to its list |
 | `cmd-shift-g` | shows or hides the Log panel |
 | `cmd-shift-v` | opens the VCS Operations popup (while the Commit panel or the Log panel shows) |
 

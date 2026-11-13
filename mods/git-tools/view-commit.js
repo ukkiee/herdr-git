@@ -29,7 +29,7 @@ import { readStatus } from "./git-status.js";
 import { readOperation } from "./git-operation.js";
 import { readLastCommit } from "./git-show.js";
 import { buildRows, checkState, toggleIncluded, keepIncluded, folderKeys, parentIndex } from "./tree.js";
-import { tip, location, uiGlyph, ICON, fileGlyph, folderGlyph, darkLook, panelFrame, toolbar, spacer, iconButton, checkbox, row, notice, notRepository, errorStrip, noteBar, WindowedList, logPanelShown, toggleLogPanel, gitButtonPlaced, openMenu, openDialog, takeWrite, releaseWrite, writeBlock, writeName, readBlocked, sentence, copyId, progressBar } from "./ui.js";
+import { tip, location, uiGlyph, ICON, fileGlyph, folderGlyph, darkLook, panelFrame, toolbar, spacer, iconButton, checkbox, row, notice, notRepository, errorStrip, noteBar, WindowedList, logPanelShown, toggleLogPanel, gitButtonPlaced, openMenu, openDialog, takeWrite, releaseWrite, writeBlock, writeName, readBlocked, sentence, copyId, progressBar, activeSpaceId } from "./ui.js";
 import { sameRepo } from "./lock.js";
 import CommitForm from "./commit-form.js";
 import { openRollback, serveRollback } from "./view-rollback.js";
@@ -554,6 +554,8 @@ export default class CommitView {
   }
 
   event(e, cx) {
+    // cmd-k or another way of opening this panel in this window (ui.js openCommitPanel).
+    if (e.type === "commit-focus" && e.space === activeSpaceId()) this.handle.focus();
     if (e.type === "changed" && (!e.root || e.root === this.repo?.root)) this.refresh(cx);
     // Fixup… or Squash Into… picked in the Log panel on this repository (view-extract.js).
     if (e.type === "rewrite-target" && sameRepo({ root: e.root, on: e.on ?? null }, this.repo)) this.form.aim(e, cx);

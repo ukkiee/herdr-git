@@ -116,7 +116,8 @@ git 모듈과 순수 계산 모듈은 `herdr`를 import하지 않는다. 그래�
   저장된 상태에 남으므로 작게 두고, 바뀔 때만 쓴다.
   - `git-tools.bus`: 사본 사이의 알림. 최근 사건 8개와 번호만 둔다(`bus.js`). 사건은 이름과 짧은
     인자뿐이다: `changed`, 창의 요청과 답, `console`(콘솔 기록이 늘었다), `log-options`(그래프·표시
-    옵션을 바꿨다), `rewrite-target`(픽스업·스쿼시 대상 커밋, 메시지는 받는 쪽이 읽는다). 큰 글은
+    옵션을 바꿨다), `rewrite-target`(픽스업·스쿼시 대상 커밋, 메시지는 받는 쪽이 읽는다),
+    `commit-focus`(Commit panel을 열었다, 그 space를 보이는 창의 패널이 목록에 포커스를 준다). 큰 글은
     싣지 않는다. Merge Revisions dialog가 저장할 결과 글은 그 머신의 임시 파일
     `git-tools-result.XXXXXXXX`(이 컴퓨터는 앱 홈의 `git-tools` 폴더, 원격은 `$TMPDIR`나 `/tmp`,
     권한 0600)에 쓰고 요청에는 경로만 담는다. 패널은 저장한 뒤 그 파일을 지운다.
@@ -211,7 +212,10 @@ Herdr의 내장 `main` 레이아웃은 구조 변경을 받지 않는다. 그래
   `install.sh`를 다시 돌린다.
 - `cmd-k`는 mod 명령이 아니다. 숨은 사본은 명령을 받지 못하고, 숨은 부모를 보이며 stack의 자식을
   고르는 앱 명령이 없다. 그래서 키가 1×1 팝업을 열고, 그 사본이 `layout.select`와 `layout.show`를
-  부른 뒤 스스로 닫는다.
+  부르고 `commit-focus` 사건을 보낸 뒤 스스로 닫는다. mod가 포커스를 받을 수 없어(`focusable` 아님)
+  Herdr는 패널에 키를 주지 않으므로, 패널이 그 사건을 자기 타이머에서 받아 목록에 스스로 포커스를
+  준다. 팝업은 `init`에서 바로 닫히므로 포커스는 그 뒤 패널의 타이머에서 간다. 사건의 space로 받는 패널을
+  그 창의 것으로 좁힌다. 다른 창의 패널이 받으면 그 창 터미널의 키를 가져간다.
 - `cmd-shift-v`는 mod 명령 `git-tools.vcs-ops`다. 명령은 보이는 사본 모두에 가므로, 받을 사본은
   `vcs-ops.js`의 `takesVcsOps`가 고른다: Commit panel이 보이면 Commit panel, 아니면 Log panel.
   그 사본이 VCS Operations popup의 주인이 되어 고른 항목을 자기 일로 실행한다. 둘 다 숨어

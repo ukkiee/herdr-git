@@ -6,7 +6,7 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } fro
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
 import { makeGit } from "./git.js";
-import { blockedBy } from "./git-smart.js";
+import { blockedBy, checkoutBranch, smartRun } from "./git-smart.js";
 
 // The user's own git settings stay out of every git these tests start.
 process.env.GIT_CONFIG_GLOBAL = "/dev/null";
@@ -91,6 +91,53 @@ const sorted = (paths) => [...paths].sort();
   for (const type of ["rebase", "checkout-rebase"]) assert.deepEqual(sorted((await blockedBy(git, repo, { type, target: "side" })).paths), ["b.txt", "c.txt"], type);
   assert.deepEqual(sorted((await blockedBy(git, repo, { type: "pull", rebase: true })).paths), ["b.txt", "c.txt"]);
   assert.deepEqual((await blockedBy(git, repo, { type: "continue" })).paths, [], "Continue, Abort and Skip have none");
+}
+
+// ---- checkout
+
+// Refused by a local change: "refused" with the files, and nothing moved.
+{
+  const repo = init("checkout-refused");
+  edit(repo, "a.txt", 0, "mine-a1");
+  const before = status(repo), at = head(repo);
+  const r = await checkoutBranch(git, repo, { name: "side" });
+  assert.equal(r.ok, false);
+  assert.equal(r.outcome, "refused");
+  assert.deepEqual(r.blocked, ["a.txt"]);
+  assert.deepEqual(status(repo), before);
+  assert.equal(head(repo), at);
+  // Nothing in the way: it just checks out.
+  const clean = init("checkout-clean");
+  const done = await checkoutBranch(git, clean, { name: "side" });
+  assert.equal(done.outcome, "done", done.err);
+  assert.equal(branch(clean), "side");
+  // Another failure (no such branch): "failed" with git's words, no files.
+  const gone = await checkoutBranch(git, repo, { name: "nowhere" });
+  assert.equal(gone.outcome, "failed");
+  assert.deepEqual(gone.blocked ?? [], []);
+}
+
+// Smart Checkout: the changes and their staging come back as they were, on the other
+// branch, and the stash it used is gone.
+{
+  const repo = init("checkout-smart");
+  edit(repo, "a.txt", 0, "mine-a1"); // in the way, merges with side's change
+  sh(repo, "git add a.txt");
+  edit(repo, "a.txt", 1, "mine-a2"); // staged and unstaged in the same file
+  edit(repo, "b.txt", 0, "mine-b1");
+  sh(repo, "echo new > n.txt && git add n.txt");
+  write(repo, "u.txt", "u\n");
+  const before = status(repo);
+  const staged = sh(repo, "git diff --cached");
+  const r = await smartRun(git, repo, { request: { type: "checkout", name: "side" } });
+  assert.equal(r.ok, true, r.err);
+  assert.equal(r.outcome, "done");
+  assert.equal(branch(repo), "side");
+  assert.deepEqual(status(repo), before);
+  assert.match(text(repo, "a.txt"), /^mine-a1\nmine-a2\n.*side-a5\n$/s);
+  const noIndexLine = (diff) => diff.replace(/^index .*\n/gm, "");
+  assert.equal(noIndexLine(sh(repo, "git diff --cached")), noIndexLine(staged), "the staging comes back");
+  assert.deepEqual(stashes(repo), []);
 }
 
 console.log("ok");

@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
 import { makeGit } from "./git.js";
 import { resetTo, checkCommit, currentBranch, RESET_MODES } from "./git-reset.js";
-import { listSnapshots, SNAPSHOTS } from "./git-snapshot.js";
+import { listSnapshots, restore, SNAPSHOTS } from "./git-snapshot.js";
 import { en } from "./messages-reset.js";
 
 // The user's own git settings stay out of every git these tests start.
@@ -143,7 +143,8 @@ assert.deepEqual(RESET_MODES, ["soft", "mixed", "hard", "keep"]);
 }
 
 // Hard with local changes: first a snapshot of all of them, working tree and staging,
-// named "Reset: N files"; untracked files are left out (a hard reset leaves them).
+// named "Reset: N files"; an untracked file at a path the commit lacks is left out (a hard
+// reset leaves it).
 {
   const { repo, first } = twoCommits("hard-recorded");
   sh(repo, "echo staged > k.txt && git add k.txt && echo worktree > k.txt && echo mine > a.txt && echo new > n.txt && git add n.txt && echo loose > u.txt");
@@ -164,6 +165,35 @@ assert.deepEqual(RESET_MODES, ["soft", "mixed", "hard", "keep"]);
   // The working tree and the staging are both in it.
   assert.equal(sh(repo, `git show ${r.snapshot}:k.txt`), "worktree\n");
   assert.equal(sh(repo, `git show ${r.snapshot}^2:k.txt`), "staged\n");
+}
+
+// Hard onto a commit that tracks a path an untracked file holds: the reset writes over that
+// file, so it is recorded too, and Restore brings it back once HEAD is where it was. Other
+// untracked files stay out of the snapshot (the reset leaves them).
+{
+  const repo = init("hard-untracked");
+  sh(repo, "echo one > a.txt && git add -A && git commit -q -m first");
+  const first = head(repo);
+  sh(repo, "git checkout -q -b theirs && echo theirs > new.txt && mkdir d && echo deep > d/x.txt && git add -A && git commit -q -m theirs");
+  const theirs = head(repo);
+  sh(repo, "git checkout -q main && echo 'MY UNTRACKED' > new.txt && mkdir d && echo mine > d/x.txt && echo loose > u.txt");
+  const r = await resetTo(git, repo, { commit: theirs, mode: "hard", copy: COPY });
+  assert.equal(r.ok, true, r.err);
+  assert.equal(text(repo, "new.txt"), "theirs\n");
+  assert.match(r.snapshot ?? "", /^[0-9a-f]{40}$/);
+  const list = await listSnapshots(git, repo);
+  assert.deepEqual(list.snapshots[0].files, [
+    { path: "d/x.txt", status: "added" },
+    { path: "new.txt", status: "added" },
+  ]);
+  assert.equal(sh(repo, `git show ${r.snapshot}:new.txt`), "MY UNTRACKED\n");
+
+  const back = await resetTo(git, repo, { commit: first, mode: "hard", copy: COPY });
+  assert.equal(back.ok, true, back.err);
+  const restored = await restore(git, repo, { snapshot: r.snapshot, paths: ["new.txt", "d/x.txt"], copy: COPY });
+  assert.equal(restored.ok, true, restored.err);
+  assert.equal(text(repo, "new.txt"), "MY UNTRACKED\n");
+  assert.equal(text(repo, "d/x.txt"), "mine\n");
 }
 
 // Hard that can't be recorded: nothing is reset, nothing is lost.

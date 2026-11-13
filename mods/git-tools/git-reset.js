@@ -1,5 +1,6 @@
 // Resetting the current branch to a commit: soft, mixed, hard or keep. A hard reset first
-// records every local change (working tree and staging) as a snapshot named "Reset"
+// records every local change (working tree and staging, and the untracked files the reset
+// writes over) as a snapshot named "Reset"
 // (git-snapshot.js), so Restore can bring them back; when it can't be recorded, nothing
 // is reset. No `herdr` import: node tests it against real repositories (git-reset.test.mjs).
 
@@ -43,12 +44,36 @@ async function localChanges(git, root) {
   return { ok: true, paths: [...found].sort() };
 }
 
+// The untracked files (ignored ones aside) a hard reset to `commit` writes over: the commit
+// tracks that path, a file where one of its folders goes, or a path under one of its
+// files. { ok, paths }. The other untracked files the reset leaves alone.
+async function untrackedInTheWay(git, root, commit) {
+  const loose = await git.read(root, ["ls-files", "-z", "-o", "--exclude-standard"]);
+  if (!loose.ok) return loose;
+  const paths = loose.out.split("\0").filter(Boolean);
+  if (!paths.length) return { ok: true, paths };
+  const tree = await git.read(root, ["ls-tree", "-r", "-z", "--name-only", "--full-tree", commit]);
+  if (!tree.ok) return tree;
+  const files = new Set(), folders = new Set();
+  for (const path of tree.out.split("\0")) {
+    if (!path) continue;
+    files.add(path);
+    for (let i = path.indexOf("/"); i > 0; i = path.indexOf("/", i + 1)) folders.add(path.slice(0, i));
+  }
+  const under = (path) => {
+    for (let i = path.indexOf("/"); i > 0; i = path.indexOf("/", i + 1)) if (files.has(path.slice(0, i))) return true;
+    return false;
+  };
+  return { ok: true, paths: paths.filter((path) => files.has(path) || folders.has(path) || under(path)) };
+}
+
 // resetTo(git, root, { commit, mode, copy }) → { ok, code, out, err, msg?, snapshot, changed }
 //   Moves the current branch (or a detached HEAD) to `commit`, a full hash (checkCommit),
 //   with `mode`, one of RESET_MODES:
 //   - soft: the index and the files stay; what the commits held is staged.
 //   - mixed: the index follows, the files stay.
-//   - hard: the index and the files follow. Before it, every local change is recorded as a
+//   - hard: the index and the files follow. Before it, every local change, and each
+//     untracked file at a path `commit` tracks (untrackedInTheWay), is recorded as a
 //     snapshot named "Reset" (`copy`: the calling copy's id, as for git-snapshot.js record);
 //     snapshot is its hash, or null when nothing local changed. Not recorded: not reset
 //     (reset.notRecorded, with the cause's words).
@@ -64,7 +89,9 @@ export async function resetTo(git, root, { commit, mode, copy } = {}) {
   let snapshot = null;
   if (mode === "hard") {
     const local = await localChanges(git, root);
-    const made = local.ok ? await record(git, root, local.paths, copy, "Reset") : local;
+    const loose = local.ok ? await untrackedInTheWay(git, root, commit) : local;
+    const paths = loose.ok ? [...new Set([...local.paths, ...loose.paths])].sort() : [];
+    const made = loose.ok ? await record(git, root, paths, copy, "Reset") : loose;
     if (!made.ok) {
       const cause = made.msg ? { cause: made.msg } : {};
       return { ok: false, code: made.code, out: "", err: `Nothing was reset: the local changes couldn't be recorded first.\n${made.err}`, msg: { key: "reset.notRecorded", args: { err: made.err }, ...cause }, ...none };

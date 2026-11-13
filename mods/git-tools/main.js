@@ -54,6 +54,7 @@ import RevisionTree from "./view-revision-tree.js";
 import HistoryTab from "./view-history-tab.js";
 import Patch from "./view-patch.js";
 import GoToHash from "./view-go-to-hash.js";
+import MergeRevisions from "./view-merge-revisions.js";
 
 // When the system's language isn't known yet, how long to wait before each next ask.
 const ASK_AGAIN = [1000, 3000, 10000];
@@ -84,6 +85,7 @@ export const VIEWS = {
   "history": HistoryTab, // history up to here tab (space-tabs.js)
   "patch": Patch, // Patch File Settings dialog
   "go-to-hash": GoToHash, // Go to Hash/Branch/Tag popup
+  "merge-revisions": MergeRevisions, // Merge Revisions dialog (Resolve Manually in the Conflicts dialog)
 };
 
 // `mod.open:git-tools` (cmd-k) opens a copy with no view. No single app command both

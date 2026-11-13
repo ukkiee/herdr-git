@@ -15,6 +15,7 @@ import { writerOn } from "./view-conflicts.js";
 import { runReset } from "./view-reset.js";
 import { applySnapshot } from "./git-snapshot.js";
 import { createPatch } from "./git-revision.js";
+import { saveRequest } from "./merge-revisions-model.js";
 
 const strings = (value) => (Array.isArray(value) ? value.filter((v) => typeof v === "string" && v) : []);
 const text = (value) => (typeof value === "string" && value ? value : null);
@@ -28,6 +29,7 @@ export const SERVE_ACTIONS = {
   "patch-create": { work: "revision.creating", run: (git, root, args) => (text(args.file)
     ? createPatch(git, root, { commits: strings(args.commits), paths: strings(args.paths), reverse: args.reverse === true, base: text(args.base), file: args.file })
     : { ok: false, err: "No patch file.", msg: { key: "revision.needFile", args: {} } }) },
+  "conflicts-save": { work: "conflicts.saving", run: (git, root, args) => saveRequest(git, root, args, writerOn(typeof args.on === "string" ? args.on : null)) },
 };
 
 // serveAction(panel, e, cx) → true when the table has e.action and the panel now runs

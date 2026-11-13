@@ -17,14 +17,36 @@
 
 import { div } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState } from "gpui-base";
-import { exec, theme, settings } from "herdr";
+import { exec, theme, settings, appHome } from "herdr";
 import { makeGit } from "./git.js";
 import { readOperation } from "./git-operation.js";
-import { readVersions } from "./git-conflict.js";
+import { readVersions, dropStaged, localPlacer, remotePlacer } from "./git-conflict.js";
 import { columns } from "./conflicts-model.js";
+import { writerOn } from "./view-conflicts.js";
 import { decide, applyNonConflicting, resolveSimple, resultText, edit } from "./merge-chunks.js";
-import { paneTitles, openFile, layoutRows, chunkButtons, toolbar, countWords, seekConflict, nextFile, leftToDecide } from "./merge-revisions-model.js";
+import { paneTitles, openFile, layoutRows, chunkButtons, toolbar, countWords, seekConflict, nextFile, leftToDecide, stageSave } from "./merge-revisions-model.js";
 import { dialogFrame, button, iconButton, close, askOwner, writeBlock, scrollText, sentence, notice, WindowedList } from "./ui.js";
+
+// Where a local space's result is staged for the panel: the app's own git-tools folder
+// (app-files.js).
+const STAGE_DIR = "git-tools";
+
+// placerOn(on): how the panel puts a staged result in place (serve-actions.js
+// "conflicts-save"). Another machine's space: with sh there. This computer's: written the
+// way a local space writes (view-conflicts.js writerOn); read with cat, as readTextFile
+// stops at 1 MiB.
+export function placerOn(on) {
+  if (on) return remotePlacer(exec, on);
+  return localPlacer({
+    read: async (file) => {
+      const r = await exec("cat", [file]);
+      if (r.code !== 0) throw new Error((r.stderr ?? "").trim() || `cat exited with ${r.code}`);
+      return r.stdout ?? "";
+    },
+    write: writerOn(null),
+    remove: (file) => dropStaged(exec, null, file),
+  });
+}
 
 // The height of one line of the picture.
 const LINE = 20;
@@ -161,12 +183,12 @@ export default class MergeRevisionsView {
 
   // ---- writes (asked of the owner)
 
-  ask(action, args, cx, done) {
+  ask(action, args, cx, done, failed) {
     this.waiting = true; this.error = null;
     cx.notify();
     askOwner(this, action, { ...this.repo(), ...args }, this.who, cx, (r, cx) => {
       this.waiting = false;
-      if (!r.ok) { this.error = sentence(this.t, r.msg, r.err); return; }
+      if (!r.ok) { failed?.(r); this.error = sentence(this.t, r.msg, r.err); return; }
       done?.(cx);
     });
   }
@@ -179,7 +201,18 @@ export default class MergeRevisionsView {
     if (!anyway && leftToDecide(state) > 0) { this.confirm = then; return; }
     this.confirm = null;
     if (this.editor) { this.editor.release(); this.editor = null; }
-    this.ask("conflicts-save", { path: this.path, text: resultText(state) }, cx, (cx) => (then === "apply" ? this.goOn(cx) : this.shut()));
+    const text = resultText(state);
+    this.waiting = true; this.error = null;
+    cx.notify();
+    cx.spawn(async (cx) => {
+      const staged = await stageSave(exec, this.on, { path: this.path, text, dir: `${appHome()}/${STAGE_DIR}` });
+      if (!staged.ok) { this.waiting = false; this.error = sentence(this.t, staged.msg, staged.err); cx.notify(); return; }
+      this.ask("conflicts-save", staged.args, cx, (cx) => (then === "apply" ? this.goOn(cx) : this.shut()), (r) => {
+        // A panel that never took the request leaves the staged file to us; one that took
+        // it removes it.
+        if (r.unheard) dropStaged(exec, this.on, staged.args.file);
+      });
+    });
   }
 
   // Accept Left or Accept Right: the whole file from that side.

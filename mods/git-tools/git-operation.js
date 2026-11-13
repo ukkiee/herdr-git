@@ -21,7 +21,8 @@ const LITERAL = "--literal-pathspecs";
 
 // The state files, by their name under the git folder. ORIG_HEAD and AUTO_MERGE are left
 // out: a finished operation leaves them behind.
-const NAMES = ["MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "REBASE_HEAD", "MERGE_MSG", "rebase-merge", "rebase-apply", "sequencer"];
+// HEAD is read with them for the branch the operation happens on (`branch`).
+const NAMES = ["MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "REBASE_HEAD", "MERGE_MSG", "rebase-merge", "rebase-apply", "sequencer", "HEAD"];
 // What is read inside the folders: rebase-merge is the default backend, rebase-apply the
 // --apply one (`git am` uses it too, without `onto`).
 const INSIDE = {
@@ -35,13 +36,14 @@ const SIDE = { U: "modified", A: "added", D: "deleted" };
 const failed = (r, extra = {}) => ({ ok: false, code: r.code ?? -1, out: r.out ?? "", err: r.err ?? "", ...(r.msg ? { msg: r.msg } : {}), ...extra });
 const refuse = (err, msg, extra = {}) => ({ ok: false, code: -1, out: "", err, msg, ...extra });
 
-const NONE = { kind: null, target: null, rebasing: null, current: null, step: null, sequence: false, message: "", conflicts: [], staged: [], canContinue: false, canSkip: false };
+const NONE = { kind: null, branch: null, target: null, rebasing: null, current: null, step: null, sequence: false, message: "", conflicts: [], staged: [], canContinue: false, canSkip: false };
 
-// readOperation(git, root, { status }?) → { ok, err, msg?, kind, head, target, rebasing,
+// readOperation(git, root, { status }?) → { ok, err, msg?, kind, head, branch, target, rebasing,
 //   current, step, sequence, message, conflicts, staged, canContinue, canSkip }
 //   kind: "merge" | "rebase" | "cherry-pick" | "revert", or null when nothing is in progress.
 //     A stash pop or apply that conflicted leaves no operation: kind null with conflicts.
 //   head: the commit HEAD is on (null without commits).
+//   branch: the branch HEAD is on, null on a detached HEAD (a rebase always runs on one).
 //   target: what a merge merges in, or what a rebase goes onto: a branch or tag name
 //     pointing at that commit, else its short hash.
 //   rebasing: the branch a rebase rewrites (null when it started on a detached HEAD).
@@ -78,7 +80,8 @@ export async function readOperation(git, root, { status } = {}) {
     : /^(p|pick)\s/.test(todo) ? "cherry-pick"
     : /^revert\s/.test(todo) ? "revert"
     : null;
-  const base = { ok: true, err: "", ...NONE, head: st.head, conflicts };
+  const ref = /^ref: refs\/heads\/(.+)$/.exec(first("HEAD"));
+  const base = { ok: true, err: "", ...NONE, head: st.head, branch: ref ? ref[1] : null, conflicts };
   if (!kind) return base;
   const currentHash = first({ rebase: "REBASE_HEAD", revert: "REVERT_HEAD", "cherry-pick": "CHERRY_PICK_HEAD", merge: "MERGE_HEAD" }[kind]) || null;
   const targetHash = kind === "merge" ? currentHash : rebase ? first(`${rebase}/onto`) || null : null;
@@ -157,6 +160,23 @@ async function describe(git, root, hashes) {
     out.set(hash.trim(), { who: { subject: subject ?? "", author: author ?? "" }, name: names[0], message: (body ?? "").replace(/\s+$/, "") });
   }
   return out;
+}
+
+// operationName(op, { step }?) → { key, args } for t(), or null when nothing is in
+// progress: "Merging main", "Rebasing feature", "Cherry-picking in main", "Reverting in
+// main". The VCS widget and the Commit panel name an operation by it, so both say the
+// same. The name is the branch the operation happens on: a rebase's is the branch it
+// rewrites, the others' the branch HEAD is on; the commit HEAD is on, short, when there
+// is no branch. step: a rebase also says how far it got ("Rebasing feature (1/2)").
+export function operationName(op, { step = false } = {}) {
+  if (!op?.kind) return null;
+  const here = op.branch ?? (op.head ? op.head.slice(0, 7) : "HEAD");
+  if (op.kind === "rebase") {
+    const name = op.rebasing ?? here;
+    return step && op.step?.total ? { key: "ops.rebasingStep", args: { name, n: op.step.n, total: op.step.total } } : { key: "ops.rebasing", args: { name } };
+  }
+  const key = { merge: "ops.merging", "cherry-pick": "ops.cherryPicking", revert: "ops.reverting" }[op.kind];
+  return { key, args: { name: here } };
 }
 
 // A message as git keeps it in MERGE_MSG, without the lines git comments out ("#

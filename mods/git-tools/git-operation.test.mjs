@@ -6,7 +6,7 @@ import { mkdtempSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileS
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
 import { makeGit } from "./git.js";
-import { readOperation, continueOperation, abortOperation, skipOperation } from "./git-operation.js";
+import { readOperation, continueOperation, abortOperation, skipOperation, operationName } from "./git-operation.js";
 import { translator } from "./i18n.js";
 
 // The person's own git settings (an editor, gpgSign, hooks path) stay out of every repository here.
@@ -193,6 +193,43 @@ git checkout -q a`);
   assert.deepEqual(there.conflicts, [UU]);
   const here = await quietly(repo);
   assert.equal(here.kind, null);
+  assert.equal(there.branch, "linked");
+  assert.equal(here.branch, "main");
+}
+
+// The name the VCS widget and the Commit panel give an operation in progress: the branch
+// it happens on (a rebase: the branch it rewrites), in both languages.
+{
+  const en = translator("en"), ko = translator("ko");
+  const says = (op, opts) => { const n = operationName(op, opts); return [en(n.key, n.args), ko(n.key, n.args)]; };
+
+  const merge = init("name-merge");
+  start(merge, "git merge side");
+  let r = await quietly(merge);
+  assert.equal(r.branch, "main");
+  assert.deepEqual(says(r), ["Merging main", "main 병합 중"]);
+
+  const rebase = init("name-rebase");
+  start(rebase, "git checkout -q side && git rebase main");
+  r = await quietly(rebase);
+  assert.equal(r.branch, null, "a rebase runs on a detached HEAD");
+  assert.deepEqual(says(r), ["Rebasing side", "side 리베이스 중"]);
+  assert.deepEqual(says(r, { step: true }), ["Rebasing side (1/2)", "side 리베이스 중 (1/2)"]);
+
+  const pick = init("name-pick");
+  start(pick, "git cherry-pick side~1");
+  assert.deepEqual(says(await quietly(pick)), ["Cherry-picking in main", "main에서 체리픽 중"]);
+
+  const revert = init("name-revert");
+  start(revert, "printf 'two\\n' > f.txt && git commit -q -am two && git revert --no-edit HEAD~1");
+  assert.deepEqual(says(await quietly(revert)), ["Reverting in main", "main에서 되돌리는 중"]);
+
+  // Started on a detached HEAD: the commit it started on, short.
+  const loose = init("name-detached");
+  const at = hash(loose, "main").slice(0, 7);
+  start(loose, "git checkout -q --detach main && git merge side");
+  assert.deepEqual(says(await quietly(loose)), [`Merging ${at}`, `${at} 병합 중`]);
+  assert.equal(operationName({ kind: null }), null);
 }
 
 // ---- Continue, Abort, Skip

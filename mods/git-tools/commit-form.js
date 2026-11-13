@@ -42,7 +42,7 @@ import { div } from "gpui-kit";
 import { h_flex, v_flex, TextareaState } from "gpui-base";
 import { theme, props, notify } from "herdr";
 import { commit, lastMessage, headIsPushed } from "./git-commit.js";
-import { abortOperation, skipOperation } from "./git-operation.js";
+import { abortOperation, skipOperation, operationName } from "./git-operation.js";
 import { openPush } from "./view-push.js";
 import { broadcast, button, checkbox, errorStrip, textBox, writingOn, fromRepo, sentence, openMenu } from "./ui.js";
 import { sameRepo } from "./lock.js";
@@ -232,14 +232,11 @@ export default class CommitForm {
     else if (r.outcome === "empty") notify({ title: kind === "revert" ? t("ops.emptyRevertTitle") : t("ops.emptyTitle"), body: t("ops.emptyBody"), level: "info" });
   }
 
-  // The line above the message while an operation is in progress: "Merging side", "Rebasing
-  // feature (1/2)".
+  // The line above the message while an operation is in progress: "Merging main", "Rebasing
+  // feature (1/2)", named as the VCS widget names it (git-operation.js operationName).
   label(op) {
-    const t = this.host.t, subject = op.current ? `'${op.current.subject || op.current.hash.slice(0, 8)}'` : "";
-    if (op.kind === "merge") return t("ops.merging", { name: op.target ?? "" });
-    if (op.kind === "rebase") return op.step?.total ? t("ops.rebasingStep", { name: op.rebasing ?? "HEAD", n: op.step.n, total: op.step.total }) : t("ops.rebasing", { name: op.rebasing ?? "HEAD" });
-    if (op.kind === "cherry-pick") return t("ops.cherryPicking", { name: subject });
-    return t("ops.reverting", { name: subject });
+    const name = operationName(op, { step: true });
+    return name ? this.host.t(name.key, name.args) : "";
   }
 
   // Abort or Skip, under the repository's lock like a commit. Abort asks first, by its

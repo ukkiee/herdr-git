@@ -14,6 +14,119 @@ const SCRATCH = "git-tools-patch-index";
 
 const refuse = (err, key, args = {}) => ({ ok: false, code: -1, out: "", err, msg: { key, args } });
 
+// ---- Reading a patch
+
+// A C-quoted name as git writes one ("a/\355\225\234.txt"): escapes, and octal bytes
+// that are UTF-8. → { name, end } (end: the index after the closing quote), or null.
+const ESCAPES = { a: "\x07", b: "\b", t: "\t", n: "\n", v: "\v", f: "\f", r: "\r", '"': '"', "\\": "\\" };
+function unquote(text, start = 0) {
+  if (text[start] !== '"') return null;
+  let bytes = "";
+  for (let i = start + 1; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === '"') {
+      try { return { name: decodeURIComponent(bytes), end: i + 1 }; } catch { return null; }
+    }
+    if (ch !== "\\") { bytes += encodeURIComponent(ch); continue; }
+    const next = text[++i];
+    if (/[0-7]/.test(next ?? "")) {
+      bytes += `%${parseInt(text.slice(i, i + 3), 8).toString(16).padStart(2, "0")}`;
+      i += 2;
+    } else if (next in ESCAPES) bytes += encodeURIComponent(ESCAPES[next]);
+    else return null;
+  }
+  return null;
+}
+
+// What follows "--- " or "+++ ": the name without git's trailing tab or a diff's date,
+// null for /dev/null.
+function headerName(rest) {
+  const quoted = unquote(rest);
+  const name = quoted ? quoted.name : rest.split("\t")[0];
+  return name === "/dev/null" ? null : name;
+}
+
+// git apply's default -p1: the name after its first folder ("a/x" → "x").
+const strip = (name) => (name === null ? null : name.includes("/") ? name.slice(name.indexOf("/") + 1) : name);
+
+// The two names on a "diff --git" line: quoted ones read exactly; unquoted ones that
+// hold spaces are split in the middle, which is right whenever both names are the same
+// (a rename or copy says its names on lines of their own).
+function gitLineNames(rest) {
+  const first = unquote(rest);
+  if (first) {
+    const second = rest[first.end] === " " ? unquote(rest, first.end + 1) : null;
+    return second ? [first.name, second.name] : [first.name, rest.slice(first.end + 1)];
+  }
+  const half = (rest.length - 1) / 2;
+  return Number.isInteger(half) && rest[half] === " " ? [rest.slice(0, half), rest.slice(half + 1)] : [rest, rest];
+}
+
+// "@@ -12,3 +12,4 @@" → [3, 4]: the lines the hunk has on each side.
+function hunkSize(line) {
+  const m = /^@@ -\d+(?:,(\d+))? \+\d+(?:,(\d+))? @@/.exec(line);
+  return m ? [m[1] === undefined ? 1 : Number(m[1]), m[2] === undefined ? 1 : Number(m[2])] : null;
+}
+
+// readPatchFiles(text) → { ok, files: [{ path, from?, status }], err?, msg? }
+//   The files a patch changes, in its order, named as git apply names them (after the
+//   first folder: "a/x" is x), so they can be picked with --include. status: "added",
+//   "modified", "deleted" or "renamed" (from: the old name; a copy is "added"). path: the
+//   new name, the old one for a deleted file. Reads git's patches and plain unified
+//   diffs. Pure: the screen reads the text, from a file or the clipboard.
+//   Empty text (msg patch.empty) and text with no file in it (patch.notPatch) are refused.
+export function readPatchFiles(text) {
+  const lines = String(text ?? "").split("\n").map((line) => line.replace(/\r$/, ""));
+  if (!lines.some((line) => line.trim())) return { ok: false, files: [], err: "The patch is empty.", msg: { key: "patch.empty", args: {} } };
+  const files = [];
+  let entry = null, left = null;
+  const end = () => {
+    if (!entry) return;
+    const { status, from } = entry;
+    const path = status === "deleted" ? entry.old : entry.new ?? entry.old;
+    if (path) files.push({ path, ...(status === "renamed" ? { from } : {}), status });
+    entry = null;
+  };
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    // Inside a hunk every line is the file's, whatever it looks like.
+    if (left) {
+      if (line === "" || /^[ +\-\\]/.test(line)) {
+        // "\ No newline at end of file" counts on neither side.
+        if (line[0] !== "\\" && line[0] !== "+") left[0]--;
+        if (line[0] !== "\\" && line[0] !== "-") left[1]--;
+        if (left[0] <= 0 && left[1] <= 0) left = null;
+        continue;
+      }
+      left = null;
+    }
+    if (line.startsWith("diff --git ")) {
+      end();
+      const [a, b] = gitLineNames(line.slice(11)).map(strip);
+      entry = { git: true, old: a, new: b, status: "modified", from: null };
+    } else if (line.startsWith("@@ ") && entry) {
+      left = hunkSize(line);
+    } else if (entry?.git && !left) {
+      if (line.startsWith("new file mode")) entry.status = "added";
+      else if (line.startsWith("deleted file mode")) entry.status = "deleted";
+      else if (line.startsWith("rename from ")) { entry.status = "renamed"; entry.old = entry.from = headerName(line.slice(12)); }
+      else if (line.startsWith("rename to ")) entry.new = headerName(line.slice(10));
+      else if (line.startsWith("copy from ")) entry.status = "added";
+      else if (line.startsWith("copy to ")) entry.new = headerName(line.slice(8));
+      else if (line.startsWith("--- ")) { const name = strip(headerName(line.slice(4))); if (name) entry.old = name; }
+      else if (line.startsWith("+++ ")) { const name = strip(headerName(line.slice(4))); if (name) entry.new = name; }
+    } else if (line.startsWith("--- ") && lines[i + 1]?.startsWith("+++ ") && hunkSize(lines[i + 2] ?? "")) {
+      end();
+      const old = strip(headerName(line.slice(4))), now = strip(headerName(lines[i + 1].slice(4)));
+      entry = { git: false, old, new: now, status: old === null ? "added" : now === null ? "deleted" : "modified", from: null };
+      i++;
+    }
+  }
+  end();
+  if (!files.length) return { ok: false, files: [], err: "This is not a patch.", msg: { key: "patch.notPatch", args: {} } };
+  return { ok: true, files };
+}
+
 // ---- Create Patch from local changes
 
 // changesCommit(git, root, { paths, message }) → { ok, code, out, err, msg?, hash }

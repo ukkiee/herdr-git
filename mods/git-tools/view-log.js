@@ -17,6 +17,7 @@ import { exec, theme, watchFolder } from "herdr";
 import { makeGit, repoRoot } from "./git.js";
 import { readRefsState, readGitDir, refsChanged, resolveCommit } from "./git-log.js";
 import { fetchAll, restoreBranch } from "./git-branch.js";
+import { remoteFailure } from "./git-remote.js";
 import { location, panelFrame, toolbar, spacer, iconButton, notice, notRepository, errorStrip, noteBar, sentence, toggleLogPanel, logPanelShown, broadcast, scriptedRepo, takeWrite, releaseWrite, writeBlock, writeName, writingOn, readBlocked, fromRepo, gitButtonPlaced, openMenu, progressBar } from "./ui.js";
 import { sameRepo } from "./lock.js";
 import { serveBranch } from "./view-branch-new.js";
@@ -530,7 +531,7 @@ export default class LogView {
       this.setBusy(null, cx);
       // Every screen on this repository reads again, this one included (see event()).
       if (r.ok) broadcast({ type: "changed", root: repo.root });
-      else this.failedOn(repo, r.err, cx);
+      else this.failedOn(repo, remoteFailure(this.t, r, "fetch").err, cx);
     });
   }
 

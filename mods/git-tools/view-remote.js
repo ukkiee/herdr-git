@@ -15,6 +15,7 @@ import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { exec, theme, notify } from "herdr";
 import { makeGit } from "./git.js";
 import { readRemote, defineRemote, removeRemote } from "./git-refs.js";
+import { remoteFailure } from "./git-remote.js";
 import { openDialog, dialogFrame, button, checkbox, close, askOwner, writeBlock, scrollText, sentence, notice } from "./ui.js";
 
 // openRemoteEdit({ root, on, name, owner, lang }) / openRemoteRemove(…): name: the remote.
@@ -51,7 +52,7 @@ export async function runRemoteAdd(git, root, args, panel) {
 function defined(r, name, panel) {
   if (r.fetchFailed) {
     const t = panel.t;
-    notify({ title: t("refs.fetchFailedAfter", { name }), body: sentence(t, r.fetchFailed.msg, r.fetchFailed.err) || "", level: "error" });
+    notify({ title: t("refs.fetchFailedAfter", { name }), body: remoteFailure(t, { ok: false, ...r.fetchFailed }, "fetch").err, level: "error" });
   }
   return r;
 }

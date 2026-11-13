@@ -14,6 +14,7 @@ import { v_flex, InputState, Input } from "gpui-base";
 import { exec, theme } from "herdr";
 import { makeGit } from "./git.js";
 import { createTag, readRemotes, pushTag } from "./git-refs.js";
+import { remoteFailure } from "./git-remote.js";
 import { openDialog, openMenu, dialogFrame, button, close, askOwner, writeBlock, scrollText, sentence } from "./ui.js";
 
 // openTag({ root, on, commit, owner, lang, who }): owner: the opening panel's bus id; who:
@@ -51,7 +52,7 @@ export function pushTagMenu(widget, b, at, cx) {
       ? list.remotes.map((remote) => ({ label: tr("refs.pushTo", { remote }), value: remote }))
       : [{ label: tr("refs.noRemotes"), value: "", disabled: true }];
     const remote = await openMenu(host.bus, rows, { width: 260, ...(at ? { at } : {}), lang: host.lang });
-    if (remote) widget.write({ key: "refs.pushingTag" }, (repo) => pushTag(repo.git, repo.root, { tag: b.name, remote }), cx);
+    if (remote) widget.write({ key: "refs.pushingTag" }, async (repo) => remoteFailure(tr, await pushTag(repo.git, repo.root, { tag: b.name, remote }), "push"), cx);
     cx.notify();
   });
 }

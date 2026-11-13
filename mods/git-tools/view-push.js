@@ -32,6 +32,7 @@ import { h_flex, v_flex } from "gpui-base";
 import { exec, theme } from "herdr";
 import { makeGit } from "./git.js";
 import { PROTECTED, readPushPlan, readPushFiles, push } from "./git-push.js";
+import { remoteFailure } from "./git-remote.js";
 import { formatTime } from "./i18n.js";
 import { buildRows } from "./tree.js";
 import { tip, openDialog, openMenu, dialogFrame, button, notice, errorStrip, row,icon, uiGlyph, ICON, fileGlyph, folderGlyph, darkLook, close, scriptedRepo, WindowedList, askOwner, serveRequest, writeBlock, sentence } from "./ui.js";
@@ -84,7 +85,7 @@ export function servePush(panel, e, cx) {
         msg: { key: "dialogs.push.moved", args: { why: sentence(t, moved.msg, moved.text) } },
       };
     }
-    return push(git, repo.root, { force: force === true, ...source });
+    return remoteFailure(t, await push(git, repo.root, { force: force === true, ...source }), "push");
   }, cx);
 }
 

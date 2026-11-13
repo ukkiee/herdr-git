@@ -16,6 +16,7 @@ import { MOD, LOG_NODE, answerMenu, logPanelShown, openCommitPanel, serveRequest
 import { vcsOpsItems, numberedPick, takesVcsOps, commitPanelShown } from "./vcs-ops.js";
 import { makeGit } from "./git.js";
 import { fetchAll } from "./git-branch.js";
+import { remoteFailure } from "./git-remote.js";
 import { openPush } from "./view-push.js";
 import { openBranchNew } from "./view-branch-new.js";
 import { newTagAtHead } from "./view-tag.js";
@@ -115,7 +116,7 @@ function fetchFrom(panel, kind, cx) {
   if (!r) return;
   // serveRequest wants a request: this one's key is answered to nobody.
   const e = { key: `vcs-ops-fetch-${Date.now().toString(36)}`, args: { root: r.root, on: r.on ?? null } };
-  serveRequest(panel, e, { key: "log.fetching" }, (repo) => fetchAll(makeGit(exec, repo.on), repo.root), cx);
+  serveRequest(panel, e, { key: "log.fetching" }, async (repo) => remoteFailure(panel.t, await fetchAll(makeGit(exec, repo.on), repo.root), "fetch"), cx);
 }
 
 // Popup size, px: title row, the group's caption, rows and separators.

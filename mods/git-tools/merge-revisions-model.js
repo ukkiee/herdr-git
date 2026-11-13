@@ -151,6 +151,19 @@ export function leftToDecide(state) {
   return changes + conflicts;
 }
 
+// saveQuestion(state, { opened, now, passed }) → "unresolved" | "overwrite" | null: what
+// Apply Changes or Save and Close asks before writing, null to write at once.
+//   unresolved: something is left to decide (leftToDecide).
+//   overwrite: the working file on disk (`now`, its text, null when it can't be read) isn't
+//   what the dialog read when it opened the file (`opened`): saving would write over what
+//   was written since. Exact text: a line end changed counts.
+//   passed: the questions already answered yes, not asked again.
+export function saveQuestion(state, { opened = null, now = null, passed = [] } = {}) {
+  if (!passed.includes("unresolved") && leftToDecide(state) > 0) return "unresolved";
+  if (!passed.includes("overwrite") && (opened ?? null) !== (now ?? null)) return "overwrite";
+  return null;
+}
+
 // seekConflict(state, from, dir) → the index of the next open conflict after chunk `from`
 // (dir 1) or before it (dir -1), or -1. from -1 with dir 1 finds the first.
 export function seekConflict(state, from, dir) {

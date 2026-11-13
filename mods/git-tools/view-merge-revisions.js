@@ -21,10 +21,10 @@ import { exec, theme, settings, appHome } from "herdr";
 import { makeGit } from "./git.js";
 import { readOperation } from "./git-operation.js";
 import { readVersions, dropStaged, localPlacer, remotePlacer } from "./git-conflict.js";
-import { columns } from "./conflicts-model.js";
-import { writerOn } from "./view-conflicts.js";
+import { columns, editedSince } from "./conflicts-model.js";
+import { writerOn, readerOn } from "./view-conflicts.js";
 import { decide, applyNonConflicting, resolveSimple, resultText, edit } from "./merge-chunks.js";
-import { paneTitles, openFile, layoutRows, chunkButtons, toolbar, countWords, seekConflict, nextFile, leftToDecide, stageSave } from "./merge-revisions-model.js";
+import { paneTitles, openFile, layoutRows, chunkButtons, toolbar, countWords, seekConflict, nextFile, leftToDecide, saveQuestion, stageSave } from "./merge-revisions-model.js";
 import { dialogFrame, button, iconButton, close, askOwner, writeBlock, scrollText, sentence, notice, WindowedList } from "./ui.js";
 
 // Where a local space's result is staged for the panel: the app's own git-tools folder
@@ -61,6 +61,8 @@ const COLUMNS = 400;
 
 // "#rrggbb" plus an alpha byte: a tint of a theme color that works in light and dark.
 const tint = (color, alpha) => (/^#[0-9a-f]{6}$/i.test(color ?? "") ? color + alpha : color);
+// The size of a question's card over the dialog.
+const QUESTION = { width: 460, height: 190 };
 // A line's text without its line end.
 const bare = (text) => text.replace(/\r?\n$/, "");
 
@@ -82,7 +84,12 @@ export default class MergeRevisionsView {
     this.current = -1; // the chunk Previous and Next Conflict went to
     this.editor = null; // the EditorState while the result is edited by hand
     this.waiting = false; // asked the owner, no answer yet
-    this.confirm = null; // "apply" | "close": saving with something left to decide
+    // The question shown over the dialog: { kind: "unresolved" | "overwrite", then, passed }
+    // before saving (saveQuestion), { kind: "accept", column } before Accept Left or Right
+    // on a file edited since git left it.
+    this.confirm = null;
+    this.opened = null; // the working file's text when the file was read, null if unreadable
+    this.checking = false; // reading the disk before a write
     this.error = null;
     this.turn = 0;
     this.handle = cx.focus_handle();
@@ -105,12 +112,13 @@ export default class MergeRevisionsView {
       const [op, head, v] = await Promise.all([
         readOperation(this.git, this.root),
         this.git.read(this.root, ["symbolic-ref", "--short", "-q", "HEAD"]),
-        readVersions(this.git, this.root, path),
+        readVersions(this.git, this.root, path, { read: readerOn(this.on) }),
       ]);
       if (turn !== this.turn) return;
       if (!op.ok || !v.ok) { const r = op.ok ? v : op; this.error = sentence(this.t, r.msg, r.err); cx.notify(); return; }
       const branch = head.ok ? head.out.trim() || null : null;
       this.op = op;
+      this.opened = v.worktree ?? null;
       this.cols = columns(op, { branch, stash: this.stash });
       this.titles = paneTitles(op, { branch, stash: this.stash });
       this.file = openFile(v, this.cols);
@@ -132,7 +140,12 @@ export default class MergeRevisionsView {
     this.lay();
   }
 
-  free() { return Boolean(this.file?.state) && !this.waiting && !this.writing(); }
+  free() { return Boolean(this.file?.state) && !this.waiting && !this.checking && !this.writing(); }
+
+  // The working file as it is now, null when it can't be read.
+  async disk() {
+    try { const text = await readerOn(this.on)(`${this.root}/${this.path}`); return typeof text === "string" ? text : null; } catch { return null; }
+  }
 
   writing() { return this.root ? writeBlock(this, this.repo()) : null; }
 
@@ -193,20 +206,25 @@ export default class MergeRevisionsView {
     });
   }
 
-  // Apply Changes (then: "apply", the next file) or Save and Close (then: "close"). With
-  // something left to decide it asks first, unless `anyway`.
-  save(then, cx, anyway = false) {
+  // Apply Changes (then: "apply", the next file) or Save and Close (then: "close"). It asks
+  // first while something is left to decide, then when the working file changed on disk
+  // since it was read (saveQuestion), except the questions in `passed`.
+  save(then, cx, passed = []) {
     if (!this.free()) return;
     const state = this.settled();
+    this.confirm = null; this.checking = true; this.error = null;
     // The footer buttons don't redraw on their own: without cx.notify() the question
     // would wait for some later redraw.
-    if (!anyway && leftToDecide(state) > 0) { this.confirm = then; cx.notify(); return; }
-    this.confirm = null;
-    if (this.editor) { this.editor.release(); this.editor = null; }
-    const text = resultText(state);
-    this.waiting = true; this.error = null;
     cx.notify();
     cx.spawn(async (cx) => {
+      const now = await this.disk();
+      this.checking = false;
+      const kind = saveQuestion(state, { opened: this.opened, now, passed });
+      if (kind) { this.confirm = { kind, then, passed }; cx.notify(); return; }
+      if (this.editor) { this.editor.release(); this.editor = null; }
+      const text = resultText(state);
+      this.waiting = true;
+      cx.notify();
       const staged = await stageSave(exec, this.on, { path: this.path, text, dir: `${appHome()}/${STAGE_DIR}` });
       if (!staged.ok) { this.waiting = false; this.error = sentence(this.t, staged.msg, staged.err); cx.notify(); return; }
       this.ask("conflicts-save", staged.args, cx, (cx) => (then === "apply" ? this.goOn(cx) : this.shut()), (r) => {
@@ -217,11 +235,24 @@ export default class MergeRevisionsView {
     });
   }
 
-  // Accept Left or Accept Right: the whole file from that side.
-  acceptAll(column, cx) {
-    if (!this.file || this.waiting || this.writing()) return;
-    if (this.editor) { this.editor.release(); this.editor = null; }
-    this.ask("conflicts-accept", { path: this.path, side: this.cols[column].side }, cx, (cx) => this.goOn(cx));
+  // Accept Left or Accept Right: the whole file from that side. A file edited since git
+  // left it asks first (editedSince), unless `anyway`.
+  acceptAll(column, cx, anyway = false) {
+    if (!this.file || this.waiting || this.checking || this.writing()) return;
+    this.confirm = null;
+    const take = (cx) => {
+      if (this.editor) { this.editor.release(); this.editor = null; }
+      this.ask("conflicts-accept", { path: this.path, side: this.cols[column].side }, cx, (cx) => this.goOn(cx));
+    };
+    if (anyway) { take(cx); return; }
+    this.checking = true; this.error = null;
+    cx.notify();
+    cx.spawn(async (cx) => {
+      const v = await readVersions(this.git, this.root, this.path, { read: readerOn(this.on) });
+      this.checking = false;
+      if (v.ok && editedSince(v)) { this.confirm = { kind: "accept", column }; cx.notify(); return; }
+      take(cx);
+    });
   }
 
   // The next conflicted file, or close when none is left.
@@ -339,33 +370,68 @@ export default class MergeRevisionsView {
       .child(lines);
   }
 
-  renderConfirm(t) {
-    const then = this.confirm, state = this.file.state;
+  // The question (this.confirm) as a small card over the dialog, which stays drawn behind
+  // it; the card's buttons are the only ones that take a click.
+  renderConfirm(t, behind) {
+    const q = this.confirm;
     const back = (_e, cx) => { this.confirm = null; cx.notify(); };
-    const body = v_flex().size_full().min_h(0).px(14).py(12).gap(8)
-      .child(div().w_full().child(this.t("conflicts.mrUnresolvedBody", { n: leftToDecide(state) })));
-    return dialogFrame("mr-unresolved", this.t("conflicts.mrUnresolvedTitle"), t, {
-      body,
-      onClose: back,
-      footer: [
-        button("mr-unresolved-back", this.t("conflicts.mrBackToResolving"), t, { onClick: back }),
-        button("mr-unresolved-save", this.t("conflicts.mrSaveAnyway"), t, { kind: "primary", onClick: (_e, cx) => this.save(then, cx, true) }),
-      ],
-    }).track_focus(this.handle).on_key_down((e, cx) => {
-      if (e.key === "escape") this.confirm = null;
-      else if (e.key === "enter") this.save(then, cx, true);
-      else return;
-      cx.stop_propagation();
-      cx.notify();
-    });
+    let id, title, text, cancel, ok, yes;
+    if (q.kind === "unresolved") {
+      [id, title, text] = ["mr-unresolved", this.t("conflicts.mrUnresolvedTitle"), this.t("conflicts.mrUnresolvedBody", { n: this.file?.state ? leftToDecide(this.file.state) : 0 })];
+      [cancel, ok] = [this.t("conflicts.mrBackToResolving"), this.t("conflicts.mrSaveAnyway")];
+      yes = (cx) => this.save(q.then, cx, [...q.passed, "unresolved"]);
+    } else if (q.kind === "overwrite") {
+      [id, title, text] = ["mr-changed", this.t("conflicts.overwriteTitle"), this.t("conflicts.mrChangedOnDiskBody", { path: this.path ?? "" })];
+      [cancel, ok] = [this.t("dialogs.cancel"), this.t("conflicts.mrOverwrite")];
+      yes = (cx) => this.save(q.then, cx, [...q.passed, "overwrite"]);
+    } else {
+      const column = this.word(q.column === "yours" ? this.titles.left : this.titles.right);
+      [id, title, text] = ["mr-overwrite", this.t("conflicts.overwriteTitle"), this.t("conflicts.overwriteBody", { path: this.path ?? "", column })];
+      [cancel, ok] = [this.t("dialogs.cancel"), this.t("conflicts.discardAccept")];
+      yes = (cx) => this.acceptAll(q.column, cx, true);
+    }
+    const card = div().id(`${id}-card`).w(QUESTION.width).h(QUESTION.height).rounded(8).border_1().border_color(t.border).overflow_hidden()
+      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+      .child(dialogFrame(id, title, t, {
+        body: v_flex().size_full().min_h(0).px(14).py(12).child(div().w_full().child(text)),
+        onClose: back,
+        footer: [
+          button(`${id}-back`, cancel, t, { onClick: back }),
+          button(`${id}-yes`, ok, t, { kind: "primary", onClick: (_e, cx) => yes(cx) }),
+        ],
+      }));
+    return div().relative().size_full()
+      .child(behind)
+      .child(div().id("mr-question").absolute().inset_0().flex().items_center().justify_center().bg(tint(t.canvas, "99"))
+        .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+        .on_mouse_down("right", (_e, cx) => cx.stop_propagation())
+        .child(card))
+      .track_focus(this.handle).on_key_down((e, cx) => {
+        if (e.key === "escape") this.confirm = null;
+        else if (e.key === "enter") yes(cx);
+        else return;
+        cx.stop_propagation();
+        cx.notify();
+      });
   }
 
   render() {
     const t = theme();
-    if (this.confirm && this.file?.state) return this.renderConfirm(t);
+    const main = this.renderMain(t);
+    if (this.confirm) return this.renderConfirm(t, main);
+    return main.track_focus(this.handle).on_key_down((e, cx) => {
+      // Keys typed in the editor stay the editor's.
+      if (this.editor) return;
+      if (e.key === "escape") this.shut();
+      else return;
+      cx.stop_propagation();
+    });
+  }
+
+  renderMain(t) {
     const said = this.error ?? this.writing();
     const text = this.file?.mode === "text";
-    const busy = this.waiting || Boolean(this.writing());
+    const busy = this.waiting || this.checking || Boolean(this.writing());
     let body;
     if (!this.file) body = this.error ? notice("", t) : notice(this.t("ui.loading"), t, { busy: true });
     else if (!text) body = notice(this.t(this.file.mode === "binary" ? "conflicts.mrBinary" : "conflicts.mrDeleted", { path: this.path }), t);
@@ -388,12 +454,6 @@ export default class MergeRevisionsView {
           button("mr-apply", this.t("conflicts.mrApply"), t, { kind: "primary", disabled: !loaded, onClick: (_e, cx) => this.save("apply", cx) }),
         ] : []),
       ],
-    }).track_focus(this.handle).on_key_down((e, cx) => {
-      // Keys typed in the editor stay the editor's.
-      if (this.editor) return;
-      if (e.key === "escape") this.shut();
-      else return;
-      cx.stop_propagation();
     });
   }
 }

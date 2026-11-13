@@ -5,7 +5,7 @@ import { execFile, execFileSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
-import { paneTitles, openFile, layoutRows, chunkButtons, toolbar, countWords, seekConflict, nextFile, leftToDecide, stageSave, saveRequest } from "./merge-revisions-model.js";
+import { paneTitles, openFile, layoutRows, chunkButtons, toolbar, countWords, seekConflict, nextFile, leftToDecide, saveQuestion, stageSave, saveRequest } from "./merge-revisions-model.js";
 import { localPlacer, remotePlacer } from "./git-conflict.js";
 import { columns } from "./conflicts-model.js";
 import { decide, resultText, edit } from "./merge-chunks.js";
@@ -138,6 +138,20 @@ const versions = (base, ours, theirs, extra = {}) => ({ ok: true, path: "src/alp
   assert.deepEqual(countWords(done).map((w) => say(ko, w)), ["모든 충돌이 해결되었습니다"]);
   assert.equal(leftToDecide(done), 0);
   assert.deepEqual(toolbar(done), { applyLeft: false, applyAll: false, applyRight: false, resolveSimple: false, conflicts: 0 });
+
+  // Before Apply Changes or Save and Close: something left to decide asks first, then a
+  // working file changed on disk since the dialog read it. A question already answered
+  // (passed) isn't asked again; a file that couldn't be read either time counts as the same.
+  const disk = "<<<<<<< ours\nX\n=======\nY\n>>>>>>> theirs\n";
+  assert.equal(saveQuestion(applied, { opened: disk, now: disk }), "unresolved");
+  assert.equal(saveQuestion(applied, { opened: disk, now: disk, passed: ["unresolved"] }), null);
+  assert.equal(saveQuestion(applied, { opened: disk, now: "mine\n", passed: ["unresolved"] }), "overwrite");
+  assert.equal(saveQuestion(done, { opened: disk, now: "mine\n" }), "overwrite");
+  assert.equal(saveQuestion(done, { opened: disk, now: disk.replace(/\n/g, "\r\n") }), "overwrite");
+  assert.equal(saveQuestion(done, { opened: disk, now: "mine\n", passed: ["overwrite"] }), null);
+  assert.equal(saveQuestion(done, { opened: disk, now: disk }), null);
+  assert.equal(saveQuestion(done, { opened: null, now: null }), null);
+  assert.equal(saveQuestion(done, { opened: disk, now: null }), "overwrite");
 
   // A simple conflict (the sides change different lines) turns the wand on.
   const simple = openFile(versions("a\nb\nc\n", "A\nb\nc\n", "a\nb\nC\n"), cols).state;

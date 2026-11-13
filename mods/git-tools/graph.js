@@ -20,10 +20,20 @@ import { shortenMiddle } from "./git-log.js";
 // A lane waits for one commit: the next dot on it. A lane never moves sideways and is
 // reused only once its commit is drawn, so lines can't overlap. A commit's first parent
 // stays in the commit's lane; every lane waiting for a commit bends into its dot.
-export function layoutGraph(commits, carry = null) {
-  const lanes = carry ? carry.lanes.map((lane) => (lane ? { ...lane } : null)) : [];
+//
+// The graph options (log-options.js):
+//   firstParent: a commit's line goes to its first parent only.
+//   through: [[hash, hash it leads to]] for commits left out of the list (git-log.js
+//   readLog's merges under noMerges): a line to one goes on to where it leads, also a
+//   lane carried from the batch before.
+// A commit from collapseLinear may have folded: { parent: count }: its lines to those
+// parents pass over commits folded away and are marked folded: true, as far as the dot.
+export function layoutGraph(commits, carry = null, { firstParent = false, through = [] } = {}) {
+  const lead = leadsTo(through);
+  const lanes = carry ? carry.lanes.map((lane) => (lane ? { ...lane, hash: lead(lane.hash) } : null)) : [];
   let next = carry ? carry.next : 0;
   const free = () => { const at = lanes.indexOf(null); return at < 0 ? lanes.length : at; };
+  const mark = (line, lane) => (lane.folded ? { ...line, folded: true } : line);
   const rows = [];
   for (const commit of commits) {
     const waiting = [];
@@ -34,27 +44,100 @@ export function layoutGraph(commits, carry = null) {
     let cols = Math.max(lanes.length, lane + 1);
     for (let i = 0; i < lanes.length; i++) {
       if (!lanes[i]) continue;
-      if (lanes[i].hash === commit.hash) { lines.push({ from: i, to: null, color: lanes[i].color }); lanes[i] = null; }
-      else lines.push({ from: i, to: i, color: lanes[i].color });
+      if (lanes[i].hash === commit.hash) { lines.push(mark({ from: i, to: null, color: lanes[i].color }, lanes[i])); lanes[i] = null; }
+      else lines.push(mark({ from: i, to: i, color: lanes[i].color }, lanes[i]));
     }
     const seen = new Set();
-    for (const parent of commit.parents) {
+    for (const parent of graphParents(commit, firstParent, lead)) {
       if (seen.has(parent)) continue;
       seen.add(parent);
+      const folded = Boolean(commit.folded?.[parent]);
       let to;
-      if (seen.size === 1) { to = lane; lanes[lane] = { hash: parent, color }; }
+      if (seen.size === 1) { to = lane; lanes[lane] = laneFor(parent, color, folded); }
       else {
         // A merged branch that already has a lane is joined there, else it opens one.
         to = lanes.findIndex((l) => l?.hash === parent);
-        if (to < 0) { to = free(); lanes[to] = { hash: parent, color: next++ }; }
+        if (to < 0) { to = free(); lanes[to] = laneFor(parent, next++, folded); }
       }
-      lines.push({ from: null, to, color: lanes[to].color });
+      lines.push(mark({ from: null, to, color: lanes[to].color }, { folded }));
     }
     while (lanes.length && !lanes[lanes.length - 1]) lanes.pop();
     cols = Math.max(cols, lanes.length);
     rows.push({ lane, color, cols, lines });
   }
   return { rows, carry: { lanes, next } };
+}
+
+// A lane's state: folded only when its line passes over folded commits.
+const laneFor = (hash, color, folded) => (folded ? { hash, color, folded: true } : { hash, color });
+
+// leadsTo(through) → hash → the commit a line to `hash` ends on: followed on while it is
+// one left out (a chain of merges left out ends on a commit that is listed).
+function leadsTo(through) {
+  if (!through?.length) return (hash) => hash;
+  const map = new Map(through);
+  return (hash) => {
+    let at = hash;
+    for (let i = 0; i <= map.size && map.has(at); i++) at = map.get(at);
+    return at;
+  };
+}
+
+// The parents a commit's lines go to: the first only with firstParent, each led on past
+// commits left out.
+function graphParents(commit, firstParent, lead) {
+  const parents = firstParent ? commit.parents.slice(0, 1) : commit.parents;
+  return parents.map(lead);
+}
+
+// collapseLinear(commits, { firstParent, through }) → the commits the graph shows with
+// linear branches folded: a commit with one parent, one child among `commits` and no Ref
+// label is left out. Each commit kept gets parents: where its lines lead now, and
+// folded: { parent: how many commits its line to that parent passes over } when any.
+// Branch tips, forks, merges, labelled commits and roots stay. New objects: the commits
+// handed in are not changed. The graph options apply as in layoutGraph (whose
+// firstParent and through the answer has already taken in).
+export function collapseLinear(commits, { firstParent = false, through = [] } = {}) {
+  const lead = leadsTo(through);
+  const parentsOf = new Map(), children = new Map();
+  for (const c of commits) {
+    const parents = [...new Set(graphParents(c, firstParent, lead))];
+    parentsOf.set(c.hash, parents);
+    for (const p of parents) children.set(p, (children.get(p) ?? 0) + 1);
+  }
+  const folds = (c) => parentsOf.get(c.hash).length === 1 && children.get(c.hash) === 1 && !(c.refs?.length);
+  const hidden = new Set(commits.filter(folds).map((c) => c.hash));
+  const out = [];
+  for (const c of commits) {
+    if (hidden.has(c.hash)) continue;
+    const parents = [], folded = {};
+    for (const first of parentsOf.get(c.hash)) {
+      let at = first, n = 0;
+      while (hidden.has(at)) { at = parentsOf.get(at)[0]; n++; }
+      if (parents.includes(at)) continue;
+      parents.push(at);
+      if (n) folded[at] = n;
+    }
+    out.push(Object.keys(folded).length ? { ...c, parents, folded } : { ...c, parents });
+  }
+  return out;
+}
+
+// reachableFrom(commits, start, { firstParent, through }) → Set of the hashes `start`
+// reaches among `commits` (itself included) by the lines the graph draws: the current
+// branch's commits when `start` is HEAD's. Empty without a start.
+export function reachableFrom(commits, start, { firstParent = false, through = [] } = {}) {
+  const lead = leadsTo(through), out = new Set();
+  if (!start) return out;
+  const byHash = new Map(commits.map((c) => [c.hash, c]));
+  const todo = [start];
+  while (todo.length) {
+    const hash = todo.pop();
+    if (out.has(hash) || !byHash.has(hash)) continue;
+    out.add(hash);
+    for (const p of graphParents(byHash.get(hash), firstParent, lead)) todo.push(p);
+  }
+  return out;
 }
 
 // ---- the Commit list's row on screen (px, still pure)

@@ -1,6 +1,6 @@
 // node graph.test.mjs: where the commit graph puts dots and lines (pure, no git).
 import assert from "node:assert/strict";
-import { layoutGraph, graphWindow, indexSegments, segmentsIn, fitLabels } from "./graph.js";
+import { layoutGraph, collapseLinear, reachableFrom, graphWindow, indexSegments, segmentsIn, fitLabels } from "./graph.js";
 
 // Commits as git-log.js gives them, newest first: [hash, ...parents].
 const commits = (...list) => list.map(([hash, ...parents]) => ({ hash, parents }));
@@ -231,6 +231,82 @@ assert.deepEqual(layoutGraph([]), { rows: [], carry: { lanes: [], next: 0 } });
   const many = ["a", "b", "c", "d", "e"].map((text) => ({ text, kind: "local" }));
   assert.deepEqual(texts(fitLabels(many, 1000, look)), { shown: ["a", "b", "c"], rest: 2 });
   assert.deepEqual(fitLabels([], 100, look), { shown: [], rest: 0 });
+}
+
+// First parent: a merge draws only its first parent's line, so the merged branch's
+// commits (listed as tips of their own) get a lane of their own and no line joins them
+// to the merge.
+{
+  const list = commits(["m", "a", "b"], ["b", "c"], ["a", "c"], ["c"]);
+  const { rows } = layoutGraph(list, null, { firstParent: true });
+  assert.deepEqual(drawn(rows), [
+    { lane: 0, color: 0, lines: [line(null, 0, 0)] },
+    { lane: 1, color: 1, lines: [line(0, 0, 0), line(null, 1, 1)] },
+    { lane: 0, color: 0, lines: [line(0, null, 0), line(1, 1, 1), line(null, 0, 0)] },
+    { lane: 0, color: 0, lines: [line(0, null, 0), line(1, null, 1)] },
+  ]);
+}
+
+// No merges: a merge left out of the list hands the lines waiting for it on to its
+// first parent (`through`), in this batch and from a batch before (carry). A merge whose
+// first parent is another merge left out is followed on.
+{
+  // c6 - m(c4, f2) - c4 ; f2 ; m left out
+  const list = commits(["c6", "m"], ["f2", "c2"], ["c4", "c2"], ["c2"]);
+  const { rows } = layoutGraph(list, null, { through: [["m", "c4"]] });
+  assert.deepEqual(drawn(rows), [
+    { lane: 0, color: 0, lines: [line(null, 0, 0)] },
+    { lane: 1, color: 1, lines: [line(0, 0, 0), line(null, 1, 1)] },
+    { lane: 0, color: 0, lines: [line(0, null, 0), line(1, 1, 1), line(null, 0, 0)] },
+    { lane: 0, color: 0, lines: [line(0, null, 0), line(1, null, 1)] },
+  ]);
+  const first = layoutGraph(commits(["c6", "m1"]), null);
+  const second = layoutGraph(commits(["c4"]), first.carry, { through: [["m1", "m2"], ["m2", "c4"]] });
+  assert.deepEqual(drawn(second.rows), [{ lane: 0, color: 0, lines: [line(0, null, 0)] }]);
+  assert.deepEqual(second.carry.lanes, []);
+}
+
+// Collapse linear branches: a commit with one parent and one child and no Ref label is
+// folded away; the line over it is marked folded, and its count is on the commit the
+// line comes from. Branch tips, forks, merges and labelled commits stay.
+{
+  // main: c1 - c2 - c3 - c4 - m ; side: c2 - s1 - s2 - s3 (tip "side") merged into m
+  const list = [
+    { hash: "m", parents: ["c4", "s3"], refs: [{ name: "main", kind: "local", current: true }, { name: "HEAD", kind: "head" }] },
+    { hash: "s3", parents: ["s2"], refs: [] },
+    { hash: "c4", parents: ["c3"], refs: [] },
+    { hash: "s2", parents: ["s1"], refs: [] },
+    { hash: "c3", parents: ["c2"], refs: [{ name: "v1", kind: "tag" }] },
+    { hash: "s1", parents: ["c2"], refs: [] },
+    { hash: "c2", parents: ["c1"], refs: [] },
+    { hash: "c1", parents: [], refs: [] },
+  ];
+  const folded = collapseLinear(list);
+  assert.deepEqual(folded.map((c) => [c.hash, c.parents, c.folded ?? {}]), [
+    ["m", ["c3", "c2"], { c3: 1, c2: 3 }],
+    ["c3", ["c2"], {}],
+    ["c2", ["c1"], {}],
+    ["c1", [], {}],
+  ]);
+  assert.equal(list[0].parents.length, 2, "the commits handed in are not changed");
+  const { rows } = layoutGraph(folded);
+  assert.deepEqual(rows[0].lines, [{ from: null, to: 0, color: 0, folded: true }, { from: null, to: 1, color: 1, folded: true }]);
+  assert.deepEqual(rows[1].lines, [{ from: 0, to: null, color: 0, folded: true }, { from: 1, to: 1, color: 1, folded: true }, line(null, 0, 0)]);
+  assert.deepEqual(rows[2].lines, [line(0, null, 0), { from: 1, to: null, color: 1, folded: true }, line(null, 0, 0)]);
+  // With the graph options: first parent folds the side branch off the merge too.
+  assert.deepEqual(collapseLinear(list, { firstParent: true }).map((c) => c.hash), ["m", "s3", "c3", "c2", "c1"]);
+  // A plain line keeps its tip and its root.
+  assert.deepEqual(collapseLinear(commits(["a", "b"], ["b", "c"], ["c"])).map((c) => c.hash), ["a", "c"]);
+}
+
+// The current branch: the commits HEAD reaches among those read, through the lines the
+// graph draws (first parent only with that option, across merges left out).
+{
+  const list = commits(["t", "x"], ["h", "a", "b"], ["b", "x"], ["a", "x"], ["x"]);
+  assert.deepEqual([...reachableFrom(list, "h")].sort(), ["a", "b", "h", "x"]);
+  assert.deepEqual([...reachableFrom(list, "h", { firstParent: true })].sort(), ["a", "h", "x"]);
+  assert.deepEqual([...reachableFrom(commits(["h", "m"], ["x"]), "h", { through: [["m", "x"]] })].sort(), ["h", "x"]);
+  assert.equal(reachableFrom(list, null).size, 0);
 }
 
 console.log("ok");

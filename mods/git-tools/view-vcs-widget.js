@@ -212,7 +212,8 @@ export class VcsWidget {
 
   // e: the press on the widget. The popup opens right under the widget, not over it,
   // held left of the host's right limit (host.popupRight, when it has one). Without a
-  // press (a menu item opened it) it opens in the window's middle.
+  // press (a menu item opened it) it opens where Herdr last saw the pointer, as the VCS
+  // Operations popup does.
   open(e, cx) {
     const host = this.host, repo = this.repo;
     if (!repo) return;

@@ -57,8 +57,10 @@ export function belowSpot({ position, local, height = 0 }, { width = 0, right } 
 
 // pressSpot(e, { width, right }) → belowSpot for a mouse press `e` on an element (its
 // position, local_position and bounds), or undefined without a press (opened from a menu
-// item): the popup then takes the window's middle. right(origin): the rightmost px the
-// popup may reach, given the element's top left corner in the window.
+// item): the popup then opens where Herdr last saw the pointer, as the VCS Operations
+// popup does (Herdr has no call for the window's size, so no middle is worked out).
+// right(origin): the rightmost px the popup may reach, given the element's top left
+// corner in the window.
 export function pressSpot(e, { width = 0, right } = {}) {
   if (!e?.position) return undefined;
   const local = e.local_position, height = e.bounds?.height ?? 26;

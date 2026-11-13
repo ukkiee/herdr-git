@@ -426,7 +426,7 @@ export function authorOf(lines = []) {
   return out;
 }
 
-// conflictsLeft(n) →the refusal of a commit or a Continue while n files are in conflict.
+// conflictsLeft(n) → the refusal of a commit or a Continue while n files are in conflict.
 export const conflictsLeft = (n) => refuse(`Resolve the conflicts first: ${n} file(s) still in conflict.`, { key: "ops.conflictsLeft", args: { n } });
 
 // Continue: the other changes the person checked are added first, then the operation is

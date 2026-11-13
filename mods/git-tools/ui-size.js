@@ -55,6 +55,17 @@ export function belowSpot({ position, local, height = 0 }, { width = 0, right } 
   return { x: Math.max(0, x), y: y0 + height + 2 };
 }
 
+// pressSpot(e, { width, right }) → belowSpot for a mouse press `e` on an element (its
+// position, local_position and bounds), or undefined without a press (opened from a menu
+// item): the popup then takes the window's middle. right(origin): the rightmost px the
+// popup may reach, given the element's top left corner in the window.
+export function pressSpot(e, { width = 0, right } = {}) {
+  if (!e?.position) return undefined;
+  const local = e.local_position, height = e.bounds?.height ?? 26;
+  const origin = local ? { x: e.position.x - local.x, y: e.position.y - local.y } : e.position;
+  return belowSpot({ position: e.position, local, height }, { width, right: right?.(origin) });
+}
+
 // Dialogs built around a list or panes: they need the room they were opened with, since
 // a list's height comes from its container. Every other dialog is a form.
 const FILLING = new Set([

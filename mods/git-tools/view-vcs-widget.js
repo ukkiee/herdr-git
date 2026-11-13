@@ -30,7 +30,7 @@ import { makeGit, repoRoot } from "./git.js";
 import { readHeads, widgetFace } from "./git-heads.js";
 import { readOperation, continueOperation, abortOperation, skipOperation, operationName } from "./git-operation.js";
 import { checkout, deleteBranch } from "./git-branch.js";
-import { belowSpot, widgetBlockWidth } from "./ui-size.js";
+import { pressSpot, widgetBlockWidth } from "./ui-size.js";
 import { openConflicts, openConflictsIfStopped } from "./view-conflicts.js";
 import { location, uiGlyph, iconButton, darkLook, broadcast, openCommitPanel, openMenu, takeWrite, releaseWrite, writeBlock, readBlocked, sentence } from "./ui.js";
 import { openPush, servePush } from "./view-push.js";
@@ -211,13 +211,12 @@ export class VcsWidget {
   // ---- the popup
 
   // e: the press on the widget. The popup opens right under the widget, not over it,
-  // held left of the host's right limit (host.popupRight, when it has one).
+  // held left of the host's right limit (host.popupRight, when it has one). Without a
+  // press (a menu item opened it) it opens in the window's middle.
   open(e, cx) {
     const host = this.host, repo = this.repo;
     if (!repo) return;
-    const local = e.local_position, height = e.bounds?.height ?? 26;
-    const origin = local ? { x: e.position.x - local.x, y: e.position.y - local.y } : e.position;
-    const at = belowSpot({ position: e.position, local, height }, { width: POPUP_WIDTH, right: host.popupRight?.(origin) });
+    const at = pressSpot(e, { width: POPUP_WIDTH, right: (origin) => host.popupRight?.(origin) });
     cx.spawn(async (cx) => {
       // The answer arrives in this copy's own call (ui.js), so what the pick starts is
       // this copy's work and outlives the popup.

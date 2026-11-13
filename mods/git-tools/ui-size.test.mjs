@@ -1,7 +1,7 @@
 // node ui-size.test.mjs: how wide a popup menu is drawn for its labels, and where the
 // VCS widget's popup and a branch row's menu go.
 import assert from "node:assert/strict";
-import { textWidth, menuWidth, belowSpot, sideOf, dialogFills, widgetBlockWidth } from "./ui-size.js";
+import { textWidth, menuWidth, belowSpot, pressSpot, sideOf, dialogFills, widgetBlockWidth } from "./ui-size.js";
 
 // ---- text: a Hangul syllable is as wide as the font size, Latin letters narrower
 {
@@ -44,6 +44,19 @@ import { textWidth, menuWidth, belowSpot, sideOf, dialogFills, widgetBlockWidth 
   assert.deepEqual(belowSpot({ position: { x: 100, y: 14 }, local: { x: 20, y: 9 }, height: 26 }, { width: 380, right: 300 }), { x: 0, y: 33 });
   // Without the inside place (not measured yet): under the pointer.
   assert.deepEqual(belowSpot({ position: { x: 900, y: 14 }, height: 26 }, { width: 380 }), { x: 900, y: 14 + 26 + 2 });
+}
+
+// ---- the VCS widget's popup from a press, or from no press (opened by a menu item):
+// no spot then, and the popup takes the middle of the window
+{
+  const press = { position: { x: 900, y: 14 }, local_position: { x: 20, y: 9 }, bounds: { height: 26 } };
+  const seen = [];
+  const right = (origin) => { seen.push(origin); return 1100; };
+  assert.deepEqual(pressSpot(press, { width: 380, right }), { x: 720, y: 33 });
+  assert.deepEqual(seen, [{ x: 880, y: 5 }]);
+  assert.deepEqual(pressSpot({ position: { x: 900, y: 14 } }, { width: 380 }), { x: 900, y: 14 + 26 + 2 });
+  assert.equal(pressSpot(null, { width: 380, right }), undefined);
+  assert.equal(pressSpot(undefined, { width: 380 }), undefined);
 }
 
 // ---- a branch row's menu: on the right of the popup, or on the left when the popup

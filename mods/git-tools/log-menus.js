@@ -11,7 +11,8 @@
 // `args` go to t(). An item's `when` is the place for why it is off now: it returns
 // { key, args } or { text } (shown on hover), or null when it is on. `write` items are
 // also off while a git write runs on the repository (ctx.writing, its words). `shown`
-// hides an item for this selection (Compare Versions needs two commits).
+// hides an item for this selection (Compare Versions needs two commits). `hint` is the
+// key that does the same where the menu opens, drawn dim on the item's right.
 //
 // ctx, as each screen hands it:
 //   commit menu:   { count (commits selected), current (branch name), writing }
@@ -50,8 +51,9 @@ const ITEMS = {
   "commit.rebaseOnto": { key: "log.rebaseOntoCommit", args: current },
   "commit.newBranch": { key: "log.newBranch", write: true, when: one },
   "commit.newTag": { key: "log.newTag" },
-  "commit.goToChild": { key: "log.goToChild" },
-  "commit.goToParent": { key: "log.goToParent" },
+  // The Commit list's left and right keys (log-list.js).
+  "commit.goToChild": { key: "log.goToChild", hint: "←" },
+  "commit.goToParent": { key: "log.goToParent", hint: "→" },
 
   // ---- Commit details: a file's menu and the toolbar
   "file.showDiff": { key: "log.showDiff" },
@@ -167,12 +169,13 @@ export const MENUS = {
   logSearch: ["log.regex", "log.matchCase"],
 };
 
-// menuItems(menu, handled, ctx) → [{ id, key, args, rule, disabled, why, work }] in order.
+// menuItems(menu, handled, ctx) → [{ id, key, args, rule, disabled, why, work, hint }] in order.
 //   menu: a MENUS name. handled: a Set of the ids the screen can do, or a function id → bool.
 //   rule: a separator line goes above this item (ui.js openMenu's `rule`). Only between
 //   items shown: never first, never last, never two in a row.
 //   why: null when on, else { key, args } or { text } (text may be "": off, nothing to say).
 //   work: the write lock's key while this item's own write runs (a toolbar button spins).
+//   hint: the item's key, or null.
 export function menuItems(menu, handled, ctx = {}) {
   const has = typeof handled === "function" ? handled : (id) => Boolean(handled?.has?.(id));
   const out = [];
@@ -182,7 +185,7 @@ export function menuItems(menu, handled, ctx = {}) {
     const item = ITEMS[id];
     if (!item || !has(id) || (item.shown && !item.shown(ctx))) continue;
     const why = item.when?.(ctx) ?? (item.write && ctx.writing ? { text: ctx.writing } : null);
-    out.push({ id, key: item.key, args: item.args ? item.args(ctx) : {}, rule: ruled, disabled: Boolean(why), why, work: item.work ?? null });
+    out.push({ id, key: item.key, args: item.args ? item.args(ctx) : {}, rule: ruled, disabled: Boolean(why), why, work: item.work ?? null, hint: item.hint ?? null });
     ruled = false;
   }
   return out;

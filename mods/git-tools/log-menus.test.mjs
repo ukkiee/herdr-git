@@ -161,4 +161,13 @@ const all = (name, ctx = {}, t = ko) => look(menuItems(name, everything, ctx), t
   assert.equal(menuItems("branchTools", everything, {}).find((x) => x.id === "branches.fetch").work, "log.fetching");
 }
 
+// The key an item has in the Commit list shows on its right: ← goes to the child commit,
+// → to the parent. Items without a key carry none.
+{
+  const hints = Object.fromEntries(menuItems("commit", everything, { count: 1, current: "main" }).map((x) => [x.id, x.hint]));
+  assert.equal(hints["commit.goToChild"], "←");
+  assert.equal(hints["commit.goToParent"], "→");
+  assert.equal(hints["commit.revert"], null);
+}
+
 console.log("ok");

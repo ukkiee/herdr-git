@@ -122,7 +122,7 @@ function openItems(host, items, target, cx, { width, hint, after }) {
   const rows = items.map((it) => ({
     label: tr(it.key, it.args), value: it.id, rule: it.rule, disabled: it.disabled,
     title: it.why?.text || (it.why?.key ? tr(it.why.key, it.why.args) : undefined),
-    hint: hint?.[it.id],
+    hint: hint?.[it.id] ?? it.hint ?? undefined,
   }));
   cx.spawn(async (cx) => {
     const pick = await openMenu(host.bus, rows, { width, lang: host.lang });

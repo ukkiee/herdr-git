@@ -170,6 +170,23 @@ export async function fileParent(git, root, { commit, path, from = null } = {}) 
   return { ...r, parent: parent ?? null, path: from ?? path };
 }
 
+// fileParents(git, root, { commit }) → { ok, code, out, err, parents }
+//   parents: every parent of the commit (full hashes) in git's order, [] for a root commit.
+export async function fileParents(git, root, { commit } = {}) {
+  const r = await git.read(root, ["rev-list", "--parents", "-n", "1", "--end-of-options", String(commit), "--"]);
+  if (!r.ok) return { ...r, parents: [] };
+  return { ...r, parents: r.out.trim().split(/\s+/).slice(1) };
+}
+
+// parentDiffs({ commit, parents, path, from? }) → [{ from, to, path, oldPath }]
+//   Show Changes to Parents: the commit's file against each parent, as readFileDiff (and
+//   the compare Diff tab) takes them, one per parent of a merge commit. from: the file's
+//   name before the commit renamed it, as Commit details reads it against the first
+//   parent; the other parents compare under the file's own name.
+export function parentDiffs({ commit, parents = [], path, from = null } = {}) {
+  return parents.map((parent, i) => ({ from: parent, to: commit, path, oldPath: i === 0 ? from ?? null : null }));
+}
+
 // readFileDiff(git, root, { from, to?, path, oldPath?, reverse? })
 //   → { ok, err, binary, truncated, from, to, rows }
 //   One file as revision `from` has it against revision `to` (null: the working file), as

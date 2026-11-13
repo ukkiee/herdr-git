@@ -6,9 +6,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFi
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
 import { makeGit } from "./git.js";
-import { readDiff } from "./git-diff.js";
 import { listSnapshots } from "./git-snapshot.js";
-import { branchCommits, workingTreeFiles, swapState, versionFiles, getFromRevision, fileParent, readFileDiff, readRevisionFile } from "./git-compare.js";
+import { branchCommits, workingTreeFiles, swapState, versionFiles, getFromRevision, fileParent, fileParents, parentDiffs, readFileDiff, readRevisionFile } from "./git-compare.js";
 import { en, ko } from "./messages-compare.js";
 import { filterArgs } from "./git-log-filter.js";
 
@@ -207,11 +206,21 @@ const worded = (r) => {
   const first = await fileParent(git, repo, { commit: c1, path: "a.txt" });
   assert.equal(first.ok, true);
   assert.equal(first.parent, null);
-  // Show Changes to Parents: the parent commit's own change to the file, read as the
-  // Diff tab reads a commit's file.
-  const of3 = await fileParent(git, repo, { commit: c3, path: "a.txt" });
-  const change = await readDiff(git, repo, { path: of3.path, commit: of3.parent });
-  assert.deepEqual(change.rows.filter((r) => r.kind === "add" || r.kind === "del").map((r) => `${r.kind} ${r.text}`), ["del 2", "add two"]);
+  // Show Changes to Parents: the picked commit's file against its parent, read as the
+  // compare Diff tab reads it (parentDiffs → readFileDiff).
+  const of3 = await fileParents(git, repo, { commit: c3 });
+  assert.deepEqual(of3.parents, [c2]);
+  const [to2] = parentDiffs({ commit: c3, parents: of3.parents, path: "a.txt" });
+  const change = await readFileDiff(git, repo, to2);
+  assert.deepEqual(change.rows.filter((r) => r.kind === "add" || r.kind === "del").map((r) => `${r.kind} ${r.text}`), ["del 3", "add three"]);
+  // A file the commit added: all of it is new against the parent (an empty diff before).
+  write(repo, "x1.txt", "x\n");
+  const c4 = commit(repo, "four");
+  const [added] = parentDiffs({ commit: c4, parents: (await fileParents(git, repo, { commit: c4 })).parents, path: "x1.txt" });
+  const made = await readFileDiff(git, repo, added);
+  assert.equal(made.ok, true, made.err);
+  assert.deepEqual(made.rows.filter((r) => r.kind === "add" || r.kind === "del").map((r) => `${r.kind} ${r.text}`), ["add x"]);
+  sh(repo, "git reset -q --hard HEAD~1");
   // Compare Before with Local: the parent's version against the working file.
   write(repo, "a.txt", "1\ntwo\nthree\nfour\n");
   const lines = (d) => d.rows.filter((r) => r.kind === "add" || r.kind === "del").map((r) => `${r.kind} ${r.text}`);
@@ -237,6 +246,38 @@ const worded = (r) => {
   assert.deepEqual([v.ok, v.text, v.binary], [true, "1\n2\n3\n", false]);
   const missing = await readRevisionFile(git, repo, { rev: c1, path: "moved.txt" });
   assert.equal(missing.ok, false);
+}
+
+// Show Changes to Parents on a merge commit: one diff per parent, in git's parent order.
+// The renamed-from name (Commit details reads it against the first parent) goes with the
+// first parent only.
+{
+  const repo = init("merge-parents");
+  write(repo, "m.txt", "1\n2\n3\n");
+  const root = commit(repo, "root");
+  sh(repo, "git checkout -q -b side");
+  write(repo, "m.txt", "1\n2\nside\n");
+  const side = commit(repo, "side");
+  sh(repo, "git checkout -q -");
+  write(repo, "m.txt", "main\n2\n3\n");
+  const main = commit(repo, "main");
+  sh(repo, "git merge -q --no-edit side");
+  const merge = sh(repo, "git rev-parse HEAD").trim();
+  const ps = await fileParents(git, repo, { commit: merge });
+  assert.equal(ps.ok, true, ps.err);
+  assert.deepEqual(ps.parents, [main, side]);
+  const diffs = parentDiffs({ commit: merge, parents: ps.parents, path: "m.txt", from: "old.txt" });
+  assert.deepEqual(diffs, [
+    { from: main, to: merge, path: "m.txt", oldPath: "old.txt" },
+    { from: side, to: merge, path: "m.txt", oldPath: null },
+  ]);
+  const lines = (d) => d.rows.filter((r) => r.kind === "add" || r.kind === "del").map((r) => `${r.kind} ${r.text}`);
+  const [toMain, toSide] = await Promise.all(parentDiffs({ commit: merge, parents: ps.parents, path: "m.txt" }).map((d) => readFileDiff(git, repo, d)));
+  assert.deepEqual(lines(toMain), ["del 3", "add side"]);
+  assert.deepEqual(lines(toSide), ["del 1", "add main"]);
+  // The first commit has no parent: nothing to show.
+  assert.deepEqual((await fileParents(git, repo, { commit: root })).parents, []);
+  assert.deepEqual(parentDiffs({ commit: root, parents: [], path: "m.txt" }), []);
 }
 
 console.log("ok");

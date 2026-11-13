@@ -25,9 +25,9 @@ import { exec, theme, settings, readTextFile } from "herdr";
 import { tip, ROW, ICON, uiGlyph, fileGlyph, folderGlyph, darkLook, row, toolbar,spacer, iconButton, notice, errorStrip, openMenu, openTab, broadcast, takeWrite, releaseWrite, writeBlock, copyId, sentence, WindowedList, panelFrame } from "./ui.js";
 import { makeGit } from "./git.js";
 import { buildRows } from "./tree.js";
-import DiffView, { openDiff } from "./view-diff.js";
+import DiffView from "./view-diff.js";
 import { openSpaceTab } from "./space-tabs.js";
-import { workingTreeFiles, versionFiles, swapState, getFromRevision, fileParent, readFileDiff, readRevisionFile } from "./git-compare.js";
+import { workingTreeFiles, versionFiles, swapState, getFromRevision, fileParent, fileParents, parentDiffs, readFileDiff, readRevisionFile } from "./git-compare.js";
 import { editorLanguage } from "./editor-language.js";
 import { en, ko } from "./messages-compare.js";
 
@@ -104,8 +104,8 @@ export function fileWithLocal(host, m) {
   openFileDiff({ root: host.repo.root, on: host.repo.on, path: m.path, from: commitOf(host, m) });
 }
 
-// Compare Before with Local and Show Changes to Parents both start at the file's
-// version in the commit's first parent; a commit without one has nothing before it.
+// Compare Before with Local starts at the file's version in the commit's first parent;
+// a commit without one has nothing before it.
 function withParent(host, m, cx, then) {
   if (!usable(host, m)) return;
   const repo = host.repo;
@@ -121,9 +121,19 @@ export function beforeWithLocal(host, m, cx) {
   withParent(host, m, cx, (repo, p) => openFileDiff({ root: repo.root, on: repo.on, path: m.path, from: p.parent, oldPath: p.path }));
 }
 
-// Show Changes to Parents: the parent commit's own change to the file.
+// Show Changes to Parents: the picked commit's file against its parent, a tab per parent
+// of a merge commit (git-compare.js parentDiffs).
 export function changesToParents(host, m, cx) {
-  withParent(host, m, cx, (repo, p) => openDiff({ root: repo.root, on: repo.on, path: p.path, commit: p.parent }));
+  if (!usable(host, m)) return;
+  const repo = host.repo, commit = commitOf(host, m);
+  cx.spawn(async (cx) => {
+    const p = await fileParents(repo.git, repo.root, { commit });
+    if (!p.ok) host.failedOn(repo, p.err, cx);
+    for (const d of parentDiffs({ commit, parents: p.parents, path: m.path, from: m.item.from ?? null })) {
+      openFileDiff({ root: repo.root, on: repo.on, path: d.path, from: d.from, to: d.to, oldPath: d.oldPath });
+    }
+    cx.notify();
+  });
 }
 
 export function editSource(host, m) {

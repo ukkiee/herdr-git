@@ -79,6 +79,23 @@ const local = (...list) => list.map((name) => ({ name }));
     ["origin/aaa", "origin/main", "origin/topic", "upstream/master", "upstream/zeta", "upstream/a"]);
 }
 
+// The VCS widget popup's order: the favorites on top (the current branch among them when
+// it is one), then the current branch, then by name; each remote's favorites first.
+{
+  const list = local("topic", "old-history", "main", "feature", "aaa-sort");
+  const popup = { scope: "local", favoritesFirst: true };
+  assert.deepEqual(names(orderBranches(list, { ...popup, current: "feature", prefs: none })),
+    ["main", "feature", "aaa-sort", "old-history", "topic"]);
+  const prefs = { favorite: ["refs/heads/topic"], unfavorite: [] };
+  assert.deepEqual(names(orderBranches(list, { ...popup, current: "topic", prefs })),
+    ["main", "topic", "aaa-sort", "feature", "old-history"]);
+  assert.deepEqual(names(orderBranches(list, { ...popup, current: "aaa-sort", prefs })),
+    ["main", "topic", "aaa-sort", "feature", "old-history"]);
+  const remote = local("origin/topic", "origin/main", "origin/aaa", "up/x", "up/master");
+  assert.deepEqual(names(orderBranches(remote, { scope: "remote", favoritesFirst: true, current: "topic", prefs: none })),
+    ["origin/main", "origin/aaa", "origin/topic", "up/master", "up/x"]);
+}
+
 // The VCS widget popup shows them in this order, each remote under its own name once.
 {
   const prefs = { favorite: ["refs/heads/topic"], unfavorite: [] };

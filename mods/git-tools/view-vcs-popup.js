@@ -160,8 +160,8 @@ export default class VcsPopup {
       const current = heads.ok ? heads.head.branch : null;
       this.heads = heads.ok ? {
         ...heads,
-        local: orderBranches(heads.local, { scope: "local", current, prefs: this.prefs }),
-        remote: orderBranches(heads.remote, { scope: "remote", current, prefs: this.prefs }),
+        local: orderBranches(heads.local, { scope: "local", current, prefs: this.prefs, favoritesFirst: true }),
+        remote: orderBranches(heads.remote, { scope: "remote", current, prefs: this.prefs, favoritesFirst: true }),
       } : null;
       this.op = op?.ok ? op : null;
       this.err = heads.ok ? null : heads.err;

@@ -59,18 +59,24 @@ export function nextFavorites(prefs, ref, on) {
 // The full ref name of a branch of that scope ("local" | "remote").
 export const refOf = (scope, name) => (scope === "remote" ? REMOTES : HEADS) + name;
 
-// 0: the current branch, 1: a favorite, 2: the rest.
-function rank(name, { scope, current, prefs }) {
-  if (scope === "local" && current && name === current) return 0;
-  return isFavorite(refOf(scope, name), prefs) ? 1 : 2;
+// 0: the current branch, 1: a favorite, 2: the rest; with favoritesFirst the favorites
+// come before the current branch (one that is both is a favorite).
+function rank(name, { scope, current, prefs, favoritesFirst }) {
+  const isCurrent = scope === "local" && current && name === current;
+  const favorite = isFavorite(refOf(scope, name), prefs);
+  if (favoritesFirst) return favorite ? 0 : isCurrent ? 1 : 2;
+  if (isCurrent) return 0;
+  return favorite ? 1 : 2;
 }
 
-// orderBranches(list, { scope, current, prefs }) → a sorted copy of `list` ([{ name, … }]).
+// orderBranches(list, { scope, current, prefs, favoritesFirst }) → a sorted copy of `list`
+// ([{ name, … }]).
 //   scope: "local" | "remote"; current: the branch HEAD is on, or null.
+//   favoritesFirst: the VCS widget popup's order, the favorites above the current branch.
 //   Remote branches stay together by remote (the remotes by name), each with its own
 //   favorites first.
-export function orderBranches(list, { scope = "local", current = null, prefs } = {}) {
-  const how = { scope, current, prefs };
+export function orderBranches(list, { scope = "local", current = null, prefs, favoritesFirst = false } = {}) {
+  const how = { scope, current, prefs, favoritesFirst };
   const keyed = list.map((b) => ({ b, remote: scope === "remote" ? splitRemote(b.name)[0] : "", rank: rank(b.name, how) }));
   keyed.sort((x, y) => byName(x.remote, y.remote) || x.rank - y.rank || byName(x.b.name, y.b.name));
   return keyed.map((k) => k.b);

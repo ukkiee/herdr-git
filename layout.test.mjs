@@ -6,7 +6,7 @@ import { mkdtempSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
-import { toMainGit, writeWhole, copyChanged, LOG_ID, MOD, TABS_ROW_ID, BUTTON_ID, BUTTON_WIDTH } from "./layout.mjs";
+import { toMainGit, writeWhole, copyChanged, LOG_ID, MOD, TABS_ROW_ID, BUTTON_ID, BUTTON_WIDTH, WIDGET_ID, WIDGET_WIDTH } from "./layout.mjs";
 
 // The parts of Herdr's shipped `main` the transform touches, plus a field of each
 // kind it must leave alone.
@@ -108,9 +108,31 @@ const parentOf = (node, id) => {
   assert.equal(row.type, "row");
   assert.deepEqual(row.size, { px: 42 }, "as tall as the tab bar was");
   assert.equal(row.resizable, false, "no boundary to drag between the tab bar and the button");
-  assert.deepEqual(row.children.map((c) => c.id), ["tabs", BUTTON_ID]);
+  assert.deepEqual(row.children.map((c) => c.id), ["tabs", WIDGET_ID, BUTTON_ID]);
   assert.deepEqual(find(layout, "tabs"), { id: "tabs", type: "block", window_drag: true, content: { mod: "tabs" } });
   assert.deepEqual(find(layout, BUTTON_ID), { id: BUTTON_ID, type: "block", size: { px: BUTTON_WIDTH }, window_drag: true, content: { mod: MOD, props: { view: "log-button" } } });
+}
+
+// VCS widget: a block of its own in the same row, left of the Git button, a fixed width
+// the tab bar gives up. Around the widget the strip moves the window as the tab bar does.
+{
+  const { layout } = toMainGit(main());
+  assert.deepEqual(find(layout, WIDGET_ID), { id: WIDGET_ID, type: "block", size: { px: WIDGET_WIDTH }, window_drag: true, content: { mod: MOD, props: { view: "vcs-widget" } } });
+  assert.equal(parentOf(layout, WIDGET_ID).id, TABS_ROW_ID);
+  const input = main();
+  delete find(input, "tabs").window_drag;
+  assert.deepEqual(find(toMainGit(input).layout, WIDGET_ID), { id: WIDGET_ID, type: "block", size: { px: WIDGET_WIDTH }, content: { mod: MOD, props: { view: "vcs-widget" } } });
+  // A main-git made before the widget existed (the row holds the tab bar and the Git
+  // button only) gets it on the next install, in its place.
+  const older = toMainGit(main()).layout;
+  const oldRow = find(older, TABS_ROW_ID);
+  oldRow.children = oldRow.children.filter((c) => c.id !== WIDGET_ID);
+  const again = toMainGit(older);
+  assert.equal(again.ok, true);
+  assert.deepEqual(again.layout, layout);
+  // Only with the Git button: elsewhere the Log panel's toolbar draws the widget.
+  assert.equal(find(toMainGit(main(), { button: false }).layout, WIDGET_ID), null);
+  assert.equal(find(toMainGit(layout, { button: false }).layout, WIDGET_ID), null);
 }
 
 // The strip around the button moves the window exactly when the tab bar does: the block

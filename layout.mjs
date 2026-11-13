@@ -1,6 +1,6 @@
 // Turns Herdr's `main` layout into `main-git`: the Changes button opens the Commit panel,
 // the Files button the Files panel, a Log panel sits under the work area, and a Git
-// button beside the Changes button shows and hides it. See
+// button beside the Changes button shows and hides it, with the VCS widget left of it. See
 // docs/adr/0001-clone-main-layout.md.
 //
 //   node layout.mjs <main.json>              check only: exit 1 and the reason if it can't be done
@@ -17,6 +17,11 @@ export const LOG_HEIGHT = 320;
 export const TABS_ROW_ID = "git-tabs";
 export const BUTTON_ID = "git-log-button";
 export const BUTTON_WIDTH = 64;
+// The VCS widget (branch, commits to pull and push, an operation in progress) sits left
+// of the Git button in the same row. A block's width is fixed in the layout, so the
+// widget gets one that holds a usual branch name and cuts longer ones short.
+export const WIDGET_ID = "git-vcs-widget";
+export const WIDGET_WIDTH = 240;
 
 const find = (node, id) => {
   if (node?.id === id) return node;
@@ -84,12 +89,10 @@ export function toMainGit(main, { button = true } = {}) {
   const { size: _height, ...bar } = tabs;
   // The button's block is the window's top right corner, which was the tab bar's: around
   // the button it moves the window when the tab bar does.
-  const gitButton = {
-    id: BUTTON_ID, type: "block", size: { px: BUTTON_WIDTH },
-    ...(tabs.window_drag === undefined ? {} : { window_drag: tabs.window_drag }),
-    content: { mod: MOD, props: { view: "log-button" } },
-  };
-  const row = { id: TABS_ROW_ID, type: "row", ...(height ? { size: height } : {}), resizable: false, children: [bar, gitButton] };
+  const drag = tabs.window_drag === undefined ? {} : { window_drag: tabs.window_drag };
+  const widget = { id: WIDGET_ID, type: "block", size: { px: WIDGET_WIDTH }, ...drag, content: { mod: MOD, props: { view: "vcs-widget" } } };
+  const gitButton = { id: BUTTON_ID, type: "block", size: { px: BUTTON_WIDTH }, ...drag, content: { mod: MOD, props: { view: "log-button" } } };
+  const row = { id: TABS_ROW_ID, type: "row", ...(height ? { size: height } : {}), resizable: false, children: [bar, widget, gitButton] };
   work.children[work.children.indexOf(oldRow ?? tabs)] = button ? row : { ...bar, ...(height ? { size: height } : {}) };
   return { ok: true, layout };
 }

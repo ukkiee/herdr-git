@@ -28,6 +28,7 @@ import { startUpdateProject } from "./view-update-project.js";
 import { openPull } from "./view-pull.js";
 import { openMerge } from "./view-merge.js";
 import { openRebase } from "./view-rebase.js";
+import { openNewWorktree } from "./view-worktree.js";
 
 // What each item does, run in the owning panel's copy: run(panel, cx, how).
 //   panel: the Log panel (kind "log") or the Commit panel (kind "commit"): repo, bus, t,
@@ -50,6 +51,7 @@ export const VCS_ACTIONS = {
   } },
   "newTag": { run: (panel, cx, how) => newTagAtHead(panel, repoOf(panel), cx, WHO[how.kind]) },
   "resetHead": { run: (panel, _cx, how) => { const r = repoOf(panel); if (r) openResetHead({ root: r.root, on: r.on ?? null, owner: panel.bus.id, who: WHO[how.kind], lang: panel.lang }); } },
+  "newWorktree": { run: (panel, _cx, how) => openNewWorktree(panel, repoOf(panel), null, WHO[how.kind]) },
   "showLog": { run: () => run("layout.show", { id: LOG_NODE }) },
   "stash": { run: (panel, _cx, how) => { const r = repoOf(panel); if (r) openStash({ root: r.root, on: r.on ?? null, owner: panel.bus.id, lang: panel.lang, who: WHO[how.kind] }); } },
   // The Unstash dialog is for one stash: the newest. Off while there is none.

@@ -2,6 +2,9 @@
 import assert from "node:assert/strict";
 import { VCS_OPS, vcsOpsItems, numberedPick, takesVcsOps, commitPanelShown } from "./vcs-ops.js";
 import { translator } from "./i18n.js";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const all = () => true;
 const ids = (items) => items.map((it) => it.id);
@@ -111,6 +114,17 @@ const en = translator("en"), ko = translator("ko");
   assert.equal(commitPanelShown(tree(true, "changes")), false);
   assert.equal(commitPanelShown(tree(false, "files")), false);
   assert.equal(commitPanelShown(null), false);
+}
+
+// Every item the popup can have has a line in view-vcs-ops.js VCS_ACTIONS, except the
+// ones with no screen yet. The screen imports the app, so its table is read as text.
+{
+  const source = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "view-vcs-ops.js"), "utf8");
+  const table = source.slice(source.indexOf("export const VCS_ACTIONS = {"));
+  const handled = new Set([...table.slice(0, table.indexOf("\n};")).matchAll(/^ {2}"([^"]+)":/gm)].map((m) => m[1]));
+  const every = vcsOpsItems(all).flatMap((it) => (it.sub ? ids(vcsOpsItems(all, it.id)) : [it.id]));
+  assert.ok(handled.has("commit") && handled.has("newWorktree"));
+  assert.deepEqual(every.filter((id) => !handled.has(id)), ["branches", "createPatch", "applyPatch", "applyPatchFromClipboard", "manageRemotes"]);
 }
 
 console.log("ok");

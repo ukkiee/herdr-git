@@ -198,7 +198,9 @@ export default class MergeRevisionsView {
   save(then, cx, anyway = false) {
     if (!this.free()) return;
     const state = this.settled();
-    if (!anyway && leftToDecide(state) > 0) { this.confirm = then; return; }
+    // The footer buttons don't redraw on their own: without cx.notify() the question
+    // would wait for some later redraw.
+    if (!anyway && leftToDecide(state) > 0) { this.confirm = then; cx.notify(); return; }
     this.confirm = null;
     if (this.editor) { this.editor.release(); this.editor = null; }
     const text = resultText(state);
@@ -344,7 +346,7 @@ export default class MergeRevisionsView {
       .child(div().w_full().child(this.t("conflicts.mrUnresolvedBody", { n: leftToDecide(state) })));
     return dialogFrame("mr-unresolved", this.t("conflicts.mrUnresolvedTitle"), t, {
       body,
-      onClose: () => { this.confirm = null; },
+      onClose: back,
       footer: [
         button("mr-unresolved-back", this.t("conflicts.mrBackToResolving"), t, { onClick: back }),
         button("mr-unresolved-save", this.t("conflicts.mrSaveAnyway"), t, { kind: "primary", onClick: (_e, cx) => this.save(then, cx, true) }),

@@ -1141,7 +1141,11 @@ The rules and their reasons are in `docs/design.md` (section 4); what a person s
   repository's config.
 - **A remote that asks for a password** fails at once with `If the remote asks for a
   password or passphrase, set up a credential helper or an SSH agent: there is nowhere
-  here to type one.` first, then git's words (pull and updates); nothing waits. The hint
+  here to type one.` first, then git's words (pull, updates, push, Push Tag, fetch, and
+  the fetch after defining a remote); nothing waits. A push gets it only when git could
+  not reach or read the remote (exit 128); one the remote or a hook refused (exit 1:
+  non-fast-forward, a stale lease, pre-push or pre-receive) shows git's words alone
+  (`git-remote.js` cannotReach). The hint
   leads so it shows without scrolling the error box, the strip or a notification. Update
   Selected tries each remote once: a branch whose remote already failed fails the same
   way without another fetch, and the notification gives the hint once, on top.
@@ -2672,7 +2676,7 @@ in English.
   list leaves out a symbolic ref or a remote name ending in `/HEAD`.
 - Credentials and GPG: the mod has no place to type a password, passphrase or GPG PIN.
   Push and fetch run with `GIT_TERMINAL_PROMPT=0`, so a remote that asks fails with
-  git's words instead of waiting. Commit sets nothing of the kind: what a signing
+  the credential hint, then git's words, instead of waiting. Commit sets nothing of the kind: what a signing
   setup does there depends on its own pinentry.
 
 **Panels**
@@ -3529,7 +3533,9 @@ commit `main` lacks)
      is on; on a commit of the current branch it is off.
 182. Set the remote's URL to one that asks for a password and Pull: it fails at once with
      `If the remote asks for a password or passphrase, set up a credential helper or an
-     SSH agent: there is nowhere here to type one.` on top, then git's words.
+     SSH agent: there is nowhere here to type one.` on top, then git's words. Push, Fetch
+     and Push Tag to it say the same; a push refused as non-fast-forward shows git's
+     words alone.
 
 **Cherry-Pick, Revert, Reset**
 

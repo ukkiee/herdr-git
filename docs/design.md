@@ -1040,7 +1040,9 @@ Herdr는 mod를 QuickJS로 돌린다. JIT가 없고, 한 호출이 너무 오래
   걸릴 수 있다.
 - 비밀번호, passphrase, GPG PIN 입력 창이 없다. `exec`에 입력을 넘길 길이 없고, 받으려면 비밀번호가
   디스크 파일을 거치는 도우미가 필요하기 때문이다. 입력을 요구하는 원격에서는 푸시, fetch, pull,
-  업데이트, 태그 푸시가 기다리지 않고 바로 실패하고 credential helper나 SSH agent를 설정하라고 안내한다.
+  업데이트, 태그 푸시가 기다리지 않고 바로 실패하고 credential helper나 SSH agent를 설정하라는 안내를
+  git 글 앞에 붙인다. 판정은 `git-remote.js`의 `cannotReach` 한 곳이다: push는 종료 코드 128(원격에
+  닿거나 읽지 못함)만, fetch는 실패 전부. 원격이나 훅이 거절한 push(종료 코드 1)는 git 글만 보인다.
 - 메뉴 막대가 없다. git 메뉴는 VCS Operations popup(`cmd-shift-v`)이다. `cmd-shift-v`는 Commit
   panel이나 Log panel이 보일 때만 열린다.
 - 알림에는 버튼을 하나만 달 수 있다. 리베이스가 편집 중단에서 멈춘 알림에는 "계속 · 중단" 버튼이

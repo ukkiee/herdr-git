@@ -254,8 +254,9 @@ restored after that). `git config --remove-section gittools` drops the favorites
 - It is disabled on `main` and `master`, including a branch that pushes to a remote
   `main` or `master`.
 - There is no place to type a password, passphrase or GPG PIN. A remote that asks for
-  one doesn't hang: the push fails and the dialog shows git's error. Your commit is
-  already made; set up a credential helper or SSH agent and press Push again.
+  one doesn't hang: the push fails and the dialog shows a hint to set up a credential
+  helper or SSH agent, then git's error. Your commit is already made; set it up and
+  press Push again. A push the remote or a hook refused shows git's error alone.
 
 ## Icons and size
 

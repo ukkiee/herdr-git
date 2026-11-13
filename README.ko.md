@@ -233,8 +233,9 @@ cd herdr-git && ./install.sh
 - `main`과 `master`에서는 비활성입니다. 원격의 `main`이나 `master`로 푸시하는 브랜치도
   마찬가지입니다.
 - 비밀번호, 암호 문구, GPG PIN을 입력할 곳이 없습니다. 입력을 요구하는 원격에서는 멈춰
-  기다리지 않고 푸시가 실패하며, 창에 git의 오류를 보여 줍니다. 커밋은 이미 되어
-  있으니 credential helper나 SSH agent를 설정하고 Push를 다시 누르면 됩니다.
+  기다리지 않고 푸시가 실패하며, 창에 credential helper나 SSH agent를 설정하라는 안내와
+  그다음 git의 오류를 보여 줍니다. 커밋은 이미 되어 있으니 설정하고 Push를 다시 누르면
+  됩니다. 원격이나 훅이 거절한 푸시에는 git의 오류만 보여 줍니다.
 
 ## 아이콘과 크기
 

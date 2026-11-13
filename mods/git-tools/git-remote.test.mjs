@@ -8,7 +8,7 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
 import { makeGit } from "./git.js";
-import { pull, readPullTargets, pullDefault, splitRemoteBranch, readTracking, updateBranch, updateBranches, checkoutAndUpdate, updateProject, resetToRemote, readUpdate } from "./git-remote.js";
+import { pull, readPullTargets, pullDefault, togglePullOption, splitRemoteBranch, readTracking, updateBranch, updateBranches, checkoutAndUpdate, updateProject, resetToRemote, readUpdate } from "./git-remote.js";
 import { smartRun } from "./git-smart.js";
 import { listSnapshots } from "./git-snapshot.js";
 
@@ -214,6 +214,16 @@ const commitMine = (mine, path, at, word) => { edit(mine, path, at, word); sh(mi
   assert.deepEqual(await splitRemoteBranch(git, mine, "up/stream/feature"), { remote: "up/stream", branch: "feature" });
   assert.deepEqual(await splitRemoteBranch(git, mine, "origin/feature"), { remote: "origin", branch: "feature" });
   assert.equal(await splitRemoteBranch(git, mine, "nowhere/feature"), null);
+}
+
+// The pull dialog's options: picking one takes off the ones it can't go with.
+{
+  assert.deepEqual(togglePullOption([], "--no-verify"), ["--no-verify"]);
+  assert.deepEqual(togglePullOption(["--ff-only", "--no-verify"], "--rebase"), ["--rebase", "--no-verify"]);
+  assert.deepEqual(togglePullOption(["--rebase"], "--squash"), ["--squash"]);
+  assert.deepEqual(togglePullOption(["--squash", "--no-commit"], "--no-ff"), ["--no-ff", "--no-commit"]);
+  assert.deepEqual(togglePullOption(["--no-ff"], "--no-ff"), []);
+  assert.deepEqual(togglePullOption(["--no-ff", "--exec=x"], "--exec=y"), ["--no-ff"]);
 }
 
 // A remote that asks for a password fails at once instead of waiting, with the remote

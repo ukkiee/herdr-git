@@ -32,6 +32,26 @@ const STEP = { timeout: 10 * 60 * 1000, env: { GIT_TERMINAL_PROMPT: "0", GIT_EDI
 
 // The pull dialog's options, in its order. Anything else is never passed on to git.
 export const PULL_OPTIONS = ["--rebase", "--ff-only", "--no-ff", "--squash", "--no-commit", "--no-verify"];
+// Options that can't go together: picking one takes the others off.
+const EXCLUDES = {
+  "--rebase": ["--ff-only", "--no-ff", "--squash", "--no-commit"],
+  "--ff-only": ["--rebase", "--no-ff"],
+  "--no-ff": ["--rebase", "--ff-only", "--squash"],
+  "--squash": ["--rebase", "--no-ff"],
+  "--no-commit": ["--rebase"],
+  "--no-verify": [],
+};
+
+// togglePullOption(options, option) → the options with `option` picked or taken off,
+// in PULL_OPTIONS order; picking it takes off the ones it can't go with.
+export function togglePullOption(options, option) {
+  const now = new Set((Array.isArray(options) ? options : []).filter((o) => PULL_OPTIONS.includes(o)));
+  if (!PULL_OPTIONS.includes(option)) return PULL_OPTIONS.filter((o) => now.has(o));
+  if (now.has(option)) now.delete(option);
+  else { now.add(option); for (const o of EXCLUDES[option]) now.delete(o); }
+  return PULL_OPTIONS.filter((o) => now.has(o));
+}
+
 // Also accepted from the branch menus: "Pull into … Using Merge".
 const ACCEPTED = new Set([...PULL_OPTIONS, "--no-rebase"]);
 

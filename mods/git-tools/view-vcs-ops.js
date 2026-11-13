@@ -30,6 +30,9 @@ import { openMerge } from "./view-merge.js";
 import { openRebase } from "./view-rebase.js";
 import { openNewWorktree } from "./view-worktree.js";
 import { VcsWidget } from "./view-vcs-widget.js";
+import { createPatchFrom } from "./view-create-patch.js";
+import { openApplyPatch } from "./view-apply-patch.js";
+import { openRemotes } from "./view-remotes.js";
 
 // What each item does, run in the owning panel's copy: run(panel, cx, how).
 //   panel: the Log panel (kind "log") or the Commit panel (kind "commit"): repo, bus, t,
@@ -72,6 +75,11 @@ export const VCS_ACTIONS = {
   "pull": { run: (panel, _cx, how) => { const r = repoOf(panel); if (r) openPull({ root: r.root, on: r.on ?? null, owner: panel.bus.id, lang: panel.lang, who: WHO[how.kind] }); } },
   "merge": { run: (panel, _cx, how) => { const r = repoOf(panel); if (r) openMerge({ root: r.root, on: r.on ?? null, owner: panel.bus.id, who: WHO[how.kind], lang: panel.lang }); } },
   "rebase": { run: (panel, _cx, how) => { const r = repoOf(panel); if (r) openRebase({ root: r.root, on: r.on ?? null, owner: panel.bus.id, who: WHO[how.kind], lang: panel.lang }); } },
+  // Patch ▸. Create Patch… takes the Commit panel's checked files and message when it owns the popup.
+  "createPatch": { run: (panel, _cx, how) => createPatchFrom(panel, repoOf(panel), WHO[how.kind], how.kind) },
+  "applyPatch": { run: (panel, _cx, how) => openApplyPatch(panel, repoOf(panel), WHO[how.kind]) },
+  "applyPatchFromClipboard": { run: (panel, _cx, how) => openApplyPatch(panel, repoOf(panel), WHO[how.kind], { clipboard: true }) },
+  "manageRemotes": { run: (panel) => openRemotes(panel, repoOf(panel)) },
 };
 
 // Branches…: the VCS widget's popup on the panel's repository. The Log panel's own widget

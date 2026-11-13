@@ -30,6 +30,8 @@ import { serveExtract, serveDropChanges } from "./view-extract.js";
 import { serveOperation } from "./view-merge.js";
 import { serveInteractive } from "./view-interactive-rebase.js";
 import { runWorktreeCreate } from "./view-worktree.js";
+import { runPatchLocal } from "./view-create-patch.js";
+import { runPatchApply } from "./view-apply-patch.js";
 
 const strings = (value) => (Array.isArray(value) ? value.filter((v) => typeof v === "string" && v) : []);
 const text = (value) => (typeof value === "string" && value ? value : null);
@@ -72,6 +74,8 @@ export const SERVE_ACTIONS = {
   "rebase-start": { work: "merge.rebasing", run: (git, root, args, panel) => serveOperation(git, root, args, panel) },
   "rebase-interactive": { work: "interactive.rebasing", run: (git, root, args, panel) => serveInteractive(git, root, args, panel) },
   "worktree-create": { work: "worktree.creating", run: (git, root, args) => runWorktreeCreate(git, root, args) },
+  "patch-local": { work: "patch.preparing", run: (git, root, args, panel) => runPatchLocal(git, root, args, panel) },
+  "patch-apply": { work: "patch.applying", run: (git, root, args, panel) => runPatchApply(git, root, args, panel) },
 };
 
 // serveAction(panel, e, cx) → true when the table has e.action and the panel now runs

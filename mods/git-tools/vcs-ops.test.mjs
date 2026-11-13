@@ -116,15 +116,16 @@ const en = translator("en"), ko = translator("ko");
   assert.equal(commitPanelShown(null), false);
 }
 
-// Every item the popup can have has a line in view-vcs-ops.js VCS_ACTIONS, except the
-// ones with no screen yet. The screen imports the app, so its table is read as text.
+// Every item the popup can have has a line in view-vcs-ops.js VCS_ACTIONS, the Patch ▸
+// group's too. The screen imports the app, so its table is read as text.
 {
   const source = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "view-vcs-ops.js"), "utf8");
   const table = source.slice(source.indexOf("export const VCS_ACTIONS = {"));
   const handled = new Set([...table.slice(0, table.indexOf("\n};")).matchAll(/^ {2}"([^"]+)":/gm)].map((m) => m[1]));
   const every = vcsOpsItems(all).flatMap((it) => (it.sub ? ids(vcsOpsItems(all, it.id)) : [it.id]));
   assert.ok(handled.has("commit") && handled.has("newWorktree") && handled.has("branches"));
-  assert.deepEqual(every.filter((id) => !handled.has(id)), ["createPatch", "applyPatch", "applyPatchFromClipboard", "manageRemotes"]);
+  assert.deepEqual(every.filter((id) => !handled.has(id)), []);
+  assert.ok(["createPatch", "applyPatch", "applyPatchFromClipboard", "manageRemotes"].every((id) => handled.has(id)));
   // Which panel kinds serve an item (`by`), read from its line: Push… is either panel's
   // (both serve the push request), Rollback the Commit panel's alone.
   const by = (id) => {

@@ -12,7 +12,8 @@ const IDENTITY = ["-c", "user.name=git-tools", "-c", "user.email=git-tools@local
 // write lock, so two of them never share the file.
 const SCRATCH = "git-tools-patch-index";
 
-const refuse = (err, key, args = {}) => ({ ok: false, code: -1, out: "", err, msg: { key, args } });
+// Before git runs: nothing changed.
+const refuse = (err, msg) => ({ ok: false, code: -1, out: "", err, msg });
 
 // ---- Reading a patch
 
@@ -159,8 +160,8 @@ async function unmerged(git, root) {
 export async function applyPatch(git, root, { file, paths = [], every = false } = {}) {
   const out = (r, more) => ({ ok: r.ok, code: r.code, out: r.out ?? "", err: r.err ?? "", ...(r.msg ? { msg: r.msg } : {}), threeWay: false, conflicts: [], changed: false, ...more });
   const list = paths.filter((path) => typeof path === "string" && path);
-  if (!list.length) return out(refuse("No files chosen to apply.", "patch.noFiles"));
-  if (typeof file !== "string" || !file) return out(refuse("No patch file.", "patch.noFile"));
+  if (!list.length) return out(refuse("No files are checked.", { key: "patch.noFiles", args: {} }));
+  if (typeof file !== "string" || !file) return out(refuse("Enter the patch file's path.", { key: "patch.noFile", args: {} }));
   const pick = every ? [] : list.map((path) => `--include=${literal(path)}`);
   const check = await git.read(root, ["apply", "--check", ...pick, "--", file], { timeout: TIMEOUT });
   if (check.ok) {
@@ -182,7 +183,7 @@ export async function applyPatch(git, root, { file, paths = [], every = false } 
 
 // ---- Create Patch from local changes
 
-// changesCommit(git, root, { paths, message }) → { ok, code, out, err, msg?, hash }
+// changesCommit(git, root, { paths, message }) → { ok, code, out, err, msg?, hash, branch }
 //   A commit on HEAD (none on a repository without commits) whose tree is HEAD's with each
 //   of `paths` as the working tree has it now: changed, new (untracked too) or gone. No
 //   ref names it, and the index and the working tree are left as they were (the tree is
@@ -190,9 +191,11 @@ export async function applyPatch(git, root, { file, paths = [], every = false } 
 //   for one commit (git-revision.js createPatch), so local changes take the same way as
 //   a commit's. A rename is its old and its new path, both in `paths`.
 //   message: the commit's message; empty: "Local changes".
+//   branch: the branch HEAD is on (the patch file is offered under its name), null when
+//   HEAD is detached.
 export async function changesCommit(git, root, { paths = [], message = "" } = {}) {
   const list = paths.filter((path) => typeof path === "string" && path);
-  if (!list.length) return { ...refuse("No files chosen for the patch.", "patch.noFiles"), hash: null };
+  if (!list.length) return { ...refuse("No files are checked.", { key: "patch.noFiles", args: {} }), hash: null };
   const dir = await git.read(root, ["rev-parse", "--absolute-git-dir"]);
   if (!dir.ok) return { ...dir, hash: null };
   const env = { GIT_INDEX_FILE: `${dir.out.trim()}/${SCRATCH}` };
@@ -202,7 +205,9 @@ export async function changesCommit(git, root, { paths = [], message = "" } = {}
   const made = await build(git, root, list, env, parent, String(message ?? ""));
   // Emptied whether or not the commit was made; a failure here leaves only a stale file.
   await git(root, ["read-tree", "--empty"], { env });
-  return made;
+  if (!made.ok) return { ...made, branch: null };
+  const branch = await git.read(root, ["symbolic-ref", "--quiet", "--short", "HEAD"]);
+  return { ...made, branch: branch.ok ? branch.out.trim() || null : null };
 }
 
 async function build(git, root, paths, env, parent, message) {

@@ -51,6 +51,8 @@ const headers = (text) => text.split("\n").filter((line) => line.startsWith("dif
   const r = await changesCommit(git, repo, { paths, message: "My change\n\nbody" });
   assert.equal(r.ok, true, r.err);
   assert.match(r.hash, /^[0-9a-f]{40}$/);
+  // The branch HEAD is on, for the patch file's name.
+  assert.equal(r.branch, "main");
   // The commit sits on HEAD, holds the message, and no ref names it.
   assert.equal(run(repo, ["rev-parse", `${r.hash}^`]).trim(), head);
   assert.equal(run(repo, ["log", "-1", "--format=%B", r.hash]).trim(), "My change\n\nbody");
@@ -92,6 +94,13 @@ const headers = (text) => text.split("\n").filter((line) => line.startsWith("dif
   const none = await changesCommit(git, repo, { paths: [], message: "" });
   assert.equal(none.ok, false);
   assert.equal(none.msg.key, "patch.noFiles");
+
+  // On a detached HEAD there is no branch.
+  run(repo, ["checkout", "-q", "--detach"]);
+  const detached = await changesCommit(git, repo, { paths: ["b.txt"], message: "" });
+  assert.equal(detached.ok, true, detached.err);
+  assert.equal(detached.branch, null);
+  assert.equal(run(repo, ["log", "-1", "--format=%s", detached.hash]).trim(), "Local changes");
 }
 
 // ---- A repository without a commit yet: the changes start from nothing.

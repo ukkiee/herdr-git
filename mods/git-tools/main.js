@@ -76,6 +76,9 @@ import Rebase from "./view-rebase.js";
 import InteractiveRebase from "./view-interactive-rebase.js";
 import NewWorktree from "./view-worktree.js";
 import CheckoutRef from "./view-checkout-ref.js";
+import CreatePatch from "./view-create-patch.js";
+import ApplyPatch from "./view-apply-patch.js";
+import Remotes from "./view-remotes.js";
 
 // When the system's language isn't known yet, how long to wait before each next ask.
 const ASK_AGAIN = [1000, 3000, 10000];
@@ -128,6 +131,9 @@ export const VIEWS = {
   "interactive-rebase": InteractiveRebase, // Rebasing Commits dialog (view-interactive-rebase.js openInteractiveRebase)
   "worktree": NewWorktree, // New Worktree dialog (view-worktree.js openNewWorktree)
   "checkout-ref": CheckoutRef, // Checkout Tag or Revision popup (view-checkout-ref.js checkoutRefFrom)
+  "create-patch": CreatePatch, // Create Patch dialog on local changes (view-create-patch.js createPatchFrom)
+  "apply-patch": ApplyPatch, // Apply Patch dialog, from a file or the clipboard (view-apply-patch.js openApplyPatch)
+  "remotes": Remotes, // Git Remotes dialog (view-remotes.js openRemotes)
 };
 
 // `mod.open:git-tools` (cmd-k) opens a copy with no view. No single app command both

@@ -7,7 +7,7 @@
 // names), aName and bName how they are shown. Saved with the tab: plain JSON.
 
 import { div } from "gpui-kit";
-import { h_flex, v_flex } from "gpui-base";
+import { h_flex, v_flex, InputState, Input } from "gpui-base";
 import { exec, theme } from "herdr";
 import { ICON, fileGlyph, folderGlyph, darkLook, row, toolbar, spacer, iconButton, notice, errorStrip, WindowedList, panelFrame } from "./ui.js";
 import { makeGit } from "./git.js";
@@ -18,6 +18,7 @@ import { openDiff } from "./view-diff.js";
 import { openSpaceTab } from "./space-tabs.js";
 import { openWorkingTreeCompare } from "./view-compare-files.js";
 import { branchCommits } from "./git-compare.js";
+import { filterArgs } from "./git-log-filter.js";
 import { en, ko } from "./messages-compare.js";
 
 const SHORT = 7;
@@ -68,24 +69,48 @@ export default class CompareBranches {
     this.listA = new WindowedList("compare-only-a", { rowHeight: ROW_H });
     this.listB = new WindowedList("compare-only-b", { rowHeight: ROW_H });
     this.fileList = new WindowedList("compare-commit-files");
+    // Each list's filter: User, Date (from), Path; Enter in a box applies that list's.
+    this.inputs = { a: this.filterInputs("a"), b: this.filterInputs("b") };
+    this.filters = { a: [], b: [] }; // git-log-filter.js filterArgs for each list
     this.load(cx);
   }
 
   git() { return makeGit(exec, this.repo?.on ?? null); }
 
+  filterInputs(side) {
+    const make = (placeholder) => {
+      const state = InputState.new({ placeholder });
+      state.on("submit", (_e, cx) => this.applyFilter(side, cx));
+      return state;
+    };
+    return { user: make(this.t("filters.user")), since: make(this.t("log.date")), path: make(this.t("log.path")) };
+  }
+
+  applyFilter(side, cx) {
+    const box = this.inputs[side], path = box.path.value().trim();
+    this.filters[side] = filterArgs({ user: box.user.value(), since: box.since.value().trim(), paths: path ? [path] : [] });
+    this.load(cx);
+    cx.notify();
+  }
+
   load(cx) {
     if (!this.repo || !this.a || !this.b) { this.lists = { onlyA: [], onlyB: [] }; this.error = this.t("dialogs.diff.noFileTab"); return; }
-    if (this.loading) return;
-    this.loading = true;
+    if (this.loading) { this.again = true; return; }
+    this.loading = true; this.again = false;
+    const { a, b } = this, git = this.git(), root = this.repo.root, fa = this.filters.a, fb = this.filters.b;
     cx.spawn(async (cx) => {
       try {
-        const r = await branchCommits(this.git(), this.repo.root, { a: this.a, b: this.b });
-        if (r.ok) { this.lists = { onlyA: r.onlyA, onlyB: r.onlyB }; this.error = null; }
-        else { this.lists ??= { onlyA: [], onlyB: [] }; this.error = r.err || this.t("ui.gitFailed"); }
+        // One read when both lists are filtered alike, else one per list.
+        const ra = await branchCommits(git, root, { a, b, filterArgs: fa });
+        const rb = JSON.stringify(fa) === JSON.stringify(fb) ? ra : await branchCommits(git, root, { a, b, filterArgs: fb });
+        const failed = !ra.ok ? ra : !rb.ok ? rb : null;
+        if (!failed) { this.lists = { onlyA: ra.onlyA, onlyB: rb.onlyB }; this.error = null; }
+        else { this.lists ??= { onlyA: [], onlyB: [] }; this.error = failed.err || this.t("ui.gitFailed"); }
       } catch (error) {
         this.lists ??= { onlyA: [], onlyB: [] }; this.error = String(error?.message ?? error);
       } finally {
         this.loading = false;
+        if (this.again) this.load(cx);
         cx.notify();
       }
     });
@@ -129,10 +154,15 @@ export default class CompareBranches {
 
   half(side, commits, list, a, b, t) {
     const body = !commits.length ? notice(this.t("compare.noCommits"), t) : list.render(commits.length, (i) => this.commitRow(side, commits[i], i, t), t);
+    const box = (state, width) => h_flex().w(width).flex_none().h(22).px(6).items_center().rounded(4).border_1().border_color(t.input).bg(t.background)
+      .child(Input.new(state).flex_1().min_w(0).h_full().text_size(12).text_color(t.foreground));
+    const inputs = this.inputs[side];
     return v_flex().flex_1().min_h(0).w_full()
       .child(h_flex().flex_none().h(28).px(10).gap(6).items_center().border_b(1).border_color(t.border).bg(t.raised).text_size(12)
         .child(div().flex_none().text_color(t.ansi3).child("⚠"))
         .child(div().min_w(0).truncate().child(this.t("compare.onlyIn", { a, b }))))
+      .child(h_flex().flex_none().h(30).px(10).gap(6).items_center().border_b(1).border_color(t.border)
+        .child(box(inputs.user, 140)).child(box(inputs.since, 110)).child(box(inputs.path, 200)))
       .child(div().flex_1().min_h(0).w_full().child(body));
   }
 

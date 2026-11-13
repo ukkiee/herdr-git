@@ -10,6 +10,7 @@ import { readDiff } from "./git-diff.js";
 import { listSnapshots } from "./git-snapshot.js";
 import { branchCommits, workingTreeFiles, swapState, versionFiles, getFromRevision, fileParent, readFileDiff, readRevisionFile } from "./git-compare.js";
 import { en, ko } from "./messages-compare.js";
+import { filterArgs } from "./git-log-filter.js";
 
 const env = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", GIT_EDITOR: "true" };
 const exec = (cmd, args = [], { cwd } = {}) => new Promise((resolve, reject) => {
@@ -59,6 +60,11 @@ const worded = (r) => {
   const path = await branchCommits(git, repo, { a: "topic", b: "main", filterArgs: ["--", "u.txt"] });
   assert.deepEqual(path.onlyA.map((c) => c.hash), [t2]);
   assert.deepEqual(path.onlyB, []);
+  // As the compare tab builds them: a path taken literally, a user.
+  const built = await branchCommits(git, repo, { a: "topic", b: "main", filterArgs: filterArgs({ paths: ["t.txt"], user: "t" }) });
+  assert.deepEqual(built.onlyA.map((c) => c.hash), [t1]);
+  const nobody = await branchCommits(git, repo, { a: "topic", b: "main", filterArgs: filterArgs({ user: "someone else" }) });
+  assert.deepEqual([nobody.onlyA, nobody.onlyB], [[], []]);
   // A branch that doesn't exist: git's words and a msg, no lists.
   const gone = await branchCommits(git, repo, { a: "nope", b: "main" });
   assert.equal(gone.ok, false);

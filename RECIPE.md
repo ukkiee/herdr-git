@@ -1123,8 +1123,10 @@ The rules and their reasons are in `docs/design.md` (section 4); what a person s
 - **Apply Patch's path.** `~` and `~/…` mean the home folder of the machine the patch is
   on; `~name` stays as typed. A patch over 1 MiB, counted in UTF-8 bytes, shows
   `Couldn't read <file>: the patch is larger than 1 MiB`. The checked files are always
-  named to git; with more than 1,000 of them (or very long names) they go in parts, and a
-  part git refuses after others leaves those others applied.
+  named to git; with more than 1,000 of them, or once their paths add up past 60,000 with
+  each counted as six times its length plus 11 (about 10,000 characters of English
+  names), they go in parts, and a part git refuses after others leaves those others
+  applied.
 - **Continue on a rebase with an edited message.** A pick stopped on conflicts keeps its
   author and author date; a commit stopped for editing is amended with the message (and
   what is staged). When more commits were made on top of that stop, git's own Continue

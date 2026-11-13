@@ -308,8 +308,10 @@ restored after that). `git config --remove-section gittools` drops the favorites
 - Apply Patch has no file picker (Herdr offers a folder picker only): type the patch's
   path, or pick its folder with 📁 in a space on this computer. A patch file over 1 MiB
   is refused. Create Patch and Apply Patch have no diff pane.
-- Apply Patch applies a very long file list in parts (over 1,000 files, or a command line
-  of about 60 KB). When git refuses a later part, the parts before it stay applied.
+- Apply Patch applies a long file list in parts: over 1,000 files, or paths that add up
+  past 60,000 when each counts as six times its length plus 11 (with English names, about
+  10,000 characters of names). When git refuses a later part, the parts before it stay
+  applied.
 - The panels follow a git-tools tab's repository only once that tab has recorded itself
   (when it opens, or when it gets the focus); until then they follow the space's folder.
 - The Merge Revisions dialog's middle pane is drawn, not an editor with colored lines: to

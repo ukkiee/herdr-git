@@ -29,6 +29,7 @@ import { runRemote } from "./view-update-project.js";
 import { serveExtract, serveDropChanges } from "./view-extract.js";
 import { serveOperation } from "./view-merge.js";
 import { serveInteractive } from "./view-interactive-rebase.js";
+import { runWorktreeCreate } from "./view-worktree.js";
 
 const strings = (value) => (Array.isArray(value) ? value.filter((v) => typeof v === "string" && v) : []);
 const text = (value) => (typeof value === "string" && value ? value : null);
@@ -67,6 +68,7 @@ export const SERVE_ACTIONS = {
   "merge-start": { work: "merge.merging", run: (git, root, args, panel) => serveOperation(git, root, args, panel) },
   "rebase-start": { work: "merge.rebasing", run: (git, root, args, panel) => serveOperation(git, root, args, panel) },
   "rebase-interactive": { work: "interactive.rebasing", run: (git, root, args, panel) => serveInteractive(git, root, args, panel) },
+  "worktree-create": { work: "worktree.creating", run: (git, root, args) => runWorktreeCreate(git, root, args) },
 };
 
 // serveAction(panel, e, cx) → true when the table has e.action and the panel now runs

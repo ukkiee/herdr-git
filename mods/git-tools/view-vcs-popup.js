@@ -27,6 +27,8 @@ import { pushBranch } from "./view-push.js";
 import { pushTagMenu } from "./view-tag.js";
 import { startUpdateProject, updateHere, checkoutUpdateHere, pullHere } from "./view-update-project.js";
 import { operateFromWidget } from "./view-merge.js";
+import { openNewWorktree } from "./view-worktree.js";
+import { checkoutRefFrom } from "./view-checkout-ref.js";
 import { MOD, openDialog, answerMenu, dialogFrame, button, uiGlyph, iconButton, darkLook, notice, WindowedList } from "./ui.js";
 
 export const POPUP_ACTIONS = {
@@ -36,6 +38,8 @@ export const POPUP_ACTIONS = {
   "ops.continue": (w, _p, cx) => w.goOn(cx),
   "ops.skip": (w, _p, cx) => w.skip(cx),
   "vcs.newBranch": (w, _p, cx) => w.newBranch(null, cx),
+  "vcs.newWorktree": (w) => openNewWorktree(w.host, w.repo, null, w.who),
+  "vcs.checkoutRef": (w, _p, cx) => checkoutRefFrom(w, cx),
   // Local changes in the way open the Smart dialog, with the widget's host running its writes.
   "branch.checkout": (w, b, cx) => {
     if (!b || b.current) return;
@@ -55,6 +59,7 @@ export const POPUP_ACTIONS = {
   "branch.mergeInto": (w, b, cx) => { if (b) operateFromWidget(w, { type: "merge", target: b.name }, cx); },
   "branch.rebaseOnto": (w, b, cx) => { if (b) operateFromWidget(w, { type: "rebase", target: b.name }, cx); },
   "branch.checkoutAndRebase": (w, b, cx) => { if (b) operateFromWidget(w, { type: "checkout-rebase", name: b.name, remote: b.scope === "remote" }, cx); },
+  "branch.newWorktreeFrom": (w, b) => openNewWorktree(w.host, w.repo, b, w.who),
 };
 export const popupHandles = (id) => Object.prototype.hasOwnProperty.call(POPUP_ACTIONS, id);
 

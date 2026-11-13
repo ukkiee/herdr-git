@@ -50,6 +50,7 @@ import { pushUpTo, pushBranch } from "./view-push.js";
 import { updateHere, checkoutUpdateHere, pullHere, updateSelected } from "./view-update-project.js";
 import { aimHere, extractHere, dropChangesHere } from "./view-extract.js";
 import { operateHere } from "./view-merge.js";
+import { openNewWorktree } from "./view-worktree.js";
 
 // Column widths, px. The Commit list takes what the side columns leave and never gets
 // narrower than LIST_MIN: when the panel is too narrow, Commit details goes first, then
@@ -156,6 +157,7 @@ const ACTIONS = {
   "branch.checkoutAndRebase": (host, b, cx) => operateHere(host, { type: "checkout-rebase", name: b.name, remote: b.scope === "remote" }, cx),
   "commit.rebaseOnto": (host, commits, cx) => { if (commits[0]?.hash) operateHere(host, { type: "rebase", target: commits[0].hash }, cx); },
   "commit.interactiveRebase": (host, commits, cx) => interactiveHere(host, commits, cx),
+  "branch.newWorktreeFrom": (host, b) => openNewWorktree(host, host.repo, b),
 };
 
 // The bus event that tells every Log panel the options file changed.

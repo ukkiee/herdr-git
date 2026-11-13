@@ -17,7 +17,6 @@ export const en = {
   "worktree.pathNotFull": "'{path}' is not a full path.",
   "worktree.refTitle": "Checkout Tag or Revision",
   "worktree.refLabel": "Enter reference (branch, tag) name or commit hash:",
-  "worktree.checkout": "Checkout",
   "worktree.enterRef": "Enter a reference name or a commit hash.",
   "worktree.unknownRef": "Nothing is called '{ref}'.",
 };
@@ -38,7 +37,6 @@ export const ko = {
   "worktree.pathNotFull": "'{path}'은(는) 전체 경로가 아닙니다.",
   "worktree.refTitle": "태그 또는 리비전 체크아웃",
   "worktree.refLabel": "참조(브랜치, 태그) 이름 또는 커밋 해시 입력:",
-  "worktree.checkout": "체크아웃",
   "worktree.enterRef": "참조 이름이나 커밋 해시를 입력하세요.",
   "worktree.unknownRef": "'{ref}'(이)라는 이름이 없습니다.",
 };

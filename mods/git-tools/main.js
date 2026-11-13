@@ -74,6 +74,8 @@ import Extract from "./view-extract.js";
 import Merge from "./view-merge.js";
 import Rebase from "./view-rebase.js";
 import InteractiveRebase from "./view-interactive-rebase.js";
+import NewWorktree from "./view-worktree.js";
+import CheckoutRef from "./view-checkout-ref.js";
 
 // When the system's language isn't known yet, how long to wait before each next ask.
 const ASK_AGAIN = [1000, 3000, 10000];
@@ -124,6 +126,8 @@ export const VIEWS = {
   "merge": Merge, // Merge dialog (view-merge.js openMerge)
   "rebase": Rebase, // Rebase dialog (view-rebase.js openRebase)
   "interactive-rebase": InteractiveRebase, // Rebasing Commits dialog (view-interactive-rebase.js openInteractiveRebase)
+  "worktree": NewWorktree, // New Worktree dialog (view-worktree.js openNewWorktree)
+  "checkout-ref": CheckoutRef, // Checkout Tag or Revision popup (view-checkout-ref.js checkoutRefFrom)
 };
 
 // `mod.open:git-tools` (cmd-k) opens a copy with no view. No single app command both

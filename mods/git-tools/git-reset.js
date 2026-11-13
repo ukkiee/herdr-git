@@ -22,6 +22,15 @@ export async function checkCommit(git, root, expr) {
   return { ok: true, code: 0, out: "", err: "", hash: r.out.trim() };
 }
 
+// currentBranch(git, root) → { ok, code, out, err, branch }: the branch HEAD is on, by its
+// short name, or null on a detached HEAD.
+export async function currentBranch(git, root) {
+  const r = await git.read(root, ["symbolic-ref", "-q", "--short", "HEAD"]);
+  if (r.ok) return { ok: true, code: 0, out: "", err: "", branch: r.out.trim() };
+  if (r.code === 1) return { ok: true, code: 0, out: "", err: "", branch: null };
+  return { ...r, branch: null };
+}
+
 // Every path the working tree or the index has otherwise than HEAD (untracked files
 // aside): { ok, paths }. A rename is its two paths.
 async function localChanges(git, root) {

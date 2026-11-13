@@ -6,7 +6,7 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync, chmo
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
 import { makeGit } from "./git.js";
-import { resetTo, checkCommit, RESET_MODES } from "./git-reset.js";
+import { resetTo, checkCommit, currentBranch, RESET_MODES } from "./git-reset.js";
 import { listSnapshots, SNAPSHOTS } from "./git-snapshot.js";
 import { en } from "./messages-reset.js";
 
@@ -132,6 +132,14 @@ assert.deepEqual(RESET_MODES, ["soft", "mixed", "hard", "keep"]);
     assert.equal(r.msg?.key, "reset.invalidCommit", bad);
     assert.equal(r.hash, null);
   }
+}
+
+// What the dialogs show above the choice: the current branch, or null on a detached HEAD.
+{
+  const { repo, first } = twoCommits("current");
+  assert.deepEqual(await currentBranch(git, repo), { ok: true, code: 0, out: "", err: "", branch: "main" });
+  sh(repo, `git checkout -q ${first}`);
+  assert.equal((await currentBranch(git, repo)).branch, null);
 }
 
 // Hard with local changes: first a snapshot of all of them, working tree and staging,

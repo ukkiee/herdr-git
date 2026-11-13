@@ -442,9 +442,11 @@ export async function restore(git, root, { snapshot, paths = [], copy } = {}) {
 //   it was. When git refuses the staging alone (the staged change doesn't fit the index
 //   HEAD has now), the changes are applied without it, and staged is false. When git
 //   refuses outright (a local change is in the way), nothing changed: ok is false with
-//   its words. Untracked files and the snapshot itself are left alone. A success comes
-//   with msg saying which of the three it was (restore.applied, restore.appliedUnstaged,
-//   restore.appliedConflicts with n and the paths' list).
+//   its words. Untracked files and the snapshot itself are left alone. ok is true only
+//   when all of it came back as it was (msg restore.applied). Applied without the staging
+//   (restore.appliedUnstaged) or with conflicts (restore.appliedConflicts, args n and the
+//   paths' list) is said like a restore that left something: ok false, changed true, and
+//   that sentence in err.
 //   Which way a refusal went is read from the index's conflicts, never from git's words:
 //   git exits 1 both when it refuses before writing and when it leaves conflicts.
 export async function applySnapshot(git, root, { snapshot } = {}) {
@@ -458,18 +460,23 @@ export async function applySnapshot(git, root, { snapshot } = {}) {
   let first = null;
   for (const index of tries) {
     const r = await git(root, ["stash", "apply", "-q", ...(index ? ["--index"] : []), snapshot]);
-    if (r.ok) return out({ ...r, err: "", msg: index ? { key: "restore.applied" } : { key: "restore.appliedUnstaged" } }, { staged: index, changed: true });
+    if (r.ok && index) return out({ ...r, err: "", msg: { key: "restore.applied" } }, { staged: true, changed: true });
+    if (r.ok) return out({ ...r, ok: false, err: UNSTAGED, msg: { key: "restore.appliedUnstaged" } }, { changed: true });
     first ??= r;
     // With conflicts already in the index git refuses at once: any failure is a refusal.
     const after = before.paths.length ? before : await unmerged(git, root);
     if (!after.ok) return out(r, { changed: true });
     if (after.paths.length && !before.paths.length) {
       const msg = { key: "restore.appliedConflicts", args: { n: after.paths.length, list: after.paths.join("\n") } };
-      return out({ ...r, ok: true, err: "", msg }, { conflicts: after.paths, staged: false, changed: true });
+      const n = after.paths.length, files = n === 1 ? "1 file" : `${n} files`;
+      const err = `Restored all of it. Lines changed on both sides are left as conflicts in ${files}; resolve them:\n${msg.args.list}`;
+      return out({ ...r, ok: false, err, msg }, { conflicts: after.paths, changed: true });
     }
   }
   return out({ ...first, ok: false });
 }
+
+const UNSTAGED = "Restored all of it. Its staging doesn't fit the index HEAD has now, so it was left out.";
 
 // The paths in a conflict in the index: { ok, paths } in git's order.
 async function unmerged(git, root) {

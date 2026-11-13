@@ -808,7 +808,9 @@ const resetAway = async (name, local) => {
   const { repo, snapshot } = await resetAway("three-way-conflict",
     "printf '1\\nTWO-mine\\n3\\n4\\n5\\n6\\n7\\n8\\n' > f.txt && echo g-staged > g.txt && git add g.txt");
   const r = await applySnapshot(git, repo, { snapshot });
-  assert.equal(r.ok, true, r.err);
+  // Not all of it as it was: said like a restore that left something.
+  assert.equal(r.ok, false);
+  assert.equal(r.err, "Restored all of it. Lines changed on both sides are left as conflicts in 1 file; resolve them:\nf.txt");
   assert.deepEqual(r.conflicts, ["f.txt"]);
   assert.deepEqual(r.msg, { key: "restore.appliedConflicts", args: { n: 1, list: "f.txt" } });
   assert.equal(r.changed, true);
@@ -822,7 +824,9 @@ const resetAway = async (name, local) => {
   const { repo, snapshot } = await resetAway("three-way-unstaged",
     "printf '1\\nTWO\\n3\\nFOUR\\n5\\n6\\n7\\n8\\n' > f.txt && git add f.txt && echo g-staged > g.txt && git add g.txt");
   const r = await applySnapshot(git, repo, { snapshot });
-  assert.equal(r.ok, true, r.err);
+  assert.equal(r.ok, false);
+  assert.equal(r.changed, true);
+  assert.equal(r.err, "Restored all of it. Its staging doesn't fit the index HEAD has now, so it was left out.");
   assert.equal(r.staged, false);
   assert.deepEqual(r.msg, { key: "restore.appliedUnstaged" });
   assert.deepEqual(r.conflicts, []);

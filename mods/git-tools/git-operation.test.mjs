@@ -371,6 +371,32 @@ for (const [name, cmd] of [["merge", "git merge side"], ["rebase", "git checkout
   assert.deepEqual(subjects(squashed), ["s2", "together", "m", "base"]);
 }
 
+// A message changed at a stopped pick keeps the commit's author and author date: someone
+// else's commit stays theirs.
+{
+  const repo = init("continue-rebase-author");
+  start(repo, `git checkout -q -b al main~1 && printf 'al\\n' > f.txt && GIT_AUTHOR_NAME="Al'ice" GIT_AUTHOR_EMAIL=a@x GIT_AUTHOR_DATE="@1600000000 +0200" git commit -q -am al && git rebase main`);
+  assert.equal(sh(repo, "git rev-parse -q --verify REBASE_HEAD >/dev/null && echo stopped || true").trim(), "stopped");
+  resolve(repo);
+  const r = await continueOperation(git, repo, { message: "al edited" });
+  assert.equal(r.outcome, "done", r.err);
+  assert.deepEqual(subjects(repo), ["al edited", "m", "base"]);
+  assert.equal(sh(repo, "git log -1 --format='%an|%ae|%ad' --date=raw").trim(), "Al'ice|a@x|1600000000 +0200");
+}
+
+// At an edit stop the changed message goes to the stopped commit itself (amended, with
+// what is staged), so the plan keeps its number of commits; nothing staged still goes on.
+for (const staged of [true, false]) {
+  const repo = init(`continue-rebase-edit-${staged ? "staged" : "bare"}`);
+  start(repo, `git checkout -q -b ed main && echo c > c.txt && git add c.txt && git commit -q -m C && GIT_SEQUENCE_EDITOR="sed -i.bak -e '1s/^pick/edit/'" git rebase -i main~1`);
+  assert.equal(sh(repo, "git log -1 --format=%s").trim(), "m");
+  if (staged) sh(repo, "printf 'more\\n' > f.txt && git add f.txt");
+  const r = await continueOperation(git, repo, { message: "m edited" });
+  assert.equal(r.outcome, "done", r.err);
+  assert.deepEqual([subjects(repo), states(repo), status(repo)], [["C", "m edited", "base"], [], []]);
+  assert.equal(sh(repo, "git show HEAD~1:f.txt"), staged ? "more\n" : "main\n");
+}
+
 // A rebase that stops again at the next commit: stopped, with where it is now.
 {
   const repo = init("continue-rebase-stops");

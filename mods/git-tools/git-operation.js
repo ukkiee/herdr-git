@@ -28,7 +28,9 @@ const NAMES = ["MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "REBASE_HEAD", "
 // --apply one (`git am` uses it too, without `onto`).
 const INSIDE = {
   // current-fixups: there while a squash or fixup is being folded in (never empty).
-  "rebase-merge": ["head-name", "onto", "msgnum", "end", "current-fixups"],
+  // author-script: the stopped commit's author, as git would commit it. amend: there at an
+  // edit stop, holding the commit the stop made (HEAD unless more were committed since).
+  "rebase-merge": ["head-name", "onto", "msgnum", "end", "current-fixups", "author-script", "amend"],
   "rebase-apply": ["head-name", "onto", "next", "last"],
   sequencer: ["todo"],
 };
@@ -408,7 +410,23 @@ async function localNameOf(git, root, name) {
   return best ? name.slice(best.length + 1) : null;
 }
 
-// conflictsLeft(n) → the refusal of a commit or a Continue while n files are in conflict.
+// author-script's lines (GIT_AUTHOR_NAME='Al'\''ice') → { GIT_AUTHOR_NAME: "Al'ice", … }.
+// The values are shell-quoted: '…' pieces, and a backslash before one character between them.
+const AUTHOR_VARS = new Set(["GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_AUTHOR_DATE"]);
+export function authorOf(lines = []) {
+  const out = {};
+  for (const line of lines) {
+    const eq = line.indexOf("=");
+    const key = line.slice(0, eq);
+    if (eq < 0 || !AUTHOR_VARS.has(key)) continue;
+    let value = "";
+    for (const [, quoted, escaped] of line.slice(eq + 1).matchAll(/'([^']*)'|\\(.)/g)) value += quoted ?? escaped;
+    out[key] = value;
+  }
+  return out;
+}
+
+// conflictsLeft(n) →the refusal of a commit or a Continue while n files are in conflict.
 export const conflictsLeft = (n) => refuse(`Resolve the conflicts first: ${n} file(s) still in conflict.`, { key: "ops.conflictsLeft", args: { n } });
 
 // Continue: the other changes the person checked are added first, then the operation is
@@ -429,11 +447,22 @@ async function continueRun(git, root, { message = "", files = [] }, before) {
     // Lines starting with "#" are the person's (an issue number), so git keeps them.
     const files = await readStateFiles(git, root);
     if (!files.ok) return files;
+    const amend = files.read.get("rebase-merge/amend")?.[0]?.trim();
+    if (amend) {
+      // An edit stop: its commit is made already, so the message (and what is staged) goes
+      // into it. Once more commits were made on top, git's own Continue decides.
+      if (amend !== before.head) return git(root, ["rebase", "--continue"], { timeout: TIMEOUT, env: NO_EDITOR });
+      const made = await git(root, ["commit", "--amend", "--cleanup=whitespace", "-m", text], { timeout: TIMEOUT, env: NO_EDITOR });
+      if (!made.ok) return made;
+      return git(root, ["rebase", "--continue"], { timeout: TIMEOUT, env: NO_EDITOR });
+    }
     if (files.read.has("rebase-merge/head-name") && !files.read.has("rebase-merge/current-fixups")) {
       // The stopped commit is committed here, then the rebase goes on without an editor:
       // an editor git opens later (a squash further on) gets git's own message. The
       // --apply backend takes no commit made at a stop, so it goes the editor's way below.
-      const made = await git(root, ["commit", "--cleanup=whitespace", "-m", text], { timeout: TIMEOUT, env: NO_EDITOR });
+      // git commit doesn't read author-script itself, so the author is handed over.
+      const author = authorOf(files.read.get("rebase-merge/author-script"));
+      const made = await git(root, ["commit", "--cleanup=whitespace", "-m", text], { timeout: TIMEOUT, env: { ...NO_EDITOR, ...author } });
       if (!made.ok) return made;
       return git(root, ["rebase", "--continue"], { timeout: TIMEOUT, env: NO_EDITOR });
     }

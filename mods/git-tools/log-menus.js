@@ -21,7 +21,8 @@
 //                  files picked), edit? (the edit facts of the commit shown) }
 //   branch menus:  { name, current, upstream, writing, deleteBlock, scope (the row's:
 //                  "local" | "remote" | "head", a detached HEAD) }
-//   toolbars:      { loaded, name, writing, deleteBlock, fixed (a Log tab on a chosen folder) }
+//   toolbars:      { loaded, name, writing, deleteBlock, fixed (a Log tab on a chosen folder),
+//                  picked (the Log toolbar: how many commits the Commit list has picked) }
 
 import { editCheck } from "./rebase-plan.js";
 
@@ -43,18 +44,27 @@ const edit = (action) => (ctx) => editCheck(action, ctx.edit ?? null, ctx.count 
 // The same for Commit details' file edits, which also need how many of the commit's files
 // are picked (ctx.files).
 const fileEdit = (action) => (ctx) => editCheck(action, ctx.edit ?? null, ctx.count ?? 1, ctx.files ?? null).why;
+// Cherry-Pick and Revert Commit: off on a merge commit (git needs a parent to be named),
+// and Cherry-Pick also on a commit the current branch already has. From the same edit
+// facts; without them the item is on and git decides.
+const pick = (action) => (ctx) => {
+  const commits = ctx.edit?.commits ?? [];
+  if (commits.some((c) => c.parents > 1)) return { key: "pick.mergeCommit" };
+  const here = action === "cherryPick" ? commits.find((c) => c.onBranch) : null;
+  return here ? { key: "pick.inBranch", args: { hash: here.hash.slice(0, 8) } } : null;
+};
 
 const ITEMS = {
   // ---- the commit row's menu
   "commit.copyRevision": { key: "log.copyRevision" },
   "commit.createPatch": { key: "log.createPatch" },
-  "commit.cherryPick": { key: "log.cherryPick" },
+  "commit.cherryPick": { key: "log.cherryPick", write: true, when: pick("cherryPick") },
   "commit.checkoutRevision": { key: "log.checkoutRevision", write: true, when: one },
   "commit.showRepository": { key: "log.showRepositoryAtRevision" },
   "commit.compareVersions": { key: "log.compareVersions", shown: (ctx) => ctx.count === 2 },
   "commit.compareWithLocal": { key: "log.compareWithLocal", shown: (ctx) => (ctx.count ?? 1) === 1 },
   "commit.resetToHere": { key: "log.resetToHere", write: true, when: one },
-  "commit.revert": { key: "log.revertCommit" },
+  "commit.revert": { key: "log.revertCommit", write: true, when: pick("revert") },
   "commit.undo": { key: "log.undoCommit", write: true, when: edit("undo") },
   "commit.editMessage": { key: "log.editMessage", write: true, when: edit("editMessage") },
   "commit.fixup": { key: "log.fixup", write: true, when: edit("fixup") },
@@ -77,8 +87,8 @@ const ITEMS = {
   "file.compareBeforeWithLocal": { key: "log.compareBeforeWithLocal" },
   "file.editSource": { key: "log.editSource" },
   "file.openRepositoryVersion": { key: "log.openRepositoryVersion" },
-  "file.revertSelected": { key: "log.revertSelectedChanges" },
-  "file.cherryPickSelected": { key: "log.cherryPickSelectedChanges" },
+  "file.revertSelected": { key: "log.revertSelectedChanges", write: true },
+  "file.cherryPickSelected": { key: "log.cherryPickSelectedChanges", write: true },
   "file.extractSelected": { key: "log.extractSelectedChanges", write: true, when: fileEdit("extractChanges") },
   "file.dropSelected": { key: "log.dropSelectedChanges", write: true, when: fileEdit("dropChanges") },
   "file.createPatch": { key: "log.createPatch" },
@@ -86,7 +96,7 @@ const ITEMS = {
   "file.historyUpToHere": { key: "log.historyUpToHere" },
   "file.showChangesToParents": { key: "log.showChangesToParents" },
   "details.showDiff": { key: "log.showDiff" },
-  "details.revertSelected": { key: "log.revertSelectedChanges" },
+  "details.revertSelected": { key: "log.revertSelectedChanges", write: true, when: unread, work: "pick.revertingChanges" },
   "details.historyUpToHere": { key: "log.historyUpToHere" },
   "details.displayOptions": { key: "log.displayOptions" },
   "details.expandAll": { key: "log.expandAll", when: unread },
@@ -139,7 +149,8 @@ const ITEMS = {
   "log.graphOptions": { key: "log.graphOptions" },
   "log.refresh": { key: "log.refresh" },
   "log.fetch": { key: "log.fetch", write: true, work: "log.fetching" },
-  "log.cherryPick": { key: "log.cherryPick" },
+  // On the commits picked in the Commit list: off with none.
+  "log.cherryPick": { key: "log.cherryPick", write: true, work: "pick.picking", when: (ctx) => (ctx.picked === 0 ? { text: "" } : null) },
   "log.displayOptions": { key: "log.displayOptions" },
   "log.goToHash": { key: "log.goToHash" },
   "log.hide": { key: "log.hide", shown: (ctx) => !ctx.fixed },

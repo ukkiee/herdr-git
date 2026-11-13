@@ -8,6 +8,8 @@ import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
 import { makeGit } from "./git.js";
 import { runOperation, skipOperation } from "./git-operation.js";
+import { readEditFacts } from "./git-rewrite.js";
+import { menuItems } from "./log-menus.js";
 
 // The person's own git settings (an editor, gpgSign, hooks path) stay out of every repository here.
 process.env.GIT_CONFIG_GLOBAL = "/dev/null";
@@ -201,6 +203,40 @@ git checkout -q main && printf 'main\\n' > f.txt && git commit -q -am m`);
   assert.equal(r.outcome, "stopped", r.err);
   assert.equal(r.operation.kind, "revert");
   assert.deepEqual(r.operation.conflicts.map((c) => c.path), ["f.txt"]);
+}
+
+// ---- the menu items: on or off from the edit facts of the commits picked
+
+// item(id, hashes) → the commit menu's item for the commits, with the facts git reads.
+const item = async (repo, id, hashes, extra = {}) => {
+  const facts = await readEditFacts(git, repo, hashes);
+  assert.equal(facts.ok, true, facts.err);
+  return menuItems("commit", new Set([id]), { count: hashes.length, edit: facts, ...extra })[0];
+};
+{
+  const repo = init("menu");
+  sh(repo, "git checkout -q -b merged side~2 && git merge -q --no-ff --no-edit side~1 && git checkout -q main");
+  const s1 = hash(repo, "side~2"), m = hash(repo, "main"), merge = hash(repo, "merged");
+  // Another branch's commit: both on.
+  assert.equal((await item(repo, "commit.cherryPick", [s1])).disabled, false);
+  assert.equal((await item(repo, "commit.revert", [s1])).disabled, false);
+  // The current branch's own commit: Cherry-Pick off, Revert on.
+  const own = await item(repo, "commit.cherryPick", [m]);
+  assert.deepEqual([own.disabled, own.why], [true, { key: "pick.inBranch", args: { hash: m.slice(0, 8) } }]);
+  assert.equal((await item(repo, "commit.cherryPick", [s1, m])).disabled, true, "one of several already in");
+  assert.equal((await item(repo, "commit.revert", [m])).disabled, false);
+  // A merge commit: both off.
+  for (const id of ["commit.cherryPick", "commit.revert"]) {
+    const it = await item(repo, id, [merge]);
+    assert.deepEqual([it.disabled, it.why], [true, { key: "pick.mergeCommit" }], id);
+  }
+  // A write running: off with its words.
+  assert.deepEqual((await item(repo, "commit.cherryPick", [s1], { writing: "Committing…" })).why, { text: "Committing…" });
+  // Without facts (too many picked to read first): on; git decides.
+  assert.equal(menuItems("commit", new Set(["commit.cherryPick"]), { count: 30 })[0].disabled, false);
+  // The Log toolbar's button: off with nothing picked.
+  assert.equal(menuItems("logTools", new Set(["log.cherryPick"]), { picked: 0 })[0].disabled, true);
+  assert.equal(menuItems("logTools", new Set(["log.cherryPick"]), { picked: 2 })[0].disabled, false);
 }
 
 console.log("ok");

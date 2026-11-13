@@ -2,6 +2,9 @@
 import assert from "node:assert/strict";
 import { MENUS, menuItems } from "./log-menus.js";
 import { translator } from "./i18n.js";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const en = translator("en"), ko = translator("ko");
 const everything = () => true;
@@ -238,6 +241,24 @@ const all = (name, ctx = {}, t = ko) => look(menuItems(name, everything, ctx), t
     assert.equal(fileReason(id, { count: 2, files: { picked: 1, total: 3 } }), "커밋을 하나만 선택하세요", id);
     assert.equal(fileReason(id, { count: 1, files: { picked: 1, total: 3 }, writing: "busy" }), "busy", id);
   }
+}
+
+// The VCS widget popup's branch and tag menus are the Branch tree's: every item of those
+// menus has a line in both screens' tables (view-log.js ACTIONS, view-vcs-popup.js
+// POPUP_ACTIONS), or it silently goes missing from one of them. The screens import the
+// app, so their tables are read as text.
+{
+  const here = dirname(fileURLToPath(import.meta.url));
+  const keysOf = (file, table) => {
+    const source = readFileSync(join(here, file), "utf8");
+    const from = source.slice(source.indexOf(`const ${table} = {`));
+    return new Set([...from.slice(0, from.indexOf("\n};")).matchAll(/^ {2}"([^"]+)":/gm)].map((m) => m[1]));
+  };
+  const log = keysOf("view-log.js", "ACTIONS"), popup = keysOf("view-vcs-popup.js", "POPUP_ACTIONS");
+  const items = [...new Set(["localBranch", "currentBranch", "remoteBranch", "tag"].flatMap((m) => MENUS[m]).filter((id) => id !== "|"))];
+  assert.ok(items.includes("branch.compareWith") && items.includes("tag.push"));
+  assert.deepEqual(items.filter((id) => !popup.has(id)), []);
+  assert.deepEqual(items.filter((id) => !log.has(id)), ["tag.push"]);
 }
 
 console.log("ok");

@@ -32,6 +32,7 @@ import { startUpdateProject, updateHere, checkoutUpdateHere, pullHere } from "./
 import { operateFromWidget } from "./view-merge.js";
 import { openNewWorktree } from "./view-worktree.js";
 import { checkoutRefFrom } from "./view-checkout-ref.js";
+import { compareWithCurrent, diffWithWorkingTree } from "./view-compare-branches.js";
 import { MOD, openDialog, answerMenu, dialogFrame, button, uiGlyph, iconButton, darkLook, notice, WindowedList } from "./ui.js";
 
 export const POPUP_ACTIONS = {
@@ -63,7 +64,11 @@ export const POPUP_ACTIONS = {
   "branch.rebaseOnto": (w, b, cx) => { if (b) operateFromWidget(w, { type: "rebase", target: b.name }, cx); },
   "branch.checkoutAndRebase": (w, b, cx) => { if (b) operateFromWidget(w, { type: "checkout-rebase", name: b.name, remote: b.scope === "remote" }, cx); },
   "branch.newWorktreeFrom": (w, b) => openNewWorktree(w.host, w.repo, b, w.who),
+  "branch.compareWith": (w, b) => compareWithCurrent({ repo: w.repo, t: w.host.t }, withRef(b), w.heads?.head),
+  "branch.showDiffWithWorkingTree": (w, b) => diffWithWorkingTree({ repo: w.repo, t: w.host.t }, withRef(b), w.heads?.head),
 };
+// A popup branch with the ref the compare tabs read.
+const withRef = (b) => (b && (b.scope === "local" || b.scope === "remote") ? { ...b, from: refOf(b.scope, b.name) } : null);
 export const popupHandles = (id) => Object.prototype.hasOwnProperty.call(POPUP_ACTIONS, id);
 
 // Which log-menus.js menu a branch or tag row of the popup has, or null.

@@ -34,27 +34,27 @@ export function openBranchCompare(t, { root, on = null, a, b, aName, bName }) {
 
 // ---- the Branch tree's items, run by the Log panel (view-log.js ACTIONS)
 
-// The current branch as the Branch tree read it: its name, or a short hash on a
-// detached HEAD.
-function currentOf(host) {
-  const head = host.branches?.data?.head;
+// The current branch as the opener read it ({ branch, hash }: the Branch tree's or the
+// VCS widget's HEAD): its name, or a short hash on a detached HEAD.
+function currentOf(head) {
   if (head?.branch) return { ref: `refs/heads/${head.branch}`, name: head.branch };
   return { ref: "HEAD", name: head?.hash ? short(head.hash) : "HEAD" };
 }
 
 // Compare with '<current>' (a branch row) and Compare with Current (the toolbar, on the
-// cursor's branch). b: log-branches.js target. The current branch comes first: the tab
-// "Compare: <current> and <branch>", above it the commits only the current branch has.
-export function compareWithCurrent(host, b) {
+// cursor's branch). host: { repo, t }; b: log-branches.js target ({ name, from }); head:
+// the opener's HEAD, the Branch tree's when omitted. The current branch comes first: the
+// tab "Compare: <current> and <branch>", above it the commits only the current branch has.
+export function compareWithCurrent(host, b, head = host.branches?.data?.head) {
   if (!host.repo || !b?.from) return;
-  const current = currentOf(host);
+  const current = currentOf(head);
   openBranchCompare(host.t, { root: host.repo.root, on: host.repo.on, a: current.ref, b: b.from, aName: current.name, bName: b.name });
 }
 
-// Show Diff with Working Tree (a branch row).
-export function diffWithWorkingTree(host, b) {
+// Show Diff with Working Tree (a branch row). Arguments as compareWithCurrent.
+export function diffWithWorkingTree(host, b, head = host.branches?.data?.head) {
   if (!host.repo || !b?.from) return;
-  openWorkingTreeCompare(host.t, { root: host.repo.root, on: host.repo.on, ref: b.from, refName: b.name, current: currentOf(host).name });
+  openWorkingTreeCompare(host.t, { root: host.repo.root, on: host.repo.on, ref: b.from, refName: b.name, current: currentOf(head).name });
 }
 
 export default class CompareBranches {

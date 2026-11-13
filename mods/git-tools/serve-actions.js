@@ -16,6 +16,8 @@ import { runReset } from "./view-reset.js";
 import { applySnapshot } from "./git-snapshot.js";
 import { createPatch } from "./git-revision.js";
 import { saveRequest } from "./merge-revisions-model.js";
+import { runStashCreate, runStashDrop, runStashClear } from "./view-stash.js";
+import { runUnstash } from "./view-unstash.js";
 
 const strings = (value) => (Array.isArray(value) ? value.filter((v) => typeof v === "string" && v) : []);
 const text = (value) => (typeof value === "string" && value ? value : null);
@@ -30,6 +32,10 @@ export const SERVE_ACTIONS = {
     ? createPatch(git, root, { commits: strings(args.commits), paths: strings(args.paths), reverse: args.reverse === true, base: text(args.base), file: args.file })
     : { ok: false, err: "No patch file.", msg: { key: "revision.needFile", args: {} } }) },
   "conflicts-save": { work: "conflicts.saving", run: (git, root, args) => saveRequest(git, root, args, writerOn(typeof args.on === "string" ? args.on : null)) },
+  "stash-create": { work: "stash.stashing", run: (git, root, args) => runStashCreate(git, root, args) },
+  "stash-apply": { work: "stash.applying", run: (git, root, args, panel) => runUnstash(git, root, args, panel) },
+  "stash-drop": { work: "stash.dropping", run: (git, root, args) => runStashDrop(git, root, args) },
+  "stash-clear": { work: "stash.clearing", run: (git, root) => runStashClear(git, root) },
 };
 
 // serveAction(panel, e, cx) → true when the table has e.action and the panel now runs

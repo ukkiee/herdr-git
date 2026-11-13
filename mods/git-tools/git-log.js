@@ -140,12 +140,16 @@ export function shortenMiddle(name, max = 28) {
   return `${name.slice(0, head)}…${name.slice(name.length - tail)}`;
 }
 
-// labelRefs(refs, { max }) → [{ text, kind, current }]
-//   The Ref labels of one commit. A local branch and the remote branches of the same
-//   name are one label ("origin & main"). HEAD is a label only when detached. Order:
-//   HEAD, the current branch, other local branches, remote branches, tags.
+// labelRefs(refs, { max, compact, tagNames }) → [{ text, kind, current, names? }]
+//   The Ref labels of one commit. HEAD is a label only when detached. Order: HEAD, the
+//   current branch, other local branches, remote branches, tags.
 //   current: HEAD is here (the label to emphasize). max: longest text, see shortenMiddle.
-export function labelRefs(refs, { max = 28 } = {}) {
+//   The display options (log-options.js), on unless said:
+//   compact: a local branch and the remote branches of the same name are one label
+//   ("origin & main"); off, each is its own.
+//   tagNames: each tag is a label by name; off, the commit's tags are one label with
+//   text "" (the screen draws a tag mark) and names: the tags' names.
+export function labelRefs(refs, { max = 28, compact = true, tagNames = true } = {}) {
   if (!refs.length) return [];
   const locals = refs.filter((r) => r.kind === "local").sort((a, b) => Number(Boolean(b.current)) - Number(Boolean(a.current)));
   const remotes = refs.filter((r) => r.kind === "remote");
@@ -153,14 +157,17 @@ export function labelRefs(refs, { max = 28 } = {}) {
   if (refs.some((r) => r.kind === "head") && !locals.some((r) => r.current)) labels.push({ text: "HEAD", kind: "head", current: true });
   const merged = new Set();
   for (const local of locals) {
-    const twins = remotes.filter((r) => r.name.slice(r.name.indexOf("/") + 1) === local.name);
+    const twins = compact ? remotes.filter((r) => r.name.slice(r.name.indexOf("/") + 1) === local.name) : [];
     for (const twin of twins) merged.add(twin);
     const text = [...twins.map((r) => r.name.slice(0, r.name.indexOf("/"))), local.name].join(" & ");
     labels.push({ text, kind: "local", current: Boolean(local.current) });
   }
   for (const remote of remotes) if (!merged.has(remote)) labels.push({ text: remote.name, kind: "remote", current: false });
-  for (const tag of refs) if (tag.kind === "tag") labels.push({ text: tag.name, kind: "tag", current: false });
-  return labels.map((label) => ({ ...label, text: shortenMiddle(label.text, max) }));
+  const tags = refs.filter((r) => r.kind === "tag").map((r) => r.name);
+  if (tagNames) for (const name of tags) labels.push({ text: name, kind: "tag", current: false });
+  const out = labels.map((label) => ({ ...label, text: shortenMiddle(label.text, max) }));
+  if (!tagNames && tags.length) out.push({ text: "", kind: "tag", current: false, names: tags });
+  return out;
 }
 
 // formatCommitTime(seconds, now) → "25 minutes ago" within the hour, "Today 2:30 PM",

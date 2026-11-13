@@ -299,6 +299,15 @@ const all = await readLog(git, repo);
   assert.equal(shortenMiddle("exactly-twenty-four-char", 24), "exactly-twenty-four-char");
   assert.deepEqual(labelRefs([ref("origin/feature/a-very-long-branch-name-that-goes-on", "remote")], { max: 24 }),
     [{ text: "origin/featu…hat-goes-on", kind: "remote", current: false }]);
+  // The display options. Compact references view off: a branch and its remote twins are
+  // labels of their own, in the same order (current, local, remote, tag).
+  const many = [ref("HEAD", "head"), ref("main", "local", true), ref("origin/main", "remote"), ref("v1.0", "tag"), ref("v1.1", "tag")];
+  assert.deepEqual(labelRefs(many, { compact: false }).map((l) => [l.text, l.kind]),
+    [["main", "local"], ["origin/main", "remote"], ["v1.0", "tag"], ["v1.1", "tag"]]);
+  // Tag names off: a commit's tags are one label without a name, which keeps the names.
+  assert.deepEqual(labelRefs(many, { tagNames: false }),
+    [{ text: "origin & main", kind: "local", current: true }, { text: "", kind: "tag", current: false, names: ["v1.0", "v1.1"] }]);
+  assert.deepEqual(labelRefs([ref("main", "local")], { tagNames: false }), [{ text: "main", kind: "local", current: false }]);
 }
 
 // Commit times the way the list words them.

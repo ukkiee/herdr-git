@@ -66,6 +66,71 @@ export async function stashFiles(git, root, hash) {
   return { ok: true, code: 0, out: "", err: "", files };
 }
 
+// refOf(git, root, hash) → { ok, ref } | a refusal: the stash's number now ("stash@{n}"),
+// read right before a write that needs one. Gone: stash.gone, nothing done.
+async function refOf(git, root, hash) {
+  if (!HASH.test(String(hash ?? ""))) return refuse("The request names no stash.", { key: "stash.badRequest" });
+  const list = await listStashes(git, root);
+  if (!list.ok) return list;
+  const found = list.stashes.find((s) => s.hash === hash);
+  return found ? { ok: true, ref: found.ref } : refuse("The stash is no longer in the list.", { key: "stash.gone" });
+}
+
+// applyStash(git, root, { hash, pop?, index?, branch? })
+//   → { ok, code, out, err, msg?, outcome, operation, changed }
+//   Puts the stash `hash` back into the working tree.
+//   index: its staging comes back staged too (without it, everything comes back unstaged).
+//   pop: it leaves the list once it came back cleanly; a conflict keeps it.
+//   branch: a new branch made at the commit the stash was made on, checked out, with the
+//     stash and its staging on it; the stash then leaves the list (pop and index are
+//     implied).
+//   outcome: "done"; "stopped" when files are left in conflict (no operation is in
+//     progress afterwards: the Conflicts dialog resolves them, the stash stays in the
+//     list); "failed" (git refused, nothing changed: its words in err).
+//   operation: git-operation.js readOperation afterwards, for the Conflicts dialog
+//     (conflicts-model.js stoppedOnConflicts), or null when it couldn't be read.
+//   changed: the repository may have changed.
+export async function applyStash(git, root, { hash, pop = false, index = false, branch = "" } = {}) {
+  const none = { outcome: "failed", operation: null, changed: false };
+  const name = String(branch ?? "").trim();
+  // Pop and a new branch drop the stash by its number; apply needs no number.
+  let target = hash;
+  if (pop || name) {
+    const found = await refOf(git, root, hash);
+    if (!found.ok) return { ...found, ...none };
+    target = found.ref;
+  } else if (!HASH.test(String(hash ?? ""))) return { ...refuse("The request names no stash.", { key: "stash.badRequest" }), ...none };
+  if (name) {
+    // Never an option: a name starting with "-" would be read as one.
+    const valid = await git.read(root, ["check-ref-format", "--branch", name]);
+    if (!valid.ok || name.startsWith("-")) return { ...valid, ok: false, err: valid.err || `'${name}' is not a valid branch name.`, ...none };
+  }
+  const before = await readOperation(git, root);
+  const args = name ? ["stash", "branch", name, target] : ["stash", pop ? "pop" : "apply", ...(index ? ["--index"] : []), target];
+  const r = await git(root, args, { timeout: TIMEOUT });
+  const after = await readOperation(git, root);
+  const operation = after.ok ? after : null;
+  const stopped = Boolean(operation?.conflicts.length) && !(before.ok && before.conflicts.length);
+  if (stopped) return { ...r, ok: false, outcome: "stopped", operation, changed: true };
+  if (!r.ok) return { ...r, outcome: "failed", operation, changed: true };
+  return { ok: true, code: 0, out: r.out, err: "", outcome: "done", operation, changed: true };
+}
+
+// dropStash(git, root, { hash }) → { ok, code, out, err, msg?, changed }
+//   Removes the stash `hash` from the list. Gone already: stash.gone, nothing dropped.
+export async function dropStash(git, root, { hash } = {}) {
+  const found = await refOf(git, root, hash);
+  if (!found.ok) return { ...found, changed: false };
+  const r = await git(root, ["stash", "drop", "-q", found.ref]);
+  return { ...r, changed: r.ok };
+}
+
+// clearStashes(git, root) → { ok, code, out, err, changed }: every stash goes.
+export async function clearStashes(git, root) {
+  const r = await git(root, ["stash", "clear"]);
+  return { ...r, changed: r.ok };
+}
+
 // The stash's newest hash, or null when the list is empty.
 async function newest(git, root) {
   const r = await git.read(root, ["rev-parse", "-q", "--verify", "refs/stash"]);

@@ -6,7 +6,7 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync, exis
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
 import { makeGit } from "./git.js";
-import { createStash, listStashes, stashFiles } from "./git-stash.js";
+import { createStash, listStashes, stashFiles, applyStash, dropStash, clearStashes } from "./git-stash.js";
 
 // The user's own git settings stay out of every git these tests start.
 process.env.GIT_CONFIG_GLOBAL = "/dev/null";
@@ -140,6 +140,125 @@ const text = (repo, path) => readFileSync(`${repo}/${path}`, "utf8");
   assert.deepEqual(here.stashes, there.stashes);
   assert.equal(here.stashes[0].branch, "side");
   assert.equal(here.stashes[0].hash, made.hash);
+}
+
+// A stash with a staged and an unstaged change, made on main.
+const staged = (name) => {
+  const repo = init(name);
+  sh(repo, "echo staged > a.txt && git add a.txt && echo work > k.txt");
+  return { repo, made: sh(repo, "git stash push -q -m mine && git rev-parse refs/stash").trim() };
+};
+
+// Apply without the index: everything comes back unstaged; the stash stays.
+{
+  const { repo, made } = staged("apply");
+  const r = await applyStash(git, repo, { hash: made });
+  assert.equal(r.ok, true, r.err);
+  assert.equal(r.outcome, "done");
+  assert.deepEqual(status(repo), [" M a.txt", " M k.txt"]);
+  assert.deepEqual(stashes(repo), [made]);
+}
+
+// Apply with the index (Reinstate index): the staging comes back too.
+{
+  const { repo, made } = staged("apply-index");
+  const r = await applyStash(git, repo, { hash: made, index: true });
+  assert.equal(r.ok, true, r.err);
+  assert.deepEqual(status(repo), [" M k.txt", "M  a.txt"]);
+}
+
+// Pop by hash after the numbers moved: that stash comes back and leaves the list; the
+// newer one stays.
+{
+  const { repo, made } = staged("pop");
+  sh(repo, "echo newer > k.txt && git stash push -q -m newer");
+  const newer = stashes(repo)[0];
+  const r = await applyStash(git, repo, { hash: made, pop: true });
+  assert.equal(r.ok, true, r.err);
+  assert.deepEqual(stashes(repo), [newer]);
+  assert.equal(text(repo, "a.txt"), "staged\n");
+}
+
+// As a new branch: the branch starts where the stash was made, with the stash's staging,
+// and the stash leaves the list.
+{
+  const { repo, made } = staged("branch");
+  sh(repo, "echo later > k.txt && git commit -q -am later");
+  const r = await applyStash(git, repo, { hash: made, branch: "from-stash" });
+  assert.equal(r.ok, true, r.err);
+  assert.equal(sh(repo, "git symbolic-ref --short HEAD").trim(), "from-stash");
+  assert.equal(sh(repo, "git rev-parse HEAD").trim(), sh(repo, "git rev-parse main~1").trim());
+  assert.deepEqual(status(repo), [" M k.txt", "M  a.txt"]);
+  assert.deepEqual(stashes(repo), []);
+}
+
+// A conflicting apply: the files are left in conflict with no operation, the stash stays
+// (pop too), and the result says it stopped there.
+{
+  const { repo, made } = staged("conflict");
+  sh(repo, "echo theirs > a.txt && git commit -q -am theirs");
+  const r = await applyStash(git, repo, { hash: made, pop: true });
+  assert.equal(r.outcome, "stopped");
+  assert.equal(r.operation.kind, null);
+  assert.deepEqual(r.operation.conflicts.map((c) => c.path ?? c), ["a.txt"]);
+  assert.equal(r.changed, true);
+  assert.deepEqual(stashes(repo), [made]);
+}
+
+// Refused (a local change in the same file): nothing changes, git's words come back.
+{
+  const { repo, made } = staged("refused");
+  sh(repo, "echo mine > a.txt");
+  const r = await applyStash(git, repo, { hash: made });
+  assert.equal(r.ok, false);
+  assert.equal(r.outcome, "failed");
+  assert.ok(r.err.length > 0);
+  assert.equal(text(repo, "a.txt"), "mine\n");
+  assert.deepEqual(stashes(repo), [made]);
+}
+
+// Drop by hash after the numbers moved: only that stash goes.
+{
+  const { repo, made } = staged("drop");
+  sh(repo, "echo newer > k.txt && git stash push -q -m newer");
+  const newer = stashes(repo)[0];
+  const r = await dropStash(git, repo, { hash: made });
+  assert.equal(r.ok, true, r.err);
+  assert.deepEqual(stashes(repo), [newer]);
+  // Gone by now: nothing is dropped, and the reason says so.
+  const again = await dropStash(git, repo, { hash: made });
+  assert.equal(again.ok, false);
+  assert.equal(again.msg.key, "stash.gone");
+  assert.deepEqual(stashes(repo), [newer]);
+  // Pop of a gone stash: nothing comes back.
+  const pop = await applyStash(git, repo, { hash: made, pop: true });
+  assert.equal(pop.ok, false);
+  assert.equal(pop.msg.key, "stash.gone");
+  assert.deepEqual(status(repo), []);
+}
+
+// Clear: every stash goes.
+{
+  const { repo } = staged("clear");
+  sh(repo, "echo newer > k.txt && git stash push -q -m newer");
+  const r = await clearStashes(git, repo);
+  assert.equal(r.ok, true, r.err);
+  assert.deepEqual(stashes(repo), []);
+}
+
+// What Smart operation does by hash: put away with untracked files, apply with the index,
+// then drop.
+{
+  const repo = init("smart");
+  sh(repo, "echo staged > a.txt && git add a.txt && echo u > u.txt");
+  const made = await createStash(git, repo, { message: "smart", untracked: true });
+  assert.equal(made.ok, true, made.err);
+  assert.deepEqual(status(repo), []);
+  const back = await applyStash(git, repo, { hash: made.hash, index: true });
+  assert.equal(back.ok, true, back.err);
+  assert.deepEqual(status(repo), ["?? u.txt", "M  a.txt"]);
+  assert.equal((await dropStash(git, repo, { hash: made.hash })).ok, true);
+  assert.deepEqual(stashes(repo), []);
 }
 
 console.log("ok");

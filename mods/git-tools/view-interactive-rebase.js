@@ -328,7 +328,7 @@ export default class InteractiveRebaseView {
 
   question(t) {
     const q = this.asking;
-    const frame = (id, title, body, footer) => dialogFrame(id, title, t, { body: div().px(14).py(12).child(body), onClose: () => { this.asking = null; }, footer });
+    const frame = (id, title, body, footer) => dialogFrame(id, title, t, { body: div().px(14).py(12).child(body), onClose: (_e, cx) => { this.asking = null; this.handle.focus(); cx.notify(); }, footer });
     if (q === "cancel") {
       return frame("ir-cancel", this.t("interactive.cancelTitle"), this.t("interactive.cancelBody"), [
         button("ir-cancel-discard", this.t("interactive.discard"), t, { onClick: () => close(this.overlay) }),

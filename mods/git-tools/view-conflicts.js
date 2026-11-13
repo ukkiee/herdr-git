@@ -311,7 +311,7 @@ export default class ConflictsView {
       .child(div().w_full().child(this.t("conflicts.overwriteBody", { path, column: this.columnLabel(column) })));
     return dialogFrame("conflicts-overwrite", this.t("conflicts.overwriteTitle"), t, {
       body,
-      onClose: () => { this.confirm = null; },
+      onClose: cancel,
       footer: [
         button("conflicts-overwrite-cancel", this.t("dialogs.cancel"), t, { onClick: cancel }),
         button("conflicts-overwrite-ok", this.t("conflicts.discardAccept"), t, { kind: "primary", onClick: (_e, cx) => this.take(path, column, cx) }),

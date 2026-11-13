@@ -315,7 +315,7 @@ export default class StashTab {
         .child(iconButton("stash-collapse", "collapse-all", t, { title: tr("commit.collapseAll"), disabled: !this.rows.length, onClick: redraw(() => this.collapseAll()) }))
         .child(spacer()))
       .child(v_flex().id("stash-body").flex_1().min_h(0)
-        .child(div().id("stash-list").h(Math.min(this.stashes.length, 6) * 24 + 2).flex_none().border_b(1).border_color(t.border)
+        .child(div().id("stash-list-box").h(Math.min(this.stashes.length, 6) * 24 + 2).flex_none().border_b(1).border_color(t.border)
           .child(this.stashList.render(this.stashes.length, (i) => this.stashRow(i, t), t)))
         .child(div().id("stash-files").flex_1().min_h(0).child(filesBody)))
       .child(h_flex().id("stash-buttons").flex_none().px(10).py(8).gap(8).items_center().border_t(1).border_color(t.border)

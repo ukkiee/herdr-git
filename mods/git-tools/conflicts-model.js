@@ -57,3 +57,47 @@ export function columns(op, { branch = null, stash = null } = {}) {
     theirs: { side: rebase ? "ours" : "theirs", label: label("theirs", theirsName) },
   };
 }
+
+// A side's state as a column shows it: a file both sides added counts as modified.
+const shown = (state) => (state === "deleted" ? "deleted" : "modified");
+
+// sortFiles(op, columns, seen) → { unresolved, resolved, seen }
+//   unresolved: [{ path, yours, theirs }] in conflict now, by path; yours and theirs are
+//     "modified" | "deleted", taken from the side each column stands for.
+//   resolved: [path] of `seen` not in conflict any more, by path.
+//   seen: every path in conflict since the dialog opened (keep it for the next call).
+export function sortFiles(op, cols, seen = []) {
+  const now = [...(op?.conflicts ?? [])].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  const conflicted = new Set(now.map((c) => c.path));
+  const all = [...new Set([...seen, ...conflicted])].sort();
+  return {
+    unresolved: now.map((c) => ({ path: c.path, yours: shown(c[cols.yours.side]), theirs: shown(c[cols.theirs.side]) })),
+    resolved: all.filter((path) => !conflicted.has(path)),
+    seen: all,
+  };
+}
+
+// controls(files, { selected, busy, loaded }) → which controls are on:
+//   accept (a column's Accept on an unresolved row), resolveSimple, resolveManually (the
+//   selected file is unresolved), finish (nothing left unresolved), unresolve (the
+//   selected file is resolved), allResolved (the heading says so).
+//   busy: a write runs. loaded: the files were read at least once.
+export function controls(files, { selected = null, busy = false, loaded = false } = {}) {
+  const open = files.unresolved.length > 0, free = loaded && !busy;
+  const allResolved = loaded && !open;
+  return {
+    accept: free && open,
+    resolveSimple: free && open,
+    resolveManually: free && files.unresolved.some((f) => f.path === selected),
+    finish: free && allResolved,
+    unresolve: free && files.resolved.includes(selected),
+    allResolved,
+  };
+}
+
+// pick(files, selected) → the path to select: `selected` while it is shown, else the first
+// unresolved file, else the first resolved one, else null.
+export function pick(files, selected) {
+  if (files.unresolved.some((f) => f.path === selected) || files.resolved.includes(selected)) return selected;
+  return files.unresolved[0]?.path ?? files.resolved[0] ?? null;
+}

@@ -2,7 +2,7 @@
 // operation in progress (git-operation.js readOperation), with no app. The words are
 // checked in both languages through the message tables, the way the dialog words them.
 import assert from "node:assert/strict";
-import { heading, columns } from "./conflicts-model.js";
+import { heading, columns, sortFiles, controls, pick } from "./conflicts-model.js";
 import { translator } from "./i18n.js";
 
 const en = translator("en"), ko = translator("ko");
@@ -72,6 +72,69 @@ const picked = { hash: "0acda529c3f0e1d2b3a4958677a8b9c0d1e2f3a4", subject: "fea
   assert.deepEqual([plain.yours.side, plain.theirs.side], ["ours", "theirs"]);
   assert.deepEqual(words(en, plain), ["Yours", "Theirs"]);
   assert.deepEqual(words(ko, plain), ["내 변경 내용", "다른 이의 변경 내용"]);
+}
+
+// The files in two groups: unresolved (in conflict now, with each column's state) and
+// resolved (seen in conflict since the dialog opened, not any more). A file both sides
+// added counts as modified on both; the columns follow the rebase swap.
+{
+  const merge = op({ kind: "merge", target: "feature", conflicts: [conflict("b/x"), conflict("a", "modified", "deleted"), conflict("n", "added", "added")] });
+  const first = sortFiles(merge, columns(merge, { branch: "main" }), []);
+  assert.deepEqual(first.unresolved, [
+    { path: "a", yours: "modified", theirs: "deleted" },
+    { path: "b/x", yours: "modified", theirs: "modified" },
+    { path: "n", yours: "modified", theirs: "modified" },
+  ]);
+  assert.deepEqual(first.resolved, []);
+  assert.deepEqual(first.seen, ["a", "b/x", "n"]);
+
+  // "a" was resolved (in the dialog or a terminal): it moves to the resolved group.
+  const later = op({ ...merge, conflicts: [conflict("b/x"), conflict("n", "added", "added")] });
+  const next = sortFiles(later, columns(later, { branch: "main" }), first.seen);
+  assert.deepEqual(next.unresolved.map((f) => f.path), ["b/x", "n"]);
+  assert.deepEqual(next.resolved, ["a"]);
+  // Undone again: back to unresolved.
+  assert.deepEqual(sortFiles(merge, columns(merge, {}), next.seen).resolved, []);
+
+  // In a rebase "Yours" shows git's theirs side.
+  const rebase = op({ kind: "rebase", target: "main", rebasing: "feature", current: picked, conflicts: [conflict("a", "deleted", "modified")] });
+  assert.deepEqual(sortFiles(rebase, columns(rebase, {}), []).unresolved, [{ path: "a", yours: "modified", theirs: "deleted" }]);
+
+  // Everything resolved, the operation still in progress or already over.
+  const over = sortFiles(op({}), columns(op({}), {}), ["a"]);
+  assert.deepEqual([over.unresolved, over.resolved], [[], ["a"]]);
+}
+
+// Which controls are on. Accept and Resolve All Simple Conflicts need an unresolved
+// file, Resolve Manually a selected unresolved one, Accept and Finish no file left
+// unresolved, Revert Conflict Resolution a resolved one. A write running turns them off.
+{
+  const files = { unresolved: [{ path: "a" }, { path: "b" }], resolved: ["c"] };
+  assert.deepEqual(controls(files, { selected: "a", busy: false, loaded: true }), {
+    accept: true, resolveSimple: true, resolveManually: true, finish: false, unresolve: false, allResolved: false,
+  });
+  assert.deepEqual(controls(files, { selected: "c", busy: false, loaded: true }), {
+    accept: true, resolveSimple: true, resolveManually: false, finish: false, unresolve: true, allResolved: false,
+  });
+  assert.deepEqual(controls(files, { selected: "a", busy: true, loaded: true }), {
+    accept: false, resolveSimple: false, resolveManually: false, finish: false, unresolve: false, allResolved: false,
+  });
+  const done = { unresolved: [], resolved: ["a", "b"] };
+  assert.deepEqual(controls(done, { selected: "a", busy: false, loaded: true }), {
+    accept: false, resolveSimple: false, resolveManually: false, finish: true, unresolve: true, allResolved: true,
+  });
+  // Before the first read nothing is known: Accept and Finish waits.
+  assert.deepEqual(controls({ unresolved: [], resolved: [] }, { selected: null, busy: false, loaded: false }), {
+    accept: false, resolveSimple: false, resolveManually: false, finish: false, unresolve: false, allResolved: false,
+  });
+
+  // The selection: kept while its file is shown, else the first unresolved file, else the
+  // first resolved one.
+  assert.equal(pick(files, "b"), "b");
+  assert.equal(pick(files, "c"), "c");
+  assert.equal(pick(files, "gone"), "a");
+  assert.equal(pick(done, null), "a");
+  assert.equal(pick({ unresolved: [], resolved: [] }, "a"), null);
 }
 
 console.log("ok");

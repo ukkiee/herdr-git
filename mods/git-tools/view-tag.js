@@ -11,7 +11,8 @@
 
 import { div } from "gpui-kit";
 import { v_flex, InputState, Input } from "gpui-base";
-import { theme } from "herdr";
+import { exec, theme } from "herdr";
+import { makeGit } from "./git.js";
 import { createTag, readRemotes, pushTag } from "./git-refs.js";
 import { openDialog, openMenu, dialogFrame, button, close, askOwner, writeBlock, scrollText, sentence } from "./ui.js";
 
@@ -25,6 +26,16 @@ export function openTag({ root, on = null, commit, owner = null, lang } = {}) {
 export function newTagAt(host, repo, commit) {
   if (!repo || !commit?.hash || writeBlock(host, repo)) return;
   openTag({ root: repo.root, on: repo.on, commit: commit.hash, owner: host.bus.id, lang: host.lang });
+}
+
+// newTagAtHead(host, repo, cx): New Tag… with no commit picked (the VCS Operations popup):
+// on the commit HEAD is at now.
+export function newTagAtHead(host, repo, cx) {
+  if (!repo || writeBlock(host, repo)) return;
+  cx.spawn(async () => {
+    const r = await makeGit(exec, repo.on ?? null).read(repo.root, ["rev-parse", "--verify", "--quiet", "HEAD^{commit}"]);
+    if (r.ok) newTagAt(host, repo, { hash: r.out.trim() });
+  });
 }
 
 // pushTagMenu(widget, b, at, cx): Push Tag on a tag of the VCS widget popup: one

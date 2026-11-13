@@ -261,6 +261,8 @@ const REQUESTS = {
   "cherry-pick": { check: startCheck, run: (git, root, args, before) => pickRun(git, root, "cherry-pick", args, before) },
   revert: { check: startCheck, run: (git, root, args, before) => pickRun(git, root, "revert", args, before) },
   merge: { check: (_before, args) => mergeCheck(args), run: mergeRun },
+  rebase: { check: (_before, args) => rebaseCheck(args), run: rebaseRun },
+  "checkout-rebase": { check: (_before, args) => checkoutRebaseCheck(args), run: checkoutRebaseRun },
 };
 
 // ---- Cherry-Pick and Revert Commit
@@ -336,6 +338,71 @@ function mergeRun(git, root, args) {
   return git(root, ["merge", ...options, ...message, "--end-of-options", str(args.target).trim()], { timeout: TIMEOUT, env: NO_EDITOR });
 }
 
+// ---- starting a rebase
+
+// The options the Rebase dialog offers besides the new base (args.onto) and another branch
+// to rebase (args.branch). --update-refs needs git 2.38; an older git says so itself.
+// The person's rebase.updateRefs is left to git.
+export const REBASE_OPTIONS = ["--rebase-merges", "--keep-empty", "--root", "--update-refs"];
+
+function rebaseCheck(args) {
+  const odd = badOption(REBASE_OPTIONS, optionsOf(args));
+  if (odd) return odd;
+  // --root needs no upstream: every commit of the branch is replayed.
+  if (!optionsOf(args).includes("--root") && !str(args.target).trim()) return refuse("Choose a branch or commit to rebase onto.", { key: "merge.noTarget" });
+  return null;
+}
+
+// args: { target (the upstream; with onto, the old base), onto?, branch?, options? }.
+// The value of --onto is joined to it, so it can't be read as an option either.
+function rebaseRun(git, root, args) {
+  const options = optionsOf(args);
+  const onto = str(args.onto).trim(), other = str(args.branch).trim();
+  const upstream = options.includes("--root") ? [] : [str(args.target).trim()];
+  return git(root, ["rebase", ...options, ...(onto ? [`--onto=${onto}`] : []), "--end-of-options", ...upstream, ...(other ? [other] : [])], { timeout: TIMEOUT, env: NO_EDITOR });
+}
+
+// ---- Checkout and Rebase onto the current branch
+
+// args: { name (the branch to check out, local or "origin/feature"), remote?, onto (the
+// current branch) }. git's rebase checks the branch out itself, after it has checked for
+// local changes. A remote branch with no local one gets a local branch tracking it first,
+// as a checkout would; with tracked local changes nothing is made: the rebase would refuse.
+function checkoutRebaseCheck(args) {
+  if (!str(args.name).trim() || !str(args.onto).trim()) return refuse("Choose a branch to check out and rebase.", { key: "merge.noTarget" });
+  return null;
+}
+
+async function checkoutRebaseRun(git, root, args) {
+  const name = str(args.name).trim(), onto = str(args.onto).trim();
+  let local = name;
+  if (args.remote === true) {
+    local = await localNameOf(git, root, name);
+    if (!local) return refuse(`'${name}' is not a remote branch.`, { key: "log.notRemoteBranch", args: { name } });
+    if (!(await git.read(root, ["rev-parse", "--verify", "--quiet", `refs/heads/${local}^{commit}`])).ok) {
+      const st = await readStatus(git, root);
+      if (!st.ok) return st;
+      if (st.changes.length) return refuse("Local changes stand in the way of the rebase.", { key: "merge.localChanges" });
+      // The full ref: a local branch could be called "origin/x" too.
+      const made = await git(root, ["branch", "--track", "--end-of-options", local, `refs/remotes/${name}`]);
+      if (!made.ok) return made;
+    }
+  }
+  return git(root, ["rebase", "--end-of-options", onto, local], { timeout: TIMEOUT, env: NO_EDITOR });
+}
+
+// "origin/feature/login" → "feature/login". A remote's own name may hold slashes, so the
+// remotes are asked for; the longest one that fits wins.
+async function localNameOf(git, root, name) {
+  const r = await git.read(root, ["remote"]);
+  if (!r.ok) return null;
+  let best = null;
+  for (const remote of r.out.split("\n")) {
+    if (remote && name.startsWith(`${remote}/`) && name.length > remote.length + 1 && (!best || remote.length > best.length)) best = remote;
+  }
+  return best ? name.slice(best.length + 1) : null;
+}
+
 // conflictsLeft(n) → the refusal of a commit or a Continue while n files are in conflict.
 export const conflictsLeft = (n) => refuse(`Resolve the conflicts first: ${n} file(s) still in conflict.`, { key: "ops.conflictsLeft", args: { n } });
 
@@ -382,9 +449,12 @@ async function continueRun(git, root, { message = "", files = [] }, before) {
 }
 
 // runOperation(git, root, { type, ...args }) → { ok, code, out, err, msg?, outcome, operation }
-//   type: "continue" | "abort" | "skip" | "cherry-pick" | "revert". args: Continue's
-//   { message, files }; Cherry-Pick's and Revert's { commits } (full or short hashes,
-//   newest first). skipped: the commits a Cherry-Pick or Revert found already in.
+//   type: "continue" | "abort" | "skip" | "cherry-pick" | "revert" | "merge" | "rebase" |
+//   "checkout-rebase". args: Continue's { message, files }; Cherry-Pick's and Revert's
+//   { commits } (full or short hashes, newest first); merge's { target, options?
+//   (MERGE_OPTIONS), message? }; rebase's { target, onto?, branch?, options?
+//   (REBASE_OPTIONS) }; checkout-rebase's { name, remote?, onto }.
+//   skipped: the commits a Cherry-Pick or Revert found already in.
 //   outcome: settle's word (above); "empty" also when Continue found the resolved commit
 //   already in and skipped it. ok: the outcome is done, stopped or empty.
 //   operation: readOperation afterwards, so the screen shows where things are now.

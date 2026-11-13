@@ -431,6 +431,53 @@ export async function restore(git, root, { snapshot, paths = [], copy } = {}) {
   return { ok: true, code: 0, out: "", err: "", restored, skipped, stagingSkipped, changed: moved() };
 }
 
+// applySnapshot(git, root, { snapshot })
+//   → { ok, code, out, err, msg?, conflicts, staged, changed }
+//   Puts a snapshot made on another HEAD back whole, 3-way, the way a stash is applied: a
+//   snapshot has the shape of one (first parent the HEAD it was made on, second its
+//   staging), so `git stash apply --index` takes it. Each change merges with what HEAD
+//   holds now; where both changed the same lines, the file is left with conflict markers
+//   and in a conflict in the index (conflicts: those paths, for the Conflicts dialog), and
+//   git stages the rest as a conflicted merge leaves it. staged: the staging came back as
+//   it was. When git refuses the staging alone (the staged change doesn't fit the index
+//   HEAD has now), the changes are applied without it, and staged is false. When git
+//   refuses outright (a local change is in the way), nothing changed: ok is false with
+//   its words. Untracked files and the snapshot itself are left alone.
+//   Which way a refusal went is read from the index's conflicts, never from git's words:
+//   git exits 1 both when it refuses before writing and when it leaves conflicts.
+export async function applySnapshot(git, root, { snapshot } = {}) {
+  const out = (r, more) => ({ ok: r.ok, code: r.code, out: r.out ?? "", err: r.err ?? "", ...(r.msg ? { msg: r.msg } : {}), conflicts: [], staged: false, changed: false, ...more });
+  if (!HASH.test(String(snapshot ?? ""))) return out({ ok: false, code: -1, err: "No rollback to restore from.", msg: { key: "restore.noSnapshot" } });
+  const made = await madeOn(git, root, snapshot);
+  if (!made.ok) return out(made);
+  const before = await unmerged(git, root);
+  if (!before.ok) return out(before);
+  const tries = made.parents.length === 2 ? [true, false] : [false];
+  let first = null;
+  for (const index of tries) {
+    const r = await git(root, ["stash", "apply", "-q", ...(index ? ["--index"] : []), snapshot]);
+    if (r.ok) return out({ ...r, err: "" }, { staged: index, changed: true });
+    first ??= r;
+    // With conflicts already in the index git refuses at once: any failure is a refusal.
+    const after = before.paths.length ? before : await unmerged(git, root);
+    if (!after.ok) return out(r, { changed: true });
+    if (after.paths.length && !before.paths.length) return out({ ...r, ok: true, err: "" }, { conflicts: after.paths, staged: false, changed: true });
+  }
+  return out({ ...first, ok: false });
+}
+
+// The paths in a conflict in the index: { ok, paths } in git's order.
+async function unmerged(git, root) {
+  const r = await git.read(root, ["ls-files", "-u", "-z"]);
+  if (!r.ok) return r;
+  const paths = [];
+  for (const line of r.out.split("\0")) {
+    const tab = line.indexOf("\t");
+    if (tab >= 0 && paths[paths.length - 1] !== line.slice(tab + 1)) paths.push(line.slice(tab + 1));
+  }
+  return { ok: true, paths };
+}
+
 // The parents of `snapshot` and the paths its message names as in a conflict or only
 // announced: { ok, parents: [hash], conflicts: Set, intents: Set }.
 async function madeOn(git, root, snapshot) {

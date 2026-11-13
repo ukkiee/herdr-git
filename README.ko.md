@@ -264,8 +264,8 @@ cd herdr-git && ./install.sh
 - 한 번에 저장소 하나, 포커스된 pane의 저장소만 보여 줍니다. 서브모듈은 따로 보여 주지
   않습니다.
 - 비밀번호, 암호 문구, GPG PIN을 입력할 곳이 없습니다. 입력을 요구하는 원격에서는 푸시, 페치,
-  풀, 업데이트, 태그 푸시가 바로 실패하고, git의 글과 함께 credential helper나 SSH agent를
-  설정하라고 안내합니다.
+  풀, 업데이트, 태그 푸시가 바로 실패하고, credential helper나 SSH agent를 설정하라는 안내와
+  그다음 git의 글을 보여 줍니다.
 - 메뉴 막대 메뉴가 없습니다. Git 메뉴는 VCS 작업 팝업(`cmd-shift-v`)이고, Commit panel이나 Log
   panel이 보일 때만 열립니다.
 - 알림에는 버튼을 하나까지만 달 수 있어서, 편집을 위해 멈춘 리베이스 알림은 계속·중단 버튼 대신

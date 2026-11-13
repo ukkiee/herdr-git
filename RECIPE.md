@@ -1139,9 +1139,12 @@ The rules and their reasons are in `docs/design.md` (section 4); what a person s
   per repository, Drop Commits' Don't ask again, the graph and view options, Commit
   details' View Options and the Branch tree's settings are app-wide (`git-tools/settings.json`); favorites are in the
   repository's config.
-- **A remote that asks for a password** fails at once with git's words and `If the remote
-  asks for a password or passphrase, set up a credential helper or an SSH agent: there is
-  nowhere here to type one.` (pull and updates); nothing waits.
+- **A remote that asks for a password** fails at once with `If the remote asks for a
+  password or passphrase, set up a credential helper or an SSH agent: there is nowhere
+  here to type one.` first, then git's words (pull and updates); nothing waits. The hint
+  leads so it shows without scrolling the error box, the strip or a notification. Update
+  Selected tries each remote once: a branch whose remote already failed fails the same
+  way without another fetch, and the notification gives the hint once, on top.
 
 ### Errors and limits on screen
 
@@ -3525,8 +3528,8 @@ commit `main` lacks)
 181. Right-click a commit not on the current branch: `Rebase 'main' onto Selected Commit`
      is on; on a commit of the current branch it is off.
 182. Set the remote's URL to one that asks for a password and Pull: it fails at once with
-     git's words and `If the remote asks for a password or passphrase, set up a credential
-     helper or an SSH agent: there is nowhere here to type one.`
+     `If the remote asks for a password or passphrase, set up a credential helper or an
+     SSH agent: there is nowhere here to type one.` on top, then git's words.
 
 **Cherry-Pick, Revert, Reset**
 

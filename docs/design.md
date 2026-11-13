@@ -378,8 +378,11 @@ Rollback은 Rollback dialog의 버튼으로만 실행되고, 쓰기 전에 버�
   쓰이지 않는다. squash·fixup 멈춤과 `--apply` 방식의 멈춤은 git이 여는 편집기에 메시지를 넣는다.
 - **빈 cherry-pick은 진행 중 상태를 남기지 않는다.** `--skip`으로 정리하고 알림으로 알린다.
 - **원격과 주고받는 동작**(fetch, pull, 업데이트, 여기까지 푸시, 태그 푸시, 원격 편집 뒤 fetch)은 모두
-  `GIT_TERMINAL_PROMPT=0`으로 돈다. 비밀번호를 칠 곳이 없으므로 묻는 원격은 기다리지 않고 git의
-  글과 "credential helper나 SSH agent를 설정한다"는 안내로 실패한다. 시간 한도는 fetch가 5분,
+  `GIT_TERMINAL_PROMPT=0`으로 돈다. 비밀번호를 칠 곳이 없으므로 묻는 원격은 기다리지 않고
+  "credential helper나 SSH agent를 설정한다"는 안내, 그다음 git의 글로 실패한다. 안내가 앞에 있어야
+  오류 칸·띠·알림에서 스크롤 없이 보이고, 창의 답이 글 앞부분만 남겨도 살아남는다. 선택 항목
+  업데이트는 원격마다 한 번만 가져온다. 가져오기에 실패한 원격을 추적하는 다음 브랜치는 다시 fetch하지
+  않고 같은 실패로 돌리며, 알림은 안내를 맨 앞에 한 번만 둔다. 시간 한도는 fetch가 5분,
   merge·rebase 단계와 푸시처럼 훅을 돌릴 수 있는 단계가 10분이다.
 - **사용자의 git 설정은 그대로 둔다.** `pull.rebase`, `rebase.updateRefs`, `commit.gpgSign`, 훅은 git이
   따르는 대로 따른다. 옵션 없이 갈라진 브랜치를 풀하면 git이 "어떻게 합칠지 지정하라"고 실패하는

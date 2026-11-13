@@ -288,8 +288,8 @@ restored after that). `git config --remove-section gittools` drops the favorites
 
 - One repository at a time, the focused pane's; submodules aren't shown on their own.
 - No place to type a password, passphrase or GPG PIN. A remote that asks for one fails
-  at once (push, fetch, pull, update, push tag) with git's words and a hint to set up a
-  credential helper or SSH agent.
+  at once (push, fetch, pull, update, push tag) with a hint to set up a credential helper
+  or SSH agent, then git's words.
 - No menu bar menu: the Git menu is the VCS Operations popup (`cmd-shift-v`), and it opens
   only while the Commit panel or the Log panel shows.
 - A notification carries one button at most, so a rebase stopped to edit says where to go

@@ -1663,10 +1663,10 @@ filter or read run everywhere.
 preview, a compare Diff tab's working-tree side, the Conflicts dialog's working-tree file,
 Apply Patch's patch file, and the app home's `console.jsonl` and `settings.json`),
 `openOverlay` (with `at` for the Push dialog's ▾ menu), `closeOverlay`, `shared`,
-`setShared` (keys `git-tools.bus`, `git-tools.lock` and `git-tools.lang`), `window` (its
-`platform`, for reading the system language, the Files panel's folder reads and Reveal in
-Finder) and `settings().dark` (Herdr's look, for the dark icon variants only when the
-theme's color can't be read). Also
+`setShared` (keys `git-tools.bus`, `git-tools.lock`, `git-tools.lang`, `git-tools.menus`
+and `git-tools.tabs`), `window` (its `platform`, for reading the system language, the
+Files panel's folder reads and Reveal in Finder) and `settings().dark` (Herdr's look, for
+the dark icon variants only when the theme's color can't be read). Also
 `localStorage` (keys `commit.grouped`, `commit.copy`, `log.branches`,
 `log.details`), `cx.timer.after`, `cx.timer.every`, `cx.focus_handle` and
 `cx.write_to_clipboard`.

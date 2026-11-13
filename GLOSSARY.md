@@ -78,6 +78,22 @@ _Avoid_: 업데이트 로그, 변경 기록
 두 브랜치, 브랜치나 커밋과 작업 트리, 두 커밋의 차이를 보여 주는 space의 탭. 종류마다 하나만 열리고 다시 열면 내용이 바뀐다.
 _Avoid_: diff 창, Diff tab(파일 하나의 차이)
 
+**Create Patch dialog**:
+로컬 변경에서 파일을 골라 패치로 만드는 창. 확인하면 패치 파일 설정 창이 이어 열린다.
+_Avoid_: 패치 내보내기 창
+
+**Apply Patch dialog**:
+파일이나 클립보드의 패치가 바꾸는 파일을 보이고, 체크한 파일만 작업 트리에 적용하는 창.
+_Avoid_: 패치 가져오기 창
+
+**Git Remotes dialog**:
+저장소의 원격을 이름과 URL 표로 보이고 추가, 편집, 제거하는 창.
+_Avoid_: 원격 설정 창
+
+**Progress bar**:
+그 저장소에서 git 쓰기가 도는 동안 Commit panel과 Log panel 아래에 동작 이름과 함께 좌우로 오가는 막대.
+_Avoid_: 스피너(버튼 안의 도는 표시), 진행률
+
 ### 커밋 창의 개념
 
 **Changes**:
@@ -174,7 +190,7 @@ _Avoid_: 충돌 상태
 _Avoid_: autostash
 
 **Favorite branch**:
-목록에서 현재 브랜치 다음으로 올려 보이게 표시한 브랜치. main과 master는 처음부터 Favorite branch다.
+목록에서 현재 브랜치 다음으로(VCS widget 팝업에서는 현재 브랜치보다 위로) 올려 보이게 표시한 브랜치. main과 master는 처음부터 Favorite branch다.
 _Avoid_: 고정 브랜치, 북마크
 
 **Operation in progress**:

@@ -50,11 +50,11 @@
   (`view-update-project.js`), Git 재설정과 HEAD 재설정 (`view-reset.js`, `view-reset-head.js`),
   커밋 메시지 편집·커밋 삭제·커밋 스쿼시·추출 (`view-reword.js`, `view-drop-commits.js`,
   `view-squash.js`, `view-extract.js`), 커밋 리베이스 (`view-interactive-rebase.js`), 새 태그·이름
-  변경·원격 정의 (`view-tag.js`, `view-rename-branch.js`, `view-remote.js`), Git 원격
-  (`view-remotes.js`), 패치 파일 설정 (`view-patch.js`), 패치 생성과 패치 적용
+  변경·원격 정의 (`view-tag.js`, `view-rename-branch.js`, `view-remote.js`), Git Remotes dialog
+  (`view-remotes.js`), 패치 파일 설정 (`view-patch.js`), Create Patch dialog와 Apply Patch dialog
   (`view-create-patch.js`, `view-apply-patch.js`), 새 워크트리 (`view-worktree.js`). 작은 팝업:
   해시로 이동 (`view-go-to-hash.js`), 태그 또는 리비전 체크아웃 (`view-checkout-ref.js`).
-- **진행 막대**: 그 저장소에서 git 쓰기가 도는 동안 Commit panel(Stash tab 포함)과 Log panel 아래 띠에
+- **Progress bar**: 그 저장소에서 git 쓰기가 도는 동안 Commit panel(Stash tab 포함)과 Log panel 아래 띠에
   동작 이름과 좌우로 오가는 막대를 그린다(`ui.js`의 `progressBar`). 얼마나 걸릴지 모르는 fetch·pull이
   많아서 남은 양을 보이지 않는다.
 - **space 탭**: 비교 탭 (`view-compare-files.js`의 작업 트리·로컬·버전 세 모드,
@@ -77,7 +77,7 @@
 | 묶음 | 파일 | 책임 |
 |---|---|---|
 | 길잡이 | `main.js` | 사본을 만들고 화면에 버스·잠금·언어를 넘긴 뒤 `props.view`로 화면을 고른다(`VIEWS` 표) |
-| 공용 부품 | `ui.js` | 저장소 찾기, 행·버튼·체크박스, 보이는 행만 그리는 `WindowedList`, 창과 메뉴 열기, 툴팁(`tip`), 진행 막대, `uiGlyph`·`iconButton`, 쓰기 잠금과 창 요청의 화면 쪽, git-tools 탭의 저장소 기록, 실패 띠의 "콘솔에서 보기" |
+| 공용 부품 | `ui.js` | 저장소 찾기, 행·버튼·체크박스, 보이는 행만 그리는 `WindowedList`, 창과 메뉴 열기, 툴팁(`tip`), Progress bar, `uiGlyph`·`iconButton`, 쓰기 잠금과 창 요청의 화면 쪽, git-tools 탭의 저장소 기록, 실패 띠의 "콘솔에서 보기" |
 | 화면 쪽 등록과 파일 | `serve-actions.js`, `app-files.js`, `space-tabs.js`, `log-pick.js`, `log-rewrite.js` | 창이 패널에 요청하는 쓰기의 표(`SERVE_ACTIONS`), 앱 홈 `git-tools` 폴더의 기록·설정 파일, 종류마다 하나인 space 탭, Log panel 쪽의 Cherry-Pick·Revert와 히스토리 편집 처리 |
 | 화면 | `view-*.js`, `commit-form.js`, `commit-stash-tab.js`, `log-branches.js`, `log-list.js`, `log-details.js`, `log-filters.js` | 그리기와 사람의 입력 |
 | git | `git.js`, `git-status.js`, `git-commit.js`, `git-rollback.js`, `git-snapshot.js`, `git-diff.js`, `git-push.js`, `git-log.js`, `git-log-filter.js`, `git-branch.js`, `git-show.js`(`readLastCommit` 포함), `files-data.js` | git과 폴더 읽기 명령을 부르고 결과를 해석한다 |
@@ -571,7 +571,7 @@ Rollback은 Rollback dialog의 버튼으로만 실행되고, 쓰기 전에 버�
   `fetch --prune`한다. 원격 추가는 `remote add --end-of-options <이름> <URL>` 뒤 같은 체크로 그 원격을
   가져온다. 빈 이름·URL은 git을 부르기 전에 거절하고, 이미 있는 이름은 git의 글로 실패한다. 원격
   제거는 그 원격 추적 브랜치도 git이 지운다. 태그 푸시는 `push <원격> refs/tags/T:refs/tags/T`다.
-- **Git 원격 창**(VCS Operations popup의 원격 관리…)은 원격을 이름 │ URL 표로 읽는다. 툴바의 추가는
+- **Git Remotes dialog**(VCS Operations popup의 원격 관리…)는 원격을 이름 │ URL 표로 읽는다. 툴바의 추가는
   빈 원격 정의 창(추가 모드), 편집과 더블클릭은 그 원격의 원격 정의 창, 제거는 제거 확인을 연다. 쓰기는
   모두 창을 연 패널이 하고(`remote-add` 등), 끝나면 표를 다시 읽는다.
 - Branch tree의 추적된 브랜치와 태그 푸시의 하위 메뉴는 두 번째 메뉴로 연다. mod가 그리는 팝업
@@ -602,14 +602,14 @@ Rollback은 Rollback dialog의 버튼으로만 실행되고, 쓰기 전에 버�
   첫 커밋은 빈 트리와 비교한다. 베이스 경로가 저장소 루트면 그대로, 저장소를 담은 폴더면 그 사이
   폴더가 경로 앞에 붙고, 저장소 안 폴더면 `--relative`, 그 밖이면 거절한다. 떨어진 여러 커밋의 패치는
   가장 오래된 커밋의 부모부터 가장 새 커밋까지라 사이의 고르지 않은 커밋도 들어간다.
-- **로컬 변경의 패치**(VCS Operations popup의 패치 ▸ 패치 생성…)는 체크한 파일로 HEAD 위에 ref 없는
+- **로컬 변경의 패치**(VCS Operations popup의 패치 ▸ 패치 생성…이 여는 Create Patch dialog)는 체크한 파일로 HEAD 위에 ref 없는
   커밋을 만든 뒤(`git-patch.js`의 `changesCommit`) 그 커밋으로 위의 패치 파일 설정 창을 연다. 커밋은
   git 폴더의 임시 인덱스 `git-tools-patch-index`에서 쓰기 잠금 아래 만들어 실제 인덱스와 작업 트리를
   건드리지 않는다. 처음 체크와 메시지는 Commit panel이 주인이면 그 체크와 메시지 초안, Log panel이
   주인이면 모든 파일이다. 제안 이름은 `<브랜치>__<메시지 첫 줄>.patch`이고 메시지는 패치 글에
   들어가지 않는다(`git diff` 꼴). 빈 메시지는 `Local changes`로 둔다(`commit-tree -m ""`는 표준 입력을
   기다린다).
-- **패치 적용**(파일에서, 클립보드에서)은 먼저 글을 읽어(`readPatchFiles`, 순수 함수) 파일과 상태를
+- **패치 적용**(Apply Patch dialog, 파일에서와 클립보드에서)은 먼저 글을 읽어(`readPatchFiles`, 순수 함수) 파일과 상태를
   보이고, 체크한 파일만 `--include`(글자 그대로 이스케이프한 경로)로 적용한다. 순서는 `apply --check`,
   작업 트리에만 적용, 실패하면 `apply --3way`(인덱스도 쓴다)다. 충돌은 git의 글이 아니라
   `ls-files -u`로 가르고, 충돌이 남으면 패널이 Conflicts dialog를 연다. 충돌 없는 3-way는 "스테이징
@@ -895,7 +895,7 @@ Herdr는 mod를 QuickJS로 돌린다. JIT가 없고, 한 호출이 너무 오래
 - **창의 테두리.** 모든 창은 Herdr 테두리 없이(`frame: "none"`) 열고 `dialogFrame`이 둥근 모서리,
   선, 그림자를 그린다. `openDialog`의 height는 상한이다. 양식 창은 내용 높이만큼 그려 가운데에
   놓이고, 목록을 채우는 창(충돌, 삭제된 브랜치, 커밋 리베이스, Merge Revisions, Restore, Push,
-  Rollback, Smart, 패치 생성, 패치 적용, Git 원격)만 연 높이를 채운다(`ui-size.js`의 `dialogFills`).
+  Rollback, Smart, Create Patch, Apply Patch, Git Remotes)만 연 높이를 채운다(`ui-size.js`의 `dialogFills`).
   Herdr 테두리 안에서는 양식 아래에 빈 공간이 남기 때문이다.
 - **툴팁.** Herdr에는 떠 있는 툴팁을 숨기는 호출이 없다. 메뉴를 연 요소 위에 포인터가 머물러 있으면
   그 툴팁이 메뉴의 첫 항목을 가린다. 그래서 화면은 툴팁을 `ui.js`의 `tip()`으로만 달고
@@ -1035,10 +1035,10 @@ Herdr는 mod를 QuickJS로 돌린다. JIT가 없고, 한 호출이 너무 오래
   그려지는지, 그 위의 클릭이 팝업 밖 클릭으로 닫히지 않는지)는 Herdr 동작에 기댄다.
 - squash·fixup에서 멈춘 뒤 메시지를 고치고 바로 뒤에 squash가 또 있으면, 마지막 메시지가 그 뒤 커밋의
   메시지까지 대신한다.
-- 패치 적용 창은 파일을 고르는 창이 없다(플랫폼에 파일 선택 API가 없고 폴더 선택만 있다). 경로를
+- Apply Patch dialog에는 파일을 고르는 창이 없다(플랫폼에 파일 선택 API가 없고 폴더 선택만 있다). 경로를
   입력하거나 📁로 폴더를 고르고, 📁는 이 컴퓨터의 space에서만 보인다. 1 MiB보다 큰 패치 파일은
   "패치가 1 MiB보다 큽니다"로 거절한다.
-- 패치 생성과 패치 적용 창에는 변경 목록 칸, Diff 칸, "클립보드에서 즉시 패치 분석 및 적용"이 없다.
+- Create Patch dialog와 Apply Patch dialog에는 변경 목록 칸, Diff 칸, "클립보드에서 즉시 패치 분석 및 적용"이 없다.
 - 패치 파일 설정 창의 "응답 없음" 문구는 주인을 늘 Log panel이라고 부른다(Commit panel이 주인일 때도).
 - git-tools 탭이 자기 창을 기록하지 못하면(Herdr가 창 id를 주지 않고, 탭이 열릴 때 포커스가 그 탭에
   없을 때) 그 탭에 포커스가 있어도 패널은 space 폴더를 따른다. 포커스를 다시 주면 그때 기록한다.

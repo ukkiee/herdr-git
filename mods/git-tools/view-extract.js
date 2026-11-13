@@ -18,13 +18,11 @@
 
 import { div } from "gpui-kit";
 import { v_flex, TextareaState } from "gpui-base";
-import { theme, notify } from "herdr";
-import { readEditFacts, extractChanges, dropChanges } from "./git-rewrite.js";
-import { editCheck } from "./rebase-plan.js";
-import { openDialog, dialogFrame, button, close, writeBlock, scrollText, textBox, broadcast, sentence, openCommitPanel } from "./ui.js";
+import { theme } from "herdr";
+import { extractChanges, dropChanges } from "./git-rewrite.js";
+import { openDialog, dialogFrame, button, close, writeBlock, scrollText, textBox, broadcast, openCommitPanel } from "./ui.js";
 import { forcePushNote, askRewrite } from "./view-reword.js";
-import { openConflictsIfStopped } from "./view-conflicts.js";
-import { offerRewriteSmart, serveRewrite, servedWhere } from "./log-rewrite.js";
+import { prepare, runHere, serveRewrite, servedWhere } from "./log-rewrite.js";
 
 const SHORT = 8;
 const strings = (value) => (Array.isArray(value) ? value.filter((v) => typeof v === "string" && v) : []);
@@ -34,23 +32,6 @@ const text = (value) => (typeof value === "string" ? value : "");
 export function openExtract({ mode = "extract", root, on = null, owner = null, commit = "", paths = [], squash = false, pushed = false, initial = false, lang } = {}) {
   const size = mode === "extract" ? { width: 560, height: 320 } : { width: 420, height: 150 };
   return openDialog("extract", { mode, root, on, owner, commit, paths, squash, pushed, initial, lang }, size);
-}
-
-// tellRewrite(r, where, done): what a rewrite that ended says. A replay that stopped on
-// conflicts opens the Conflicts dialog; one that stopped otherwise says so; one that
-// ended says `done` ({ key, args }) when given.
-//   where: { root, on, owner, lang, t } of the screen that ran it.
-export function tellRewrite(r, where, done) {
-  const { t } = where;
-  if (r.outcome === "stopped") {
-    if (openConflictsIfStopped(r, { root: where.root, on: where.on, owner: where.owner, lang: where.lang, who: "ui.logPanel" })) {
-      notify({ title: t("ops.stopped"), body: r.operation?.current?.subject ?? "", level: "warning" });
-    } else {
-      notify({ title: t("rewrite.stoppedTitle"), body: t("rewrite.stoppedBody"), level: "warning" });
-    }
-  } else if (r.outcome === "done" && done) {
-    notify({ title: t(done.key, done.args), body: "", level: "info" });
-  }
 }
 
 // aimCommitPanel(target): shows the Commit panel and tells it the commit the checked
@@ -63,30 +44,13 @@ export function aimCommitPanel({ root, on = null, commit, squash = false, pushed
 
 // ---- the Log panel's side (view-log.js ACTIONS)
 
-const whereOf = (host, repo) => ({ root: repo.root, on: repo.on ?? null, owner: host.bus.id, lang: host.lang, t: host.t });
-
-// Reads the facts for `hash` and checks `action` on them (files: editCheck's); then(facts,
-// initial) goes on when it is on.
-function prepare(host, hash, action, files, cx, then) {
-  const repo = host.repo;
-  if (!repo || !hash || host.writeBlock()) return;
-  cx.spawn(async (cx) => {
-    const facts = await readEditFacts(repo.git, repo.root, [hash]);
-    if (!host.shows(repo)) return;
-    if (!facts.ok) { host.failedOn(repo, sentence(host.t, facts.msg, facts.err), cx); return; }
-    const check = editCheck(action, facts, 1, files);
-    if (check.why) { host.fail(host.t(check.why.key, check.why.args), cx); return; }
-    then(repo, facts, Boolean(check.confirm));
-    cx.notify();
-  });
-}
-
 // Fixup… and Squash Into…: the Commit panel takes the commit as its target.
 export function aimHere(host, commits, squash, cx) {
   const list = Array.isArray(commits) ? commits : [commits];
   const hash = list.length === 1 ? list[0]?.hash : null;
   if (list.length !== 1) { host.fail(host.t("log.selectOneCommit"), cx); return; }
-  prepare(host, hash, squash ? "squashInto" : "fixup", null, cx, (repo, facts, initial) => {
+  prepare(host, [{ hash }], squash ? "squashInto" : "fixup", cx, (facts, initial) => {
+    const repo = host.repo;
     const target = { root: repo.root, on: repo.on ?? null, commit: hash, squash, pushed: facts.pushed };
     if (initial) openExtract({ ...target, mode: "target", owner: host.bus.id, initial, lang: host.lang });
     else aimCommitPanel(target);
@@ -104,29 +68,20 @@ function picked(host, m) {
 export function extractHere(host, m, cx) {
   const at = picked(host, m);
   if (!at) return;
-  prepare(host, at.hash, "extractChanges", { picked: 1, total: at.total }, cx, (repo, facts, initial) => {
+  prepare(host, [{ hash: at.hash }], "extractChanges", cx, (facts, initial) => {
+    const repo = host.repo;
     openExtract({ mode: "extract", root: repo.root, on: repo.on ?? null, owner: host.bus.id, commit: at.hash, paths: at.paths, pushed: facts.pushed, initial, lang: host.lang });
-  });
+  }, { picked: 1, total: at.total });
 }
 
 export function dropChangesHere(host, m, cx) {
   const at = picked(host, m);
   if (!at) return;
-  prepare(host, at.hash, "dropChanges", { picked: 1, total: at.total }, cx, (repo, facts, initial) => {
+  prepare(host, [{ hash: at.hash }], "dropChanges", cx, (_facts, initial, cx) => {
+    const repo = host.repo, request = { type: "drop-changes", commit: at.hash, paths: at.paths };
     if (initial) { openExtract({ mode: "drop", root: repo.root, on: repo.on ?? null, owner: host.bus.id, commit: at.hash, paths: at.paths, initial, lang: host.lang }); return; }
-    if (!host.setBusy({ key: "rewrite.droppingChanges" }, cx, repo)) return;
-    cx.spawn(async (cx) => {
-      let r;
-      try { r = await dropChanges(repo.git, repo.root, { commit: at.hash, paths: at.paths }); } catch (error) { r = { ok: false, err: String(error?.message ?? error) }; }
-      // Released first: the panel skips reads while a write runs.
-      host.setBusy(null, cx);
-      if (r.ok || r.changed) broadcast({ type: "changed", root: repo.root });
-      const done = { key: "rewrite.droppedChanges" };
-      if (r.ok) tellRewrite(r, whereOf(host, repo), done);
-      else if (!offerRewriteSmart(r, whereOf(host, repo), { type: "drop-changes", commit: at.hash, paths: at.paths, done })) host.failedOn(repo, sentence(host.t, r.msg, r.err) || host.t("ui.gitFailed"), cx);
-      cx.notify();
-    });
-  });
+    runHere(host, repo, { key: "rewrite.droppingChanges" }, () => dropChanges(repo.git, repo.root, request), { key: "rewrite.droppedChanges" }, cx, request);
+  }, { picked: 1, total: at.total });
 }
 
 // ---- what this dialog asks (serve-actions.js): (git, root, args, panel) → a result

@@ -51,7 +51,7 @@ import { broadcast, button, checkbox, errorStrip, textBox, writingOn, fromRepo, 
 import { askAbort } from "./view-vcs-popup.js";
 import { sameRepo } from "./lock.js";
 import { fixupInto, readMessages } from "./git-rewrite.js";
-import { tellRewrite } from "./view-extract.js";
+import { tellRewrite } from "./log-rewrite.js";
 
 const SHORT = 8;
 

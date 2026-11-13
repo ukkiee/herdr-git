@@ -134,7 +134,7 @@ const ITEMS = {
   "branches.hide": { key: "branches.hide" },
   "branches.new": { key: "log.newBranch", write: true, when: unread },
   // On the cursor's branch, when it tracks one (ctx.upstream).
-  "branches.updateSelected": { key: "branches.updateSelected", write: true, work: "remote.updating", when: (ctx) => (ctx.upstream ? null : { text: "" }) },
+  "branches.updateSelected": { key: "branches.updateSelected", write: true, work: "remote.updating", when: tracked },
   "branches.delete": { key: "log.deleteBranch", args: name, write: true, when: deleteBlock, work: "log.deleting" },
   // The branches deleted here, kept to restore: after Delete Branch, its neighbor.
   "branches.deleted": { key: "branches.openDeleted", when: unread },

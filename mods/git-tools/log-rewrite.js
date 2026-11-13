@@ -34,10 +34,11 @@ const hashesOf = (commits) => (Array.isArray(commits) ? commits : [commits]).map
 const strings = (value) => (Array.isArray(value) ? value.filter((v) => typeof v === "string" && v) : []);
 const text = (value) => (typeof value === "string" ? value : "");
 
-// What a write that ended says, and the Conflicts dialog when it stopped on conflicts.
+// tellRewrite(r, where, done): what a history edit that ended says, and the Conflicts
+// dialog when it stopped on conflicts.
 //   r: the git-rewrite.js result. where: { root, on, owner, lang, t } of the panel.
 //   done: the notification's title key when the edit ended, with its args.
-function finish(r, where, done) {
+export function tellRewrite(r, where, done) {
   const { t } = where;
   if (r.outcome === "stopped") {
     if (openConflictsIfStopped(r, { root: where.root, on: where.on, owner: where.owner, lang: where.lang, who: "ui.logPanel" })) {
@@ -52,32 +53,35 @@ function finish(r, where, done) {
 
 // offerRewriteSmart(r, where, request) → true when local changes refused the replay and
 // the Smart dialog opened for `request` (git-smart.js SMART_RUNS: { type, ...args, done? },
-// done the notification it ends with). where: as finish's.
+// done the notification it ends with). where: as tellRewrite's.
 export function offerRewriteSmart(r, where, request) {
   return offerSmart(r, { root: where.root, on: where.on, owner: where.owner, lang: where.lang, who: "ui.logPanel", request });
 }
 
 const whereOf = (host, repo) => ({ root: repo.root, on: repo.on ?? null, owner: host.bus.id, lang: host.lang, t: host.t });
 
-// Reads the facts for the commits picked and checks `action` on them; then(facts, initial)
-// goes on when it is on (initial: the first commit is among them, to be asked about).
-function prepare(host, commits, action, cx, then) {
+// prepare(host, commits, action, cx, then, files?): reads the facts for the commits picked
+// (each { hash }) and checks `action` on them; then(facts, initial, cx) goes on when it is
+// on (initial: the first commit is among them, to be asked about). files: editCheck's, for
+// Commit details' file edits.
+export function prepare(host, commits, action, cx, then, files = null) {
   const repo = host.repo, hashes = hashesOf(commits);
   if (!repo || !hashes.length || host.writeBlock()) return;
   cx.spawn(async (cx) => {
     const facts = await readEditFacts(repo.git, repo.root, hashes);
     if (!host.shows(repo)) return;
     if (!facts.ok) { host.failedOn(repo, sentence(host.t, facts.msg, facts.err), cx); return; }
-    const check = editCheck(action, facts, hashes.length);
+    const check = editCheck(action, facts, hashes.length, files);
     if (check.why) { host.fail(host.t(check.why.key, check.why.args), cx); return; }
     await then(facts, Boolean(check.confirm), cx);
     cx.notify();
   });
 }
 
-// Runs write() as this panel's work on repo, then tells every screen and says how it ended.
-// request: the write as a Smart request, for when local changes refuse it.
-function runHere(host, repo, work, write, done, cx, request = null) {
+// runHere(host, repo, work, write, done, cx, request?): runs write() as this panel's work
+// on repo, then tells every screen and says how it ended (tellRewrite). request: the write
+// as a Smart request, for when local changes refuse it.
+export function runHere(host, repo, work, write, done, cx, request = null) {
   if (!host.setBusy(work, cx, repo)) return;
   cx.spawn(async (cx) => {
     let r;
@@ -85,7 +89,7 @@ function runHere(host, repo, work, write, done, cx, request = null) {
     // Released first: the panel skips reads while a write runs.
     host.setBusy(null, cx);
     if (r.ok || r.changed) broadcast({ type: "changed", root: repo.root });
-    if (r.ok) finish(r, whereOf(host, repo), done);
+    if (r.ok) tellRewrite(r, whereOf(host, repo), done);
     else if (!(request && offerRewriteSmart(r, whereOf(host, repo), { ...request, done }))) host.failedOn(repo, sentence(host.t, r.msg, r.err) || host.t("ui.gitFailed"), cx);
     cx.notify();
   });
@@ -144,10 +148,10 @@ export function squashHere(host, commits, cx) {
 export const servedWhere = (root, args, panel) => ({ root, on: typeof args.on === "string" ? args.on : null, owner: panel?.bus?.id ?? null, lang: panel?.lang, t: panel?.t ?? ((key) => key) });
 
 // serveRewrite(r, where, request, done) → what a dialog's history edit answers: it says how
-// r ended (finish). One that local changes refused opens the Smart dialog and counts as
+// r ended (tellRewrite). One that local changes refused opens the Smart dialog and counts as
 // done for the asking dialog: it closes, and the Smart dialog carries on.
 export function serveRewrite(r, where, request, done) {
-  if (r.ok) finish(r, where, done);
+  if (r.ok) tellRewrite(r, where, done);
   else if (offerRewriteSmart(r, where, { ...request, done })) return { ok: true };
   return r;
 }

@@ -2,10 +2,11 @@
 // one conflicted file, with no app: the pane titles, the aligned rows of the picture, the
 // chunk buttons, the toolbar, the count, the edit round trip, the save request.
 import { execFile, execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
-import { paneTitles, openFile, layoutRows, chunkButtons, toolbar, countWords, seekConflict, nextFile, leftToDecide, saveRequest } from "./merge-revisions-model.js";
+import { paneTitles, openFile, layoutRows, chunkButtons, toolbar, countWords, seekConflict, nextFile, leftToDecide, stageSave, saveRequest } from "./merge-revisions-model.js";
+import { localPlacer, remotePlacer } from "./git-conflict.js";
 import { columns } from "./conflicts-model.js";
 import { decide, resultText, edit } from "./merge-chunks.js";
 import { translator } from "./i18n.js";
@@ -187,8 +188,12 @@ const versions = (base, ours, theirs, extra = {}) => ({ ok: true, path: "src/alp
   assert.equal(nextFile([c("a"), c("d")], "b"), "d");
 }
 
-// Save request, on a real merge conflict: the panel writes the text and marks the file
-// resolved; a request without a path or text is refused.
+// Save request, on a real merge conflict. The dialog puts the result in a staged file and
+// the request carries only its path, however big the text: the request goes through the
+// shared value every screen redraws on. The panel moves the staged file into place byte
+// for byte (this computer's way and another machine's), marks the file resolved and
+// removes the staged file. A request without a path, or whose file isn't a staged
+// result, is refused and touches nothing.
 {
   const base = realpathSync(mkdtempSync(`${tmpdir()}/git-tools-merge-revisions-`));
   const env = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", GIT_EDITOR: "true" };
@@ -200,26 +205,82 @@ const versions = (base, ours, theirs, extra = {}) => ({ ok: true, path: "src/alp
   });
   const git = makeGit(exec, null);
   const sh = (cwd, cmd) => { try { return execFileSync("sh", ["-c", cmd], { cwd, env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }); } catch (e) { return e.stdout; } };
-  const repo = `${base}/r`;
-  mkdirSync(`${repo}/src`, { recursive: true });
-  sh(repo, "git init -q -b main && git config user.email t@t && git config user.name t");
-  writeFileSync(`${repo}/src/alpha.txt`, "a\nb\n");
-  sh(repo, "git add -A && git commit -qm base && git checkout -qb feature");
-  writeFileSync(`${repo}/src/alpha.txt`, "a\nF\n");
-  sh(repo, "git commit -qam f && git checkout -q main");
-  writeFileSync(`${repo}/src/alpha.txt`, "a\nM\n");
-  sh(repo, "git commit -qam m && git merge feature");
-  assert.match(sh(repo, "git ls-files -u"), /src\/alpha\.txt/);
+  const conflicted = (name) => {
+    const repo = `${base}/${name}`;
+    mkdirSync(`${repo}/src`, { recursive: true });
+    sh(repo, "git init -q -b main && git config user.email t@t && git config user.name t");
+    writeFileSync(`${repo}/src/alpha.txt`, "a\nb\n");
+    sh(repo, "git add -A && git commit -qm base && git checkout -qb feature");
+    writeFileSync(`${repo}/src/alpha.txt`, "a\nF\n");
+    sh(repo, "git commit -qam f && git checkout -q main");
+    writeFileSync(`${repo}/src/alpha.txt`, "a\nM\n");
+    sh(repo, "git commit -qam m && git merge feature");
+    assert.match(sh(repo, "git ls-files -u"), /src\/alpha\.txt/);
+    return repo;
+  };
+  // A big result with multi-byte letters, CRLF and shell characters.
+  const line = "가나다 abc \"$x\" `y` \\ 'q' %s\r\n";
+  let big = "";
+  while (Buffer.byteLength(big) < 300 * 1024) big += line;
+  big += "끝";
 
-  const write = async (p, text) => writeFileSync(p, text);
-  const refused = await saveRequest(git, repo, { path: "src/alpha.txt" }, write);
-  assert.equal(refused.ok, false);
-  assert.equal(refused.msg.key, "conflicts.badRequest");
-  assert.equal((await saveRequest(git, repo, { text: "x" }, write)).ok, false);
-
-  const r = await saveRequest(git, repo, { path: "src/alpha.txt", text: "a\nM\nF\n" }, write);
+  // This computer: staged under the app's own folder, placed the way a local space writes.
+  const local = conflicted("local");
+  const dir = `${base}/app-home/git-tools`;
+  const staged = await stageSave(exec, null, { path: "src/alpha.txt", text: big, dir });
+  assert.equal(staged.ok, true, staged.err);
+  assert.deepEqual(Object.keys(staged.args).sort(), ["file", "path"]);
+  assert.equal(staged.args.path, "src/alpha.txt");
+  assert.ok(staged.args.file.startsWith(`${dir}/`), staged.args.file);
+  assert.ok(JSON.stringify(staged.args).length < 512, "the request carries no text");
+  assert.ok(readFileSync(staged.args.file).equals(Buffer.from(big, "utf8")));
+  const here = localPlacer({
+    read: async (p) => readFileSync(p, "utf8"),
+    write: async (p, text) => writeFileSync(p, text),
+    remove: async (p) => rmSync(p, { force: true }),
+  });
+  const r = await saveRequest(git, local, staged.args, here);
   assert.equal(r.ok, true, r.err);
-  assert.equal(readFileSync(`${repo}/src/alpha.txt`, "utf8"), "a\nM\nF\n");
-  assert.equal(sh(repo, "git ls-files -u"), "");
-  assert.equal(sh(repo, "git show :src/alpha.txt"), "a\nM\nF\n");
+  assert.ok(readFileSync(`${local}/src/alpha.txt`).equals(Buffer.from(big, "utf8")));
+  assert.equal(sh(local, "git ls-files -u"), "");
+  assert.equal(sh(local, "git show :src/alpha.txt"), big);
+  assert.equal(existsSync(staged.args.file), false, "the staged file is removed");
+
+  // Another machine: staged in that machine's temporary folder and placed with sh there
+  // (run here with this computer's sh). Every call carries at most 100 KB.
+  const far = conflicted("far");
+  chmodSync(`${far}/src/alpha.txt`, 0o755);
+  const calls = [];
+  const spy = async (cmd, args, options) => { calls.push({ cmd, args, options }); return exec(cmd, args, options); };
+  const there = await stageSave(spy, "far-away", { path: "src/alpha.txt", text: big });
+  assert.equal(there.ok, true, there.err);
+  assert.ok(JSON.stringify(there.args).length < 512, "the request carries no text");
+  const placed = await saveRequest(git, far, there.args, remotePlacer(spy, "far-away"));
+  assert.equal(placed.ok, true, placed.err);
+  assert.ok(readFileSync(`${far}/src/alpha.txt`).equals(Buffer.from(big, "utf8")));
+  assert.equal(statSync(`${far}/src/alpha.txt`).mode & 0o777, 0o755);
+  assert.equal(sh(far, "git show :src/alpha.txt"), big);
+  assert.equal(existsSync(there.args.file), false, "the staged file is removed");
+  for (const call of calls) {
+    assert.equal(call.options.on, "far-away");
+    for (const arg of call.args) assert.ok(Buffer.byteLength(arg) <= 100 * 1024, `${Buffer.byteLength(arg)} bytes`);
+  }
+
+  // Refused: no path, no staged file, a file that isn't a staged result.
+  const left = conflicted("refused");
+  const victim = `${base}/keep.txt`;
+  writeFileSync(victim, "mine\n");
+  for (const args of [{ file: staged.args.file }, { path: "src/alpha.txt" }, { path: "src/alpha.txt", text: "x" }, { path: "src/alpha.txt", file: victim }]) {
+    const refused = await saveRequest(git, left, args, here);
+    assert.equal(refused.ok, false, JSON.stringify(args));
+    assert.equal(refused.msg.key, "conflicts.badRequest");
+  }
+  assert.equal(readFileSync(victim, "utf8"), "mine\n");
+  assert.match(sh(left, "git ls-files -u"), /src\/alpha\.txt/);
+
+  // A staged file the panel can't use (the file is no longer in conflict) is removed too.
+  const late = await stageSave(exec, null, { path: "src/alpha.txt", text: "x\n", dir });
+  const notNow = await saveRequest(git, local, late.args, here);
+  assert.equal(notNow.ok, false);
+  assert.equal(existsSync(late.args.file), false);
 }

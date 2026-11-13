@@ -88,13 +88,28 @@ export async function acceptSide(git, root, path, side) {
 // marks it resolved. write(absolutePath, text): writeTextFile for this computer's space,
 // remoteWriter for another machine's; it may throw or return { ok: false, err }.
 // A failed write leaves the conflict as it was.
-export async function saveResult(git, root, path, text, { write } = {}) {
+export function saveResult(git, root, path, text, { write } = {}) {
+  return saveWith(git, root, path, typeof write === "function" ? (target) => write(target, text) : null);
+}
+
+// saveStaged(git, root, path, file, placer) → result, as saveResult, with the text in a
+// staged file (stageText) instead of in hand. placer: localPlacer or remotePlacer. The
+// staged file is removed afterwards, whatever happened.
+export async function saveStaged(git, root, path, file, placer) {
+  try {
+    return await saveWith(git, root, path, placer ? (target) => placer.place(file, target) : null);
+  } finally {
+    try { await placer?.drop(file); } catch { /* nothing more to do with it */ }
+  }
+}
+
+async function saveWith(git, root, path, put) {
   const { r, entries } = await unmergedEntries(git, root, path);
   if (!entries) return r;
   if (!entries[path]) return notConflicted(path);
-  if (typeof write !== "function") return writeFailed(path, "no way to write files");
+  if (!put) return writeFailed(path, "no way to write files");
   try {
-    const w = await write(`${root}/${path}`, text);
+    const w = await put(`${root}/${path}`);
     if (w && w.ok === false) return writeFailed(path, String(w.err ?? ""));
   } catch (error) {
     return writeFailed(path, String(error?.message ?? error));
@@ -175,18 +190,23 @@ const NEXT = 'printf "%s" "$1" >> "$2"';
 const MOVE = 'mv -f "$1" "$2"';
 const DROP = 'rm -f "$1"';
 
+// shOn(exec, on) → run(script, args) → { ok, out, err }: a sh script on the machine `on`.
+const shOn = (exec, on) => async (script, args) => {
+  try {
+    const r = await exec("sh", ["-c", script, "git-tools", ...args], { on });
+    return r.code === 0
+      ? { ok: true, out: r.stdout ?? "" }
+      : { ok: false, err: (r.stderr ?? "").trim() || (r.stdout ?? "").trim() || `sh exited with ${r.code}` };
+  } catch (error) {
+    return { ok: false, err: String(error?.message ?? error) };
+  }
+};
+
 // remoteWriter(exec, on) → write(absolutePath, text) → { ok, err }: writes a file on the
 // machine `on` with sh, for a space on another machine (writeTextFile writes only on this
 // one, and exec has no stdin), in parts of at most REMOTE_CHUNK_BYTES each.
 export function remoteWriter(exec, on) {
-  const run = async (script, args) => {
-    try {
-      const r = await exec("sh", ["-c", script, "git-tools", ...args], { on });
-      return r.code === 0 ? { ok: true } : { ok: false, err: (r.stderr ?? "").trim() || (r.stdout ?? "").trim() || `sh exited with ${r.code}` };
-    } catch (error) {
-      return { ok: false, err: String(error?.message ?? error) };
-    }
-  };
+  const run = shOn(exec, on);
   return async (path, text) => {
     const temp = `${path}.git-tools-${Math.random().toString(36).slice(2, 10)}.tmp`;
     const pieces = parts(String(text ?? ""), REMOTE_CHUNK_BYTES);
@@ -195,5 +215,75 @@ export function remoteWriter(exec, on) {
     if (r.ok) r = await run(MOVE, [temp, path]);
     if (!r.ok) await run(DROP, [temp]);
     return r;
+  };
+}
+
+// ---- a result handed over in a staged file
+// A dialog asks a panel to save through the shared value every screen redraws on, so a
+// result the size of the file can't ride in the request: the dialog writes it to a staged
+// file on the space's machine (stageText) and the request names only that file. The
+// panel puts the staged file's text in place (saveStaged) and removes it.
+
+// Made by mktemp: the prefix and eight letters or digits. A request naming any other file
+// is refused, so a request can never make the panel read or remove a file of the person's.
+const STAGED = /^\/(?:[^\0]*\/)?git-tools-result\.[A-Za-z0-9]{8}$/;
+// $1: the folder, "" for the machine's temporary folder.
+const MAKE = 'd="${1:-${TMPDIR:-/tmp}}"; mkdir -p "$d" && mktemp "${d%/}/git-tools-result.XXXXXXXX"';
+// $1 the staged file, $2 the file, $3 a temporary file next to it: as remoteWriter, the
+// file keeps its mode and is never half written.
+const PLACE = 'if [ -f "$2" ]; then cp -p "$2" "$3" || exit 1; fi; cat "$1" > "$3" && mv -f "$3" "$2"';
+
+// isStaged(file) → whether `file` is a staged result's absolute path.
+export const isStaged = (file) => typeof file === "string" && STAGED.test(file);
+
+// stageText(exec, on, text, { dir }) → { ok, file } | { ok: false, err }: writes `text` to
+// a new staged file on the machine `on` (null: this computer), byte for byte, in parts as
+// remoteWriter does. dir: the folder to make it in (made when missing); none: the machine's
+// temporary folder. The file is readable by the person only (mktemp's mode).
+export async function stageText(exec, on, text, { dir = null } = {}) {
+  const run = shOn(exec, on);
+  const made = await run(MAKE, [dir ?? ""]);
+  if (!made.ok) return made;
+  const file = made.out.trim();
+  if (!isStaged(file)) return { ok: false, err: `mktemp gave no usable file: ${file}` };
+  const w = await remoteWriter(exec, on)(file, text);
+  if (!w.ok) { await run(DROP, [file]); return { ok: false, err: w.err }; }
+  return { ok: true, file };
+}
+
+// dropStaged(exec, on, file): removes a staged file (nothing for any other path).
+export async function dropStaged(exec, on, file) {
+  if (isStaged(file)) await shOn(exec, on)(DROP, [file]);
+}
+
+// A placer puts a staged file's text in a file and removes staged files:
+//   place(staged, absolutePath) → { ok, err? } (may throw), drop(staged).
+
+// remotePlacer(exec, on): for a space on another machine, with sh there (the text never
+// leaves that machine). Byte for byte; the file keeps its mode.
+export function remotePlacer(exec, on) {
+  const run = shOn(exec, on);
+  return {
+    place: async (staged, path) => {
+      const temp = `${path}.git-tools-${Math.random().toString(36).slice(2, 10)}.tmp`;
+      const r = await run(PLACE, [staged, path, temp]);
+      if (!r.ok) await run(DROP, [temp]);
+      return r;
+    },
+    drop: (staged) => dropStaged(exec, on, staged),
+  };
+}
+
+// localPlacer({ read, write, remove }): for this computer's space, so the file is written
+// the way a local space writes (view-conflicts.js writerOn). read(file) → text,
+// write(absolutePath, text), remove(file).
+export function localPlacer({ read, write, remove }) {
+  return {
+    place: async (staged, path) => {
+      const text = await read(staged);
+      if (typeof text !== "string") return { ok: false, err: `Couldn't read ${staged}` };
+      return write(path, text);
+    },
+    drop: async (staged) => { if (isStaged(staged)) await remove(staged); },
   };
 }

@@ -11,7 +11,7 @@
 // Words come back as { key, args } for messages-conflicts.js.
 
 import { merge, counts, resolved } from "./merge-chunks.js";
-import { saveResult } from "./git-conflict.js";
+import { stageText, saveStaged, isStaged } from "./git-conflict.js";
 
 const short = (hash) => String(hash ?? "").slice(0, 8);
 
@@ -172,10 +172,25 @@ export function nextFile(conflicts, path) {
 
 const badRequest = () => ({ ok: false, code: 1, out: "", err: "The request names no conflicted file.", msg: { key: "conflicts.badRequest" } });
 
-// saveRequest(git, root, { path, text }, write) → git-conflict.js saveResult's result: the
-// text written to the file and the file marked resolved. write: view-conflicts.js writerOn.
-export function saveRequest(git, root, args, write) {
+// The request goes through the shared value every screen redraws on and stays there a
+// while, so it never carries the result: the dialog stages it in a file first.
+
+// stageSave(exec, on, { path, text, dir }) → { ok, args: { path, file } } | a failure with
+// msg. The result `text` for the conflicted `path`, staged on the space's machine `on`
+// (git-conflict.js stageText): this computer's in `dir` (the app's own folder), another
+// machine's in its temporary folder. args is the "conflicts-save" request's.
+export async function stageSave(exec, on, { path, text, dir = null } = {}) {
+  const staged = await stageText(exec, on, String(text ?? ""), { dir: on ? null : dir });
+  if (!staged.ok) return { ok: false, code: 1, out: "", err: `Couldn't write ${path}: ${staged.err}`, msg: { key: "conflicts.writeFailed", args: { path, err: staged.err } } };
+  return { ok: true, args: { path, file: staged.file } };
+}
+
+// saveRequest(git, root, { path, file }, placer) → git-conflict.js saveStaged's result: the
+// staged file's text put in the file, the file marked resolved, the staged file removed.
+// placer: git-conflict.js localPlacer or remotePlacer. A file that isn't a staged result is
+// refused and left alone.
+export function saveRequest(git, root, args, placer) {
   const path = typeof args?.path === "string" && args.path ? args.path : null;
-  if (!path || typeof args.text !== "string") return badRequest();
-  return saveResult(git, root, path, args.text, { write });
+  if (!path || !isStaged(args.file)) return badRequest();
+  return saveStaged(git, root, path, args.file, placer);
 }

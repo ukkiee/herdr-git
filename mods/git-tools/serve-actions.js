@@ -22,6 +22,9 @@ import { runUnstash } from "./view-unstash.js";
 import { createBranch } from "./git-branch.js";
 import { serveReword, serveSquash, serveDrop } from "./log-rewrite.js";
 import { runSmartRequest } from "./view-smart.js";
+import { runTagCreate } from "./view-tag.js";
+import { runRenameBranch } from "./view-rename-branch.js";
+import { runRemoteEdit, runRemoteRemove } from "./view-remote.js";
 
 const strings = (value) => (Array.isArray(value) ? value.filter((v) => typeof v === "string" && v) : []);
 const text = (value) => (typeof value === "string" && value ? value : null);
@@ -48,6 +51,10 @@ export const SERVE_ACTIONS = {
   "rewrite-drop": { work: "rewrite.dropping", run: (git, root, args, panel) => serveDrop(git, root, args, panel) },
   "smart-run": { work: "smart.working", run: (git, root, args, panel) => runSmartRequest(git, root, { ...args, mode: "smart" }, panel) },
   "smart-force": { work: "smart.forcing", run: (git, root, args, panel) => runSmartRequest(git, root, { ...args, mode: "force" }, panel) },
+  "tag-create": { work: "refs.tagging", run: (git, root, args) => runTagCreate(git, root, args) },
+  "branch-rename": { work: "refs.renaming", run: (git, root, args) => runRenameBranch(git, root, args) },
+  "remote-edit": { work: "refs.editingRemote", run: (git, root, args) => runRemoteEdit(git, root, args) },
+  "remote-remove": { work: "refs.removingRemote", run: (git, root, args) => runRemoteRemove(git, root, args) },
 };
 
 // serveAction(panel, e, cx) → true when the table has e.action and the panel now runs

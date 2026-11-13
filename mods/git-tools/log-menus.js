@@ -54,10 +54,10 @@ const ITEMS = {
   "commit.drop": { key: "log.dropCommits", args: (ctx) => ({ n: ctx.count ?? 1 }), write: true, when: edit("drop") },
   "commit.squash": { key: "log.squashCommits", shown: (ctx) => (ctx.count ?? 1) >= 2, write: true, when: edit("squash") },
   "commit.interactiveRebase": { key: "log.interactiveRebase" },
-  "commit.pushUpToHere": { key: "log.pushUpToHere" },
+  "commit.pushUpToHere": { key: "log.pushUpToHere", when: one },
   "commit.rebaseOnto": { key: "log.rebaseOntoCommit", args: current },
   "commit.newBranch": { key: "log.newBranch", write: true, when: one },
-  "commit.newTag": { key: "log.newTag" },
+  "commit.newTag": { key: "log.newTag", write: true, when: one },
   // The Commit list's left and right keys (log-list.js).
   "commit.goToChild": { key: "log.goToChild", hint: "←" },
   "commit.goToParent": { key: "log.goToParent", hint: "→" },
@@ -99,10 +99,12 @@ const ITEMS = {
   "branch.trackedBranch": { key: "branches.trackedBranch", args: (ctx) => ({ upstream: ctx.upstream }), shown: (ctx) => Boolean(ctx.upstream) },
   "branch.pullRebase": { key: "branches.pullRebase", args: current },
   "branch.pullMerge": { key: "branches.pullMerge", args: current },
-  "branch.rename": { key: "branches.rename" },
+  "branch.rename": { key: "branches.rename", write: true },
   "branch.delete": { key: "log.delete", write: true, when: deleteBlock },
-  "remote.edit": { key: "branches.editRemote" },
-  "remote.remove": { key: "branches.removeRemote" },
+  "remote.edit": { key: "branches.editRemote", write: true },
+  "remote.remove": { key: "branches.removeRemote", write: true },
+  // A tag's menu (the VCS widget popup's Tags): Push Tag opens one "Push to <remote>" per remote.
+  "tag.push": { key: "refs.pushTag", write: true },
 
   // ---- the Branch tree's vertical toolbar
   "branches.hide": { key: "branches.hide" },
@@ -165,6 +167,7 @@ export const MENUS = {
     "branch.pullRebase", "branch.pullMerge", RULE, "branch.delete",
   ],
   remoteFolder: ["remote.edit", "remote.remove"],
+  tag: ["tag.push"],
   branchTools: [
     "branches.hide", "branches.new", "branches.updateSelected", "branches.delete", "branches.deleted", "branches.compareWithCurrent",
     "branches.showMine", "branches.fetch", "branches.favorite", "branches.navigateLog", "branches.settings", RULE,

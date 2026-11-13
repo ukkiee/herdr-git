@@ -13,6 +13,7 @@
 // it is there. Each gets (widget, target, cx): the widget part (view-vcs-widget.js) and
 //   vcs.* and ops.*: the pick ({ id, run? })
 //   branch.*:        { name, scope ("local" | "remote"), current, upstream }
+//   tag.*:           { name, scope: "tag" }
 
 import { div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
@@ -21,6 +22,9 @@ import { makeGit, repoRoot } from "./git.js";
 import { readHeads, popupRows } from "./git-heads.js";
 import { readOperation } from "./git-operation.js";
 import { smartCheckout } from "./view-smart.js";
+import { renameFrom } from "./view-rename-branch.js";
+import { pushBranch } from "./view-push.js";
+import { pushTagMenu } from "./view-tag.js";
 import { MOD, openDialog, answerMenu, dialogFrame, button, uiGlyph, iconButton, darkLook, notice, WindowedList } from "./ui.js";
 
 export const POPUP_ACTIONS = {
@@ -37,11 +41,16 @@ export const POPUP_ACTIONS = {
   },
   "branch.newFrom": (w, b, cx) => w.newBranch(b, cx),
   "branch.delete": (w, b, cx) => w.remove(b, cx),
+  "branch.rename": (w, b) => renameFrom(w.host, w.repo, b),
+  "branch.push": (w, b) => pushBranch(w.host, w.repo, b),
+  "branch.trackedBranch": (w, b, cx) => { if (b?.upstream) w.branchMenu({ name: b.upstream, scope: "remote", current: false }, null, cx); },
+  "tag.push": (w, b, cx) => pushTagMenu(w, b, null, cx),
 };
 export const popupHandles = (id) => Object.prototype.hasOwnProperty.call(POPUP_ACTIONS, id);
 
-// Which log-menus.js menu a branch row of the popup has, or null (a tag has none yet).
+// Which log-menus.js menu a branch or tag row of the popup has, or null.
 export function branchMenu(target) {
+  if (target?.scope === "tag") return "tag";
   if (target?.scope === "remote") return "remoteBranch";
   if (target?.scope === "local") return target.current ? "currentBranch" : "localBranch";
   return null;

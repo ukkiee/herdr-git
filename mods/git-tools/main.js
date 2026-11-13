@@ -64,6 +64,9 @@ import Reword from "./view-reword.js";
 import Squash from "./view-squash.js";
 import DropCommits from "./view-drop-commits.js";
 import Smart from "./view-smart.js";
+import Tag from "./view-tag.js";
+import RenameBranch from "./view-rename-branch.js";
+import Remote from "./view-remote.js";
 
 // When the system's language isn't known yet, how long to wait before each next ask.
 const ASK_AGAIN = [1000, 3000, 10000];
@@ -104,6 +107,9 @@ export const VIEWS = {
   "squash": Squash, // Squashed Commit Message dialog (view-squash.js openSquash)
   "drop-commits": DropCommits, // Drop Commits confirmation (view-drop-commits.js openDropCommits)
   "smart": Smart, // Smart dialog: local changes in the way of a request (view-smart.js openSmart)
+  "tag": Tag, // New Tag dialog (view-tag.js openTag)
+  "rename-branch": RenameBranch, // Rename Branch dialog (view-rename-branch.js openRenameBranch)
+  "remote": Remote, // Define Remote dialog and the Remove Remote question (view-remote.js)
 };
 
 // `mod.open:git-tools` (cmd-k) opens a copy with no view. No single app command both

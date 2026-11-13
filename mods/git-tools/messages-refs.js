@@ -2,6 +2,7 @@
 // (i18n.js), and the sentences git-refs.js words itself. Keys start with "refs.".
 
 export const en = {
+  "refs.ok": "OK",
   "refs.tagLabel": "Enter the name of new tag",
   "refs.tagging": "Creating tag…",
   "refs.renameTitle": "Rename Branch {name}",
@@ -13,7 +14,6 @@ export const en = {
   "refs.remoteUrl": "URL:",
   "refs.fetchRemote": "Fetch from the remote",
   "refs.editingRemote": "Updating remote…",
-  "refs.fetchingRemote": "Fetching {name}…",
   "refs.removeTitle": "Remove Remote",
   "refs.removeAsk": "Remove the remote {name}? Its remote branches are removed too.",
   "refs.remove": "Remove",
@@ -31,6 +31,7 @@ export const en = {
 };
 
 export const ko = {
+  "refs.ok": "확인",
   "refs.tagLabel": "새 태그 이름 입력",
   "refs.tagging": "태그를 만드는 중…",
   "refs.renameTitle": "브랜치 {name} 이름 변경",
@@ -42,7 +43,6 @@ export const ko = {
   "refs.remoteUrl": "URL:",
   "refs.fetchRemote": "원격으로 가져오기",
   "refs.editingRemote": "원격을 고치는 중…",
-  "refs.fetchingRemote": "{name}에서 가져오는 중…",
   "refs.removeTitle": "원격 제거",
   "refs.removeAsk": "원격 {name}을(를) 제거하시겠습니까? 원격 브랜치도 함께 제거됩니다.",
   "refs.remove": "제거",

@@ -41,6 +41,10 @@ import { undoHere, editMessageHere, dropHere, squashHere } from "./log-rewrite.j
 import { OPTIONS_KEY, readOptions, toggleOption, readArgs, graphMenu, displayMenu, columnsMenu } from "./log-options.js";
 import { appSetting, saveAppSetting } from "./app-files.js";
 import { readMe } from "./git-log-filter.js";
+import { newTagAt } from "./view-tag.js";
+import { renameFrom } from "./view-rename-branch.js";
+import { remoteDialog } from "./view-remote.js";
+import { pushUpTo, pushBranch } from "./view-push.js";
 
 // Column widths, px. The Commit list takes what the side columns leave and never gets
 // narrower than LIST_MIN: when the panel is too narrow, Commit details goes first, then
@@ -119,6 +123,14 @@ const ACTIONS = {
   "commit.squash": (host, commits, cx) => squashHere(host, commits, cx),
   "log.graphOptions": (host, _t, cx) => host.openOptions("graph", cx),
   "log.displayOptions": (host, _t, cx) => host.openOptions("display", cx),
+  "commit.newTag": (host, commits) => newTagAt(host, host.repo, commits[0]),
+  "commit.pushUpToHere": (host, commits) => pushUpTo(host, host.repo, commits[0]),
+  "branch.rename": (host, b) => renameFrom(host, host.repo, b),
+  "branch.push": (host, b) => pushBranch(host, host.repo, b),
+  // The tracked branch's own menu, as its row under Remote has it.
+  "branch.trackedBranch": (host, b, cx) => { const up = host.branches.data?.local.find((x) => x.name === b?.name)?.upstream; if (up) host.branches.menu({ kind: "branch", scope: "remote", key: `remote:${up}`, label: up, branch: { name: up } }, cx); },
+  "remote.edit": (host, r) => remoteDialog(host, host.repo, r?.remote, "edit"),
+  "remote.remove": (host, r) => remoteDialog(host, host.repo, r?.remote, "remove"),
 };
 
 // The bus event that tells every Log panel the options file changed.

@@ -8,7 +8,7 @@
 // The new tab opens before the old one closes: closing a space's last tab closes the space.
 
 import { spaces, panes, run } from "herdr";
-import { MOD } from "./ui.js";
+import { MOD, newTab } from "./ui.js";
 
 const escape = (text) => text.replace(/[.*+?^$()|[\]\\]/g, "\\$&");
 
@@ -30,6 +30,6 @@ export function openSpaceTab({ view, props = {}, name, kind = [], unlike = [] })
   const pattern = kind.length ? namePattern(kind) : null, other = unlike.length ? namePattern(unlike) : null;
   const fits = (text) => pattern.test(text) && !other?.test(text);
   const old = pattern ? space?.tabs?.find((tab) => tab.panes === 1 && ours.has(tab.id) && fits(tab.name ?? "")) : null;
-  run("tab.new", { name, mod: MOD, props: { ...props, view } });
+  newTab(name, { ...props, view });
   if (old) run("tab.close", { id: old.id });
 }

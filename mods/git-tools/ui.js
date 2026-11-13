@@ -13,6 +13,7 @@ import { LANGS, translator, systemLang, sentence } from "./i18n.js";
 import { fileIcon, folderIcon, darkColor } from "./icon-theme.js";
 import { iconShape, iconDraw } from "./ui-icons.js";
 import { menuWidth, dialogFills } from "./ui-size.js";
+import { whereFocused, newPanes, rememberTab } from "./focus-repo.js";
 import { en as consoleEn, ko as consoleKo } from "./messages-console.js";
 
 export const MOD = "git-tools";
@@ -94,12 +95,10 @@ export { sentence };
 // ---- where git runs
 
 // The focused pane's folder, else the space's (the order the shipped Changes panel uses),
-// and the machine to run git on (null: this computer).
+// and the machine to run git on (null: this computer). A tab this mod opened stands for
+// the repository it was opened on (focus-repo.js).
 export function location() {
-  const space = spaces().find((s) => s.active), f = focused();
-  const pane = f?.pane ? panes().find((p) => p.pane === f.pane) : null;
-  const on = f?.pane === null ? (f.terminal?.includes("/") ? f.terminal.split("/")[0] : null) : space?.machine ?? null;
-  return { folder: pane?.cwd || f?.cwd || space?.folder || null, on, space: space?.id ?? null };
+  return whereFocused({ space: spaces().find((s) => s.active), focused: focused(), panes: panes(), tabs: shared(TABS) ?? {} });
 }
 
 // ---- the main-git layout's nodes
@@ -381,7 +380,19 @@ export function openDialog(view, props = {}, { width = 560, height = 420 } = {})
 // would stay after the system's changed. A tab reads the system's language itself; a
 // `lang` the caller puts in props fixes it (for checking the other language).
 export function openTab(view, props = {}, name) {
-  run("tab.new", { name, mod: MOD, props: { ...props, view } });
+  newTab(name, { ...props, view });
+}
+
+// newTab(name, props): a tab in the shown space whose only pane is this mod with `props`,
+// recorded with its repository (props.root, props.on) so the panels follow that
+// repository while the tab has the focus (focus-repo.js).
+const TABS = "git-tools.tabs";
+export function newTab(name, props) {
+  const before = panes();
+  run("tab.new", { name, mod: MOD, props });
+  const after = panes();
+  const record = rememberTab(shared(TABS), newPanes(before, after), { root: props.root, on: props.on ?? null }, after);
+  if (JSON.stringify(record) !== JSON.stringify(shared(TABS) ?? {})) setShared(TABS, record);
 }
 
 const MENU_ROW = 28, MENU_PAD = 5, MENU_RULE = 9;

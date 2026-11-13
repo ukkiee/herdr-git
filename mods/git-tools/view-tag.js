@@ -16,25 +16,26 @@ import { makeGit } from "./git.js";
 import { createTag, readRemotes, pushTag } from "./git-refs.js";
 import { openDialog, openMenu, dialogFrame, button, close, askOwner, writeBlock, scrollText, sentence } from "./ui.js";
 
-// openTag({ root, on, commit, owner, lang }): owner: the opening panel's bus id.
-export function openTag({ root, on = null, commit, owner = null, lang } = {}) {
-  return openDialog("tag", { root, on, commit, owner, lang }, { width: 460, height: 190 });
+// openTag({ root, on, commit, owner, lang, who }): owner: the opening panel's bus id; who:
+// that panel's name key for the words when it doesn't answer ("ui.logPanel" by default).
+export function openTag({ root, on = null, commit, owner = null, lang, who = "ui.logPanel" } = {}) {
+  return openDialog("tag", { root, on, commit, owner, lang, who }, { width: 460, height: 190 });
 }
 
 // newTagAt(host, repo, commit): New Tag… on a commit row. host: the opening panel (its bus,
 // lang); repo: { root, on }; commit: { hash }. Nothing while another write runs.
-export function newTagAt(host, repo, commit) {
+export function newTagAt(host, repo, commit, who) {
   if (!repo || !commit?.hash || writeBlock(host, repo)) return;
-  openTag({ root: repo.root, on: repo.on, commit: commit.hash, owner: host.bus.id, lang: host.lang });
+  openTag({ root: repo.root, on: repo.on ?? null, commit: commit.hash, owner: host.bus.id, lang: host.lang, who });
 }
 
-// newTagAtHead(host, repo, cx): New Tag… with no commit picked (the VCS Operations popup):
-// on the commit HEAD is at now.
-export function newTagAtHead(host, repo, cx) {
+// newTagAtHead(host, repo, cx, who): New Tag… with no commit picked (the VCS Operations
+// popup): on the commit HEAD is at now. who: as openTag.
+export function newTagAtHead(host, repo, cx, who) {
   if (!repo || writeBlock(host, repo)) return;
   cx.spawn(async () => {
     const r = await makeGit(exec, repo.on ?? null).read(repo.root, ["rev-parse", "--verify", "--quiet", "HEAD^{commit}"]);
-    if (r.ok) newTagAt(host, repo, { hash: r.out.trim() });
+    if (r.ok) newTagAt(host, repo, { hash: r.out.trim() }, who);
   });
 }
 
@@ -68,6 +69,7 @@ export default class TagView {
     this.on = p.on ?? null;
     this.commit = typeof p.commit === "string" ? p.commit : "";
     this.owner = p.owner ?? null;
+    this.who = typeof p.who === "string" ? p.who : "ui.logPanel";
     this.waiting = false;
     this.error = null;
     this.handle = cx.focus_handle();
@@ -90,7 +92,7 @@ export default class TagView {
     if (!this.ready()) return;
     this.waiting = true; this.error = null;
     cx.notify();
-    askOwner(this, "tag-create", { root: this.root, on: this.on, name: this.name(), commit: this.commit }, "ui.logPanel", cx, (r) => {
+    askOwner(this, "tag-create", { root: this.root, on: this.on, name: this.name(), commit: this.commit }, this.who, cx, (r) => {
       this.waiting = false;
       if (r.ok) close(this.overlay);
       else this.error = sentence(this.t, r.msg, r.err);

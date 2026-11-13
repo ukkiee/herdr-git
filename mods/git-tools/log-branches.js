@@ -365,12 +365,12 @@ export default class LogBranches {
     const upstream = m.kind === "branch" && m.scope === "local" ? m.branch.upstream : null;
     const ctx = {
       name: b ? shortenMiddle(b.name, 30) : m.label, current: d?.head.branch ?? (d?.head.hash ? d.head.hash.slice(0, 7) : "HEAD"),
-      upstream: upstream ?? "", writing: host.writeBlock(), deleteBlock: b ? this.deleteBlock(b) : null,
+      upstream: upstream ?? "", writing: host.writeBlock(), deleteBlock: b ? this.deleteBlock(b) : null, scope: b?.scope ?? null,
     };
     const items = host.items(which, ctx);
     if (!items.length) return;
     const target = b ?? { remote: m.label };
-    const rows = items.map((it) => ({ label: tr(it.key, it.args), value: it.id, rule: it.rule, disabled: it.disabled, title: it.why ? (it.why.text ?? tr(it.why.key, it.why.args)) || undefined : undefined }));
+    const rows = items.map((it) => ({ label: tr(it.key, it.args), value: it.id, rule: it.rule, disabled: it.disabled, hint: it.hint ?? undefined, title: it.why ? (it.why.text ?? tr(it.why.key, it.why.args)) || undefined : undefined }));
     // While the menu is open its row shows no tooltip: it would cover the first item.
     this.menuRow = m.key;
     cx.spawn(async (cx) => {
@@ -502,6 +502,8 @@ export default class LogBranches {
             else if (e.key === "left") this.fold(true, cx);
             else if (e.key === "right") this.fold(false, cx);
             else if (e.key === "enter") this.activate(this.cursorRow(), cx);
+            // Rename… on the cursor's local branch, as its menu says.
+            else if (e.key === "f2") this.host.run("branch.rename", this.target(this.cursorRow()), cx);
             else return;
             cx.stop_propagation();
           })

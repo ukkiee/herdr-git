@@ -18,6 +18,7 @@ import { makeGit } from "./git.js";
 import { fetchAll } from "./git-branch.js";
 import { openPush } from "./view-push.js";
 import { openBranchNew } from "./view-branch-new.js";
+import { newTagAtHead } from "./view-tag.js";
 import { openResetHead } from "./view-reset-head.js";
 import { openConsole } from "./view-console.js";
 import { openStash } from "./view-stash.js";
@@ -43,6 +44,7 @@ export const VCS_ACTIONS = {
     const r = repoOf(panel);
     if (r) openBranchNew({ root: r.root, on: r.on ?? null, owner: panel.bus.id, lang: panel.lang });
   } },
+  "newTag": { run: (panel, cx, how) => newTagAtHead(panel, repoOf(panel), cx, WHO[how.kind]) },
   "resetHead": { run: (panel, _cx, how) => { const r = repoOf(panel); if (r) openResetHead({ root: r.root, on: r.on ?? null, owner: panel.bus.id, who: WHO[how.kind], lang: panel.lang }); } },
   "showLog": { run: () => run("layout.show", { id: LOG_NODE }) },
   "stash": { run: (panel, _cx, how) => { const r = repoOf(panel); if (r) openStash({ root: r.root, on: r.on ?? null, owner: panel.bus.id, lang: panel.lang, who: WHO[how.kind] }); } },

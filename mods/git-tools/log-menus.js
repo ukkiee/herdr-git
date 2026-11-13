@@ -17,7 +17,8 @@
 // ctx, as each screen hands it:
 //   commit menu:   { count (commits selected), current (branch name), writing, edit? (the
 //                  edit facts of the commits selected, git-rewrite.js readEditFacts) }
-//   branch menus:  { name, current, upstream, writing, deleteBlock }
+//   branch menus:  { name, current, upstream, writing, deleteBlock, scope (the row's:
+//                  "local" | "remote" | "head", a detached HEAD) }
 //   toolbars:      { loaded, name, writing, deleteBlock, fixed (a Log tab on a chosen folder) }
 
 import { editCheck } from "./rebase-plan.js";
@@ -99,7 +100,9 @@ const ITEMS = {
   "branch.trackedBranch": { key: "branches.trackedBranch", args: (ctx) => ({ upstream: ctx.upstream }), shown: (ctx) => Boolean(ctx.upstream) },
   "branch.pullRebase": { key: "branches.pullRebase", args: current },
   "branch.pullMerge": { key: "branches.pullMerge", args: current },
-  "branch.rename": { key: "branches.rename", write: true },
+  // F2 on the Branch tree's cursor row does the same (log-branches.js). A detached HEAD
+  // has no branch name to change.
+  "branch.rename": { key: "branches.rename", write: true, hint: "F2", shown: (ctx) => ctx.scope !== "head" },
   "branch.delete": { key: "log.delete", write: true, when: deleteBlock },
   "remote.edit": { key: "branches.editRemote", write: true },
   "remote.remove": { key: "branches.removeRemote", write: true },

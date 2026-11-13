@@ -91,6 +91,15 @@ const all = (name, ctx = {}, t = ko) => look(menuItems(name, everything, ctx), t
   assert.ok(!all("logTools", { fixed: true }).includes("숨기기"));
 }
 
+// Rename… carries its key, F2, and has no place on a detached HEAD's row.
+{
+  const rename = (menu, ctx) => menuItems(menu, everything, ctx).find((it) => it.id === "branch.rename");
+  assert.equal(rename("localBranch", { name: "f", scope: "local" })?.hint, "F2");
+  assert.equal(rename("currentBranch", { name: "main", scope: "local" })?.hint, "F2");
+  assert.equal(rename("headBranch", { name: "main", scope: "local" })?.hint, "F2");
+  assert.equal(rename("headBranch", { name: "a1b2c3d", scope: "head" }), undefined);
+}
+
 // Every name in the model is in both languages' tables.
 {
   for (const name of Object.keys(MENUS)) {

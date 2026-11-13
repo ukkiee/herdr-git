@@ -46,7 +46,8 @@ export const SERVE_ACTIONS = {
   "rewrite-reword": { work: "rewrite.rewording", run: (git, root, args, panel) => serveReword(git, root, args, panel) },
   "rewrite-squash": { work: "rewrite.squashing", run: (git, root, args, panel) => serveSquash(git, root, args, panel) },
   "rewrite-drop": { work: "rewrite.dropping", run: (git, root, args, panel) => serveDrop(git, root, args, panel) },
-  "smart-run": { work: "smart.working", run: (git, root, args, panel) => runSmartRequest(git, root, args, panel) },
+  "smart-run": { work: "smart.working", run: (git, root, args, panel) => runSmartRequest(git, root, { ...args, mode: "smart" }, panel) },
+  "smart-force": { work: "smart.forcing", run: (git, root, args, panel) => runSmartRequest(git, root, { ...args, mode: "force" }, panel) },
 };
 
 // serveAction(panel, e, cx) → true when the table has e.action and the panel now runs

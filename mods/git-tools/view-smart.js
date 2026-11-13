@@ -4,7 +4,8 @@
 // any other request Cancel and Smart <request>.
 //
 // The dialog doesn't write itself: it asks the screen copy that opened it (props.owner)
-// to run Smart or the forced checkout (serve-actions.js "smart-run" → runSmartRequest),
+// to run Smart or the forced checkout (serve-actions.js "smart-run" and "smart-force" →
+// runSmartRequest),
 // which tells what came of it: the Conflicts dialog when files are left in conflict, a
 // notification when the changes stay in the stash.
 //
@@ -86,8 +87,8 @@ function tell(r, { root, on, panel, who, type }) {
   if (conflicts) openConflicts({ root, on, owner: panel?.bus?.id ?? null, lang: panel?.lang, who, stash: stopped ? null : r.stash?.ref ?? null });
 }
 
-// runSmartRequest(git, root, args, panel): the serving copy's side of "smart-run"
-// (serve-actions.js). args: { request, mode: "smart" | "force", on?, who? } as plain JSON.
+// runSmartRequest(git, root, args, panel): the serving copy's side of "smart-run" and
+// "smart-force" (serve-actions.js, which sets the mode). args: { request, mode: "smart" | "force", on?, who? } as plain JSON.
 // panel: the serving copy ({ bus, lang, t, copy? }). A request that stopped, or whose
 // changes came back in conflict, counts as done: the person goes on from there.
 export async function runSmartRequest(git, root, args, panel) {
@@ -172,7 +173,7 @@ export default class SmartView {
     if (this.running || !this.root || !this.request || this.writing()) return;
     this.running = mode; this.error = null;
     cx.notify();
-    askOwner(this, "smart-run", { root: this.root, on: this.on, request: this.request, mode, who: this.who }, this.who, cx, (r) => {
+    askOwner(this, mode === "force" ? "smart-force" : "smart-run", { root: this.root, on: this.on, request: this.request, who: this.who }, this.who, cx, (r) => {
       this.running = null;
       if (r.ok) close(this.overlay);
       else this.error = sentence(this.t, r.msg, r.err) || this.t("ui.gitFailed");

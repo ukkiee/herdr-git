@@ -27,7 +27,8 @@
 
 import { View, div } from "gpui-kit";
 import { props, nextCommand, theme } from "herdr";
-import { subscribe, lockSide, LOCK_BEAT, UNKNOWN, openCommitPanel, close, speakAs, fixedLang, rememberedLang, rememberLang, readSystemLang } from "./ui.js";
+import { subscribe, lockSide, LOCK_BEAT, UNKNOWN, openCommitPanel, close, speakAs, fixedLang, rememberedLang, rememberLang, readSystemLang, claimTab, releaseTab, tabRecorded } from "./ui.js";
+import { isTabScreen } from "./focus-repo.js";
 import { translator } from "./i18n.js";
 import { warmIcons } from "./icon-theme.js";
 import Commit from "./view-commit.js";
@@ -42,6 +43,43 @@ import IconSheet from "./view-icon-sheet.js";
 import LogButton from "./view-log-button.js";
 import DeletedBranches from "./view-deleted-branches.js";
 import Files from "./view-files.js";
+import { recordWith } from "./git.js";
+import { recordGit } from "./app-files.js";
+import Console from "./view-console.js";
+import CompareFiles, { FileDiff, FileView } from "./view-compare-files.js";
+import CompareBranches from "./view-compare-branches.js";
+import Conflicts from "./view-conflicts.js";
+import Reset from "./view-reset.js";
+import ResetHead from "./view-reset-head.js";
+import RevisionTree from "./view-revision-tree.js";
+import HistoryTab from "./view-history-tab.js";
+import Patch from "./view-patch.js";
+import GoToHash from "./view-go-to-hash.js";
+import MergeRevisions from "./view-merge-revisions.js";
+import Stash from "./view-stash.js";
+import Unstash from "./view-unstash.js";
+import VcsWidget from "./view-vcs-widget.js";
+import VcsPopup from "./view-vcs-popup.js";
+import VcsOps, { vcsOpsCommand } from "./view-vcs-ops.js";
+import Reword from "./view-reword.js";
+import Squash from "./view-squash.js";
+import DropCommits from "./view-drop-commits.js";
+import Smart from "./view-smart.js";
+import Tag from "./view-tag.js";
+import RenameBranch from "./view-rename-branch.js";
+import Remote from "./view-remote.js";
+import Pull from "./view-pull.js";
+import UpdateProject from "./view-update-project.js";
+import UpdateInfo from "./view-update-info.js";
+import Extract from "./view-extract.js";
+import Merge from "./view-merge.js";
+import Rebase from "./view-rebase.js";
+import InteractiveRebase from "./view-interactive-rebase.js";
+import NewWorktree from "./view-worktree.js";
+import CheckoutRef from "./view-checkout-ref.js";
+import CreatePatch from "./view-create-patch.js";
+import ApplyPatch from "./view-apply-patch.js";
+import Remotes from "./view-remotes.js";
 
 // When the system's language isn't known yet, how long to wait before each next ask.
 const ASK_AGAIN = [1000, 3000, 10000];
@@ -60,6 +98,43 @@ export const VIEWS = {
   "icon-sheet": IconSheet, // every Icon theme icon, for checking: tab.new { mod, props } only
   "deleted-branches": DeletedBranches, // Deleted Branches dialog
   "files": Files, // Files panel: the `files` block of the main-git layout
+  "console": Console, // Git console tab: tab.new { mod, props } (view-console.js openConsole)
+  "compare-files": CompareFiles, // working tree, local and version compare tabs (space-tabs.js)
+  "compare-diff": FileDiff, // one file between two revisions: tab.new { mod, props }
+  "compare-file": FileView, // one file read only: tab.new { mod, props }
+  "compare-branches": CompareBranches, // branch compare tab (space-tabs.js)
+  "conflicts": Conflicts, // Conflicts dialog (view-conflicts.js openConflicts)
+  "reset": Reset, // Git Reset dialog (view-reset.js openReset)
+  "reset-head": ResetHead, // Reset Head dialog (view-reset-head.js openResetHead)
+  "revision-tree": RevisionTree, // repository at revision tab (space-tabs.js)
+  "history": HistoryTab, // history up to here tab (space-tabs.js)
+  "patch": Patch, // Patch File Settings dialog
+  "go-to-hash": GoToHash, // Go to Hash/Branch/Tag popup
+  "merge-revisions": MergeRevisions, // Merge Revisions dialog (Resolve Manually in the Conflicts dialog)
+  "stash": Stash, // Stash dialog, and the Drop and Clear questions (view-stash.js openStash, openStashConfirm)
+  "unstash": Unstash, // Unstash dialog (view-unstash.js openUnstash)
+  "vcs-widget": VcsWidget, // VCS widget: the `git-vcs-widget` block left of the Git button
+  "vcs-popup": VcsPopup, // VCS widget popup, and the question before an abort
+  "vcs-ops": VcsOps, // VCS Operations popup (cmd-shift-v, view-vcs-ops.js vcsOpsCommand)
+  "reword": Reword, // Edit Commit Message dialog (view-reword.js openReword)
+  "squash": Squash, // Squashed Commit Message dialog (view-squash.js openSquash)
+  "drop-commits": DropCommits, // Drop Commits confirmation (view-drop-commits.js openDropCommits)
+  "smart": Smart, // Smart dialog: local changes in the way of a request (view-smart.js openSmart)
+  "tag": Tag, // New Tag dialog (view-tag.js openTag)
+  "rename-branch": RenameBranch, // Rename Branch dialog (view-rename-branch.js openRenameBranch)
+  "remote": Remote, // Define Remote dialog and the Remove Remote question (view-remote.js)
+  "pull": Pull, // Pull dialog (view-pull.js openPull)
+  "update-project": UpdateProject, // Update Project dialog (view-update-project.js openUpdateProject)
+  "update-info": UpdateInfo, // Update Info tab: what an update brought in (view-update-info.js openUpdateInfo)
+  "extract": Extract, // Extract Selected Changes dialog, and the first-commit question (view-extract.js openExtract)
+  "merge": Merge, // Merge dialog (view-merge.js openMerge)
+  "rebase": Rebase, // Rebase dialog (view-rebase.js openRebase)
+  "interactive-rebase": InteractiveRebase, // Rebasing Commits dialog (view-interactive-rebase.js openInteractiveRebase)
+  "worktree": NewWorktree, // New Worktree dialog (view-worktree.js openNewWorktree)
+  "checkout-ref": CheckoutRef, // Checkout Tag or Revision popup (view-checkout-ref.js checkoutRefFrom)
+  "create-patch": CreatePatch, // Create Patch dialog on local changes (view-create-patch.js createPatchFrom)
+  "apply-patch": ApplyPatch, // Apply Patch dialog, from a file or the clipboard (view-apply-patch.js openApplyPatch)
+  "remotes": Remotes, // Git Remotes dialog (view-remotes.js openRemotes)
 };
 
 // `mod.open:git-tools` (cmd-k) opens a copy with no view. No single app command both
@@ -90,7 +165,16 @@ export default class GitTools extends View {
     // Here, not in a screen's first render: the copies share the module, so only the
     // first copy pays for it.
     warmIcons();
+    // Every runner records its writes in the Git console (git.js). Each copy installs the
+    // same function, before its screen can run git.
+    recordWith(recordGit);
     this.say(() => this.screen.init(p, cx));
+    // A tab's screen records its pane with its repository, so the panels follow that
+    // repository while the tab has the focus (ui.js claimTab). Again from render while
+    // it has no record: the pane may be known only once the tab has the focus.
+    this.props = p;
+    this.tabPane = null;
+    this.claimTab(cx);
     if (!fixed) this.askLang(cx, 0);
     // A lock this copy holds stays alive only while it beats (lock.js STALE). Writes
     // nothing while the copy holds none.
@@ -98,7 +182,9 @@ export default class GitTools extends View {
     cx.spawn(async (cx) => {
       for (;;) {
         const name = await nextCommand();
-        this.say(() => this.screen.command?.(name, cx));
+        // cmd-shift-v reaches every shown copy; the Log or Commit panel opens the popup.
+        if (name === "vcs-ops") this.say(() => vcsOpsCommand(this.screen, p.view, cx, { folder: p.folder ?? null }));
+        else this.say(() => this.screen.command?.(name, cx));
         cx.notify();
       }
     });
@@ -158,7 +244,18 @@ export default class GitTools extends View {
       this.turning = true;
       cx.timer.after(0, (cx) => { this.turning = false; this.turnTo(rememberedLang(), cx); });
     }
+    if (isTabScreen(this.props) && !tabRecorded(this.tabPane)) this.claimTab(cx);
     return this.say(() => this.screen.render(cx));
+  }
+
+  // In a timer: the shared value can't be set from inside render.
+  claimTab(cx) {
+    if (this.claiming || !isTabScreen(this.props)) return;
+    this.claiming = true;
+    cx.timer.after(0, () => {
+      this.claiming = false;
+      this.tabPane = claimTab(this.props) ?? this.tabPane;
+    });
   }
 
   async close(cx) {
@@ -167,6 +264,7 @@ export default class GitTools extends View {
     this.events.stop(UNKNOWN);
     // First and synchronous: the 250 ms may run out in the screen's own close.
     this.locks.releaseAll();
+    releaseTab(this.tabPane);
     await this.say(() => this.screen.close?.(cx));
   }
 }

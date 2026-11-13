@@ -18,14 +18,14 @@
 // repository that opted in (`git config --local gittools.scripted true`) or a dialog
 // opened from a Log tab on a chosen folder (`chosen`).
 
-import { div, svg } from "gpui-kit";
+import { div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { exec, theme } from "herdr";
 import { makeGit } from "./git.js";
 import { readDeletedBranches, restoreBranches } from "./git-branch.js";
 import { formatTime } from "./i18n.js";
 import { checkState } from "./tree.js";
-import { openDialog, dialogFrame, button, checkbox, row, notice, errorStrip, scrollText, icon, close, scriptedRepo, sentence, WindowedList, askOwner, serveRequest, writeBlock } from "./ui.js";
+import { tip, openDialog, dialogFrame, button, checkbox, row, notice, errorStrip,scrollText, uiGlyph, darkLook, close, scriptedRepo, sentence, WindowedList, askOwner, serveRequest, writeBlock } from "./ui.js";
 
 const SHORT = 7; // a hash as the Branch tree's HEAD row shows it
 
@@ -196,13 +196,13 @@ export default class DeletedBranchesView {
       .child(checkbox(`deleted-branch-check-${i}`, this.picked.has(k), t, {
         disabled: this.running || off, onClick: (_e, cx) => { this.at = i; this.toggle(b); cx.notify(); },
       }))
-      .child(svg(icon("branch-item")).size(13).flex_none().text_color(off ? t.dim : t.ansi2))
+      .child(uiGlyph("branch-item", { dark: darkLook(t.background), disabled: off }).text_color(t.dim))
       .child(div().flex_none().max_w("40%").truncate().text_color(off ? t.dim : t.foreground).child(b.name))
       .child(div().flex_none().text_size(12).text_color(t.dim).child(b.hash.slice(0, SHORT)))
       .child(div().flex_1().min_w(0).truncate().text_size(12).text_color(off ? t.ansi3 : t.muted).child(off ? why : b.subject))
       .child(div().flex_none().text_size(12).text_color(t.dim).whitespace_nowrap().child(formatTime(b.time, this.lang)));
     // The reason takes the subject's place on a row that can't be restored.
-    if (off) el = el.opacity(0.6).tooltip(b.subject || why);
+    if (off) el = tip(el.opacity(0.6), b.subject || why);
     return el;
   }
 

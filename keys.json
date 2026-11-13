@@ -1,6 +1,7 @@
 {
   "layout:main-git": {
     "cmd-k": "mod.open:git-tools",
-    "cmd-shift-g": "layout.toggle:git-log"
+    "cmd-shift-g": "layout.toggle:git-log",
+    "cmd-shift-v": "git-tools.vcs-ops"
   }
 }

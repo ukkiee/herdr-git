@@ -11,10 +11,18 @@ import { makeCopy, post } from "./bus.js";
 import { makeLocks, BEAT, sameRepo, repoName } from "./lock.js";
 import { LANGS, translator, systemLang, sentence } from "./i18n.js";
 import { fileIcon, folderIcon, darkColor } from "./icon-theme.js";
+import { iconShape, iconDraw } from "./ui-icons.js";
+import { menuWidth, dialogFills, dialogRoom } from "./ui-size.js";
+import { whereFocused, newPanes, rememberTab, registerTab, forgetTab } from "./focus-repo.js";
+import { en as consoleEn, ko as consoleKo } from "./messages-console.js";
 
 export const MOD = "git-tools";
 export const ROW = 24;
-export const icon = (name) => `mods/${MOD}/icons/${name}.svg`;
+// The shape of a named icon (ui-icons.js), for svg(): drawn in the text color. A colored
+// icon goes through uiGlyph or iconButton instead.
+export const icon = (name) => iconShape(name);
+// The size buttons and menus draw their icons at: the icons' own 16-pixel grid.
+export const ICON = 16;
 
 // ---- language
 
@@ -87,12 +95,10 @@ export { sentence };
 // ---- where git runs
 
 // The focused pane's folder, else the space's (the order the shipped Changes panel uses),
-// and the machine to run git on (null: this computer).
+// and the machine to run git on (null: this computer). A tab this mod opened stands for
+// the repository it was opened on (focus-repo.js).
 export function location() {
-  const space = spaces().find((s) => s.active), f = focused();
-  const pane = f?.pane ? panes().find((p) => p.pane === f.pane) : null;
-  const on = f?.pane === null ? (f.terminal?.includes("/") ? f.terminal.split("/")[0] : null) : space?.machine ?? null;
-  return { folder: pane?.cwd || f?.cwd || space?.folder || null, on, space: space?.id ?? null };
+  return whereFocused({ space: spaces().find((s) => s.active), focused: focused(), panes: panes(), tabs: shared(TABS) ?? {} });
 }
 
 // ---- the main-git layout's nodes
@@ -363,8 +369,11 @@ export function serveRequest(screen, e, label, work, cx) {
 // props.lang: the dialog's language, so it draws in it from the start. Pass the
 // opener's (`lang: this.lang`) from a click handler or a task: there the opener isn't
 // known here, and the system's language as last read is used.
+// width, height: the room the dialog gets. A form draws its own frame only as tall as it
+// needs inside it (dialogFrame), so the height is a ceiling there: give what the form
+// needs without an error, and the room for its error text is added (ui-size.js dialogRoom).
 export function openDialog(view, props = {}, { width = 560, height = 420 } = {}) {
-  return openOverlay({ mod: MOD, kind: "dialog", modal: true, width, height, props: { ...props, view, lang: openingLang(props.lang) } });
+  return openOverlay({ mod: MOD, kind: "dialog", modal: true, frame: "none", width, height: dialogRoom(view, height), props: { ...props, view, lang: openingLang(props.lang) } });
 }
 
 // A tab in the shown space whose only pane is one of our screens. Its props are saved
@@ -372,7 +381,41 @@ export function openDialog(view, props = {}, { width = 560, height = 420 } = {})
 // would stay after the system's changed. A tab reads the system's language itself; a
 // `lang` the caller puts in props fixes it (for checking the other language).
 export function openTab(view, props = {}, name) {
-  run("tab.new", { name, mod: MOD, props: { ...props, view } });
+  newTab(name, { ...props, view });
+}
+
+// newTab(name, props): a tab in the shown space whose only pane is this mod with `props`,
+// recorded with its repository (props.root, props.on) so the panels follow that
+// repository while the tab has the focus (focus-repo.js). The record here is a first try:
+// panes() may not show the new pane yet, and the tab's screen records itself (claimTab).
+const TABS = "git-tools.tabs";
+
+// claimTab(props): a tab's screen records its own pane with its repository. Returns the
+// pane recorded, or null (not a tab's screen, or its pane not known yet).
+export function claimTab(p) {
+  const got = registerTab(shared(TABS), { props: p, focused: focused(), panes: panes() });
+  if (got) setShared(TABS, got.record);
+  return got?.pane ?? null;
+}
+
+// releaseTab(pane): a tab's screen that closes takes its pane out of the record.
+export function releaseTab(pane) {
+  const next = forgetTab(shared(TABS), pane);
+  if (next) setShared(TABS, next);
+}
+
+// tabRecorded(pane) → whether the record has `pane`.
+export function tabRecorded(pane) {
+  const record = shared(TABS);
+  return Boolean(pane && record && typeof record === "object" && record[pane]);
+}
+
+export function newTab(name, props) {
+  const before = panes();
+  run("tab.new", { name, mod: MOD, props });
+  const after = panes();
+  const record = rememberTab(shared(TABS), newPanes(before, after), { root: props.root, on: props.on ?? null }, after);
+  if (JSON.stringify(record) !== JSON.stringify(shared(TABS) ?? {})) setShared(TABS, record);
 }
 
 const MENU_ROW = 28, MENU_PAD = 5, MENU_RULE = 9;
@@ -388,13 +431,17 @@ const MENU_ROW = 28, MENU_PAD = 5, MENU_RULE = 9;
 // press inside a dialog is somewhere outside the dialog: a dialog passes `at`.
 // lang: the menu's language, as for openDialog (pass `lang: this.lang`). Labels are the
 // opener's to word; the menu screen draws them as given.
+// width: the narrowest the menu is. It widens to its longest label (ui-size.js menuWidth),
+// so a label with a long branch name still shows what it does.
 export function openMenu(bus, items, { width = 220, at, lang } = {}) {
   // Unique among all copies: every opener sees every answer and takes the one with its key.
   const key = `menu-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   const height = MENU_PAD * 2 + items.length * MENU_ROW + items.filter((it, i) => it.rule && i > 0).length * MENU_RULE;
   const answer = bus.wait(key);
+  menuShown(key, true);
+  answer.then(() => menuShown(key, false), () => menuShown(key, false));
   const spot = at && Number.isFinite(at.x) && Number.isFinite(at.y) ? { x: at.x, y: at.y } : undefined;
-  openOverlay({ mod: MOD, kind: "popup", width, height, ...(spot ? { at: spot } : {}), props: { view: "menu", key, items, lang: openingLang(lang) } });
+  openOverlay({ mod: MOD, kind: "popup", width: menuWidth(items, { min: width }), height, ...(spot ? { at: spot } : {}), props: { view: "menu", key, items, lang: openingLang(lang) } });
   return answer;
 }
 
@@ -418,6 +465,26 @@ export function answerMenu(bus, key, value) {
 }
 
 export const menuMetrics = { row: MENU_ROW, pad: MENU_PAD, rule: MENU_RULE };
+
+// The menus openMenu has open, by key. Module state, so shared by every copy of this
+// source: while any is open, no screen draws a tooltip. The pointer is still resting on
+// the element that opened the menu, and its tooltip would sit over the menu's first items
+// (Herdr has no call that hides a tooltip; leaving it off the element does).
+const openMenus = new Set();
+// The count goes in a shared value too: setting it redraws every copy, so the opener
+// drops its tooltip as the menu opens and gets it back once it closes.
+const MENUS = "git-tools.menus";
+function menuShown(key, open) {
+  if (open) openMenus.add(key);
+  else openMenus.delete(key);
+  if (shared(MENUS) !== openMenus.size) setShared(MENUS, openMenus.size);
+}
+
+// tip(el, text) → el with the tooltip `text`, unless a menu is open or text is empty.
+// Screens attach every tooltip with it (ui-ids.test.mjs); the menu screens draw their own.
+export function tip(el, text) {
+  return text && !openMenus.size ? el.tooltip(text) : el;
+}
 
 // ---- small parts
 
@@ -469,15 +536,25 @@ export function folderGlyph(name, { open = false, size = 14 } = {}) {
   return image(folderIcon(name.slice(name.lastIndexOf("/") + 1), { open })).size(size).flex_none();
 }
 
-// A square toolbar button drawing icons/<name>.svg. The press stops here so a row or a
-// draggable bar underneath doesn't also get it.
+// A named icon (ui-icons.js) as an element: in the file's colors, or its shape in the
+// surrounding text color for the gray ones and for `disabled` (one gray, like a turned-off
+// button). `dark`: the background is dark, so a _dark file shows where there is one; pass
+// darkLook() of what the icon sits on.
+export function uiGlyph(name, { dark = false, disabled = false, size = ICON } = {}) {
+  const { path, tint } = iconDraw(name, { dark, disabled });
+  return (tint ? svg(path) : image(path)).size(size).flex_none();
+}
+
+// A square toolbar button drawing a named icon (ui-icons.js) at 16 pixels. The press stops
+// here so a row or a draggable bar underneath doesn't also get it. The button sits on the
+// panel's background (t.background), which picks the dark files.
 export function iconButton(id, name, t, { title, disabled = false, active = false, busy = false, size = 24, onClick } = {}) {
   let el = div().id(id).size(size).flex_none().flex().items_center().justify_center().rounded(5)
     .text_color(disabled ? t.dim : active ? t.foreground : t.muted)
     .when(active, (el) => el.bg(t.selected))
     .when(disabled, (el) => el.opacity(0.5))
-    .child(busy ? svg(icon("spinner")).size(15).spin(900) : svg(icon(name)).size(15));
-  if (title) el = el.tooltip(title);
+    .child(busy ? svg(icon("spinner")).size(15).spin(900) : uiGlyph(name, { dark: darkLook(t.background), disabled, size: Math.min(ICON, size - 2) }));
+  el = tip(el, title);
   if (disabled) return el;
   return el.cursor_pointer().hover((s) => s.bg(t.hover).text_color(t.foreground))
     .on_mouse_down("left", stop)
@@ -491,7 +568,7 @@ export function checkbox(id, state, t, { disabled = false, onClick } = {}) {
     .border_color(s === "none" ? t.input : t.accent)
     .when(s !== "none", (el) => el.bg(t.accent))
     .when(disabled, (el) => el.opacity(0.5))
-    .when(s !== "none", (el) => el.child(svg(icon(s === "all" ? "check" : "minus")).size(11).text_color(t.accent_foreground)));
+    .when(s !== "none", (el) => el.child(svg(icon(s === "all" ? "checkbox-all" : "checkbox-some")).size(11).text_color(t.accent_foreground)));
   if (disabled) return el;
   return el.cursor_pointer().on_mouse_down("left", stop)
     .on_click((e, cx) => { cx.stop_propagation(); onClick?.(e, cx); });
@@ -506,11 +583,32 @@ export function button(id, label, t, { kind = "plain", disabled = false, busy = 
     .text_color(disabled ? t.dim : primary ? t.solid_foreground : t.foreground)
     .when(busy, (el) => el.child(svg(icon("spinner")).size(12).spin(900)))
     .child(label);
-  if (title) el = el.tooltip(title);
+  el = tip(el, title);
   if (disabled || busy) return el;
   return el.cursor_pointer().hover((s) => s.opacity(0.88))
     .on_mouse_down("left", stop)
     .on_click((e, cx) => { cx.stop_propagation(); onClick?.(e, cx); });
+}
+
+// progressBar(id, t, { label, title, state }) → the strip at the bottom of a panel while
+// a git write runs there: the write's name ("Updating…") over a bar that slides back and
+// forth, since how long a fetch or a pull takes isn't known. title: the tooltip (the
+// whole sentence when the name is cut). state: an object the screen keeps ({}), where the
+// strip remembers its measured width; the slide runs natively, render isn't called for it.
+const SLIDE = 1600;
+export function progressBar(id, t, { label, title, state }) {
+  const width = state?.width ?? 240, piece = Math.max(40, Math.round(width * 0.3));
+  return v_flex().id(id).flex_none().w_full().min_w(0).px(10).pt(6).pb(8).gap(5).border_t(1).border_color(t.border)
+    .when(Boolean(label), (el) => el.child(div().id(`${id}-label`).w_full().min_w(0).truncate().text_size(12).text_color(t.foreground)
+      .map((el) => tip(el, title)).child(label ?? "")))
+    .child(div().id(`${id}-track`).relative().w_full().h(4).rounded(2).bg(t.border).overflow_hidden()
+      .on_size_change((size, cx) => {
+        if (!state || size.width === state.width) return;
+        state.width = size.width;
+        cx.notify();
+      })
+      .child(div().absolute().top(0).h(4).w(piece).rounded(2).bg(t.accent)
+        .loop("left", { from: 0, to: Math.max(0, width - piece), period: SLIDE })));
 }
 
 // Centered words for an empty, loading or not-a-repository state. t: the theme.
@@ -536,11 +634,28 @@ export function scrollText(id, text, t, { maxHeight, color } = {}) {
     .child(Scrollbar.vertical(id).absolute().inset_0());
 }
 
+// Shows the shown space's Git console tab, or opens one: the strip's link. The same tab
+// view-console.js openConsole finds (a tab named Console | 콘솔 whose only pane is ours);
+// written here because view-console.js imports this file.
+const CONSOLE_NAMES = new Set([consoleEn["console.title"], consoleKo["console.title"]]);
+function showConsole() {
+  const space = spaces().find((s) => s.active);
+  const ours = new Set(panes().filter((p) => p.mod === MOD).map((p) => p.tab));
+  const found = space?.tabs?.find((tab) => tab.panes === 1 && ours.has(tab.id) && CONSOLE_NAMES.has(tab.name));
+  if (found) run("tab.select", { id: found.id });
+  else run("tab.new", { name: words()("console.title"), mod: MOD, props: { view: "console" } });
+}
+
 // git's own words under a panel or inside a dialog, with a way to dismiss them.
-// What was read before stays on screen above it.
+// What was read before stays on screen above it. "View in Console" opens the Git
+// console, where a failed write's whole command and output are kept (git.js records it).
 export function errorStrip(id, text, t, onDismiss) {
   return h_flex().id(id).w_full().flex_none().max_h(120).gap(8).px(10).py(6).items_start().border_t(1).border_color(t.border).bg(t.raised)
     .child(div().flex_1().min_w(0).child(scrollText(`${id}-text`, text, t, { maxHeight: 108 })))
+    .child(div().id(`${id}-console`).flex_none().text_size(12).text_color(t.accent).cursor_pointer().hover((s) => s.underline())
+      .on_mouse_down("left", stop)
+      .on_click((_e, cx) => { cx.stop_propagation(); showConsole(); })
+      .child(words()("vcs-ops.viewInConsole")))
     .when(Boolean(onDismiss), (el) => el.child(iconButton(`${id}-close`, "x", t, { title: words()("ui.dismiss"), size: 20, onClick: onDismiss })));
 }
 
@@ -560,15 +675,29 @@ export function noteBar(id, text, t, { action, onDismiss } = {}) {
 
 // The frame of a dialog: title and close, the body, the buttons. Esc is the screen's
 // own to handle (track_focus + on_key_down on the element this returns).
-export function dialogFrame(id, title, t, { body, footer = [], note, onClose } = {}) {
-  return v_flex().id(id).size_full().min_h(0).bg(t.popover).text_color(t.foreground).text_size(13)
+//
+// openDialog opens every dialog without Herdr's frame, and this draws it: a dialog's
+// overlay keeps the height it was opened with, so with Herdr's frame a form shorter than
+// that showed empty space under its buttons. A form's card is as tall as what it holds,
+// centered in the overlay's room (the room around it is see-through and, the dialog
+// being modal, takes no click). A dialog built around a list fills the room
+// (ui-size.js dialogFills); the Merge Revisions dialog's questions ("mr-…") sit in a
+// card of their own and draw no second one. `width` narrows a form's card: a question
+// drawn over a larger dialog (its room is that dialog's whole overlay).
+export function dialogFrame(id, title, t, { body, footer = [], note, onClose, width } = {}) {
+  const fills = dialogFills(id), inner = String(id).startsWith("mr-");
+  const frame = v_flex().id(id).min_h(0).when(width == null, (el) => el.w_full()).when(width != null, (el) => el.w(width).max_w_full()).bg(t.popover).text_color(t.foreground).text_size(13)
+    .when(fills, (el) => el.h_full())
+    .when(!inner, (el) => el.rounded(10).border_1().border_color(t.border).shadow_lg().overflow_hidden())
     .child(h_flex().h(40).flex_none().px(14).gap(8).items_center().border_b(1).border_color(t.border)
       .child(div().flex_1().min_w(0).truncate().font_semibold().child(title))
       .child(iconButton(`${id}-close`, "x", t, { title: words()("ui.close"), onClick: onClose ?? (() => {}) })))
-    .child(div().flex_1().min_h(0).child(body))
+    .child(fills ? div().flex_1().min_h(0).child(body) : div().w_full().flex_none().child(body))
     .child(h_flex().flex_none().px(14).py(10).gap(8).items_center().border_t(1).border_color(t.border)
       .child(div().flex_1().min_w(0).truncate().text_size(12).text_color(t.muted).child(note ?? ""))
       .children(footer));
+  if (fills) return frame;
+  return v_flex().id(`${id}-room`).size_full().min_h(0).items_center().justify_center().child(frame);
 }
 
 export const close = (overlay) => { if (overlay) closeOverlay(overlay); };

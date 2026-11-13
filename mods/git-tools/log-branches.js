@@ -1,6 +1,12 @@
-// Branch tree: the left column of the Log panel. A vertical toolbar (New Branch, Delete,
-// Deleted Branches, Fetch, Expand All, Collapse All), a filter input, and the tree: HEAD, then Local and
-// Remote with "/" in a name making folders.
+// Branch tree: the left column of the Log panel. A vertical toolbar (log-menus.js
+// branchTools), a filter input, and the tree: HEAD, then Local, Remote and Tags. Branches
+// show in branch-order.js order (the current one, the favorites, then by name), with
+// "/" in a name making folders unless the ⋮ settings say otherwise. A favorite's icon is
+// a star; on another branch's row the icon turns to an empty star under the pointer, and
+// a click on it marks the branch (git-branch.js setFavorite).
+//
+// The ⋮ settings (single click, Group by Directory, Show Tags), Show My Branches and
+// Hide Git Branches are kept in the app's settings file under SETTINGS_KEY.
 //
 // A part of the Log panel: `host` is described at the top of log-list.js. Clicking a
 // branch calls host.setBranch(name, cx) (the same one again: host.setBranch(null, cx)).
@@ -18,19 +24,50 @@
 //
 // command(name, cx) takes `branches-*` names (listed there) for keys and scripts.
 
-import { div, svg } from "gpui-kit";
+import { div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { theme } from "herdr";
-import { readBranches, checkout, deleteBranch } from "./git-branch.js";
+import { readBranches, deleteBranch, readFavorites, setFavorite, readMyBranches, readTags } from "./git-branch.js";
+import { isFavorite, nextFavorites, orderBranches, orderTreeRows, refOf as fullRef, treeSettings, treeSettingsMenu, toggleTreeSetting } from "./branch-order.js";
+import { appSetting, saveAppSetting } from "./app-files.js";
+import { smartCheckout } from "./view-smart.js";
+import { readOperation } from "./git-operation.js";
 import { shortenMiddle } from "./git-log.js";
 import { buildRows, folderKeys, parentIndex } from "./tree.js";
 import { openBranchNew, openBranchDelete } from "./view-branch-new.js";
 import { openDeletedBranches } from "./view-deleted-branches.js";
-import { icon, row, iconButton, notice, broadcast, openMenu, sentence, WindowedList } from "./ui.js";
+import { tip, uiGlyph, darkLook, ICON, row, iconButton, notice, broadcast, openMenu, sentence, WindowedList } from "./ui.js";
 
 const GROUPS = [["local", "log.local"], ["remote", "log.remote"]];
 const INDENT = 12;
 const FILTER_COMMAND = "branches-filter:";
+const SETTINGS_KEY = "branchTree";
+// The vertical toolbar's width: all that shows of the column while it is hidden.
+export const TOOLS_WIDTH = 30;
+
+// The vertical toolbar's buttons, by item (log-menus.js branchTools): element id and icon.
+// Written out as calls so ui-icons.test.mjs sees every icon name. An item missing here
+// draws the settings icon: an unknown name would throw in render.
+const TOOL_BUTTONS = {
+  "branches.hide": (t, o) => iconButton("log-branch-hide", "hide-branches", t, o),
+  "branches.new": (t, o) => iconButton("log-branch-new", "plus", t, o),
+  "branches.updateSelected": (t, o) => iconButton("log-branch-update", "update", t, o),
+  "branches.delete": (t, o) => iconButton("log-branch-delete", "branch-delete", t, o),
+  "branches.deleted": (t, o) => iconButton("log-branch-deleted", "restore", t, o),
+  "branches.compareWithCurrent": (t, o) => iconButton("log-branch-compare", "compare", t, o),
+  "branches.showMine": (t, o) => iconButton("log-branch-mine", "my-branches", t, o),
+  "branches.fetch": (t, o) => iconButton("log-branch-fetch", "fetch", t, o),
+  "branches.favorite": (t, o) => iconButton("log-branch-favorite", "favorite", t, o),
+  "branches.navigateLog": (t, o) => iconButton("log-branch-navigate", "locate", t, o),
+  "branches.settings": (t, o) => iconButton("log-branch-settings", "branch-settings", t, o),
+  "branches.expandAll": (t, o) => iconButton("log-branch-expand", "expand-all", t, o),
+  "branches.collapseAll": (t, o) => iconButton("log-branch-collapse", "collapse-all", t, o),
+};
+function toolButton(id, t, o) {
+  if (TOOL_BUTTONS[id]) return TOOL_BUTTONS[id](t, o);
+  const elementId = `log-${id.split(".").join("-")}`;
+  return iconButton(elementId, "settings", t, o);
+}
 
 export default class LogBranches {
   init(host, cx) {
@@ -45,8 +82,22 @@ export default class LogBranches {
     this.stale = true; // rows must be worked out again
     this.list = new WindowedList("log-branch-rows");
     this.handle = cx.focus_handle();
+    this.prefs = { favorite: [], unfavorite: [] }; // git-branch.js readFavorites
+    this.settings = treeSettings(null);
+    this.mine = null; // readMyBranches' result while Show My Branches is on
+    this.hovered = null; // key of the row under the pointer
     this.makeInput("");
+    cx.spawn(async (cx) => {
+      const saved = treeSettings(await appSetting(SETTINGS_KEY));
+      if (JSON.stringify(saved) === JSON.stringify(this.settings)) return;
+      this.settings = saved;
+      this.stale = true;
+      this.reload(cx);
+      cx.notify();
+    });
   }
+
+  hidden() { return this.settings.hidden; }
 
   // The placeholder is fixed when the input is made: a copy whose language changed since
   // gets a new input holding what was typed.
@@ -67,11 +118,26 @@ export default class LogBranches {
     if (!repo) { this.data = null; this.read = false; this.key = null; this.picked = null; this.cursor = null; this.stale = true; return; }
     const key = JSON.stringify([repo.root, repo.on]);
     if (key !== this.key) { this.key = key; this.data = null; this.read = false; this.picked = null; this.cursor = null; this.collapsed = new Set(); this.list.top = 0; this.stale = true; }
+    const { tags, mine } = this.settings;
     cx.spawn(async (cx) => {
-      const r = await readBranches(repo.git, repo.root);
+      const [r, prefs, tagged, my] = await Promise.all([
+        readBranches(repo.git, repo.root), readFavorites(repo.git, repo.root),
+        tags ? readTags(repo.git, repo.root) : null, mine ? readMyBranches(repo.git, repo.root) : null,
+      ]);
+      // A favorite or a tag that can't be read only goes without its star or its group.
+      r.tags = tagged?.ok ? tagged.tags : [];
+      if (prefs.ok) this.prefs = { favorite: prefs.favorite, unfavorite: prefs.unfavorite };
+      // A rebase runs on a detached HEAD, and the HEAD row says so then. Asked only while
+      // HEAD is detached: reading the operation also reads the working tree's status.
+      if (r.ok && !r.head.branch && r.head.hash) {
+        const op = await readOperation(repo.git, repo.root);
+        r.rebasing = op.ok && op.kind === "rebase";
+      }
       if (turn !== this.turn) return;
       this.read = true;
       if (!r.ok) { this.failed = r.err; host.fail(r.err, cx); cx.notify(); return; }
+      this.mine = my?.ok ? { email: my.email, refs: new Set(my.mine) } : null;
+      if (my && !my.ok) host.fail(my.err, cx);
       // The read works again: its own old error goes, anyone else's stays.
       if (this.failed && host.error === this.failed) host.fail(null, cx);
       this.failed = null;
@@ -105,7 +171,9 @@ export default class LogBranches {
     if (!d || !key) return null;
     if (key === "head") return d.head.branch ?? (d.head.hash ? "HEAD" : null);
     const cut = key.indexOf(":"), scope = key.slice(0, cut), name = key.slice(cut + 1);
-    return (d[scope] ?? []).some((b) => b.name === name) ? name : null;
+    if (!(d[scope] ?? []).some((b) => b.name === name)) return null;
+    // A tag by its full name: a branch may have the same short one.
+    return scope === "tags" ? `refs/tags/${name}` : name;
   }
 
   // The row the Commit list is limited to: the one that was clicked, or, when the limit
@@ -116,6 +184,7 @@ export default class LogBranches {
     if (this.picked && this.refOf(this.picked) === ref) return this.picked;
     if (d.local.some((b) => b.name === ref)) return `local:${ref}`;
     if (d.remote.some((b) => b.name === ref)) return `remote:${ref}`;
+    if (ref.startsWith("refs/tags/") && (d.tags ?? []).some((b) => `refs/tags/${b.name}` === ref)) return `tags:${ref.slice(10)}`;
     return null;
   }
 
@@ -131,23 +200,40 @@ export default class LogBranches {
     const match = (name) => !words || name.toLowerCase().includes(words);
     const current = tr("log.headCurrent");
     if (match(current) || (d.head.branch && match(d.head.branch))) {
-      rows.push({ key: "head", kind: "head", depth: 0, label: d.head.branch ? current : d.head.hash ? `HEAD (${d.head.hash.slice(0, 7)})` : "HEAD" });
+      const label = d.head.branch ? current : d.rebasing ? `⚠ ${tr("vcs.detachedHead")}` : d.head.hash ? `HEAD (${d.head.hash.slice(0, 7)})` : "HEAD";
+      rows.push({ key: "head", kind: "head", depth: 0, label });
     }
+    const { grouped } = this.settings;
+    // Show My Branches: only those holding a commit of the person's (git-branch.js
+    // readMyBranches); none at all while user.email isn't set.
+    const mine = this.settings.mine ? this.mine : null;
+    const shown = (scope, b) => !this.settings.mine || Boolean(mine?.refs.has(fullRef(scope, b.name)));
     for (const [scope, key] of GROUPS) {
       const label = tr(key);
-      const items = d[scope].filter((b) => match(b.name)).map((b) => ({ path: b.name, branch: b }));
-      if (words && !items.length) continue;
+      const how = { scope, current: d.head.branch, prefs: this.prefs };
+      const items = orderBranches(d[scope].filter((b) => match(b.name) && shown(scope, b)), how).map((b) => ({ path: b.name, branch: b }));
+      if ((words || this.settings.mine) && !items.length) continue;
       // While filtering everything that matches shows, whatever is folded.
       const open = words ? true : !this.collapsed.has(scope);
       rows.push({ key: scope, kind: "group", depth: 0, label, open, count: items.length });
       if (!open) continue;
+      if (!grouped) {
+        for (const it of items) rows.push({ key: `${scope}:${it.path}`, kind: "branch", scope, depth: 1, label: it.path, branch: it.branch });
+        continue;
+      }
       const folded = new Set();
       if (!words) for (const key of this.collapsed) if (key.startsWith(`${scope}:`)) folded.add(key.slice(scope.length + 1));
-      for (const r of buildRows(items, { grouped: true, collapsed: folded })) {
+      for (const r of orderTreeRows(buildRows(items, { grouped: true, collapsed: folded }), how)) {
         rows.push(r.folder
           ? { key: `${scope}:${r.key}`, kind: "folder", depth: r.depth + 1, label: r.name, open: r.open, count: r.count }
           : { key: `${scope}:${r.path}`, kind: "branch", scope, depth: r.depth + 1, label: r.name, branch: r.item.branch });
       }
+    }
+    const tags = this.settings.tags ? (d.tags ?? []).filter((b) => match(b.name)) : [];
+    if (tags.length) {
+      const open = words ? true : !this.collapsed.has("tags");
+      rows.push({ key: "tags", kind: "group", depth: 0, label: tr("vcs.tags"), open, count: tags.length });
+      if (open) for (const b of tags) rows.push({ key: `tags:${b.name}`, kind: "tag", scope: "tags", depth: 1, label: b.name, branch: b });
     }
   }
 
@@ -160,25 +246,27 @@ export default class LogBranches {
   at(key) { return key ? this.current().findIndex((r) => r.key === key) : -1; }
   cursorRow() { const i = this.at(this.cursor); return i < 0 ? null : this.rows[i]; }
 
-  // What an action on a row works on: { name, from, scope, current }, or null for a
-  // folder. `from` is what a new branch would start at: the full ref name, since a tag or
-  // a local branch may share the short one.
+  // What an action on a row works on: { name, from, scope, current, upstream }, or null
+  // for a folder. `from` is what a new branch would start at: the full ref name, since a
+  // tag or a local branch may share the short one. upstream: the branch a local one
+  // tracks, else null. A tag's scope is "tag".
   target(m) {
     const d = this.data;
     if (!m || !d) return null;
     if (m.kind === "branch") {
       const from = `${m.scope === "remote" ? "refs/remotes/" : "refs/heads/"}${m.branch.name}`;
-      return { name: m.branch.name, from, scope: m.scope, current: m.scope === "local" && m.branch.current };
+      return { name: m.branch.name, from, scope: m.scope, current: m.scope === "local" && m.branch.current, upstream: m.scope === "local" ? m.branch.upstream ?? null : null };
     }
+    if (m.kind === "tag") return { name: m.branch.name, from: `refs/tags/${m.branch.name}`, scope: "tag", current: false, upstream: null };
     if (m.kind !== "head") return null;
-    if (d.head.branch) return { name: d.head.branch, from: `refs/heads/${d.head.branch}`, scope: "local", current: true };
-    return d.head.hash ? { name: d.head.hash.slice(0, 7), from: d.head.hash, scope: "head", current: true } : null;
+    if (d.head.branch) return { name: d.head.branch, from: `refs/heads/${d.head.branch}`, scope: "local", current: true, upstream: d.local.find((b) => b.name === d.head.branch)?.upstream ?? null };
+    return d.head.hash ? { name: d.head.hash.slice(0, 7), from: d.head.hash, scope: "head", current: true, upstream: null } : null;
   }
 
   // Why Delete can't run on this target, or null when it can.
   deleteBlock(b) {
     const tr = this.host.t;
-    if (!b) return tr("log.selectLocalToDelete");
+    if (!b || b.scope === "tag") return tr("log.selectLocalToDelete");
     if (b.scope === "remote") return tr("log.remoteNoDelete");
     if (b.current) return tr("log.currentNoDelete");
     return null;
@@ -192,12 +280,14 @@ export default class LogBranches {
     cx.notify();
   }
 
-  // A click or Enter: a group or folder folds, a branch (or HEAD) limits the Commit
-  // list to itself, and lets go of it when it already does.
+  // A click or Enter: a group or folder folds. A branch, a tag or HEAD limits the Commit
+  // list to itself, and lets go of it when it already does; with the ⋮ setting "Navigate
+  // Log to Branch Head" it selects its head commit instead.
   activate(m, cx) {
     if (!m) return;
     this.cursor = m.key;
     if (m.kind === "group" || m.kind === "folder") { if (!this.words()) this.setFold(m.key, m.open, cx); return; }
+    if (this.settings.click === "navigate") { this.navigate(this.target(m), cx); cx.notify(); return; }
     const ref = this.refOf(m.key);
     if (!ref) return;
     if (this.limitedKey() === m.key) { this.picked = null; this.host.setBranch(null, cx); }
@@ -244,10 +334,82 @@ export default class LogBranches {
       next.add(scope);
       for (const key of folderKeys((d?.[scope] ?? []).map((b) => ({ path: b.name })))) next.add(`${scope}:${key}`);
     }
+    next.add("tags");
     this.collapsed = next;
     this.stale = true;
     this.list.top = 0;
     cx.notify();
+  }
+
+  // ---- favorites, the ⋮ settings and the toolbar's toggles
+
+  // A local or remote branch's full ref name, or null for HEAD detached, a tag, nothing.
+  favoriteRef(b) { return b && (b.scope === "local" || b.scope === "remote") ? b.from : null; }
+
+  // Mark or unmark `b` as a favorite: shown at once, then kept in the repository's config.
+  // Not a write of the repository's content, so it takes no write lock; the screens on
+  // the repository read again to show it.
+  toggleFavorite(b, cx) {
+    const { host } = this, repo = host.repo, ref = this.favoriteRef(b);
+    if (!repo || !ref) return;
+    const on = !isFavorite(ref, this.prefs);
+    this.prefs = nextFavorites(this.prefs, ref, on);
+    this.stale = true;
+    cx.notify();
+    cx.spawn(async (cx) => {
+      const r = await setFavorite(repo.git, repo.root, ref, on);
+      if (!r.ok) host.failedOn(repo, host.t("branch-tree.favoriteFailed", { err: r.err }), cx);
+      broadcast({ type: "changed", root: repo.root });
+      if (host.shows(repo)) this.reload(cx);
+      cx.notify();
+    });
+  }
+
+  // Selects the head commit of `b` in the Commit list. Not there (the list is limited to
+  // something else, or filtered): says so.
+  navigate(b, cx) {
+    const { host } = this;
+    if (!b?.from) return;
+    const text = b.scope === "head" ? b.name : b.from.replace(/^refs\/(heads|remotes|tags)\//, "");
+    cx.spawn(async (cx) => {
+      const turn = host.beginJump();
+      const found = await host.goTo(b.from, cx, turn);
+      if (found === false && host.jumpLive(turn)) host.fail(host.t(host.branch || host.filterArgs?.length ? "log.commitFiltered" : "log.commitNowhere", { text }), cx);
+      cx.notify();
+    });
+  }
+
+  // Takes `next` as the settings now and saves them; what they change is read again.
+  useSettings(next, cx) {
+    const before = this.settings;
+    if (JSON.stringify(next) === JSON.stringify(before)) return;
+    this.settings = next;
+    this.stale = true;
+    if ((next.tags && !before.tags) || (next.mine && !before.mine)) this.reload(cx);
+    cx.notify();
+    cx.spawn(async (cx) => {
+      const r = await saveAppSetting(SETTINGS_KEY, next);
+      if (!r.ok) this.host.fail(this.host.t("branch-tree.settingsFailed", { err: r.err }), cx);
+      cx.notify();
+    });
+  }
+
+  // "mine" (Show My Branches) or "hidden" (Hide Git Branches).
+  toggle(id, cx) { this.useSettings(toggleTreeSetting(this.settings, id), cx); }
+
+  // The ⋮ Branches Pane Settings popup: a group name nothing can pick, then the choices
+  // with a check mark before what is on.
+  openSettings(cx) {
+    const { host } = this, tr = host.t;
+    const rows = treeSettingsMenu(this.settings).map((it) => (it.header
+      ? { label: tr(it.key), value: null, disabled: true }
+      : { label: `${it.checked ? "✓" : " "}  ${tr(it.key)}`, value: it.id, rule: Boolean(it.rule) }));
+    cx.spawn(async (cx) => {
+      const id = await openMenu(host.bus, rows, { width: 260, lang: host.lang });
+      this.handle.focus();
+      if (id) this.useSettings(toggleTreeSetting(this.settings, id), cx);
+      cx.notify();
+    });
   }
 
   // ---- git actions
@@ -278,8 +440,10 @@ export default class LogBranches {
   }
 
   checkout(b, cx) {
-    if (!b || b.current || b.scope === "head") return;
-    this.act({ key: "log.checkingOut" }, (repo) => checkout(repo.git, repo.root, b.name, { remote: b.scope === "remote" }), cx);
+    if (!b || b.current || b.scope === "head" || b.scope === "tag") return;
+    // Local changes in the way open the Smart dialog, with this panel running its writes.
+    const host = this.host;
+    this.act({ key: "log.checkingOut" }, (repo) => smartCheckout(repo, { name: b.name, remote: b.scope === "remote" }, { owner: host.bus.id, lang: host.lang, who: "ui.logPanel" }), cx);
   }
 
   newBranch(b, cx) {
@@ -315,26 +479,38 @@ export default class LogBranches {
     cx.notify();
   }
 
+  // Which menu a row has (log-menus.js): the HEAD row, the current branch, another local
+  // branch, a remote branch, a remote's own folder (the first level under Remote).
+  menuOf(m, b) {
+    if (m.kind === "head") return "headBranch";
+    if (m.kind === "tag") return null;
+    if (m.kind === "folder") return m.key.startsWith("remote:") && m.depth === 1 ? "remoteFolder" : null;
+    if (!b) return null;
+    return b.scope === "remote" ? "remoteBranch" : b.current ? "currentBranch" : "localBranch";
+  }
+
   menu(m, cx) {
-    const b = this.target(m);
-    if (!b) return;
-    const writing = this.host.writeBlock(), busy = Boolean(writing), block = this.deleteBlock(b), tr = this.host.t;
-    const items = [
-      { label: tr("log.checkout"), value: "checkout", disabled: b.current || busy, title: b.current ? tr("log.alreadyCheckedOut") : writing ?? undefined },
-      { label: tr("log.newBranchFrom", { name: shortenMiddle(b.name, 30) }), value: "new", disabled: busy, title: writing ?? undefined },
-      { label: tr("log.delete"), value: "delete", rule: true, disabled: Boolean(block) || busy, title: block ?? writing ?? undefined },
-    ];
+    const { host } = this, b = this.target(m), which = m ? this.menuOf(m, b) : null;
+    if (!which) return;
+    const d = this.data, tr = host.t;
+    const upstream = m.kind === "branch" && m.scope === "local" ? m.branch.upstream : null;
+    const ctx = {
+      name: b ? shortenMiddle(b.name, 30) : m.label, current: d?.head.branch ?? (d?.head.hash ? d.head.hash.slice(0, 7) : "HEAD"),
+      upstream: upstream ?? "", writing: host.writeBlock(), deleteBlock: b ? this.deleteBlock(b) : null, scope: b?.scope ?? null,
+    };
+    const items = host.items(which, ctx);
+    if (!items.length) return;
+    const target = b ?? { remote: m.label };
+    const rows = items.map((it) => ({ label: tr(it.key, it.args), value: it.id, rule: it.rule, disabled: it.disabled, hint: it.hint ?? undefined, title: it.why ? (it.why.text ?? tr(it.why.key, it.why.args)) || undefined : undefined }));
     // While the menu is open its row shows no tooltip: it would cover the first item.
     this.menuRow = m.key;
     cx.spawn(async (cx) => {
       // The answer arrives in this panel's own call (ui.js), so what the pick starts
       // (git, a dialog) is the panel's work and outlives the popup.
-      const pick = await openMenu(this.host.bus, items, { width: 300, lang: this.host.lang });
+      const pick = await openMenu(host.bus, rows, { width: 300, lang: host.lang });
       if (this.menuRow === m.key) this.menuRow = null;
       this.handle.focus();
-      if (pick === "checkout") this.checkout(b, cx);
-      else if (pick === "new") this.newBranch(b, cx);
-      else if (pick === "delete") this.remove(b, cx);
+      if (pick) host.run(pick, target, cx);
       cx.notify();
     });
   }
@@ -376,7 +552,7 @@ export default class LogBranches {
   // ---- drawing
 
   chevron(m, t) {
-    return svg(icon(m.open ? "chevron-down" : "chevron-right")).size(12).flex_none().text_color(t.muted);
+    return uiGlyph(m.open ? "chevron-down" : "chevron-right").text_color(t.muted);
   }
 
   treeRow(i, t, limited) {
@@ -390,35 +566,62 @@ export default class LogBranches {
         .child(div().flex_none().text_size(11).text_color(t.dim).child(String(m.count)));
     }
     if (m.kind === "folder") {
-      return el.child(this.chevron(m, t)).child(svg(icon("folder")).size(13).flex_none().text_color(t.muted))
+      return el.child(this.chevron(m, t)).child(uiGlyph("folder").text_color(t.muted))
         .child(div().flex_1().min_w(0).truncate().child(m.label))
         .when(!m.open, (el) => el.child(div().flex_none().text_size(11).text_color(t.dim).child(String(m.count))));
     }
     if (m.kind === "head") {
-      return el.child(svg(icon("branch-item")).size(13).flex_none().text_color(t.ansi3))
+      // No icon on the HEAD row: the empty arrow-wide place lines its label up with the groups'.
+      return el.child(div().size(ICON).flex_none())
         .child(div().flex_1().min_w(0).truncate().child(m.label));
     }
+    const dark = darkLook(t.background);
+    if (m.kind === "tag") {
+      if (this.menuRow !== m.key) el = tip(el, m.branch.name);
+      return el.child(uiGlyph("tag", { dark })).child(div().flex_1().min_w(0).truncate().child(m.label));
+    }
     const b = m.branch, here = m.scope === "local" && b.current;
+    const favorite = isFavorite(fullRef(m.scope, b.name), this.prefs);
+    // The icon is the star: a favorite's, or an empty one under the pointer. A click on it
+    // marks or unmarks the branch and does nothing else.
+    // Each name written out so ui-icons.test.mjs sees it.
+    const glyph = here ? (favorite ? uiGlyph("current-branch-favorite", { dark }) : uiGlyph("current-branch", { dark }))
+      : favorite ? uiGlyph("favorite", { dark }) : uiGlyph(this.hovered === m.key ? "favorite-hover" : "branch-item", { dark });
+    const star = div().id(`log-branch-star-${i}`).flex_none().cursor_pointer()
+      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+      .on_click((_e, cx) => { cx.stop_propagation(); this.toggleFavorite(this.target(m), cx); })
+      .child(glyph);
+    el = el.on_hover((over, cx) => {
+      const was = this.hovered;
+      if (over) this.hovered = m.key; else if (this.hovered === m.key) this.hovered = null;
+      if (was !== this.hovered) cx.notify();
+    });
     // No tooltip while this row's menu is open.
-    if (this.menuRow !== m.key) el = el.tooltip(m.scope === "local" && b.upstream ? `${b.name} → ${b.upstream}` : b.name);
+    if (this.menuRow !== m.key) el = tip(el, m.scope === "local" && b.upstream ? `${b.name} → ${b.upstream}` : b.name);
     return el
-      .child(svg(icon("branch-item")).size(13).flex_none().text_color(here ? t.ansi3 : m.scope === "remote" ? t.ansi5 : t.ansi2))
+      .child(star)
       .child(div().flex_1().min_w(0).truncate().when(here, (el) => el.font_semibold()).child(m.label))
       // Commits not pushed yet (ahead) and not pulled yet (behind), against its upstream.
       .when(b.ahead > 0, (el) => el.child(div().flex_none().text_size(11).text_color(t.ansi2).child(`↑${b.ahead}`)))
       .when(b.behind > 0, (el) => el.child(div().flex_none().text_size(11).text_color(t.ansi4).child(`↓${b.behind}`)));
   }
 
+  // The vertical toolbar (log-menus.js branchTools). Its buttons act on the cursor row.
+  // While the column is hidden only Hide Git Branches shows, pressed, to bring it back.
   tools(t) {
-    const { host } = this, writing = host.writeBlock(), busy = Boolean(writing), b = this.target(this.cursorRow()), block = this.deleteBlock(b), tr = host.t;
-    return v_flex().id("log-branch-tools").flex_none().w(30).h_full().py(5).gap(2).items_center().border_r(1).border_color(t.border)
-      .child(iconButton("log-branch-new", "plus", t, { title: writing ?? tr("log.newBranch"), disabled: !this.data || busy, onClick: (_e, cx) => this.newBranch(null, cx) }))
-      .child(iconButton("log-branch-delete", "branch-delete", t, { title: block ?? writing ?? tr("log.deleteBranch", { name: b.name }), disabled: Boolean(block) || busy, busy: host.writingHere()?.key === "log.deleting", onClick: (_e, cx) => this.remove(b, cx) }))
-      .child(iconButton("log-branch-deleted", "restore", t, { title: tr("branches.openDeleted"), disabled: !this.data, onClick: (_e, cx) => this.deletedBranches(cx) }))
-      .child(iconButton("log-branch-fetch", "fetch", t, { title: writing ?? tr("log.fetch"), disabled: busy, busy: host.writingHere()?.key === "log.fetching", onClick: (_e, cx) => host.fetch(cx) }))
-      .child(div().w(16).h(1).my(3).bg(t.border))
-      .child(iconButton("log-branch-expand", "expand-all", t, { title: tr("log.expandAll"), onClick: (_e, cx) => this.expandAll(cx) }))
-      .child(iconButton("log-branch-collapse", "collapse-all", t, { title: tr("log.collapseAll"), onClick: (_e, cx) => this.collapseAll(cx) }));
+    const { host } = this, b = this.target(this.cursorRow()), tr = host.t, hidden = this.hidden();
+    const ctx = { loaded: Boolean(this.data), name: b?.name, upstream: b?.upstream ?? null, favoritable: Boolean(this.favoriteRef(b)), writing: host.writeBlock(), deleteBlock: this.deleteBlock(b) };
+    const items = host.items("branchTools", ctx).filter((it) => !hidden || it.id === "branches.hide");
+    const pressed = { "branches.hide": hidden, "branches.showMine": this.settings.mine };
+    let bar = v_flex().id("log-branch-tools").flex_none().w(TOOLS_WIDTH).h_full().py(5).gap(2).items_center().border_r(1).border_color(t.border);
+    for (const it of items) {
+      if (it.rule && !hidden) bar = bar.child(div().w(16).h(1).my(3).bg(t.border));
+      const title = (it.why?.text ?? (it.why ? tr(it.why.key, it.why.args) : "")) || tr(it.key, it.args);
+      bar = bar.child(toolButton(it.id, t, {
+        title, disabled: it.disabled, active: Boolean(pressed[it.id]), busy: it.work !== null && host.writingHere()?.key === it.work, onClick: (_e, cx) => host.run(it.id, b, cx),
+      }));
+    }
+    return bar;
   }
 
   render(cx) {
@@ -429,17 +632,20 @@ export default class LogBranches {
       this.relabeling = true;
       cx.timer.after(1, (cx) => { this.relabeling = false; if (this.inputLang !== this.host.lang) { const typing = this.typing; this.makeInput(this.input.value()); if (typing) this.input.focus(); cx.notify(); } });
     }
+    if (this.hidden()) return h_flex().id("log-branch-tree").size_full().min_h(0).items_start().child(this.tools(t));
     const rows = this.current(), n = rows.length, limited = this.limitedKey();
+    const noEmail = this.settings.mine && this.mine && !this.mine.email;
     const body = !this.read ? notice(tr("ui.loading"), t, { busy: true })
-      : !n ? notice(this.words() ? tr("log.noBranchesMatch") : "", t)
-        : this.list.render(n, (i) => this.treeRow(i, t, limited), t);
+      : noEmail ? notice(tr("branch-tree.noEmail"), t)
+        : !n ? notice(this.words() ? tr("log.noBranchesMatch") : "", t)
+          : this.list.render(n, (i) => this.treeRow(i, t, limited), t);
     return h_flex().id("log-branch-tree").size_full().min_h(0).min_w(0).items_start().text_size(12.5)
       .child(this.tools(t))
       .child(v_flex().flex_1().min_w(0).h_full().min_h(0)
         // As tall as the Commit list's toolbar, so the two bottom lines meet.
         .child(h_flex().id("log-branch-filter").h(34).flex_none().w_full().min_w(0).px(8).gap(6).items_center().border_b(1).border_color(t.border)
           .cursor_text().on_mouse_down("left", (_e, cx) => { this.input.focus(); cx.stop_propagation(); })
-          .child(svg(icon("search")).size(13).flex_none().text_color(this.typing ? t.accent : t.dim))
+          .child(uiGlyph("search").text_color(this.typing ? t.accent : t.dim))
           .child(Input.new(this.input).flex_1().min_w(0).h_full().text_size(12.5).text_color(t.foreground)))
         .child(div().id("log-branch-list").track_focus(this.handle).flex_1().min_h(0).w_full()
           .on_key_down((e, cx) => {

@@ -7,12 +7,17 @@ import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
 import { makeGit } from "./git.js";
 import { rollback } from "./git-rollback.js";
-import { listSnapshots, restore as restoreAs, wordRestore } from "./git-snapshot.js";
+import { listSnapshots, restore as restoreAs, wordRestore, record, applySnapshot } from "./git-snapshot.js";
+import { resetTo } from "./git-reset.js";
 import { translator } from "./i18n.js";
 import { readLog } from "./git-log.js";
 import { readBranches } from "./git-branch.js";
 import { readPushPlan } from "./git-push.js";
 import { en } from "./messages-restore.js";
+
+// The user's own git settings (a conflict style, say) stay out of every git these tests start.
+process.env.GIT_CONFIG_GLOBAL = "/dev/null";
+process.env.GIT_CONFIG_NOSYSTEM = "1";
 
 const base = realpathSync(mkdtempSync(`${tmpdir()}/git-tools-snapshot-`));
 // Same shape as herdr's exec: resolves with { code, stdout, stderr }, rejects when it can't start.
@@ -732,6 +737,124 @@ if ((() => { const dir = mkdtempSync(`${base}/fold-`); writeFileSync(`${dir}/F`,
   assert.equal(bad.ok, false);
   assert.equal(bad.msg?.key, "restore.noSnapshot");
   assert.equal(text(repo, "a"), "head\n");
+}
+
+// ---- the write a snapshot was taken before, and putting one back whole (3-way)
+
+// A hard reset's snapshot is listed as "Reset"; a rollback's, and one with a single
+// parent, as "Rollback". None made on the HEAD there is now is put back 3-way.
+{
+  const repo = init("actions");
+  sh(repo, "echo head > a && echo head > b && git add -A && git commit -q -m first");
+  sh(repo, "echo old > a");
+  const old = oldSnapshot(repo, ["a"]);
+  sh(repo, "echo rolled > b");
+  const rolled = await back(repo, [["b", "modified"]]);
+  sh(repo, "echo mine > a");
+  const reset = await resetTo(git, repo, { commit: sh(repo, "git rev-parse HEAD").trim(), mode: "hard", copy: COPY });
+  assert.equal(reset.ok, true, reset.err);
+  const r = await listSnapshots(git, repo);
+  assert.deepEqual(r.snapshots.map((s) => [s.hash, s.action, s.threeWay]), [
+    [reset.snapshot, "Reset", false],
+    [rolled, "Rollback", false],
+    [old, "Rollback", false],
+  ]);
+  // Another first line than this module writes reads as a rollback.
+  assert.deepEqual(await record(git, repo, ["a"], COPY, "Push"), { ok: false, code: -1, out: "", err: "Unknown snapshot action: Push", snapshot: null });
+}
+
+// Two commits: f.txt has eight lines and c2 changes the second; g.txt and d.txt stay.
+// Local changes on c2, recorded by a hard reset to c1. → { repo, c1, c2, snapshot, before }
+const resetAway = async (name, local) => {
+  const repo = init(name);
+  sh(repo, "printf '1\\n2\\n3\\n4\\n5\\n6\\n7\\n8\\n' > f.txt && echo g0 > g.txt && echo d > d.txt && git add -A && git commit -q -m c1");
+  const c1 = sh(repo, "git rev-parse HEAD").trim();
+  sh(repo, "printf '1\\nTWO\\n3\\n4\\n5\\n6\\n7\\n8\\n' > f.txt && git commit -q -am c2");
+  const c2 = sh(repo, "git rev-parse HEAD").trim();
+  sh(repo, local);
+  const before = { status: status(repo), index: entries(repo) };
+  const r = await resetTo(git, repo, { commit: c1, mode: "hard", copy: COPY });
+  assert.equal(r.ok, true, r.err);
+  return { repo, c1, c2, snapshot: r.snapshot, before };
+};
+
+// Put back after a reset to another commit: every change and its staging, a partly
+// staged file, a staged deletion and a staged new file included. A change HEAD's move
+// doesn't touch merges with it.
+{
+  const { repo, snapshot, before } = await resetAway("three-way",
+    "printf '1\\nTWO\\n3\\n4\\n5\\n6\\n7\\nEIGHT\\n' > f.txt && echo g-staged > g.txt && git add g.txt && echo g-work > g.txt && git rm -q d.txt && echo n > n.txt && git add n.txt && echo loose > u.txt");
+  const listed = (await listSnapshots(git, repo)).snapshots[0];
+  assert.equal(listed.hash, snapshot);
+  assert.equal(listed.threeWay, true);
+  const r = await applySnapshot(git, repo, { snapshot });
+  assert.equal(r.ok, true, r.err);
+  assert.deepEqual(r.conflicts, []);
+  assert.equal(r.staged, true);
+  assert.deepEqual(r.msg, { key: "restore.applied" });
+  assert.equal(r.changed, true);
+  assert.deepEqual(status(repo), before.status);
+  assert.equal(text(repo, "f.txt"), "1\n2\n3\n4\n5\n6\n7\nEIGHT\n");
+  assert.equal(sh(repo, "git show :g.txt"), "g-staged\n");
+  assert.equal(text(repo, "g.txt"), "g-work\n");
+  // The snapshot stays, as after any Restore.
+  assert.equal((await listSnapshots(git, repo)).snapshots[0].hash, snapshot);
+}
+
+// Lines changed on both sides: the file is left with conflict markers, in a conflict in
+// the index, for the Conflicts dialog. The other changes come back staged as git leaves
+// them after a conflicted merge.
+{
+  const { repo, snapshot } = await resetAway("three-way-conflict",
+    "printf '1\\nTWO-mine\\n3\\n4\\n5\\n6\\n7\\n8\\n' > f.txt && echo g-staged > g.txt && git add g.txt");
+  const r = await applySnapshot(git, repo, { snapshot });
+  // Not all of it as it was: said like a restore that left something.
+  assert.equal(r.ok, false);
+  assert.equal(r.err, "Restored all of it. Lines changed on both sides are left as conflicts in 1 file; resolve them:\nf.txt");
+  assert.deepEqual(r.conflicts, ["f.txt"]);
+  assert.deepEqual(r.msg, { key: "restore.appliedConflicts", args: { n: 1, list: "f.txt" } });
+  assert.equal(r.changed, true);
+  assert.deepEqual(status(repo), ["M  g.txt", "UU f.txt"]);
+  assert.match(text(repo, "f.txt"), /^1\n<<<<<<< [^\n]*\n2\n=======\nTWO-mine\n>>>>>>> [^\n]*\n3\n/);
+}
+
+// Staging that can't go on the index HEAD has now (the staged change's surrounding lines
+// changed between the commits): the changes come back without their staging.
+{
+  const { repo, snapshot } = await resetAway("three-way-unstaged",
+    "printf '1\\nTWO\\n3\\nFOUR\\n5\\n6\\n7\\n8\\n' > f.txt && git add f.txt && echo g-staged > g.txt && git add g.txt");
+  const r = await applySnapshot(git, repo, { snapshot });
+  assert.equal(r.ok, false);
+  assert.equal(r.changed, true);
+  assert.equal(r.err, "Restored all of it. Its staging doesn't fit the index HEAD has now, so it was left out.");
+  assert.equal(r.staged, false);
+  assert.deepEqual(r.msg, { key: "restore.appliedUnstaged" });
+  assert.deepEqual(r.conflicts, []);
+  assert.deepEqual(status(repo), [" M f.txt", " M g.txt"]);
+  assert.equal(text(repo, "f.txt"), "1\n2\n3\nFOUR\n5\n6\n7\n8\n");
+}
+
+// A local change in the way: git refuses, nothing changes, its words come back.
+{
+  const { repo, snapshot } = await resetAway("three-way-refused", "echo g-mine > g.txt");
+  sh(repo, "echo g-later > g.txt");
+  const r = await applySnapshot(git, repo, { snapshot });
+  assert.equal(r.ok, false);
+  assert.notEqual(r.err, "");
+  assert.equal(r.changed, false);
+  assert.deepEqual(status(repo), [" M g.txt"]);
+  assert.equal(text(repo, "g.txt"), "g-later\n");
+}
+
+// Not a snapshot's hash: nothing runs.
+{
+  const repo = init("three-way-bad");
+  sh(repo, "echo a > a && git add a && git commit -q -m first");
+  for (const snapshot of ["", "HEAD", "--index"]) {
+    const r = await applySnapshot(git, repo, { snapshot });
+    assert.equal(r.ok, false);
+    assert.equal(r.msg?.key, "restore.noSnapshot");
+  }
 }
 
 console.log("ok");

@@ -17,13 +17,16 @@ function statusOf(xy) {
   return "modified";
 }
 
-// readStatus(git, root) → { ok, err, hasHead, detached, changes, unversioned }
+// readStatus(git, root) → { ok, err, hasHead, head, detached, changes, unversioned }
 //   git: from makeGit (git.js). root: the repository root.
-//   changes: [{ path, status }]: tracked files that differ from HEAD; status is
+//   changes: [{ path, status, xy }]: tracked files that differ from HEAD; status is
 //   "modified" | "added" | "deleted" | "conflict". "added" also covers a file only
-//   registered with `git add --intent-to-add`.
+//   registered with `git add --intent-to-add`. xy: porcelain v2's two letters as git
+//   wrote them: X the index against HEAD, Y the work tree against the index ("." for no
+//   change); for a conflict, our side and their side (UU, AA, AU, UA, DU, UD, DD).
 //   unversioned: [{ path, status: "unversioned" }]: untracked and not ignored.
-//   hasHead: false in a repository without commits.
+//   hasHead: false in a repository without commits. head: the commit HEAD is on (full
+//   hash), null without commits.
 //   detached: HEAD is on a commit and no branch (a commit made there is on no branch).
 //   Paths are relative to root, in git's order (by path). An untracked folder that is
 //   itself a repository comes as one path ending in "/".
@@ -35,21 +38,21 @@ export async function readStatus(git, root) {
   const r = await git.read(root, ["status", "--porcelain=v2", "--branch", "-z", "--no-renames", "--untracked-files=all"]);
   if (!r.ok) {
     const why = r.err ? { err: r.err } : { err: "git status failed", msg: { key: "commit.statusFailed" } };
-    return { ok: false, ...why, hasHead: false, detached: false, changes: [], unversioned: [] };
+    return { ok: false, ...why, hasHead: false, head: null, detached: false, changes: [], unversioned: [] };
   }
   const changes = [], unversioned = [];
-  let hasHead = true, detached = false;
+  let hasHead = true, head = null, detached = false;
   for (const entry of r.out.split("\0")) {
     const kind = entry[0];
     if (kind === "#") {
-      if (entry.startsWith("# branch.oid ")) hasHead = entry !== "# branch.oid (initial)";
+      if (entry.startsWith("# branch.oid ")) { hasHead = entry !== "# branch.oid (initial)"; head = hasHead ? entry.slice(13) : null; }
       // git writes the same line on a branch someone named "(detached)": that one
       // branch reads as detached here too.
       else if (entry === "# branch.head (detached)") detached = true;
     }
-    else if (kind === "1") changes.push({ path: pathAfter(entry, 8), status: statusOf(entry.slice(2, 4)) });
-    else if (kind === "u") changes.push({ path: pathAfter(entry, 10), status: "conflict" });
+    else if (kind === "1") changes.push({ path: pathAfter(entry, 8), status: statusOf(entry.slice(2, 4)), xy: entry.slice(2, 4) });
+    else if (kind === "u") changes.push({ path: pathAfter(entry, 10), status: "conflict", xy: entry.slice(2, 4) });
     else if (kind === "?") unversioned.push({ path: entry.slice(2), status: "unversioned" });
   }
-  return { ok: true, err: "", hasHead, detached, changes, unversioned };
+  return { ok: true, err: "", hasHead, head, detached, changes, unversioned };
 }

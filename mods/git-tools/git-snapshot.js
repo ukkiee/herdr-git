@@ -48,9 +48,14 @@ async function headCommit(git, root) {
   return { ok: true, head: r.out.trim() };
 }
 
-// record(git, root, paths, copy) → { ok, code, out, err, msg?, snapshot }
+// The write a snapshot was taken before: the first word of its message ("Reset: 3 files").
+// Snapshots made before others than Rollback recorded any say "Rollback" too.
+export const ACTIONS = ["Rollback", "Reset", "Checkout"];
+
+// record(git, root, paths, copy, action = "Rollback") → { ok, code, out, err, msg?, snapshot }
 //   Records `paths` as the working tree has them now (a file's content, a link, or its
-//   absence) on top of HEAD, as a new snapshot. snapshot: its commit hash, or null when
+//   absence) on top of HEAD, as a new snapshot taken before `action` (one of ACTIONS:
+//   its message starts "<action>: N files"). snapshot: its commit hash, or null when
 //   `paths` is empty. With a commit, the index of `paths` is recorded too, as the second
 //   parent (indexCommit); paths in a conflict are named in the message's body. The real
 //   index and the working tree are not touched: the trees are built in the scratch index
@@ -58,21 +63,22 @@ async function headCommit(git, root) {
 //   too. Fails without an id, or with git's words when any step fails, and then no
 //   snapshot is added. Each tree is checked before it becomes part of a snapshot: every
 //   path it changes against HEAD must be one of `paths`.
-export async function record(git, root, paths, copy) {
+export async function record(git, root, paths, copy, action = "Rollback") {
   if (!COPY.test(String(copy ?? ""))) return { ...noCopy, snapshot: null };
+  if (!ACTIONS.includes(action)) return { ok: false, code: -1, out: "", err: `Unknown snapshot action: ${action}`, snapshot: null };
   if (!paths.length) return { ok: true, code: 0, out: "", err: "", snapshot: null };
   const dir = await git.read(root, ["rev-parse", "--absolute-git-dir"]);
   if (!dir.ok) return { ...dir, snapshot: null };
   const env = { GIT_INDEX_FILE: scratchIndex(dir.out.trim(), copy) };
   const at = await headCommit(git, root);
   if (!at.ok) return { ...at, snapshot: null };
-  const made = await build(git, root, paths, env, at.head, copy);
+  const made = await build(git, root, paths, env, at.head, copy, action);
   // Emptied whether or not the snapshot was made; a failure here leaves only a stale file.
   await git(root, ["read-tree", "--empty"], { env });
   return made;
 }
 
-async function build(git, root, paths, env, head, copy) {
+async function build(git, root, paths, env, head, copy, action) {
   const fail = (r) => ({ ...r, ok: false, snapshot: null });
   const base = await git(root, head ? ["read-tree", head] : ["read-tree", "--empty"], { env });
   if (!base.ok) return fail(base);
@@ -86,7 +92,7 @@ async function build(git, root, paths, env, head, copy) {
   if (!tree.ok) return fail(tree);
   const odd = await outside(git, root, head, tree.out.trim(), paths);
   if (!odd.ok) return fail(odd);
-  const message = `Rollback: ${paths.length} ${paths.length === 1 ? "file" : "files"}`;
+  const message = `${action}: ${paths.length} ${paths.length === 1 ? "file" : "files"}`;
   // Without a commit there is no first parent to put the index's commit after: such a
   // snapshot holds no index, like one made before snapshots held it.
   const index = head ? await indexCommit(git, root, paths, env, head, message, copy) : { ok: true, parents: [], conflicts: [], intents: [] };
@@ -208,11 +214,17 @@ async function outside(git, root, head, tree, paths) {
 const STATUS = { M: "modified", T: "modified", A: "added", D: "deleted" };
 
 // listSnapshots(git, root) → { ok, code, err, snapshots }
-//   snapshots: the newest LIST_LIMIT, newest first: [{ hash, time, files }]. time: when it
-//   was made, unix seconds. files: [{ path, status }] by path, status "modified" |
-//   "added" | "deleted" against the HEAD it was made on. [] when nothing was ever rolled
-//   back here. One git call, plus one more only when that call fails.
+//   snapshots: the newest LIST_LIMIT, newest first: [{ hash, time, action, threeWay, files }].
+//   time: when it was made, unix seconds. action: the write it was taken before, one of
+//   ACTIONS ("Rollback" for a message this module doesn't know). threeWay: it holds the
+//   staging and was made on another HEAD than the one now, so Restore puts it back whole
+//   with applySnapshot (restore would skip every path HEAD changed since). files:
+//   [{ path, status }] by path, status "modified" | "added" | "deleted" against the HEAD
+//   it was made on. [] when nothing was ever rolled back here. Two git calls, plus one
+//   more only when the log fails.
 export async function listSnapshots(git, root) {
+  const at = await headCommit(git, root);
+  if (!at.ok) return { ok: false, code: at.code, err: at.err, snapshots: [] };
   // -g walks the reflog, so every snapshot is listed, not only the ref's tip and what it
   // reaches. -z ends the header and each status and path with NUL. The output is read
   // word by word: a status is always followed by its path, so a path is never taken for
@@ -220,7 +232,8 @@ export async function listSnapshots(git, root) {
   // could be is the next entry's header (a status never does). A snapshot holding the
   // index has two parents: without --diff-merges=first-parent (git 2.31) git lists no
   // files for it; with it, the change against the first, the HEAD it was made on.
-  const r = await git.read(root, ["log", "-g", `--max-count=${LIST_LIMIT}`, "--format=%x01%H %ct", "--name-status", "--no-renames", "--root", "--diff-merges=first-parent", "-z", "--no-color", SNAPSHOTS, "--"]);
+  // The header: \x01, hash, time and parents, \x02, the message's first line.
+  const r = await git.read(root, ["log", "-g", `--max-count=${LIST_LIMIT}`, "--format=%x01%H %ct %P%x02%s","--name-status", "--no-renames", "--root", "--diff-merges=first-parent", "-z", "--no-color", SNAPSHOTS, "--"]);
   if (!r.ok) {
     // Never rolled back: no such ref. Asked of git, not read from its words, which may be
     // in another language.
@@ -233,8 +246,12 @@ export async function listSnapshots(git, root) {
   for (let i = 0; i < words.length; i++) {
     const word = words[i];
     if (word.startsWith("\x01")) {
-      const [hash, time] = word.slice(1).trim().split(" ");
-      entry = { hash, time: Number(time), files: [] };
+      const cut = word.indexOf("\x02");
+      const [hash, time, ...parents] = word.slice(1, cut).trim().split(" ");
+      const named = /^(\w+): \d+ files?$/.exec(word.slice(cut + 1).trim());
+      const action = named && ACTIONS.includes(named[1]) ? named[1] : "Rollback";
+      const threeWay = parents.length === 2 && parents[0] !== at.head;
+      entry = { hash, time: Number(time), action, threeWay, files: [] };
       snapshots.push(entry);
       continue;
     }
@@ -412,6 +429,65 @@ export async function restore(git, root, { snapshot, paths = [], copy } = {}) {
     return { ok: false, code: broke ? broke.code : -1, out: "", restored, skipped, stagingSkipped, changed: moved(), err, msg };
   }
   return { ok: true, code: 0, out: "", err: "", restored, skipped, stagingSkipped, changed: moved() };
+}
+
+// applySnapshot(git, root, { snapshot })
+//   → { ok, code, out, err, msg?, conflicts, staged, changed }
+//   Puts a snapshot made on another HEAD back whole, 3-way, the way a stash is applied: a
+//   snapshot has the shape of one (first parent the HEAD it was made on, second its
+//   staging), so `git stash apply --index` takes it. Each change merges with what HEAD
+//   holds now; where both changed the same lines, the file is left with conflict markers
+//   and in a conflict in the index (conflicts: those paths, for the Conflicts dialog), and
+//   git stages the rest as a conflicted merge leaves it. staged: the staging came back as
+//   it was. When git refuses the staging alone (the staged change doesn't fit the index
+//   HEAD has now), the changes are applied without it, and staged is false. When git
+//   refuses outright (a local change is in the way), nothing changed: ok is false with
+//   its words. Untracked files and the snapshot itself are left alone. ok is true only
+//   when all of it came back as it was (msg restore.applied). Applied without the staging
+//   (restore.appliedUnstaged) or with conflicts (restore.appliedConflicts, args n and the
+//   paths' list) is said like a restore that left something: ok false, changed true, and
+//   that sentence in err.
+//   Which way a refusal went is read from the index's conflicts, never from git's words:
+//   git exits 1 both when it refuses before writing and when it leaves conflicts.
+export async function applySnapshot(git, root, { snapshot } = {}) {
+  const out = (r, more) => ({ ok: r.ok, code: r.code, out: r.out ?? "", err: r.err ?? "", ...(r.msg ? { msg: r.msg } : {}), conflicts: [], staged: false, changed: false, ...more });
+  if (!HASH.test(String(snapshot ?? ""))) return out({ ok: false, code: -1, err: "No rollback to restore from.", msg: { key: "restore.noSnapshot" } });
+  const made = await madeOn(git, root, snapshot);
+  if (!made.ok) return out(made);
+  const before = await unmerged(git, root);
+  if (!before.ok) return out(before);
+  const tries = made.parents.length === 2 ? [true, false] : [false];
+  let first = null;
+  for (const index of tries) {
+    const r = await git(root, ["stash", "apply", "-q", ...(index ? ["--index"] : []), snapshot]);
+    if (r.ok && index) return out({ ...r, err: "", msg: { key: "restore.applied" } }, { staged: true, changed: true });
+    if (r.ok) return out({ ...r, ok: false, err: UNSTAGED, msg: { key: "restore.appliedUnstaged" } }, { changed: true });
+    first ??= r;
+    // With conflicts already in the index git refuses at once: any failure is a refusal.
+    const after = before.paths.length ? before : await unmerged(git, root);
+    if (!after.ok) return out(r, { changed: true });
+    if (after.paths.length && !before.paths.length) {
+      const msg = { key: "restore.appliedConflicts", args: { n: after.paths.length, list: after.paths.join("\n") } };
+      const n = after.paths.length, files = n === 1 ? "1 file" : `${n} files`;
+      const err = `Restored all of it. Lines changed on both sides are left as conflicts in ${files}; resolve them:\n${msg.args.list}`;
+      return out({ ...r, ok: false, err, msg }, { conflicts: after.paths, changed: true });
+    }
+  }
+  return out({ ...first, ok: false });
+}
+
+const UNSTAGED = "Restored all of it. Its staging doesn't fit the index HEAD has now, so it was left out.";
+
+// The paths in a conflict in the index: { ok, paths } in git's order.
+async function unmerged(git, root) {
+  const r = await git.read(root, ["ls-files", "-u", "-z"]);
+  if (!r.ok) return r;
+  const paths = [];
+  for (const line of r.out.split("\0")) {
+    const tab = line.indexOf("\t");
+    if (tab >= 0 && paths[paths.length - 1] !== line.slice(tab + 1)) paths.push(line.slice(tab + 1));
+  }
+  return { ok: true, paths };
 }
 
 // The parents of `snapshot` and the paths its message names as in a conflict or only

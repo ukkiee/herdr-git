@@ -4,6 +4,8 @@
 // a result instead of throwing. No forced checkout, no remote branch deletion.
 // No `herdr` import: node tests it.
 
+import { nextFavorites } from "./branch-order.js";
+
 // What we refuse ourselves, in the shape git's own answers have.
 const refused = (err, more = {}) => ({ ok: false, code: -1, out: "", err, ...more });
 
@@ -175,6 +177,90 @@ async function startPoint(git, root, from) {
 // Up to five minutes; herdr's exec gives a command 30 s unless told otherwise.
 export async function fetchAll(git, root) {
   return git(root, ["fetch", "--all", "--prune"], { timeout: 300000, env: { GIT_TERMINAL_PROMPT: "0" } });
+}
+
+// ---- favorites (branch-order.js decides what is one) and Show My Branches
+
+const FAVORITE = "gittools.favorite", UNFAVORITE = "gittools.unfavorite";
+
+// Every value of a multi-valued key of the repository's own config. git answers 1 when
+// the key isn't there: that is an empty list, not a failure.
+async function configList(git, root, key) {
+  const r = await git.read(root, ["config", "--local", "--get-all", key]);
+  if (r.ok) return { ...r, list: r.out.split("\n").filter(Boolean) };
+  return r.code === 1 ? { ok: true, code: 0, out: "", err: "", list: [] } : { ...r, list: [] };
+}
+
+// readFavorites(git, root) → { ok, code, out, err, favorite, unfavorite }: the full ref
+// names marked (gittools.favorite) and main or master unmarked (gittools.unfavorite).
+export async function readFavorites(git, root) {
+  const [on, off] = await Promise.all([configList(git, root, FAVORITE), configList(git, root, UNFAVORITE)]);
+  const failed = !on.ok ? on : !off.ok ? off : null;
+  if (failed) return { ok: false, code: failed.code, out: "", err: failed.err, favorite: [], unfavorite: [] };
+  return { ok: true, code: 0, out: "", err: "", favorite: on.list, unfavorite: off.list };
+}
+
+// setFavorite(git, root, ref, on) → { ok, code, out, err, favorite, unfavorite }: marks
+// (on) or unmarks the branch with that full ref name, and says what is kept now. Values
+// are added and removed one by one, matched as written (--fixed-value): a ref name may
+// hold "." or "+".
+export async function setFavorite(git, root, ref, on) {
+  const before = await readFavorites(git, root);
+  if (!before.ok) return before;
+  const after = nextFavorites(before, ref, on);
+  for (const [key, was, now] of [[FAVORITE, before.favorite, after.favorite], [UNFAVORITE, before.unfavorite, after.unfavorite]]) {
+    let r = null;
+    if (now.includes(ref) && !was.includes(ref)) r = await git(root, ["config", "--local", "--add", key, ref]);
+    // 5: nothing of that value was there to remove.
+    else if (!now.includes(ref) && was.includes(ref)) r = await git(root, ["config", "--local", "--fixed-value", "--unset-all", key, ref]);
+    if (r && !r.ok && r.code !== 5) return { ...r, favorite: before.favorite, unfavorite: before.unfavorite };
+  }
+  return { ok: true, code: 0, out: "", err: "", ...after };
+}
+
+// readTags(git, root) → { ok, code, out, err, tags }: tags [{ name, hash }] by name, hash
+// the commit the tag points at (an annotated tag's own object is looked through).
+export async function readTags(git, root) {
+  const r = await git.read(root, ["for-each-ref", "--format=%(refname)%00%(objectname)%00%(*objectname)", "--sort=refname", "refs/tags/"]);
+  if (!r.ok) return { ...r, tags: [] };
+  const tags = [];
+  for (const line of r.out.split("\n")) {
+    const [ref, hash, peeled] = line.split("\0");
+    if (ref) tags.push({ name: ref.slice("refs/tags/".length), hash: peeled || hash });
+  }
+  return { ok: true, code: 0, out: "", err: "", tags };
+}
+
+// How many commits one for-each-ref is handed at a time: well under the argument limit.
+const CONTAINS_CHUNK = 1000;
+
+// readMyBranches(git, root) → { ok, code, out, err, email, mine }
+//   email: user.email as git sees it here, or null when none is set (mine is then []).
+//   mine: the full ref names of the local and remote branches that hold a commit whose
+//   author email is that one, in any case.
+export async function readMyBranches(git, root) {
+  const none = (r) => ({ ok: r.ok, code: r.code, out: "", err: r.err, email: null, mine: [] });
+  const who = await git.read(root, ["config", "--get", "user.email"]);
+  if (!who.ok) return who.code === 1 ? none({ ok: true, code: 0, err: "" }) : none(who);
+  const email = who.out.trim();
+  if (!email) return none({ ok: true, code: 0, err: "" });
+  // The author line reads "Name <email> time zone": in angle brackets the address can't
+  // match a longer one ending the same.
+  const log = await git.read(root, ["log", "--branches", "--remotes", "--regexp-ignore-case", "--fixed-strings", `--author=<${email}>`, "--format=%H", "--"]);
+  if (!log.ok) return { ...none(log), email };
+  const commits = log.out.split("\n").filter(Boolean);
+  const mine = new Set();
+  // A ref handed several --contains lists when it holds any of them.
+  for (let i = 0; i < commits.length; i += CONTAINS_CHUNK) {
+    const contains = commits.slice(i, i + CONTAINS_CHUNK).map((c) => `--contains=${c}`);
+    const r = await git.read(root, ["for-each-ref", "--format=%(refname)%00%(symref)", ...contains, HEADS, REMOTES]);
+    if (!r.ok) return { ...none(r), email };
+    for (const line of r.out.split("\n")) {
+      const [ref, symref] = line.split("\0");
+      if (ref && !symref) mine.add(ref);
+    }
+  }
+  return { ok: true, code: 0, out: "", err: "", email, mine: [...mine] };
 }
 
 // deleteBranch(git, root, name, { confirmed }) → { ok, code, out, err, unmerged, deleted? }

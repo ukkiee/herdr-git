@@ -6,7 +6,7 @@ import { formatTime } from "./i18n.js";
 // Fields end in NUL and -z ends each commit in NUL, so a subject may hold anything a
 // commit message can (quotes, pipes, control characters): nothing is split on text.
 // %aN/%aE: the author as .mailmap maps them, the names the User list and filter use.
-const FIELDS = ["%H", "%P", "%aN", "%aE", "%ct", "%D", "%s"];
+const FIELDS = ["%H", "%P", "%aN", "%aE", "%ct", "%at", "%D", "%s"];
 const FORMAT = `--format=${FIELDS.join("%x00")}`;
 
 // "HEAD -> refs/heads/main, tag: refs/tags/v1.0, refs/remotes/origin/main" → refs.
@@ -37,13 +37,24 @@ function parseRefs(text) {
 //   the full read takes in a repository with tens of thousands of them.
 //   extra: more `git log` arguments, from git-log-filter.js (already safe to pass on):
 //   options first, then optionally "--" and paths.
-//   → { ok, err, commits }
-//   commit: { hash, parents: [hash], subject, author, email, time, refs }
-//     time: commit date, unix seconds. refs: [{ name, kind, current? }] with kind
-//     "head" | "local" | "remote" | "tag". "head" marks the commit HEAD is on; the
-//     branch HEAD is on has current: true (a detached HEAD has "head" and no current).
+//   The graph options (log-options.js readArgs):
+//   order: "date" (children before parents, then newest first) or "topo" (a merged
+//   branch's commits together under the merge). Both keep children before parents.
+//   firstParent: follow only first parents from each starting point. A merge still
+//   lists both parents; graph.js draws the first.
+//   noMerges: merge commits are left out. git keeps the real parents of the commits
+//   under a merge (`--no-merges` rewrites nothing), so merges are read and dropped here,
+//   and the answer has through: [[merge, its first parent]] for graph.js to join the
+//   lines across them, and read: how many commits git gave, which is what `skip` goes
+//   on from (a batch may show fewer than it read).
+//   → { ok, err, commits } (with noMerges also { read, through })
+//   commit: { hash, parents: [hash], subject, author, email, time, authorTime, refs }
+//     time: commit date, authorTime: author date, unix seconds. refs: [{ name, kind,
+//     current? }] with kind "head" | "local" | "remote" | "tag". "head" marks the commit
+//     HEAD is on; the branch HEAD is on has current: true (a detached HEAD has "head"
+//     and no current).
 //   A repository without commits is { ok: true, commits: [] }.
-export async function readLog(git, root, { skip = 0, count = 1000, branch = null, extra = [], tags = true } = {}) {
+export async function readLog(git, root, { skip = 0, count = 1000, branch = null, extra = [], tags = true, order = "date", firstParent = false, noMerges = false } = {}) {
   const cut = extra.indexOf("--");
   const options = cut < 0 ? extra : extra.slice(0, cut), paths = cut < 0 ? [] : extra.slice(cut + 1);
   let revs;
@@ -54,16 +65,30 @@ export async function readLog(git, root, { skip = 0, count = 1000, branch = null
     if (!head.ok && head.code !== 1) return { ok: false, err: head.err, commits: [] };
     revs = ["--branches", "--remotes", ...(tags ? ["--tags"] : []), ...(head.ok ? ["HEAD"] : [])];
   }
-  const r = await git.read(root, ["log", "-z", FORMAT, "--date-order", "--decorate=full", ...(tags ? [] : ["--decorate-refs-exclude=refs/tags/*"]), "--no-show-signature", "--no-color",
+  const r = await git.read(root, ["log", "-z", FORMAT, order === "topo" ? "--topo-order" : "--date-order", ...(firstParent ? ["--first-parent"] : []),
+    "--decorate=full", ...(tags ? [] : ["--decorate-refs-exclude=refs/tags/*"]), "--no-show-signature", "--no-color",
     `--skip=${Math.max(0, skip)}`, `--max-count=${Math.max(0, count)}`, ...options, ...revs, "--", ...paths]);
   if (!r.ok) return { ok: false, err: r.err, commits: [] };
   const parts = r.out.split("\0");
   const commits = [];
   for (let i = 0; i + FIELDS.length <= parts.length; i += FIELDS.length) {
-    const [hash, parents, author, email, time, refs, subject] = parts.slice(i, i + FIELDS.length);
-    commits.push({ hash, parents: parents ? parents.split(" ") : [], subject, author, email, time: Number(time), refs: parseRefs(refs) });
+    const [hash, parents, author, email, time, authorTime, refs, subject] = parts.slice(i, i + FIELDS.length);
+    commits.push({ hash, parents: parents ? parents.split(" ") : [], subject, author, email, time: Number(time), authorTime: Number(authorTime), refs: parseRefs(refs) });
   }
-  return { ok: true, err: "", commits };
+  if (!noMerges) return { ok: true, err: "", commits };
+  const through = commits.filter((c) => c.parents.length > 1).map((c) => [c.hash, c.parents[0]]);
+  return { ok: true, err: "", commits: commits.filter((c) => c.parents.length <= 1), read: commits.length, through };
+}
+
+// readNotPicked(git, root, branch) → { ok, err, notPicked: [hash] }
+//   The commits of `branch` whose change the current branch (HEAD) has no copy of: not
+//   reachable from HEAD and no commit there with an equal patch (`git cherry`'s "+").
+//   Every other commit of the branch is already on the current branch.
+export async function readNotPicked(git, root, branch) {
+  const r = await git.read(root, ["cherry", "HEAD", branch]);
+  if (!r.ok) return { ok: false, err: r.err || `git cherry failed (${r.code})`, notPicked: [] };
+  const notPicked = r.out.split("\n").filter((line) => line.startsWith("+ ")).map((line) => line.slice(2).trim());
+  return { ok: true, err: "", notPicked };
 }
 
 // readRefsState(git, root) → { ok, err, state }
@@ -115,12 +140,16 @@ export function shortenMiddle(name, max = 28) {
   return `${name.slice(0, head)}…${name.slice(name.length - tail)}`;
 }
 
-// labelRefs(refs, { max }) → [{ text, kind, current }]
-//   The Ref labels of one commit. A local branch and the remote branches of the same
-//   name are one label ("origin & main"). HEAD is a label only when detached. Order:
-//   HEAD, the current branch, other local branches, remote branches, tags.
+// labelRefs(refs, { max, compact, tagNames }) → [{ text, kind, current, names? }]
+//   The Ref labels of one commit. HEAD is a label only when detached. Order: HEAD, the
+//   current branch, other local branches, remote branches, tags.
 //   current: HEAD is here (the label to emphasize). max: longest text, see shortenMiddle.
-export function labelRefs(refs, { max = 28 } = {}) {
+//   The display options (log-options.js), on unless said:
+//   compact: a local branch and the remote branches of the same name are one label
+//   ("origin & main"); off, each is its own.
+//   tagNames: each tag is a label by name; off, the commit's tags are one label with
+//   text "" (the screen draws a tag mark) and names: the tags' names.
+export function labelRefs(refs, { max = 28, compact = true, tagNames = true } = {}) {
   if (!refs.length) return [];
   const locals = refs.filter((r) => r.kind === "local").sort((a, b) => Number(Boolean(b.current)) - Number(Boolean(a.current)));
   const remotes = refs.filter((r) => r.kind === "remote");
@@ -128,14 +157,17 @@ export function labelRefs(refs, { max = 28 } = {}) {
   if (refs.some((r) => r.kind === "head") && !locals.some((r) => r.current)) labels.push({ text: "HEAD", kind: "head", current: true });
   const merged = new Set();
   for (const local of locals) {
-    const twins = remotes.filter((r) => r.name.slice(r.name.indexOf("/") + 1) === local.name);
+    const twins = compact ? remotes.filter((r) => r.name.slice(r.name.indexOf("/") + 1) === local.name) : [];
     for (const twin of twins) merged.add(twin);
     const text = [...twins.map((r) => r.name.slice(0, r.name.indexOf("/"))), local.name].join(" & ");
     labels.push({ text, kind: "local", current: Boolean(local.current) });
   }
   for (const remote of remotes) if (!merged.has(remote)) labels.push({ text: remote.name, kind: "remote", current: false });
-  for (const tag of refs) if (tag.kind === "tag") labels.push({ text: tag.name, kind: "tag", current: false });
-  return labels.map((label) => ({ ...label, text: shortenMiddle(label.text, max) }));
+  const tags = refs.filter((r) => r.kind === "tag").map((r) => r.name);
+  if (tagNames) for (const name of tags) labels.push({ text: name, kind: "tag", current: false });
+  const out = labels.map((label) => ({ ...label, text: shortenMiddle(label.text, max) }));
+  if (!tagNames && tags.length) out.push({ text: "", kind: "tag", current: false, names: tags });
+  return out;
 }
 
 // formatCommitTime(seconds, now) → "25 minutes ago" within the hour, "Today 2:30 PM",

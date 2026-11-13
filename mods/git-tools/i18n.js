@@ -11,6 +11,26 @@ import * as commit from "./messages-commit.js";
 import * as log from "./messages-log.js";
 import * as dialogs from "./messages-dialogs.js";
 import * as files from "./messages-files.js";
+import * as gitConsole from "./messages-console.js";
+import * as conflicts from "./messages-conflicts.js";
+import * as ops from "./messages-ops.js";
+import * as compare from "./messages-compare.js";
+import * as reset from "./messages-reset.js";
+import * as revision from "./messages-revision.js";
+import * as stash from "./messages-stash.js";
+import * as vcs from "./messages-vcs.js";
+import * as vcsOps from "./messages-vcs-ops.js";
+import * as rewrite from "./messages-rewrite.js";
+import * as smart from "./messages-smart.js";
+import * as graph from "./messages-graph.js";
+import * as refs from "./messages-refs.js";
+import * as remote from "./messages-remote.js";
+import * as pick from "./messages-pick.js";
+import * as merge from "./messages-merge.js";
+import * as interactive from "./messages-interactive.js";
+import * as worktree from "./messages-worktree.js";
+import * as branchTree from "./messages-branch-tree.js";
+import * as patch from "./messages-patch.js";
 
 export const LANGS = ["en", "ko"];
 
@@ -60,7 +80,7 @@ export function systemLang(platform, read) {
 // screen's words go into its own area's file, and this list stays as it is. A table
 // that isn't listed is never used: i18n.test.mjs finds every
 // messages-*.js in the folder and fails when one of its keys doesn't come out of `t`.
-export const TABLES = [ui, restore, branches, filters, commit, log, dialogs, files];
+export const TABLES = [ui, restore, branches, filters, commit, log, dialogs, files, gitConsole, conflicts, ops, compare, reset, revision, stash, vcs, vcsOps, rewrite, smart, graph, refs, remote, pick, merge, interactive, worktree, branchTree, patch];
 
 // One value per key and language: a sentence, or for English words that change with a
 // count, { one, other } (chosen by args.n: one when it is 1). Placeholders are {name},

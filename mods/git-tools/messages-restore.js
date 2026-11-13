@@ -36,6 +36,13 @@ export const en = {
   "restore.stagingSilent": "git failed while staging, without a message.",
   "restore.stagingNotAllFailed": { one: "Restored 1 file. Restored without their staging:\n{staged}\n{err}", other: "Restored {n} files. Restored without their staging:\n{staged}\n{err}" },
   "restore.notAllStagingFailed": { one: "Restored 1 file. Not restored, to keep what is there now:\n{list}\nRestored without their staging:\n{staged}\n{err}", other: "Restored {n} files. Not restored, to keep what is there now:\n{list}\nRestored without their staging:\n{staged}\n{err}" },
+  "restore.actionRollback": "Rollback",
+  "restore.actionReset": "Reset",
+  "restore.actionCheckout": "Checkout",
+  "restore.threeWayHint": "Recorded on another commit: Restore applies all of it 3-way, and lines changed on both sides may be left as conflicts.",
+  "restore.applied": "Restored all of it, with its staging.",
+  "restore.appliedUnstaged": "Restored all of it. Its staging doesn't fit the index HEAD has now, so it was left out.",
+  "restore.appliedConflicts": { one: "Restored all of it. Lines changed on both sides are left as conflicts in 1 file; resolve them:\n{list}", other: "Restored all of it. Lines changed on both sides are left as conflicts in {n} files; resolve them:\n{list}" },
 };
 
 export const ko = {
@@ -73,4 +80,11 @@ export const ko = {
   "restore.stagingSilent": "스테이징하던 중 git이 아무 메시지 없이 실패했습니다.",
   "restore.stagingNotAllFailed": "{n}개 파일을 복원했습니다. 스테이징은 복원하지 않은 파일:\n{staged}\n{err}",
   "restore.notAllStagingFailed": "{n}개 파일을 복원했습니다. 지금 있는 것을 지키려고 복원하지 않은 파일:\n{list}\n스테이징은 복원하지 않은 파일:\n{staged}\n{err}",
+  "restore.actionRollback": "롤백",
+  "restore.actionReset": "재설정",
+  "restore.actionCheckout": "체크아웃",
+  "restore.threeWayHint": "다른 커밋에서 기록했습니다. 복원은 전체를 3-way로 적용하며, 양쪽에서 바뀐 줄은 충돌로 남을 수 있습니다.",
+  "restore.applied": "모두 복원했습니다. 스테이징도 복원했습니다.",
+  "restore.appliedUnstaged": "모두 복원했습니다. 스테이징은 지금 HEAD의 인덱스에 맞지 않아 복원하지 않았습니다.",
+  "restore.appliedConflicts": "모두 복원했습니다. 양쪽에서 바뀐 줄이 충돌로 남은 파일 {n}개를 해결하세요:\n{list}",
 };

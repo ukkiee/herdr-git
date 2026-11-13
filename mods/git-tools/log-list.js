@@ -12,10 +12,18 @@
 //   host.setBranch(ref, cx)    sets it (null clears) and reads the list again
 //   host.filterArgs            extra `git log` arguments from the filter row ([] when none)
 //   host.setFilterArgs(a, cx)  sets them and reads the list again
-//   host.selected              the selected commit (as git-log.js returns it), or null
-//   host.select(hash, cx)      selects a commit that is in the list (null clears)
+//   host.selected              the commit last clicked among those picked (as git-log.js
+//                              returns it), or null: what a one-commit action works on
+//   host.select(hash, cx)      picks a commit that is in the list, alone (null clears)
 //   host.pick(hash, cx)        the same for the person's own pick: a hash jump still
 //                              running is dropped
+//   host.pickWith(hash, { shift, cmd }, cx), host.pickForMenu(hash, cx), host.keepPicks(cx):
+//                              Shift and Cmd clicks, a right-click, a list read again
+//                              (log-select.js)
+//   host.picks, host.isPicked(hash), host.pickedCommits() (newest first)
+//   host.items(menu, ctx)      a menu's or toolbar's items now (log-menus.js menuItems with
+//                              the actions this panel does); host.run(id, target, cx) runs
+//                              one; host.itemTitle(item) is its tooltip
 //   host.beginJump()           a new hash jump's turn; host.jumpLive(turn) is false once
 //                              a newer jump, search, filter, pick or repository took over
 //   host.goTo(hash, cx, turn?) Promise<true | false | null>: finds a commit by (short)
@@ -49,22 +57,31 @@
 //   host.bus                   the panel's side of the bus, for ui.js openMenu
 //   host.list, host.branches, host.details: the parts themselves (host.list.handle gets
 //                              the keyboard back after a menu)
+//   host.options               the graph and display options (log-options.js readOptions)
+//   host.me                    the email git is configured with in host.repo, or null:
+//                              whose commits My Commits highlights
 
 import { div } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { theme } from "herdr";
-import { readLog, labelRefs } from "./git-log.js";
+import { readLog, readNotPicked, labelRefs } from "./git-log.js";
 import { formatTime } from "./i18n.js";
-import { layoutGraph, graphWindow, indexSegments, segmentsIn, fitLabels } from "./graph.js";
+import { layoutGraph, collapseLinear, reachableFrom, longEdges, graphWindow, indexSegments, segmentsIn, fitLabels } from "./graph.js";
+import { readArgs } from "./log-options.js";
 import { openCommitMenu } from "./log-details.js";
-import { ROW, row, notice, strokePath, WindowedList } from "./ui.js";
+import { tip, ROW, row, notice, strokePath, WindowedList, openMenu, uiGlyph } from "./ui.js";
+import { relatives } from "./git-revision.js";
 
 const BATCH = 1000;
 const LANE = 14, PAD = 5, MID = ROW / 2;
 const laneX = (lane) => PAD + lane * LANE + LANE / 2;
 const lanePalette = (t) => [t.ansi4, t.ansi2, t.ansi3, t.ansi5, t.ansi6, t.ansi1, t.ansi12, t.ansi10, t.ansi13, t.ansi14];
 // A row's own padding (row(): 2px left here, 8px right) and the 6px between its parts.
-const ROW_PAD = 10, GAP = 6, AUTHOR = 120, TIME = 124;
+const ROW_PAD = 10, GAP = 6, AUTHOR = 120, TIME = 124, HASH = 64;
+// Long edges off: a line this many rows long or more shows `part` rows at each end.
+const LONG_EDGE = { long: 30, part: 1 };
+// A folded line (a collapsed linear branch) is drawn in dashes, px.
+const DASH = 4, DASH_GAP = 3;
 // The subject keeps at least this much before Ref labels take the rest.
 const SUBJECT_MIN = 40;
 // 11px text with no way to measure it: a character is taken as 6.5px, above the
@@ -72,18 +89,43 @@ const SUBJECT_MIN = 40;
 const LABEL_LOOK = { char: 6.5, pad: 12, gap: 4, most: 3 };
 const STRIP = 3; // the sideways scroll strip under the graph part
 
+// A row's lines as segments, less the ones a long edge cut hides (graph.js longEdges).
+function segmentsOf(graph, cut) {
+  const hide = new Set(cut?.hide ?? []);
+  const segments = [];
+  graph.lines.forEach((l, i) => {
+    if (hide.has(i)) return;
+    segments.push({
+      color: l.color, folded: Boolean(l.folded),
+      x1: laneX(l.from ?? graph.lane), y1: l.from === null ? MID : 0,
+      x2: laneX(l.to ?? graph.lane), y2: l.to === null ? MID : ROW,
+    });
+  });
+  return indexSegments(segments);
+}
+
+// A straight line from (x1, y1) to (x2, y2) in dashes, on a path builder.
+function dashed(p, x1, y1, x2, y2) {
+  const length = Math.hypot(x2 - x1, y2 - y1);
+  if (!length) return p.move_to(x1, y1).line_to(x2, y2);
+  const dx = (x2 - x1) / length, dy = (y2 - y1) / length;
+  for (let d = 0; d < length; d += DASH + DASH_GAP) {
+    const e = Math.min(length, d + DASH);
+    p = p.move_to(x1 + dx * d, y1 + dy * d).line_to(x1 + dx * e, y1 + dy * e);
+  }
+  return p;
+}
+
+// The Ref labels as the display options word them.
+const labelLook = (options) => ({ compact: options.compactRefs, tagNames: options.tagNames });
+
 // What a row draws, worked out once when the commits arrive: render only places it.
-function rowModel(commit, graph) {
-  const segments = graph.lines.map((l) => ({
-    color: l.color,
-    x1: laneX(l.from ?? graph.lane), y1: l.from === null ? MID : 0,
-    x2: laneX(l.to ?? graph.lane), y2: l.to === null ? MID : ROW,
-  }));
+function rowModel(commit, graph, options) {
   return {
-    commit, segments: indexSegments(segments),
+    commit, graph, segments: segmentsOf(graph, null), arrows: [],
     lane: graph.lane, color: graph.color,
     width: PAD * 2 + graph.cols * LANE,
-    labels: labelRefs(commit.refs),
+    labels: labelRefs(commit.refs, labelLook(options)),
     merge: commit.parents.length > 1,
     head: commit.refs.some((r) => r.kind === "head"),
     minute: -1, time: "",
@@ -108,6 +150,20 @@ export default class LogList {
     this.rows = [];
     this.index = new Map(); // hash → row number
     this.carry = null;
+    // Everything read for the rows, in git's order: what a relayout (collapse, expand,
+    // long edges) starts from. seen: how many commits git gave (merges left out under
+    // No Merges count too: the next batch skips them). through: graph.js layoutGraph's.
+    this.commits = [];
+    this.loaded = new Set();
+    this.seen = 0;
+    this.through = [];
+    this.graphRows = []; // layoutGraph's row for each row in this.rows
+    this.cuts = new Map(); // graph.js longEdges' answer the rows are drawn with
+    this.collapsed = false; // Collapse Linear Branches is in effect (until Expand)
+    this.current = new Set(); // the hashes HEAD reaches among those read
+    // Non-Picked Commits: { key, hashes: Set } for the branch the list is limited to,
+    // or null when it does not apply (no branch, the current one, a read that failed).
+    this.notPicked = null;
     this.more = false; // commits beyond the ones read
     // { err, top, mark }: the next batch failed to read. mark: host.errorMark when its error
     // went up on the strip (null: not shown).
@@ -131,25 +187,113 @@ export default class LogList {
   // arguments. A branch alone still has its whole history.
   graphed() { return this.host.filterArgs.length === 0; }
 
-  add(commits, fresh) {
-    if (fresh) { this.rows = []; this.index = new Map(); this.carry = null; this.previewed = false; }
-    const graph = this.graphed() ? layoutGraph(commits, this.carry) : null;
+  // The graph options as graph.js takes them.
+  graphOptions() { return { firstParent: this.host.options.firstParent, through: this.through }; }
+
+  // r: a readLog answer. Collapsed, the whole list is laid out again (a commit read now
+  // may make one above it a fork); else the new rows go on from the carry.
+  add(r, fresh) {
+    if (fresh) { this.commits = []; this.loaded = new Set(); this.seen = 0; this.through = []; this.carry = null; this.previewed = false; this.clearRows(); }
+    this.commits.push(...r.commits);
+    for (const c of r.commits) this.loaded.add(c.hash);
+    this.seen += r.read ?? r.commits.length;
+    if (r.through?.length) this.through.push(...r.through);
+    if (this.collapsed && this.graphed()) this.relayout();
+    else this.place(r.commits);
+    this.settleRows();
+  }
+
+  clearRows() { this.rows = []; this.index = new Map(); this.graphRows = []; this.cuts = new Map(); }
+
+  place(commits) {
+    const graph = this.graphed() ? layoutGraph(commits, this.carry, this.graphOptions()) : null;
     if (graph) this.carry = graph.carry;
     for (let i = 0; i < commits.length; i++) {
+      const g = graph ? graph.rows[i] : LONE;
       this.index.set(commits[i].hash, this.rows.length);
-      this.rows.push(rowModel(commits[i], graph ? graph.rows[i] : LONE));
+      this.rows.push(rowModel(commits[i], g, this.host.options));
+      this.graphRows.push(g);
     }
+  }
+
+  // Every row again from what was read: after Collapse or Expand.
+  relayout() {
+    const top = this.rows[Math.min(this.list.top, this.rows.length - 1)]?.commit.hash ?? null;
+    this.clearRows();
+    this.carry = null;
+    if (this.collapsed && this.graphed()) {
+      const shown = collapseLinear(this.commits, this.graphOptions());
+      const graph = layoutGraph(shown, null, this.graphOptions());
+      for (let i = 0; i < shown.length; i++) {
+        this.index.set(shown[i].hash, this.rows.length);
+        this.rows.push(rowModel(shown[i], graph.rows[i], this.host.options));
+        this.graphRows.push(graph.rows[i]);
+      }
+    } else this.place(this.commits);
+    // The commit on top stays on top when it is still a row.
+    const at = top ? this.index.get(top) : undefined;
+    if (at !== undefined) this.list.top = at;
+  }
+
+  // What depends on all the rows read: the long edges' cuts and the current branch.
+  settleRows() {
+    const { options } = this.host;
+    const cuts = !options.longEdges && this.graphed() ? longEdges(this.graphRows, LONG_EDGE) : new Map();
+    for (const i of new Set([...this.cuts.keys(), ...cuts.keys()])) {
+      const m = this.rows[i];
+      if (!m) continue;
+      const cut = cuts.get(i) ?? null;
+      m.segments = segmentsOf(m.graph, cut);
+      m.arrows = cut?.arrows ?? [];
+    }
+    this.cuts = cuts;
+    const head = this.commits.find((c) => c.refs.some((ref) => ref.kind === "head"));
+    this.current = reachableFrom(this.commits, head?.hash ?? null, this.graphOptions());
+    this.headBranch = head?.refs.find((ref) => ref.current)?.name ?? null;
+  }
+
+  // Collapse Linear Branches (true) or Expand Linear Branches (false).
+  setCollapsed(on, cx) {
+    if (this.collapsed === on) return;
+    this.collapsed = on;
+    this.relayout();
+    this.settleRows();
+    cx.notify();
+  }
+
+  // The display options changed: the rows' labels, times and long edges again.
+  restyle(cx) {
+    for (const m of this.rows) { m.labels = labelRefs(m.commit.refs, labelLook(this.host.options)); m.fitRoom = -1; m.minute = -1; }
+    this.settleRows();
+    this.readNotPicked(cx);
+    cx.notify();
+  }
+
+  // Non-Picked Commits applies to a list limited to another branch than the current one
+  // (headBranch: the branch HEAD is on, from the refs read).
+  readNotPicked(cx) {
+    const { host } = this, repo = host.repo, branch = host.branch;
+    const on = host.options.highlight.notPicked && repo && branch && branch !== "HEAD" && branch !== this.headBranch;
+    if (!on) { this.notPicked = null; return; }
+    const key = JSON.stringify([repo.root, repo.on, branch]);
+    if (this.notPicked?.key === key) return;
+    cx.spawn(async (cx) => {
+      const r = await readNotPicked(repo.git, repo.root, branch);
+      if (repo !== host.repo || branch !== host.branch) return;
+      this.notPicked = r.ok ? { key, hashes: new Set(r.notPicked) } : null;
+      cx.notify();
+    });
   }
 
   // One read. `fresh`: from the top again, as many as are shown now; else the next batch.
   // Resolves when the rows are in place. A newer reload makes an older read's answer void.
   fetch(fresh) {
     const { host } = this, repo = host.repo, turn = fresh ? ++this.turn : this.turn;
-    const skip = fresh ? 0 : this.rows.length;
-    const count = fresh ? Math.max(BATCH, Math.ceil(this.rows.length / BATCH) * BATCH) : BATCH;
+    const skip = fresh ? 0 : this.seen;
+    const count = fresh ? Math.max(BATCH, Math.ceil(this.seen / BATCH) * BATCH) : BATCH;
     this.loading = true;
     const work = (async () => {
-      const r = await readLog(repo.git, repo.root, { skip, count, branch: host.branch, extra: host.filterArgs });
+      const r = await readLog(repo.git, repo.root, { skip, count, branch: host.branch, extra: host.filterArgs, ...readArgs(host.options) });
       if (turn !== this.turn) return null;
       this.loading = false; this.read = true; this.pending = null;
       // The full read is here (or failed): a preview that lands after it is void, also
@@ -174,8 +318,8 @@ export default class LogList {
       // the top, where the newest commits are.
       const over = fresh && this.previewed;
       const top = over && this.list.top > 0 ? this.rows[this.list.top]?.commit.hash : null;
-      this.add(r.commits, fresh);
-      this.more = r.commits.length >= count;
+      this.add(r, fresh);
+      this.more = (r.read ?? r.commits.length) >= count;
       const at = top ? this.index.get(top) : undefined;
       if (at !== undefined) this.list.top = at;
       return { ...r, recovered, over };
@@ -193,12 +337,12 @@ export default class LogList {
   preview(turn, moved, cx) {
     const { host } = this, repo = host.repo;
     cx.spawn(async (cx) => {
-      const r = await readLog(repo.git, repo.root, { count: BATCH, branch: host.branch, extra: host.filterArgs, tags: false });
+      const r = await readLog(repo.git, repo.root, { count: BATCH, branch: host.branch, extra: host.filterArgs, tags: false, ...readArgs(host.options) });
       // Void when the full read landed first or a newer reload began (`awaited` is this
       // turn only until then; `loading` won't do, a next batch sets it again).
       // An empty answer may only mean every commit hangs on a tag: the full read says.
       if (this.awaited !== turn || !r.ok || !r.commits.length) return;
-      this.add(r.commits, true);
+      this.add(r, true);
       this.previewed = true; this.read = true;
       if (moved) this.list.top = 0;
       cx.notify();
@@ -209,9 +353,10 @@ export default class LogList {
   // What is shown stays until the new commits are there.
   reload(cx) {
     const { host } = this, repo = host.repo;
-    if (!repo) { this.turn++; this.rows = []; this.index = new Map(); this.carry = null; this.more = false; this.stalled = null; this.loading = false; this.read = false; this.previewed = false; this.awaited = null; this.key = null; return; }
-    const key = JSON.stringify([repo.root, repo.on]), view = JSON.stringify([host.branch, host.filterArgs]);
-    if (key !== this.key) { this.key = key; this.rows = []; this.index = new Map(); this.stalled = null; this.read = false; this.previewed = false; this.list.top = 0; this.left = 0; }
+    if (!repo) { this.turn++; this.forget(); this.carry = null; this.more = false; this.stalled = null; this.loading = false; this.read = false; this.previewed = false; this.awaited = null; this.key = null; return; }
+    // Another sort or graph option is another view: read from the top, at the top.
+    const key = JSON.stringify([repo.root, repo.on]), view = JSON.stringify([host.branch, host.filterArgs, readArgs(host.options)]);
+    if (key !== this.key) { this.key = key; this.forget(); this.stalled = null; this.read = false; this.previewed = false; this.list.top = 0; this.left = 0; }
     const moved = view !== this.view;
     this.view = view;
     // Rows still on screen from the view before are not a preview of this one: where they
@@ -236,12 +381,21 @@ export default class LogList {
         // A preview already put the list at the top of this view; from there on the
         // place is the person's.
         if (moved && !r.over) this.list.top = 0;
-        // The selected commit may be gone (amended, filtered out); if it is still here,
-        // host.select swaps in the newly read one.
-        if (host.selected) host.select(this.index.has(host.selected.hash) ? host.selected.hash : null, cx);
+        // Picked commits may be gone (amended, filtered out); the ones still here stay
+        // picked, and host.selected becomes the newly read object.
+        if (host.picks.picked.size) host.keepPicks(cx);
+        // The branches may have moved: git cherry is asked again.
+        this.notPicked = null;
+        this.readNotPicked(cx);
       }
       cx.notify();
     });
+  }
+
+  // Nothing read is kept: another repository, or none.
+  forget() {
+    this.clearRows();
+    this.commits = []; this.loaded = new Set(); this.seen = 0; this.through = []; this.current = new Set(); this.notPicked = null;
   }
 
   loadMore(cx) {
@@ -283,6 +437,8 @@ export default class LogList {
   async goTo(hash, cx, live = () => true) {
     for (let reads = 0; reads < 500; reads++) {
       if (!live()) return null;
+      // Read but folded away: linear branches are expanded to show it.
+      if (this.collapsed && this.loaded.has(hash) && !this.index.has(hash)) this.setCollapsed(false, cx);
       const at = this.index.get(hash);
       if (at !== undefined) {
         this.host.select(hash, cx);
@@ -300,6 +456,30 @@ export default class LogList {
       if (r && !r.ok) { this.stall(r, cx); return false; }
     }
     return false;
+  }
+
+  // Go to Parent Commit (which "parents") and Go to Child Commit ("children") from
+  // `commit`: one goes straight there; several open a popup to pick one (each as its
+  // short hash and subject); none does nothing. Children are those of what the list
+  // shows: every branch, or host.branch alone.
+  goToRelative(which, commit, cx) {
+    const host = this.host, repo = host.repo;
+    if (!repo || !commit?.hash) return;
+    const turn = host.beginJump();
+    cx.spawn(async (cx) => {
+      const r = await relatives(repo.git, repo.root, commit.hash, { branch: host.branch ?? null });
+      if (repo !== host.repo || !host.jumpLive(turn)) return;
+      if (!r.ok) { host.fail(r.err || host.t("ui.gitFailed"), cx); cx.notify(); return; }
+      const next = r[which];
+      let hash = next.length === 1 ? next[0].hash : null;
+      if (next.length > 1) {
+        hash = await openMenu(host.bus, next.map((c) => ({ label: `${c.hash.slice(0, 8)}  ${c.subject}`, value: c.hash })), { width: 380, lang: host.lang });
+        this.handle.focus();
+      }
+      if (!hash || repo !== host.repo || !host.jumpLive(turn)) return;
+      await host.goTo(hash, cx, turn);
+      cx.notify();
+    });
   }
 
   move(by, cx) {
@@ -322,10 +502,14 @@ export default class LogList {
     else if (name === "log-focus") this.handle.focus();
   }
 
-  // Worked out again each minute, and when the copy's language changes.
+  // Worked out again each minute, and when the copy's language changes. The author's
+  // date, or with Commit Timestamp the commit date (restyle starts it over).
   timeOf(m) {
     const minute = Math.floor(Date.now() / 60000), lang = this.host.lang;
-    if (m.minute !== minute || m.timeLang !== lang) { m.minute = minute; m.timeLang = lang; m.time = formatTime(m.commit.time, lang); }
+    if (m.minute !== minute || m.timeLang !== lang) {
+      const { commit } = m, seconds = this.host.options.commitTimestamp ? commit.time : (commit.authorTime ?? commit.time);
+      m.minute = minute; m.timeLang = lang; m.time = formatTime(seconds, lang);
+    }
     return m.time;
   }
 
@@ -356,15 +540,29 @@ export default class LogList {
     const w = Math.min(m.width, v.room), left = v.left;
     const color = palette[m.color % palette.length], x = laneX(m.lane) - left;
     let cell = div().relative().flex_none().h(ROW).w(w).overflow_hidden();
-    for (const s of segmentsIn(m.segments, left, left + w)) cell = cell.child(strokePath((p) => p.move_to(s.x1 - left, s.y1).line_to(s.x2 - left, s.y2), palette[s.color % palette.length], 1.5));
+    for (const s of segmentsIn(m.segments, left, left + w)) {
+      const stroke = palette[s.color % palette.length];
+      cell = cell.child(strokePath((p) => (s.folded ? dashed(p, s.x1 - left, s.y1, s.x2 - left, s.y2) : p.move_to(s.x1 - left, s.y1).line_to(s.x2 - left, s.y2)), stroke, 1.5));
+    }
+    // Where a long edge is cut: a chevron pointing the way the line goes on.
+    for (const a of m.arrows) {
+      const ax = laneX(a.lane) - left, tip = a.dir === "down" ? ROW - 3 : 3, back = a.dir === "down" ? tip - 4 : tip + 4;
+      if (ax < -6 || ax > w + 6) continue;
+      cell = cell.child(strokePath((p) => p.move_to(ax - 4, back).line_to(ax, tip).line_to(ax + 4, back), palette[(m.graph.lines.find((l) => l.to === a.lane || l.from === a.lane)?.color ?? 0) % palette.length], 1.5));
+    }
     if (x < -6 || x > w + 6) return cell;
     // HEAD's commit is a ring around a dot.
     if (m.head) return cell.child(div().absolute().left(x - 6).top(MID - 6).size(12).rounded(6).border_1().border_color(color).bg(t.background).flex().items_center().justify_center().child(div().size(6).rounded(3).bg(color)));
     return cell.child(div().absolute().left(x - 4).top(MID - 4).size(8).rounded(4).bg(color));
   }
 
-  label(label, t) {
+  label(label, t, id) {
     const color = label.current ? t.ansi3 : { local: t.ansi2, remote: t.ansi5, tag: t.muted, head: t.ansi3 }[label.kind];
+    // Tags without their names (Tag Names off): one tag mark, the names as its tooltip.
+    if (label.names) {
+      return h_flex().id(id).flex_none().h(16).px(3).items_center().rounded(4).border_1().border_color(color)
+        .map((el) => tip(el, label.names.join(", "))).child(uiGlyph("tag", { size: 12 }));
+    }
     return h_flex().flex_none().h(16).px(5).items_center().rounded(4).border_1().border_color(color).text_size(11).text_color(color).whitespace_nowrap()
       .when(label.current, (el) => el.font_semibold())
       .child(label.text);
@@ -372,29 +570,55 @@ export default class LogList {
 
   // Ref labels get 45% of the row at most, and never the subject's last SUBJECT_MIN px.
   // labelSpace: what the row's other parts leave, before the graph part takes its own.
-  labels(m, t, labelSpace, graphWidth) {
+  labels(m, t, labelSpace, graphWidth, i) {
     const room = Math.max(0, Math.min(labelSpace.most, labelSpace.left - graphWidth));
     if (m.fitRoom !== room) { m.fit = fitLabels(m.labels, room, LABEL_LOOK); m.fitRoom = room; }
     const { shown, rest } = m.fit;
     // Left-aligned in a box no wider than the room: should the estimate fall short, the
     // last label's end is cut, never the first label's start.
     return h_flex().flex_none().max_w(room).gap(LABEL_LOOK.gap).overflow_hidden()
-      .children(shown.map((l) => this.label(l, t)))
+      .children(shown.map((l, k) => this.label(l, t, `log-tags-${i}-${k}`)))
       .when(rest > 0, (el) => el.child(div().flex_none().text_size(11).text_color(t.dim).child(`+${rest}`)));
   }
 
-  commitRow(i, t, palette, wide, v, labelSpace) {
+  // How the rows stand out now (the display options' Highlight), worked out per frame.
+  highlights() {
+    const { host } = this, h = host.options.highlight;
+    const me = h.mine && host.me ? host.me.toLowerCase() : null;
+    // The current branch stands out among others: not in a list limited to it.
+    const current = h.current && !(host.branch && (host.branch === "HEAD" || host.branch === this.headBranch)) ? this.current : null;
+    return { me, current, merges: h.merges, picked: this.notPicked?.hashes ?? null };
+  }
+
+  commitRow(i, t, palette, cols, v, labelSpace, look) {
     const m = this.rows[i], { commit } = m, { host } = this;
-    return row(`log-commit-${i}`, t, { selected: host.selected?.hash === commit.hash }).pl(2)
-      .on_click((_e, cx) => { this.handle.focus(); host.pick(commit.hash, cx); cx.notify(); })
-      .on_mouse_down("right", (_e, cx) => { this.handle.focus(); host.pick(commit.hash, cx); openCommitMenu(host, commit, cx); cx.notify(); })
+    const selected = host.isPicked(commit.hash);
+    // Non-Picked Commits: what the current branch has already is grayed.
+    const gray = (look.merges && m.merge) || (look.picked !== null && !look.picked.has(commit.hash));
+    const mine = look.me !== null && commit.email.toLowerCase() === look.me;
+    const subject = div().flex_1().min_w(0).truncate().text_color(gray ? t.dim : t.foreground).when(mine, (el) => el.font_semibold()).child(commit.subject);
+    const labels = m.labels.length > 0 ? this.labels(m, t, labelSpace, Math.min(m.width, v.room), i) : null;
+    const left = labels && host.options.refsLeft;
+    const muted = gray ? t.dim : t.muted;
+    return row(`log-commit-${i}`, t, { selected }).pl(2)
+      .when(!selected && look.current !== null && look.current.has(commit.hash), (el) => el.bg(t.raised))
+      .on_click((e, cx) => {
+        this.handle.focus();
+        const mods = { shift: Boolean(e.modifiers?.shift), cmd: Boolean(e.modifiers?.platform || e.modifiers?.control) };
+        if (mods.shift || mods.cmd) host.pickWith(commit.hash, mods, cx);
+        else host.pick(commit.hash, cx);
+        cx.notify();
+      })
+      .on_mouse_down("right", (_e, cx) => { this.handle.focus(); host.pickForMenu(commit.hash, cx); openCommitMenu(host, host.pickedCommits(), cx); cx.notify(); })
       // On the row, so it runs before the list's own wheel handling and can stop it.
       .on_scroll_wheel((e, cx) => { if (this.slide(e, cx)) cx.stop_propagation(); })
       .child(this.graphCell(m, t, palette, v))
-      .child(div().flex_1().min_w(0).truncate().text_color(m.merge ? t.dim : t.foreground).child(commit.subject))
-      .when(m.labels.length > 0, (el) => el.child(this.labels(m, t, labelSpace, Math.min(m.width, v.room))))
-      .when(wide > 1, (el) => el.child(div().flex_none().w(AUTHOR).truncate().text_size(12).text_color(t.muted).child(commit.author)))
-      .when(wide > 0, (el) => el.child(div().flex_none().w(TIME).truncate().text_size(12).text_color(t.muted).child(this.timeOf(m))));
+      .when(left, (el) => el.child(labels))
+      .child(subject)
+      .when(Boolean(labels) && !left, (el) => el.child(labels))
+      .when(cols.author, (el) => el.child(div().flex_none().w(AUTHOR).truncate().text_size(12).text_color(muted).when(mine, (el) => el.font_semibold()).child(commit.author)))
+      .when(cols.date, (el) => el.child(div().flex_none().w(TIME).truncate().text_size(12).text_color(muted).child(this.timeOf(m))))
+      .when(cols.hash, (el) => el.child(div().flex_none().w(HASH).truncate().text_size(12).text_color(muted).child(commit.hash.slice(0, 8))));
   }
 
   // A thin strip under the graph part while it has more than it shows: where the window is.
@@ -418,10 +642,15 @@ export default class LogList {
     }
     const palette = lanePalette(t), width = host.listWidth ?? 9999, wide = width >= 520 ? 2 : width >= 380 ? 1 : 0;
     const v = this.graphView(width);
+    // The Columns the display options ask for, as many as the width allows (a narrow list
+    // drops author and hash, then the date).
+    const shown = host.options.columns;
+    const cols = { author: shown.author && wide > 1, date: shown.date && wide > 0, hash: shown.hash && wide > 1 };
     const labelSpace = {
       most: Math.floor((width - ROW_PAD) * 0.45),
-      left: width - ROW_PAD - GAP * 2 - SUBJECT_MIN - (wide > 1 ? AUTHOR + GAP : 0) - (wide > 0 ? TIME + GAP : 0),
+      left: width - ROW_PAD - GAP * 2 - SUBJECT_MIN - (cols.author ? AUTHOR + GAP : 0) - (cols.date ? TIME + GAP : 0) - (cols.hash ? HASH + GAP : 0),
     };
+    const look = this.highlights();
     return div().id("log-list").track_focus(this.handle).relative().size_full().min_h(0)
       .on_key_down((e, cx) => {
         const page = Math.max(1, this.list.fit - 1);
@@ -431,10 +660,12 @@ export default class LogList {
         else if (e.key === "pageup") this.move(-page, cx);
         else if (e.key === "home") this.move(-this.rows.length, cx);
         else if (e.key === "end") this.move(this.rows.length, cx);
+        else if (e.key === "left" && host.selected) host.run("commit.goToChild", [host.selected], cx);
+        else if (e.key === "right" && host.selected) host.run("commit.goToParent", [host.selected], cx);
         else return;
         cx.stop_propagation();
       })
-      .child(this.list.render(n, (i) => this.commitRow(i, t, palette, wide, v, labelSpace), t))
+      .child(this.list.render(n, (i) => this.commitRow(i, t, palette, cols, v, labelSpace, look), t))
       .when(v.max > 0, (el) => el.child(this.scrollStrip(v, t)));
   }
 }

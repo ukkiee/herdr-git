@@ -5,7 +5,18 @@
 // the Commit panel watches the folder, and a read that touched .git would start the next read.
 export const READ = ["--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "diff.autoRefreshIndex=false"];
 
-// makeGit(exec, on) → git(cwd, args, { timeout?, env? }) → { ok, code, out, err }.
+// The recorder every runner without its own hands its writes to (main.js installs the Git
+// console's, app-files.js). One value for all copies, never a copy's state: every copy
+// installs the same function, so it doesn't matter whether copies share this module.
+let installed = null;
+
+// recordWith(fn | null): installs the recorder for runners made without one.
+export function recordWith(fn) { installed = typeof fn === "function" ? fn : null; }
+
+// A command that only looks starts with the READ flags (git.read): the console leaves it out.
+const reads = (args) => args[0] === READ[0];
+
+// makeGit(exec, on, { record? }) → git(cwd, args, { timeout?, env? }) → { ok, code, out, err }.
 // Never throws: a program that can't start or a machine that can't be reached is
 // { ok: false, code: -1 }. `out` is stdout exactly as git wrote it (-z output and diffs
 // depend on it); `err` is trimmed stderr, or trimmed stdout when stderr is empty (hooks
@@ -13,15 +24,29 @@ export const READ = ["--no-optional-locks", "-c", "core.fsmonitor=false", "-c", 
 // `on`: the space's machine, null for this computer. `env`: herdr's exec has no env
 // option, so variables go through the `env` program. `timeout`: ms (exec's default is 30 s,
 // its cap 10 min).
-export function makeGit(exec, on) {
+// record(call): gets every command that may write once it ended, { at (ms), cwd, on,
+// args (git's, without env), code, stdout, stderr }, and is awaited so one copy's records
+// land in order. Default: the installed one (recordWith). Its failure never fails git.
+export function makeGit(exec, on, { record } = {}) {
+  const note = async (call) => {
+    const fn = record ?? installed;
+    if (!fn || reads(call.args)) return;
+    try { await fn(call); } catch { /* the console misses one line; git's result stands */ }
+  };
   const git = async (cwd, args, { timeout, env } = {}) => {
     const options = { cwd, on };
     if (timeout) options.timeout = timeout;
     const vars = Object.entries(env ?? {}).map(([k, v]) => `${k}=${v}`);
+    const at = Date.now();
     let r;
     try { r = vars.length ? await exec("env", [...vars, "git", ...args], options) : await exec("git", args, options); }
-    catch (error) { return { ok: false, code: -1, out: "", err: String(error?.message ?? error) }; }
+    catch (error) {
+      const err = String(error?.message ?? error);
+      await note({ at, cwd, on: on ?? null, args, code: -1, stdout: "", stderr: err });
+      return { ok: false, code: -1, out: "", err };
+    }
     const out = r.stdout ?? "";
+    await note({ at, cwd, on: on ?? null, args, code: r.code, stdout: out, stderr: r.stderr ?? "" });
     return { ok: r.code === 0, code: r.code, out, err: (r.stderr ?? "").trim() || out.trim() };
   };
   // For anything that only looks: status, log, diff, for-each-ref, rev-parse.

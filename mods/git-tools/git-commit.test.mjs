@@ -8,6 +8,10 @@ import { makeGit } from "./git.js";
 import { commit, lastMessage, headIsPushed } from "./git-commit.js";
 import { translator } from "./i18n.js";
 
+// The person's own git settings (an editor, gpgSign, hooks path) stay out of every repository here.
+process.env.GIT_CONFIG_GLOBAL = "/dev/null";
+process.env.GIT_CONFIG_NOSYSTEM = "1";
+
 const base = realpathSync(mkdtempSync(`${tmpdir()}/git-tools-commit-`));
 // Same shape as herdr's exec: resolves with { code, stdout, stderr }, rejects when it can't start.
 const exec = (cmd, args = [], { cwd } = {}) => new Promise((resolve, reject) => {
@@ -75,6 +79,12 @@ git add -A && git commit -q -m first`);
   assert.equal(r.ok, true, r.err);
   assert.equal(message(repo), `${typed}\n`);
   assert.deepEqual(status(repo), []);
+  // A repository set to strip comment lines keeps it all the same.
+  sh(repo, "git config commit.cleanup strip");
+  writeFileSync(`${repo}/a.txt`, "3\n");
+  const again = await commit(git, repo, { files: [{ path: "a.txt", status: "modified" }], message: typed });
+  assert.equal(again.ok, true, again.err);
+  assert.equal(message(repo), `${typed}\n`);
 }
 
 // File names are names, not patterns or options: spaces, Korean, glob characters and a
@@ -321,6 +331,63 @@ git add -A && git commit -q -m first`);
   // The English table words each one exactly as err says it.
   const english = translator("en");
   for (const r of [last, pushed, said, quiet]) assert.equal(english(r.msg.key, r.msg.args), r.err, r.msg.key);
+}
+
+// While any file is in conflict, neither Commit nor Amend commits anything, whatever left
+// the conflict: a revert or a rebase stopped by it (where git itself would take a commit
+// of the file, conflict markers and all), a stash pop (no operation in progress at all) or
+// a merge. HEAD, the operation's state and the file stay as they were.
+{
+  const conflicted = (name, start) => {
+    const repo = init(name);
+    sh(repo, `printf 'base\\n' > f.txt && echo 1 > other.txt && git add -A && git commit -q -m base
+git checkout -q -b side && printf 'side\\n' > f.txt && git commit -q -am side
+git checkout -q main && printf 'main\\n' > f.txt && git commit -q -am main`);
+    sh(repo, `${start} >/dev/null 2>&1 || true`);
+    return repo;
+  };
+  const states = (repo) => lines(sh(repo, "for n in MERGE_HEAD REVERT_HEAD CHERRY_PICK_HEAD rebase-merge sequencer; do p=$(git rev-parse --git-path $n); [ -e \"$p\" ] && echo $n; done; true"));
+  const cases = {
+    revert: "printf 'two\\n' > f.txt && git commit -q -am two && git revert --no-edit HEAD~1",
+    rebase: "git checkout -q side && git rebase main",
+    "stash-pop": "printf 'mine\\n' > f.txt && git stash -q && git reset -q --hard HEAD~1 && git checkout -q side && git stash pop",
+    merge: "git merge side",
+  };
+  for (const [name, start] of Object.entries(cases)) {
+    const repo = conflicted(`conflict-${name}`, start);
+    writeFileSync(`${repo}/other.txt`, "2\n");
+    const before = { head: head(repo), states: states(repo), status: status(repo), file: sh(repo, "cat f.txt") };
+    assert.ok(before.status.some((line) => line.startsWith("UU ")), `${name}: the case starts in conflict`);
+    for (const amend of [false, true]) {
+      const r = await commit(git, repo, { files: [{ path: "f.txt", status: "conflict" }, { path: "other.txt", status: "modified" }], message: "x", amend });
+      assert.equal(r.ok, false, `${name}${amend ? " (amend)" : ""} commits nothing`);
+      assert.deepEqual(r.msg, { key: "ops.conflictsLeft", args: { n: 1 } }, name);
+      assert.deepEqual({ head: head(repo), states: states(repo), status: status(repo), file: sh(repo, "cat f.txt") }, before, name);
+    }
+  }
+
+  // Once resolved, Commit goes on with the operation: everything the operation staged and
+  // the checked changes go in, the unchecked ones stay. Amend stays off until it's over.
+  const repo = conflicted("in-progress-merge", "echo mine > other.txt && echo new > u.txt && echo loose > loose.txt && git merge side");
+  sh(repo, "printf 'done\\n' > f.txt && git add f.txt");
+  const amend = await commit(git, repo, { files: [{ path: "u.txt", status: "unversioned" }], message: "m", amend: true });
+  assert.deepEqual([amend.ok, amend.msg], [false, { key: "ops.noAmend" }]);
+  assert.deepEqual(states(repo), ["MERGE_HEAD"]);
+  const r = await commit(git, repo, { files: [{ path: "u.txt", status: "unversioned" }], message: "merge side\n\n#7 resolved" });
+  assert.equal(r.ok, true, r.err);
+  assert.equal(r.outcome, "done");
+  assert.equal(message(repo), "merge side\n\n#7 resolved\n");
+  assert.equal(sh(repo, "git rev-list --parents -n 1 HEAD").trim().split(" ").length, 3, "a merge commit");
+  assert.deepEqual(lines(sh(repo, "git diff --name-only HEAD~1 HEAD")).sort(), ["f.txt", "u.txt"]);
+  assert.deepEqual(states(repo), []);
+  assert.deepEqual(status(repo), [" M other.txt", "?? loose.txt"]);
+
+  // A stopped revert goes on and ends: the revert commit, nothing left in progress.
+  const reverted = conflicted("in-progress-revert", "printf 'two\\n' > f.txt && git commit -q -am two && git revert --no-edit HEAD~1");
+  sh(reverted, "printf 'done\\n' > f.txt && git add f.txt");
+  const done = await commit(git, reverted, { files: [], message: "Revert main, by hand" });
+  assert.equal(done.ok, true, done.err);
+  assert.deepEqual([lines(sh(reverted, "git log --format=%s")), states(reverted)], [["Revert main, by hand", "two", "main", "base"], []]);
 }
 
 console.log("ok");

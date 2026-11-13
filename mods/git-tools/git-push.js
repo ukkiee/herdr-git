@@ -13,13 +13,18 @@ const QUOTE = ["-c", "core.quotePath=false"];
 // git's own words when it said any, else ours with their msg (i18n.js).
 const said = (r, err, msg) => (r.err ? { err: r.err } : { err, msg });
 
-// Where the current branch goes: its upstream, else `origin` and the same name.
+// Where a branch goes: its upstream, else `origin` and the same name. `wanted`: a local
+// branch's name, or null for the current branch.
 // → { ok, err, branch, remote, target, tracked, protected }
-async function destination(git, root) {
+async function destination(git, root, wanted = null) {
   const none = { branch: null, remote: null, target: null, tracked: false, protected: false };
+  if (wanted) {
+    const has = await git.read(root, ["rev-parse", "--verify", "--quiet", `refs/heads/${wanted}^{commit}`]);
+    if (!has.ok) return fail(`There is no local branch named "${wanted}" with commits.`, { ...none, msg: { key: "refs.noSuchBranch", args: { name: wanted } } });
+  }
   // The full ref, cut here: `symbolic-ref --short` answers "heads/main" when a tag "main"
   // exists too, which would push the wrong branch and miss that main is protected.
-  const head = await git.read(root, ["symbolic-ref", "--quiet", "HEAD"]);
+  const head = wanted ? { ok: true, out: `refs/heads/${wanted}` } : await git.read(root, ["symbolic-ref", "--quiet", "HEAD"]);
   const ref = head.ok ? head.out.trim() : "";
   if (!ref.startsWith("refs/heads/")) {
     // Exit 1 with nothing said: HEAD is a commit, not a branch.
@@ -56,8 +61,24 @@ async function destination(git, root) {
   return { ok: true, err: "", ...found };
 }
 
-// readPushPlan(git, root) → { ok, err, branch, remote, target, tracked, protected, isNew, commits, more }
-//   branch: the current branch. remote / target: where it goes: its upstream, else
+// The commit Push All up to Here stops at, checked: its full hash when `source` (the
+// branch being pushed) has it, else a refusal. → { ok, err, msg?, hash }
+async function stopAt(git, root, upTo, source) {
+  const r = await git.read(root, ["rev-parse", "--verify", "--quiet", "--end-of-options", `${upTo}^{commit}`]);
+  const hash = r.ok ? r.out.trim() : "";
+  if (!hash) return fail(`There is no commit ${upTo}.`, { hash: null, msg: { key: "refs.noSuchCommit", args: { commit: String(upTo) } } });
+  // Exit 1: not an ancestor; anything else is git failing to tell.
+  const on = await git.read(root, ["merge-base", "--is-ancestor", hash, source]);
+  if (on.ok) return { ok: true, err: "", hash };
+  if (on.code === 1) return fail("This commit is not on the current branch.", { hash: null, msg: { key: "refs.notOnBranch", args: {} } });
+  return fail(on.err || "git merge-base failed", { hash: null, ...(on.err ? {} : { msg: { key: "dialogs.gitCommandFailed", args: { command: "git merge-base" } } }) });
+}
+
+// readPushPlan(git, root, { upTo?, branch? }) → { ok, err, branch, remote, target, tracked, protected, isNew, upTo, commits, more }
+//   upTo: a commit (any name git takes): Push All up to Here, the plan stops at it, and
+//   `upTo` in the answer is its full hash (null without). It must be on the branch.
+//   branch: a local branch to push instead of the current one (Push… on another branch).
+//   branch: the branch pushed. remote / target: where it goes: its upstream, else
 //   "origin" and the same name (tracked: false; the push then sets the upstream).
 //   protected: the branch or its target is in PROTECTED (no Force Push).
 //   isNew: the remote had no such branch when it was last fetched from or pushed to.
@@ -67,20 +88,27 @@ async function destination(git, root) {
 //   Nothing is fetched: "the remote" is what the last fetch or push saw.
 //   ok is false (with what could be read) on a detached HEAD and when there is no remote
 //   to push to; `err` says which.
-export async function readPushPlan(git, root) {
-  const to = await destination(git, root);
-  const plan = { ok: to.ok, err: to.err, ...(to.msg ? { msg: to.msg } : {}), branch: to.branch, remote: to.remote, target: to.target, tracked: to.tracked, protected: to.protected, isNew: false, commits: [], more: false };
+export async function readPushPlan(git, root, { upTo = null, branch = null } = {}) {
+  const to = await destination(git, root, branch);
+  const plan = { ok: to.ok, err: to.err, ...(to.msg ? { msg: to.msg } : {}), branch: to.branch, remote: to.remote, target: to.target, tracked: to.tracked, protected: to.protected, isNew: false, upTo: null, commits: [], more: false };
   if (!to.ok) return plan;
+  const source = `refs/heads/${to.branch}`;
   const [seen, head] = await Promise.all([
     git.read(root, ["rev-parse", "--verify", "--quiet", `refs/remotes/${to.remote}/${to.target}`]),
-    git.read(root, ["rev-parse", "--verify", "--quiet", "HEAD^{commit}"]),
+    git.read(root, ["rev-parse", "--verify", "--quiet", `${source}^{commit}`]),
   ]);
   plan.isNew = !seen.ok;
-  // A branch without commits has nothing to push, and `git log HEAD` would fail on it.
+  // A branch without commits has nothing to push, and `git log` would fail on it.
   if (!head.ok) return plan;
+  let tip = source;
+  if (upTo) {
+    const stop = await stopAt(git, root, upTo, source);
+    if (!stop.ok) return { ...plan, ok: false, err: stop.err, ...(stop.msg ? { msg: stop.msg } : {}) };
+    plan.upTo = tip = stop.hash;
+  }
   // %aN: the author as .mailmap maps them, as the Commit list shows them.
   const r = await git.read(root, ["log", "-z", "--format=%H%x00%P%x00%aN%x00%ct%x00%s", "--no-show-signature", "--no-color",
-    `--max-count=${MAX_COMMITS + 1}`, "HEAD", "--not", `--remotes=${to.remote}`, "--"]);
+    `--max-count=${MAX_COMMITS + 1}`, tip, "--not", `--remotes=${to.remote}`, "--"]);
   if (!r.ok) return { ...plan, ok: false, ...said(r, "git log failed", { key: "dialogs.gitCommandFailed", args: { command: "git log" } }) };
   const parts = r.out.split("\0");
   for (let i = 0; i + 5 <= parts.length; i += 5) {
@@ -101,10 +129,11 @@ const STATUS = { A: "added", D: "deleted" };
 //   on `to`'s first-parent line that the remote already has. When the remote has none of
 //   them (a first push, or `to` is a root commit), every file in `to` is "added".
 //   One commit's own changes: { from: commit.parent, to: commit.hash } (readPushPlan).
-export async function readPushFiles(git, root, { from = null, to = "HEAD" } = {}) {
+//   branch: the branch being pushed when it isn't the current one (its remote decides).
+export async function readPushFiles(git, root, { from = null, to = "HEAD", branch = null } = {}) {
   let since = from;
   if (!since) {
-    const at = await destination(git, root);
+    const at = await destination(git, root, branch);
     if (!at.ok) return { ok: false, err: at.err, ...(at.msg ? { msg: at.msg } : {}), files: [] };
     // Walking first parents only, the walk stops at one commit at most: git lists that
     // boundary with a "-" in front.
@@ -137,9 +166,18 @@ const PUSH_TIMEOUT = 600000;
 //   still absent, when it never saw one). If someone pushed there since the last fetch,
 //   git refuses. Refused here, before `git push` starts, when the branch or its target
 //   is in PROTECTED.
-export async function push(git, root, { force = false } = {}) {
-  const at = await destination(git, root);
+//   upTo, branch: as readPushPlan. With upTo only that commit and what it reaches go; the
+//   remote branch ends at it.
+export async function push(git, root, { force = false, upTo = null, branch = null } = {}) {
+  const at = await destination(git, root, branch);
   if (!at.ok) return fail(at.err, at.msg ? { msg: at.msg } : {});
+  const source = `refs/heads/${at.branch}`;
+  let from = source;
+  if (upTo) {
+    const stop = await stopAt(git, root, upTo, source);
+    if (!stop.ok) return fail(stop.err, stop.msg ? { msg: stop.msg } : {});
+    from = stop.hash;
+  }
   const args = ["push"];
   if (force) {
     if (at.protected) {
@@ -155,6 +193,12 @@ export async function push(git, root, { force = false } = {}) {
   if (!at.tracked) args.push("--set-upstream");
   // --end-of-options: a remote may be called "--force"; it must stay a name.
   // Full ref names on both sides: a tag or a remote branch of the same name can't be meant.
-  args.push("--end-of-options", at.remote, `refs/heads/${at.branch}:refs/heads/${at.target}`);
-  return git(root, args, { timeout: PUSH_TIMEOUT, env: { GIT_TERMINAL_PROMPT: "0" } });
+  args.push("--end-of-options", at.remote, `${from}:refs/heads/${at.target}`);
+  const r = await git(root, args, { timeout: PUSH_TIMEOUT, env: { GIT_TERMINAL_PROMPT: "0" } });
+  // --set-upstream only takes a branch as the source: pushing a commit leaves the branch
+  // untracked, so the tracking is set here, as a plain first push would have.
+  if (r.ok && !at.tracked && from !== source) {
+    await git(root, ["branch", `--set-upstream-to=refs/remotes/${at.remote}/${at.target}`, "--end-of-options", at.branch]);
+  }
+  return r;
 }

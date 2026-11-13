@@ -17,30 +17,36 @@
 // Commands (`git-tools.<name>`, for keys and scripts; they reach shown copies only):
 //   refresh, commit-group-by-directory, commit-expand-all, commit-collapse-all,
 //   commit-up, commit-down, commit-left, commit-right, commit-toggle (the Space key),
-//   commit-show-diff, commit-rollback, commit-restore (opens the Restore dialog).
+//   commit-show-diff, commit-rollback, commit-restore (opens the Restore dialog),
+//   commit-stash (opens the Stash dialog), commit-unstash (shows the Stash tab).
 //   Anything else is passed on to the commit form.
 
-import { div, svg } from "gpui-kit";
+import { div } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { exec, theme, watchFolder } from "herdr";
 import { makeGit, repoRoot } from "./git.js";
 import { readStatus } from "./git-status.js";
+import { readOperation } from "./git-operation.js";
 import { readLastCommit } from "./git-show.js";
 import { buildRows, checkState, toggleIncluded, keepIncluded, folderKeys, parentIndex } from "./tree.js";
-import { location, icon, fileGlyph, folderGlyph, darkLook, panelFrame, toolbar, spacer, iconButton, checkbox, row, notice, notRepository, errorStrip, noteBar, WindowedList, logPanelShown, toggleLogPanel, gitButtonPlaced, openMenu, takeWrite, releaseWrite, writeBlock, readBlocked, sentence, copyId } from "./ui.js";
+import { tip, location, uiGlyph, ICON, fileGlyph, folderGlyph, darkLook, panelFrame, toolbar, spacer, iconButton, checkbox, row, notice, notRepository, errorStrip, noteBar, WindowedList, logPanelShown, toggleLogPanel, gitButtonPlaced, openMenu, openDialog, takeWrite, releaseWrite, writeBlock, writeName, readBlocked, sentence, copyId, progressBar } from "./ui.js";
 import { sameRepo } from "./lock.js";
 import CommitForm from "./commit-form.js";
 import { openRollback, serveRollback } from "./view-rollback.js";
 import { openRestore, serveRestore } from "./view-restore.js";
 import { servePush } from "./view-push.js";
+import { serveAction } from "./serve-actions.js";
 import { openDiff } from "./view-diff.js";
+import StashTab from "./commit-stash-tab.js";
+import { settleSmartMark } from "./view-smart.js";
 
 // The groups' names are worded when drawn (groupName): rows outlive a change of language.
 // "last" is the Last commit group: only while Amend is on (see items).
 const GROUPS = [{ id: "changes" }, { id: "unversioned" }, { id: "last" }];
-// Folding as a folder starts: Unversioned Files folded, the others open.
-const CLOSED = () => ({ changes: false, unversioned: true, last: false });
-const COLLAPSED = () => ({ changes: new Set(), unversioned: new Set(), last: new Set() });
+// Folding as a folder starts: Unversioned Files folded, the others open. "conflicts" is
+// the Merge Conflicts node inside Changes: the files in conflict, above the other changes.
+const CLOSED = () => ({ changes: false, conflicts: false, unversioned: true, last: false });
+const COLLAPSED = () => ({ changes: new Set(), conflicts: new Set(), unversioned: new Set(), last: new Set() });
 const POLL = 10000;
 // How many folders the panel keeps the last view of (see remember).
 const SEEN = 8;
@@ -75,6 +81,11 @@ export default class CommitView {
     this.detached = false;
     // The commit HEAD is on, read only while Amend is on: { hash, subject, files }, or null.
     this.last = null;
+    // The operation in progress and the files in conflict (git-operation.js readOperation),
+    // read with every status; null until read or when it couldn't be.
+    this.op = null;
+    // What the operation staged, while one is in progress: always Included, can't be unchecked.
+    this.locked = new Set();
     // The Included paths. Not `this.included`: that name is the method the form calls,
     // and a field of the same name would hide it.
     this.picked = new Set();
@@ -86,6 +97,7 @@ export default class CommitView {
     this.rows = []; this.checks = new Map();
     this.selected = null; this.at = -1;
     this.busy = null; this.held = null; // ui.js takeWrite
+    this.progress = {}; // the progress strip's measured width (ui.js progressBar)
     this.writeError = null;
     // The Rollback notice: { repo, snapshot, n }, or null (see rolledBack).
     this.note = null;
@@ -95,6 +107,9 @@ export default class CommitView {
     this.handle = cx.focus_handle();
     this.form = new CommitForm();
     this.form.init(this, cx);
+    // The head's "Commit | Stash" tabs and the Stash tab (commit-stash-tab.js).
+    this.stashTab = new StashTab();
+    this.stashTab.init(this);
     this.refresh(cx);
     // The watch can miss things (a remote space has none at all), so the timer stays on.
     cx.timer.every(POLL, (cx) => this.refresh(cx));
@@ -106,10 +121,15 @@ export default class CommitView {
   // ---- what the commit form (and anything else hosted here) may use
 
   // repo: { git, root, on, folder }, or null outside a repository.
-  // included() → [{ path, status }]: the files checked for the next commit, both groups.
+  // included() → [{ path, status }]: the files checked for the next commit, both groups,
+  // the operation's staged files with them.
   included() {
-    return [...this.changes, ...this.unversioned].filter((file) => this.picked.has(file.path));
+    return [...this.changes, ...this.unversioned].filter((file) => this.picked.has(file.path) || this.locked.has(file.path));
   }
+
+  // operation() → readOperation's result for the shown repository ({ kind, conflicts, … }),
+  // or null when not read.
+  operation() { return this.op; }
 
   // hasHead: false while the repository has no commit (nothing to amend).
   // detached: HEAD is on no branch (the form warns before a commit is made there).
@@ -150,7 +170,7 @@ export default class CommitView {
     if (e.action === "push") servePush(this, e, cx);
     else if (e.action === "rollback") serveRollback(this, e, cx);
     else if (e.action === "restore") serveRestore(this, e, cx);
-    else return false;
+    else return serveAction(this, e, cx);
     return true;
   }
 
@@ -198,7 +218,7 @@ export default class CommitView {
       this.context = context; this.repo = null; this.watching = null; this.lost = false;
       // A write's failure belongs to the repository it ran on, like a read's.
       this.error = null; this.writeError = null; this.note = null; this.notRepo = false; this.read = false;
-      this.picked = new Set(); this.selected = null; this.last = null;
+      this.picked = new Set(); this.selected = null; this.last = null; this.op = null;
       this.closed = CLOSED();
       this.collapsed = COLLAPSED();
       this.apply({ hasHead: false, changes: [], unversioned: [] });
@@ -223,7 +243,7 @@ export default class CommitView {
             this.repo = null; this.watching = null;
             this.notRepo = top.notRepo; this.folder = folder;
             this.error = top.notRepo ? null : sentence(this.t, top.msg, top.err);
-            if (top.notRepo) this.apply({ hasHead: false, changes: [], unversioned: [] });
+            if (top.notRepo) { this.op = null; this.apply({ hasHead: false, changes: [], unversioned: [] }); }
             return;
           }
           repo = { git, root: top.root, on, folder };
@@ -232,6 +252,9 @@ export default class CommitView {
           if (readBlocked(this, repo)) { this.repo = repo; this.waiting = held = true; return; }
         }
         const status = await readStatus(repo.git, repo.root);
+        if (this.contextKey() !== context) return;
+        // The same status answers both: one more read of the state files, not of the tree.
+        const op = status.ok ? await readOperation(repo.git, repo.root, { status }) : null;
         if (this.contextKey() !== context) return;
         // The Last commit group follows HEAD (a commit, an amend, a checkout, another
         // copy's write): asked on every read while Amend is on, its files read again only
@@ -248,9 +271,18 @@ export default class CommitView {
         if (!status.ok || !status.hasHead || !amend) this.last = null;
         else if (last.ok && !last.same) this.last = last.hash ? { hash: last.hash, subject: last.subject, files: last.files } : null;
         // A failed read keeps what was read before; git's words go in the strip below.
-        if (status.ok) { this.apply(status); this.error = last && !last.ok ? sentence(this.t, last.msg, last.err) : null; }
+        if (status.ok) {
+          // Unread (git failed on the state files): the operation shown before stays, and
+          // the commit module reads it again before committing anyway.
+          if (op?.ok) this.op = op;
+          // Nothing in progress: what a stopped Smart left in the stash comes back now.
+          settleSmartMark(this, repo, op, cx);
+          this.apply(status);
+          this.error = last && !last.ok ? sentence(this.t, last.msg, last.err) : op && !op.ok ? sentence(this.t, op.msg, op.err) : null;
+        }
         else this.error = sentence(this.t, status.msg, status.err);
         this.watch(cx);
+        this.stashTab.refresh(cx);
       } finally {
         this.loading = false;
         if (!held) this.read = true;
@@ -266,7 +298,7 @@ export default class CommitView {
     if (!this.context || !this.repo || !this.read || this.notRepo) return;
     this.seen.delete(this.context);
     this.seen.set(this.context, {
-      repo: this.repo, status: { hasHead: this.hasHead, detached: this.detached, changes: this.changes, unversioned: this.unversioned },
+      repo: this.repo, op: this.op, status: { hasHead: this.hasHead, detached: this.detached, changes: this.changes, unversioned: this.unversioned },
       picked: this.picked, selected: this.selected, closed: this.closed, collapsed: this.collapsed, top: this.list.top,
     });
     // A handful of folders are gone back and forth between; the rest are read afresh.
@@ -283,17 +315,22 @@ export default class CommitView {
     this.repo = was.repo;
     this.picked = was.picked; this.selected = was.selected;
     this.closed = was.closed; this.collapsed = was.collapsed;
+    this.op = was.op ?? null;
     this.apply(was.status);
     this.list.top = was.top;
     this.read = true;
   }
 
-  // Takes a status as readStatus returns it. Files still listed stay Included.
+  // Takes a status as readStatus returns it, with this.op already set. Files still listed
+  // stay Included.
   apply(status) {
     this.changes = status.changes; this.unversioned = status.unversioned; this.hasHead = status.hasHead;
     this.detached = Boolean(status.detached);
-    this.paths = { changes: this.changes.map((f) => f.path), unversioned: this.unversioned.map((f) => f.path) };
+    const conflicts = this.changes.filter((f) => f.status === "conflict");
+    this.paths = { changes: this.changes.map((f) => f.path), conflicts: conflicts.map((f) => f.path), unversioned: this.unversioned.map((f) => f.path) };
     this.picked = keepIncluded(this.picked, [...this.changes, ...this.unversioned]);
+    // Continue commits whatever is staged, so those files can't be left out.
+    this.locked = new Set(this.op?.kind ? this.op.staged : []);
     this.rebuild();
   }
 
@@ -330,7 +367,20 @@ export default class CommitView {
       // The Last commit group's paths are none: nothing in it is checked or rolled back.
       rows.push({ id: `g:${group.id}`, kind: "group", group: group.id, depth: 0, count: items.length, paths: this.paths[group.id] ?? [], open, item: null });
       if (!open) continue;
-      for (const r of buildRows(items, { grouped: this.grouped, compact: true, collapsed: this.collapsed[group.id] })) {
+      // Changes opens with the Merge Conflicts node: the files in conflict under it, the
+      // operation's other files and the person's changes after it.
+      const conflicts = group.id === "changes" ? items.filter((f) => f.status === "conflict") : [];
+      if (conflicts.length) {
+        const shown = !this.closed.conflicts;
+        rows.push({ id: "node:conflicts", kind: "node", group: "conflicts", depth: 1, count: conflicts.length, paths: this.paths.conflicts, open: shown, item: null });
+        if (shown) {
+          for (const r of buildRows(conflicts, { grouped: this.grouped, compact: true, collapsed: this.collapsed.conflicts })) {
+            rows.push({ ...r, id: `conflicts:${r.key}`, kind: r.folder ? "folder" : "file", group: "conflicts", depth: r.depth + 2 });
+          }
+        }
+      }
+      const rest = conflicts.length ? items.filter((f) => f.status !== "conflict") : items;
+      for (const r of buildRows(rest, { grouped: this.grouped, compact: true, collapsed: this.collapsed[group.id] })) {
         rows.push({ ...r, id: `${group.id}:${r.key}`, kind: r.folder ? "folder" : "file", group: group.id, depth: r.depth + 1 });
       }
     }
@@ -348,9 +398,16 @@ export default class CommitView {
 
   check(r) {
     let state = this.checks.get(r.id);
-    if (!state) { state = checkState(r.paths, this.picked); this.checks.set(r.id, state); }
+    if (!state) {
+      const on = this.locked.size ? new Set([...this.picked, ...this.locked]) : this.picked;
+      state = checkState(r.paths, on);
+      this.checks.set(r.id, state);
+    }
     return state;
   }
+
+  // A row whose every file the operation staged: its checkbox stays checked and off.
+  isLocked(r) { return this.locked.size > 0 && r.paths.length > 0 && r.paths.every((path) => this.locked.has(path)); }
 
   current() { return this.rows[this.at] ?? null; }
 
@@ -363,7 +420,7 @@ export default class CommitView {
   }
 
   toggleOpen(r) {
-    if (r.kind === "group") this.closed[r.group] = !this.closed[r.group];
+    if (r.kind === "group" || r.kind === "node") this.closed[r.group] = !this.closed[r.group];
     else if (r.kind === "folder") {
       const set = this.collapsed[r.group];
       if (!set.delete(r.key)) set.add(r.key);
@@ -374,8 +431,18 @@ export default class CommitView {
 
   toggleCheck(r) {
     if (!r || r.group === "last") return false;
-    this.picked = toggleIncluded(this.picked, r.paths);
+    // The operation's staged files stay checked: only the others under the row toggle.
+    const paths = this.locked.size ? r.paths.filter((path) => !this.locked.has(path)) : r.paths;
+    if (!paths.length) return false;
+    this.picked = toggleIncluded(this.picked, paths);
     this.checks.clear();
+    return true;
+  }
+
+  // The Conflicts dialog, on the shown repository. It asks this panel to run its writes.
+  resolveConflicts() {
+    if (!this.repo || !this.paths.conflicts?.length) return false;
+    openDialog("conflicts", { root: this.repo.root, on: this.repo.on, owner: this.bus.id, lang: this.lang }, { width: 760, height: 460 });
     return true;
   }
 
@@ -387,14 +454,15 @@ export default class CommitView {
   }
 
   expandAll() {
-    this.closed = { changes: false, unversioned: false, last: false };
+    this.closed = { changes: false, conflicts: false, unversioned: false, last: false };
     this.collapsed = COLLAPSED();
     this.rebuild();
   }
 
   collapseAll() {
-    this.closed = { changes: true, unversioned: true, last: true };
+    this.closed = { changes: true, conflicts: true, unversioned: true, last: true };
     for (const group of GROUPS) this.collapsed[group.id] = new Set(folderKeys(this.items(group.id), { compact: true }));
+    this.collapsed.conflicts = new Set(folderKeys(this.changes.filter((f) => f.status === "conflict"), { compact: true }));
     this.rebuild();
   }
 
@@ -416,7 +484,7 @@ export default class CommitView {
   // dialog asks this panel to run the rollback.
   rollback(r = this.current()) {
     if (!this.canRollback()) return false;
-    const checked = r && r.group === "changes" && r.kind !== "group" ? r.paths : [];
+    const checked = r && (r.group === "changes" || r.group === "conflicts") && r.kind !== "group" ? r.paths : [];
     openRollback({ root: this.repo.root, on: this.repo.on, files: this.changes, checked, owner: this.bus.id, lang: this.lang });
     return true;
   }
@@ -432,8 +500,8 @@ export default class CommitView {
   rowMenu(r, cx) {
     const items = [];
     if (r.kind === "file") items.push({ label: this.t("commit.showDiff"), value: "diff" });
-    // Unversioned Files have nothing to roll back to.
-    if (r.group === "changes") items.push({ label: this.t("commit.rollback"), value: "rollback", disabled: !this.canRollback(), title: this.writeBlock() ?? undefined });
+    // Unversioned Files have nothing to roll back to. Files in conflict are Changes too.
+    if (r.group === "changes" || r.group === "conflicts") items.push({ label: this.t("commit.rollback"), value: "rollback", disabled: !this.canRollback(), title: this.writeBlock() ?? undefined });
     if (!items.length) return;
     cx.spawn(async (cx) => {
       const picked = await openMenu(this.bus, items, { lang: this.lang });
@@ -481,15 +549,19 @@ export default class CommitView {
     else if (name === "commit-rollback") this.rollback();
     else if (name === "commit-restore") this.restore();
     else if (/^commit-(up|down|left|right)$/.test(name)) this.act(name.slice(7));
+    else if (this.stashTab.command(name)) return;
     else this.form.command?.(name, cx);
   }
 
   event(e, cx) {
     if (e.type === "changed" && (!e.root || e.root === this.repo?.root)) this.refresh(cx);
+    // Fixup… or Squash Into… picked in the Log panel on this repository (view-extract.js).
+    if (e.type === "rewrite-target" && sameRepo({ root: e.root, on: e.on ?? null }, this.repo)) this.form.aim(e, cx);
     // Another write on the noticed repository, whichever copy ran it, ends the notice; the
     // rollback's own "changed" (by its request's key) doesn't. A "changed" without a root
     // stands for events that went unseen, which may hold such a write: it ends it too.
     if (e.type === "changed" && this.note && (!e.root || e.root === this.note.repo?.root) && (!e.by || e.by !== this.note.by)) this.note = null;
+    this.stashTab.event(e, cx);
   }
 
   // ---- drawing
@@ -511,23 +583,35 @@ export default class CommitView {
       })
       // The arrow's place is kept on file rows so checkboxes line up under their folder's.
       .child(folds
-        ? div().id(`commit-fold-${r.id}`).size(14).flex_none().flex().items_center().justify_center().rounded(3).text_color(t.muted)
+        ? div().id(`commit-fold-${r.id}`).size(ICON).flex_none().flex().items_center().justify_center().rounded(3).text_color(t.muted)
           .cursor_pointer().hover((s) => s.bg(t.hover).text_color(t.foreground))
           .on_mouse_down("left", stop)
           .on_click((_e, cx) => { cx.stop_propagation(); this.toggleOpen(r); cx.notify(); })
-          .child(svg(icon(r.open ? "chevron-down" : "chevron-right")).size(12))
-        : div().size(14).flex_none())
+          .child(uiGlyph(r.open ? "chevron-down" : "chevron-right"))
+        : div().size(ICON).flex_none())
       // The Last commit group has no checkboxes: its group row shows the commit glyph in the
       // checkbox's place and its files keep the place empty, so icons line up with the
       // other groups'.
-      .child(r.group !== "last" ? checkbox(`commit-check-${r.id}`, this.check(r), t, { onClick: (_e, cx) => { this.toggleCheck(r); cx.notify(); } })
+      // The Merge Conflicts node has none either: what's in conflict can't be committed.
+      .child(r.kind === "node" ? div().size(14).flex_none()
+        : r.group !== "last" ? checkbox(`commit-check-${r.id}`, this.check(r), t, { disabled: this.isLocked(r), onClick: (_e, cx) => { this.toggleCheck(r); cx.notify(); } })
         : r.kind === "group" ? commitGlyph(t) : div().size(14).flex_none());
     const count = folds ? this.t("commit.files", { n: r.count }) : "";
+    if (r.kind === "node") {
+      return el
+        .child(div().flex_none().max_w("60%").truncate().font_semibold().text_color(statusColor("conflict", t)).child(this.t("ops.mergeConflicts")))
+        .child(div().id("commit-resolve").flex_none().px(4).rounded(3).text_color(t.accent).cursor_pointer()
+          .hover((s) => s.bg(t.hover))
+          .on_mouse_down("left", stop)
+          .on_click((_e, cx) => { cx.stop_propagation(); this.resolveConflicts(); cx.notify(); })
+          .child(this.t("ops.resolve")))
+        .child(div().flex_1().min_w(0).truncate().text_size(12).text_color(t.dim).child(count));
+    }
     if (r.kind === "group" && r.group === "last") {
       const last = this.last;
       // A commit made with an empty message has no subject: its short hash stands in.
       // A subject can be long, so it is the one cut and the file count stays whole.
-      return el.tooltip(last?.hash ?? "")
+      return tip(el, last?.hash ?? "")
         .child(div().flex_initial().min_w(0).truncate().font_semibold().child(last?.subject || (last?.hash ?? "").slice(0, 8)))
         .child(div().flex_none().text_size(12).text_color(t.dim).child(count));
     }
@@ -550,7 +634,7 @@ export default class CommitView {
       .when(status === "conflict", (el) => el.font_semibold())
       .child(r.name);
     const from = status === "renamed" ? r.item.from : null;
-    return el.when(Boolean(from), (el) => el.tooltip(this.t("log.renamedFrom", { path: r.path, from })))
+    return el.when(Boolean(from), (el) => tip(el, this.t("log.renamedFrom", { path: r.path, from })))
       .child(fileGlyph(r.path, { dark: this.dark }))
       // A name alone takes the rest of the row and is cut there; next to its folder it
       // keeps its own width up to 70% so both stay readable at the panel's 280px.
@@ -573,6 +657,8 @@ export default class CommitView {
       cx.timer.after(0, (cx) => { this.moving = false; if (this.waiting && !this.readBlocked()) this.refresh(cx); });
     }
     const t = theme(), shown = logPanelShown(), r = this.current();
+    const writing = this.repo ? this.writeBlock() : null;
+    if (this.stashTab.showing()) return this.stashTab.render(cx, t);
     this.dark = darkLook();
     const note = this.note && sameRepo(this.note.repo, this.repo) ? this.note : null;
     const body = this.notRepo ? notice(notRepository(this.folder, this.t), t)
@@ -581,6 +667,7 @@ export default class CommitView {
       : this.list.render(this.rows.length, (i) => this.renderRow(i, t), t);
     const redraw = (fn) => (_e, cx) => { fn(cx); cx.notify(); };
     return panelFrame("commit-panel", t)
+      .when(this.stashTab.any(), (el) => el.child(this.stashTab.header(t)))
       .child(toolbar(t)
         .child(iconButton("commit-refresh", "refresh", t, { title: this.t("commit.refresh"), busy: Boolean(this.loading && this.read), onClick: redraw((cx) => this.refresh(cx)) }))
         .child(iconButton("commit-rollback", "rollback", t, { title: this.repo && this.writeBlock() || this.t("commit.rollback"), disabled: !this.canRollback(), onClick: redraw(() => this.rollback()) }))
@@ -602,6 +689,8 @@ export default class CommitView {
         })
         .child(body))
       .when(Boolean(this.repo), (el) => el.child(this.form.render(cx)))
+      // Any write on this repository (or this panel's elsewhere): its name over a moving bar.
+      .when(Boolean(writing), (el) => el.child(progressBar("commit-progress", t, { label: writeName(this, this.repo), title: writing, state: this.progress })))
       .when(Boolean(note), (el) => el.child(noteBar("commit-note", this.t("restore.rolledBack", { n: note?.n ?? 0 }), t, {
         action: { label: this.t("restore.open"), onClick: (_e, cx) => { this.restore(note?.snapshot ?? null); cx.notify(); } },
         onDismiss: (_e, cx) => { this.note = null; cx.notify(); },

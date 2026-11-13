@@ -15,7 +15,9 @@
 // with a note.
 // A failed push keeps the dialog open with git's output in it; a successful one closes it.
 //
-// props: { view: "push", root, on, owner, overlay }.
+// props: { view: "push", root, on, owner, overlay, upTo?, branch? }. upTo: a commit hash,
+// Push All up to Here: the plan stops there and the line reads `<hash> → origin : target`.
+// branch: a local branch to push instead of the current one.
 //
 // Commands (`git-tools.<name>`, for scripts): refresh (reads the plan again), push-run,
 // push-force, push-menu (opens ▾), push-next / push-prev / push-all (the commit
@@ -30,9 +32,10 @@ import { h_flex, v_flex } from "gpui-base";
 import { exec, theme } from "herdr";
 import { makeGit } from "./git.js";
 import { PROTECTED, readPushPlan, readPushFiles, push } from "./git-push.js";
+import { remoteFailure } from "./git-remote.js";
 import { formatTime } from "./i18n.js";
 import { buildRows } from "./tree.js";
-import { openDialog, openMenu, dialogFrame, button, notice, errorStrip, row, icon, fileGlyph, folderGlyph, darkLook, close, scriptedRepo, WindowedList, askOwner, serveRequest, writeBlock, sentence } from "./ui.js";
+import { tip, openDialog, openMenu, dialogFrame, button, notice, errorStrip, row,icon, uiGlyph, ICON, fileGlyph, folderGlyph, darkLook, close, scriptedRepo, WindowedList, askOwner, serveRequest, writeBlock, sentence } from "./ui.js";
 
 // openPush({ root, on, owner, lang })
 //   Opens the Push dialog for the repository's current branch. commit-form.js calls it
@@ -42,22 +45,39 @@ import { openDialog, openMenu, dialogFrame, button, notice, errorStrip, row, ico
 //   lang: the opener's language ("en" | "ko"), so the dialog draws in it from the start
 //   (ui.js openDialog). Pass `lang: this.lang`.
 //   After a push every screen on the repository is told "changed" and the dialog closes.
-export function openPush({ root, on = null, owner = null, lang } = {}) {
-  return openDialog("push", { root, on, owner, lang }, { width: 760, height: 480 });
+//   upTo, branch: optional, as in props above.
+export function openPush({ root, on = null, owner = null, lang, upTo = null, branch = null } = {}) {
+  return openDialog("push", { root, on, owner, lang, upTo, branch }, { width: 760, height: 480 });
 }
+
+// pushUpTo(host, repo, commit): Push All up to Here… on a commit row (commit: { hash }).
+// pushBranch(host, repo, b): Push… on a local branch row (b: { name, scope, current }).
+// host: the opening panel (its bus, lang), which runs the push; repo: { root, on }.
+export function pushUpTo(host, repo, commit) {
+  if (repo && commit?.hash) openPush({ root: repo.root, on: repo.on, owner: host.bus.id, lang: host.lang, upTo: commit.hash });
+}
+export function pushBranch(host, repo, b) {
+  if (repo && b?.scope === "local") openPush({ root: repo.root, on: repo.on, owner: host.bus.id, lang: host.lang, branch: b.current ? null : b.name });
+}
+
+// The plan's source as the dialog and the panel pass it on: only strings count.
+const sourceOf = (a) => ({
+  upTo: typeof a?.upTo === "string" && a.upTo ? a.upTo : null,
+  branch: typeof a?.branch === "string" && a.branch ? a.branch : null,
+});
 
 // servePush(panel, e, cx)
 //   The Commit panel's side: runs the dialog's request { force, shown } (shown: planOf
 //   of the plan on screen) on e.args.root under the write lock (ui.js serveRequest).
 export function servePush(panel, e, cx) {
-  const { force = false, shown = null } = e.args ?? {};
+  const { force = false, shown = null } = e.args ?? {}, source = sourceOf(e.args);
   // Runs outside the panel's own call: its words come from panel.t.
   const t = panel.t;
   serveRequest(panel, e, { key: force === true ? "dialogs.push.forcePushing" : "dialogs.push.pushing" }, async (repo) => {
     const git = makeGit(exec, repo.on);
     // git-push.js pushes the branch checked out at that moment, which may not be the
     // one the dialog showed (a checkout elsewhere since it opened).
-    const moved = planMoved(shown, planOf(await readPushPlan(git, repo.root)));
+    const moved = planMoved(shown, planOf(await readPushPlan(git, repo.root, source)));
     if (moved) {
       return {
         ok: false, moved: true, err: `Nothing was pushed: ${moved.text}. Check the commits shown and push again.`,
@@ -65,7 +85,7 @@ export function servePush(panel, e, cx) {
         msg: { key: "dialogs.push.moved", args: { why: sentence(t, moved.msg, moved.text) } },
       };
     }
-    return push(git, repo.root, { force: force === true });
+    return remoteFailure(t, await push(git, repo.root, { force: force === true, ...source }), "push");
   }, cx);
 }
 
@@ -110,6 +130,7 @@ export default class PushView {
     this.root = p.root ?? null;
     this.on = p.on ?? null;
     this.owner = p.owner ?? null; // the Commit panel copy that runs the push
+    this.source = sourceOf(p); // { upTo, branch }: what is pushed, when not the current branch's tip
     this.git = makeGit(exec, this.on);
     this.plan = null; // readPushPlan's answer; null until the first one
     this.loading = false;
@@ -138,7 +159,7 @@ export default class PushView {
     this.loading = true; this.again = false;
     cx.spawn(async (cx) => {
       try {
-        const [plan, opted] = await Promise.all([readPushPlan(this.git, this.root), scriptedRepo(this.git, this.root)]);
+        const [plan, opted] = await Promise.all([readPushPlan(this.git, this.root, this.source), scriptedRepo(this.git, this.root)]);
         this.takePlan(plan);
         this.scripted = opted;
       } finally {
@@ -163,7 +184,8 @@ export default class PushView {
     const commit = this.selected ? plan.commits.find((c) => c.hash === this.selected) : null;
     this.files = null;
     cx.spawn(async (cx) => {
-      const r = await readPushFiles(this.git, this.root, commit ? { from: commit.parent, to: commit.hash } : {});
+      const r = await readPushFiles(this.git, this.root, commit ? { from: commit.parent, to: commit.hash }
+        : { to: plan.upTo ?? (this.source.branch ? `refs/heads/${this.source.branch}` : "HEAD"), branch: this.source.branch });
       if (turn !== this.turn) return;
       this.files = r.ok ? r.files : [];
       this.filesError = r.ok ? null : { err: r.err, msg: r.msg };
@@ -226,7 +248,7 @@ export default class PushView {
     this.pushing = force ? "force" : "push";
     this.error = null;
     cx.notify();
-    const args = { root: this.root, on: this.on, force, shown: planOf(this.plan) };
+    const args = { root: this.root, on: this.on, force, shown: planOf(this.plan), ...this.source };
     askOwner(this, "push", args, "ui.commitPanel", cx, (r, cx) => {
       this.pushing = null;
       if (r.ok) { close(this.overlay); return; }
@@ -285,7 +307,8 @@ export default class PushView {
     const link = (text) => div().flex_none().max_w("32%").truncate().text_color(t.accent).child(text);
     return row("push-target", t, { selected: this.selected === null && n > 0, height: 28 })
       .when(n > 0, (el) => el.cursor_pointer().on_click((_e, cx) => { this.select(null, cx); cx.notify(); }))
-      .child(div().flex_none().max_w("32%").truncate().font_semibold().child(plan.branch ?? "HEAD"))
+      // Up to a commit: that commit's short hash stands where the branch would.
+      .child(div().flex_none().max_w("32%").truncate().font_semibold().child(plan.upTo ? plan.upTo.slice(0, 8) : plan.branch ?? "HEAD"))
       .when(Boolean(plan.remote), (el) => el
         .child(div().flex_none().text_color(t.dim).child("→"))
         .child(link(plan.remote))
@@ -319,7 +342,7 @@ export default class PushView {
           this.rebuild();
           cx.notify();
         })
-        .child(svg(icon(r.open ? "chevron-down" : "chevron-right")).size(12).flex_none().text_color(t.muted))
+        .child(uiGlyph(r.open ? "chevron-down" : "chevron-right").text_color(t.muted))
         .child(folderGlyph(r.name, { open: r.open }))
         .child(div().flex_none().max_w("70%").truncate().child(r.name))
         .child(div().flex_1().min_w(0).truncate().text_size(12).text_color(t.dim).child(countOf(this.t, "dialogs.files", r.count)));
@@ -327,7 +350,7 @@ export default class PushView {
     const status = r.item.status;
     return row(`push-file-${r.key}`, t, { depth: r.depth })
       // The arrow's place is kept so files line up under their folder's name.
-      .child(div().size(12).flex_none())
+      .child(div().size(ICON).flex_none())
       .child(fileGlyph(r.path, { dark: this.dark }))
       .child(div().flex_1().min_w(0).truncate().text_color(statusColor(status, t))
         .when(status === "deleted", (el) => el.line_through())
@@ -370,9 +393,9 @@ export default class PushView {
     let main = half("push-run").px(14).gap(6)
       .when(busy, (el) => el.child(svg(icon("spinner")).size(12).spin(900)))
       .child(this.t(this.pushing === "force" ? "dialogs.push.forcePushing" : busy ? "dialogs.push.pushing" : "dialogs.push.push"))
-      .tooltip(why ?? this.t("dialogs.push.pushTo", { branch: this.plan.branch, remote: this.plan.remote, target: this.plan.target }));
-    let more = half("push-more").w(24).child(svg(icon("chevron-down")).size(12));
-    if (!this.menuOpen) more = more.tooltip(why ?? this.t("dialogs.push.more"));
+      .map((el) => tip(el, why ?? this.t("dialogs.push.pushTo", { branch: this.plan.branch, remote: this.plan.remote, target: this.plan.target })));
+    let more = half("push-more").w(24).child(uiGlyph("chevron-down"));
+    if (!this.menuOpen) more = tip(more, why ?? this.t("dialogs.push.more"));
     if (on) {
       main = live(main, (_e, cx) => this.run(false, cx));
       // A click carries no position: the press before it does.

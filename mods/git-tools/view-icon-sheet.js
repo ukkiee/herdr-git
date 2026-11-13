@@ -21,7 +21,7 @@
 import { div, image } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { theme } from "herdr";
-import { panelFrame, toolbar, spacer, button, darkLook, WindowedList } from "./ui.js";
+import { tip, panelFrame, toolbar, spacer, button, darkLook, WindowedList } from "./ui.js";
 import { makeIconTheme, THEME_ROOT, DEFAULT_FILE_ICON, DEFAULT_FOLDER_ICON } from "./icon-theme.js";
 import { FILE_RULES, FOLDER_RULES, DARK_FILE_ICONS, CLOSED_ONLY_FOLDER_ICONS } from "./icon-theme-data.js";
 
@@ -158,7 +158,7 @@ export default class IconSheet {
       const icons = r.section.pair
         ? [div().p(2).rounded(3).bg(PAPER.bg).child(img(cell.icons[0], 14)), div().p(2).rounded(3).bg(INK.bg).child(img(cell.icons[1], 14))]
         : [img(cell.icons[0], 14), img(cell.icons[0], 24)];
-      return h_flex().id(id).w(CELL).flex_none().gap(6).items_center().tooltip(cell.icons.join("\n"))
+      return h_flex().id(id).w(CELL).flex_none().gap(6).items_center().map((el) => tip(el, cell.icons.join("\n")))
         .children(icons)
         .child(div().flex_1().min_w(0).truncate().text_size(12).text_color(c.fg).child(cell.name));
     }));
@@ -170,7 +170,7 @@ export default class IconSheet {
     return panelFrame("icon-sheet", t)
       .child(toolbar(t)
         .child(div().px(4).font_semibold().child("Icon sheet"))
-        .child(div().id("icon-sheet-timing").min_w(0).truncate().text_size(12).text_color(t.muted).tooltip(this.timing).child(this.timing))
+        .child(div().id("icon-sheet-timing").min_w(0).truncate().text_size(12).text_color(t.muted).map((el) => tip(el, this.timing)).child(this.timing))
         .child(spacer())
         .child(button("icon-sheet-look", `Background: ${lookLabel}`, t, {
           onClick: (_e, cx) => { this.look = LOOKS[(LOOKS.indexOf(this.look) + 1) % LOOKS.length]; cx.notify(); },

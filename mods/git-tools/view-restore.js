@@ -3,7 +3,9 @@
 // the right (all checked), Close and Restore at the bottom. Double-clicking a file opens
 // the snapshot's change of it in a Diff tab. Restore brings back the files and what was
 // staged of them. After Restore the dialog stays open with what was restored, what was
-// left, and whose staging was left, and why.
+// left, and whose staging was left, and why. Each snapshot row names the write it was
+// taken before (Rollback, Reset, Checkout). A snapshot made on another HEAD is put back
+// whole, 3-way (its files stay checked, the note says lines may be left as conflicts).
 //
 // The dialog doesn't write itself: it asks the Commit panel copy that opened it
 // (props.owner) to restore under the repository's write lock (serveRestore, ui.js
@@ -18,14 +20,14 @@
 // obeyed for a repository that opted in (`git config --local gittools.scripted true`) or
 // a dialog opened from a Commit panel tab on a chosen folder (`chosen`).
 
-import { div, svg } from "gpui-kit";
+import { div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { exec, theme } from "herdr";
 import { makeGit } from "./git.js";
 import { listSnapshots, restore, wordRestore } from "./git-snapshot.js";
 import { formatTime } from "./i18n.js";
 import { buildRows, checkState, toggleIncluded } from "./tree.js";
-import { openDialog, dialogFrame, button, checkbox, row, notice, errorStrip, scrollText, icon, fileGlyph, folderGlyph, darkLook, close, scriptedRepo, sentence, WindowedList, askOwner, serveRequest, writeBlock } from "./ui.js";
+import { openDialog, dialogFrame, button, checkbox, row, notice, errorStrip, scrollText, uiGlyph, ICON, fileGlyph, folderGlyph, darkLook, close, scriptedRepo, sentence, WindowedList, askOwner, serveRequest, writeBlock } from "./ui.js";
 import { openDiff } from "./view-diff.js";
 
 // openRestore({ root, on, owner, select, chosen, lang })
@@ -65,7 +67,10 @@ const stop = (_e, cx) => cx.stop_propagation();
 // A restore that went through but left some paths, or their staging, as they were: shown
 // as its result line (each path and why), not as an error. The *Failed ones end with
 // git's words: the files are back, an index write failed.
-const PARTLY = new Set(["restore.notAll", "restore.stagingNotAll", "restore.notAllStaging", "restore.stagingNotAllFailed", "restore.notAllStagingFailed"]);
+const PARTLY = new Set(["restore.notAll", "restore.stagingNotAll", "restore.notAllStaging", "restore.stagingNotAllFailed", "restore.notAllStagingFailed", "restore.appliedUnstaged", "restore.appliedConflicts"]);
+
+// The write each snapshot was taken before, as its row names it (git-snapshot.js ACTIONS).
+const ACTION_NAMES = { Rollback: "restore.actionRollback", Reset: "restore.actionReset", Checkout: "restore.actionCheckout" };
 
 // Same colors as the Commit panel's rows.
 function statusColor(status, t) {
@@ -162,7 +167,8 @@ export default class RestoreView {
   }
 
   toggleCheck(paths) {
-    if (this.running) return false;
+    // A 3-way snapshot is put back whole: its files stay checked.
+    if (this.running || this.current()?.threeWay) return false;
     this.picked = toggleIncluded(this.picked, paths);
     return true;
   }
@@ -191,6 +197,16 @@ export default class RestoreView {
     const snapshot = this.current(), paths = this.chosen();
     if (this.running || !snapshot || !paths.length || this.writing()) return false;
     this.running = true; this.result = null; this.error = null;
+    // Made on another HEAD: put back whole, 3-way (git-snapshot.js applySnapshot).
+    if (snapshot.threeWay) {
+      askOwner(this, "restore-3way", { root: this.root, on: this.on, snapshot: snapshot.hash }, "ui.commitPanel", cx, (r) => {
+        this.running = false;
+        if (r.ok) this.result = { msg: { key: "restore.applied" }, err: "" };
+        else if (PARTLY.has(r.msg?.key)) this.result = { msg: r.msg, err: r.err };
+        else this.error = sentence(this.t, r.msg, r.err) || this.t("ui.gitFailed");
+      });
+      return true;
+    }
     askOwner(this, "restore", { root: this.root, on: this.on, snapshot: snapshot.hash, paths }, "ui.commitPanel", cx, (r) => {
       this.running = false;
       if (r.ok) this.result = { msg: { key: "restore.restored", args: { n: paths.length } }, err: "" };
@@ -227,8 +243,9 @@ export default class RestoreView {
     return row(`restore-snapshot-${i}`, t, { selected: i === this.at })
       .cursor_pointer()
       .on_click((_e, cx) => { this.handle.focus(); this.pick(i); cx.notify(); })
-      .child(svg(icon("rollback")).size(14).flex_none().text_color(t.muted))
-      .child(div().flex_1().min_w(0).truncate().child(formatTime(s.time, this.lang)))
+      .child(uiGlyph("rollback", { dark: darkLook(t.background) }))
+      .child(div().flex_none().whitespace_nowrap().child(this.t(ACTION_NAMES[s.action] ?? ACTION_NAMES.Rollback)))
+      .child(div().flex_1().min_w(0).truncate().text_color(t.muted).child(formatTime(s.time, this.lang)))
       .child(div().flex_none().text_size(12).text_color(t.dim).whitespace_nowrap().child(this.t("restore.files", { n: s.files.length })));
   }
 
@@ -243,14 +260,14 @@ export default class RestoreView {
       })
       // The arrow's place is kept on file rows so checkboxes line up under their folder's.
       .child(r.folder
-        ? div().id(`restore-fold-${r.key}`).size(14).flex_none().flex().items_center().justify_center().rounded(3).text_color(t.muted)
+        ? div().id(`restore-fold-${r.key}`).size(ICON).flex_none().flex().items_center().justify_center().rounded(3).text_color(t.muted)
           .cursor_pointer().hover((s) => s.bg(t.hover).text_color(t.foreground))
           .on_mouse_down("left", stop)
           .on_click((_e, cx) => { cx.stop_propagation(); this.toggleFold(r); cx.notify(); })
-          .child(svg(icon(r.open ? "chevron-down" : "chevron-right")).size(12))
-        : div().size(14).flex_none())
+          .child(uiGlyph(r.open ? "chevron-down" : "chevron-right"))
+        : div().size(ICON).flex_none())
       .child(checkbox(`restore-check-${r.key}`, checkState(r.paths, this.picked), t, {
-        disabled: this.running, onClick: (_e, cx) => { this.toggleCheck(r.paths); cx.notify(); },
+        disabled: this.running || Boolean(this.current()?.threeWay), onClick: (_e, cx) => { this.toggleCheck(r.paths); cx.notify(); },
       }));
     if (r.folder) {
       return el
@@ -277,7 +294,7 @@ export default class RestoreView {
     const right = v_flex().flex_1().min_w(0).min_h(0).border_l(1).border_color(t.border)
       .child(h_flex().id("restore-all").h(28).flex_none().px(10).gap(8).items_center()
         .child(checkbox("restore-all-check", checkState(all, this.picked), t, {
-          disabled: this.running || !all.length, onClick: (_e, cx) => { this.toggleCheck(all); cx.notify(); },
+          disabled: this.running || !all.length || Boolean(this.current()?.threeWay), onClick: (_e, cx) => { this.toggleCheck(all); cx.notify(); },
         }))
         .child(div().flex_1().min_w(0).truncate().text_size(12).text_color(t.dim)
           .child(this.chosen().length ? this.t("restore.files", { n: all.length }) : this.t("restore.noFiles"))))
@@ -297,7 +314,7 @@ export default class RestoreView {
     this.dark = darkLook(t.popover);
     return dialogFrame("restore", this.t("restore.title"), t, {
       body: this.body(t), onClose: () => this.shut(),
-      note: this.running ? this.t("restore.running") : writing ?? (this.current() ? this.t("restore.hint") : ""),
+      note: this.running ? this.t("restore.running") : writing ?? (!this.current() ? "" : this.current().threeWay ? this.t("restore.threeWayHint") : this.t("restore.hint")),
       footer: [
         // Not "restore-close": dialogFrame gives its × that id.
         button("restore-cancel", this.t("restore.close"), t, { disabled: this.running, onClick: () => this.shut() }),

@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
 import { makeGit } from "./git.js";
-import { readLog, readRefsState, readGitDir, refsChanged, resolveCommit, labelRefs, shortenMiddle, formatCommitTime } from "./git-log.js";
+import { readLog, readNotPicked, readRefsState, readGitDir, refsChanged, resolveCommit, labelRefs, shortenMiddle, formatCommitTime } from "./git-log.js";
 
 const tmp = realpathSync(mkdtempSync(`${tmpdir()}/git-tools-log-`));
 // Same shape as herdr's exec: resolves with { code, stdout, stderr }, rejects when it can't start.
@@ -131,6 +131,70 @@ const all = await readLog(git, repo);
   assert.deepEqual(pathOnTopic.commits.map((c) => c.hash), [c4, c2, c1]);
 }
 
+// Graph options. Topologically: a merged branch's commits come right under the merge,
+// before the first parent's older ones (by date f2, c4, f1 interleave).
+{
+  const topo = await readLog(git, repo, { order: "topo" });
+  assert.equal(topo.ok, true, topo.err);
+  assert.deepEqual(topo.commits.map((c) => c.hash), [c6, m, f2, f1, c4, c2, c1]);
+  const byDate = await readLog(git, repo, { order: "date" });
+  assert.deepEqual(byDate.commits.map((c) => c.hash), all.commits.map((c) => c.hash));
+}
+
+// First parent: from a branch, only its own line; a merge is still listed with both
+// parents (graph.js follows the first one).
+{
+  const r = await readLog(git, repo, { branch: "main", firstParent: true });
+  assert.deepEqual(r.commits.map((c) => c.hash), [c6, m, c4, c2, c1]);
+  assert.deepEqual(r.commits[1].parents, [c4, f2]);
+}
+
+// No merges: merge commits are left out. git does not rewrite the parents of the commits
+// under a merge (c6's parent stays m), so the answer says where each merge left out
+// leads: its first parent. read: how many commits git gave (the next batch skips them).
+{
+  const r = await readLog(git, repo, { noMerges: true });
+  assert.equal(r.ok, true, r.err);
+  assert.deepEqual(r.commits.map((c) => c.hash), [c6, f2, c4, f1, c2, c1]);
+  assert.deepEqual(r.commits[0].parents, [m]);
+  assert.deepEqual(r.through, [[m, c4]]);
+  assert.equal(r.read, 7);
+  // In batches: the merge is still counted, so skip goes on from what git gave.
+  const one = await readLog(git, repo, { noMerges: true, count: 2 });
+  assert.deepEqual([one.commits.map((c) => c.hash), one.read, one.through], [[c6], 2, [[m, c4]]]);
+  const next = await readLog(git, repo, { noMerges: true, skip: one.read, count: 2 });
+  assert.deepEqual([next.commits.map((c) => c.hash), next.read, next.through], [[f2, c4], 2, []]);
+}
+
+// Author time and commit time: a cherry-pick keeps the author's date and gets a new
+// commit date. Non-picked commits: of a branch's commits, the ones whose change the
+// current branch has no copy of (git cherry's "+"); every other commit of that branch is
+// already on the current branch, by its hash or by an equal change.
+{
+  const picks = `${tmp}/picks`;
+  mkdirSync(picks);
+  raw(picks, ["init", "-q", "-b", "main"]);
+  const base = commit(picks, "a.txt", "base", 0);
+  raw(picks, ["checkout", "-q", "-b", "side"]);
+  const same = commit(picks, "s.txt", "picked over", 10);
+  const own = commit(picks, "t.txt", "only on side", 20);
+  raw(picks, ["checkout", "-q", "main"]);
+  raw(picks, ["cherry-pick", same], 30);
+  const copy = raw(picks, ["rev-parse", "HEAD"]);
+  const r = await readLog(git, picks);
+  const byHash = new Map(r.commits.map((c) => [c.hash, c]));
+  assert.deepEqual([byHash.get(copy).authorTime, byHash.get(copy).time], [T + 10, T + 30]);
+  assert.deepEqual([byHash.get(own).authorTime, byHash.get(own).time], [T + 20, T + 20]);
+  const side = await readNotPicked(git, picks, "side");
+  assert.deepEqual(side, { ok: true, err: "", notPicked: [own] });
+  assert.deepEqual(await readNotPicked(git, picks, "main"), { ok: true, err: "", notPicked: [] });
+  const gone = await readNotPicked(git, picks, "no-such");
+  assert.equal(gone.ok, false);
+  assert.ok(gone.err.length > 0);
+  assert.deepEqual(gone.notPicked, []);
+  assert.ok(base);
+}
+
 // A detached HEAD: the commit carries HEAD and no current branch; commits only HEAD
 // reaches are still listed.
 {
@@ -235,6 +299,15 @@ const all = await readLog(git, repo);
   assert.equal(shortenMiddle("exactly-twenty-four-char", 24), "exactly-twenty-four-char");
   assert.deepEqual(labelRefs([ref("origin/feature/a-very-long-branch-name-that-goes-on", "remote")], { max: 24 }),
     [{ text: "origin/featu…hat-goes-on", kind: "remote", current: false }]);
+  // The display options. Compact references view off: a branch and its remote twins are
+  // labels of their own, in the same order (current, local, remote, tag).
+  const many = [ref("HEAD", "head"), ref("main", "local", true), ref("origin/main", "remote"), ref("v1.0", "tag"), ref("v1.1", "tag")];
+  assert.deepEqual(labelRefs(many, { compact: false }).map((l) => [l.text, l.kind]),
+    [["main", "local"], ["origin/main", "remote"], ["v1.0", "tag"], ["v1.1", "tag"]]);
+  // Tag names off: a commit's tags are one label without a name, which keeps the names.
+  assert.deepEqual(labelRefs(many, { tagNames: false }),
+    [{ text: "origin & main", kind: "local", current: true }, { text: "", kind: "tag", current: false, names: ["v1.0", "v1.1"] }]);
+  assert.deepEqual(labelRefs([ref("main", "local")], { tagNames: false }), [{ text: "main", kind: "local", current: false }]);
 }
 
 // Commit times the way the list words them.

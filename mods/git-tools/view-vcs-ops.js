@@ -29,6 +29,7 @@ import { openPull } from "./view-pull.js";
 import { openMerge } from "./view-merge.js";
 import { openRebase } from "./view-rebase.js";
 import { openNewWorktree } from "./view-worktree.js";
+import { VcsWidget } from "./view-vcs-widget.js";
 
 // What each item does, run in the owning panel's copy: run(panel, cx, how).
 //   panel: the Log panel (kind "log") or the Commit panel (kind "commit"): repo, bus, t,
@@ -44,6 +45,7 @@ export const VCS_ACTIONS = {
   // The Commit panel runs the push (view-push.js servePush).
   "push": { by: ["commit"], run: (panel) => { const r = repoOf(panel); if (r) openPush({ root: r.root, on: r.on ?? null, owner: panel.bus.id, lang: panel.lang }); } },
   "fetch": { run: (panel, cx, how) => fetchFrom(panel, how.kind, cx) },
+  "branches": { run: (panel, cx, how) => openBranches(panel, cx, how) },
   "newBranch": { run: (panel, cx, how) => {
     if (how.kind === "log") { panel.branches.newBranch(null, cx); return; }
     const r = repoOf(panel);
@@ -71,6 +73,22 @@ export const VCS_ACTIONS = {
   "merge": { run: (panel, _cx, how) => { const r = repoOf(panel); if (r) openMerge({ root: r.root, on: r.on ?? null, owner: panel.bus.id, who: WHO[how.kind], lang: panel.lang }); } },
   "rebase": { run: (panel, _cx, how) => { const r = repoOf(panel); if (r) openRebase({ root: r.root, on: r.on ?? null, owner: panel.bus.id, who: WHO[how.kind], lang: panel.lang }); } },
 };
+
+// Branches…: the VCS widget's popup on the panel's repository. The Log panel's own widget
+// when it follows that repository; otherwise one made for this pick, which reads the
+// branches itself while the popup opens (its picks run in this panel's copy).
+function openBranches(panel, cx, how) {
+  const r = repoOf(panel);
+  if (!r) return;
+  let w = panel.widget?.repo?.root === r.root ? panel.widget : null;
+  if (!w) {
+    w = new VcsWidget();
+    w.init(panel, { who: WHO[how.kind] });
+    w.refresh(cx);
+    w.repo = r;
+  }
+  w.open(null, cx);
+}
 
 const handledBy = (kind) => (id) => Object.prototype.hasOwnProperty.call(VCS_ACTIONS, id) && (!VCS_ACTIONS[id].by || VCS_ACTIONS[id].by.includes(kind));
 

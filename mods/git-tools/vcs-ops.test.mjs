@@ -123,8 +123,17 @@ const en = translator("en"), ko = translator("ko");
   const table = source.slice(source.indexOf("export const VCS_ACTIONS = {"));
   const handled = new Set([...table.slice(0, table.indexOf("\n};")).matchAll(/^ {2}"([^"]+)":/gm)].map((m) => m[1]));
   const every = vcsOpsItems(all).flatMap((it) => (it.sub ? ids(vcsOpsItems(all, it.id)) : [it.id]));
-  assert.ok(handled.has("commit") && handled.has("newWorktree"));
-  assert.deepEqual(every.filter((id) => !handled.has(id)), ["branches", "createPatch", "applyPatch", "applyPatchFromClipboard", "manageRemotes"]);
+  assert.ok(handled.has("commit") && handled.has("newWorktree") && handled.has("branches"));
+  assert.deepEqual(every.filter((id) => !handled.has(id)), ["createPatch", "applyPatch", "applyPatchFromClipboard", "manageRemotes"]);
+  // Which panel kinds serve an item (`by`), read from its line: Push… is either panel's
+  // (both serve the push request), Rollback the Commit panel's alone.
+  const by = (id) => {
+    const line = table.split("\n").find((l) => l.startsWith(`  "${id}":`)) ?? "";
+    const m = /by: \[([^\]]*)\]/.exec(line);
+    return m ? m[1].split(",").map((s) => s.trim().replace(/"/g, "")) : null;
+  };
+  assert.deepEqual(by("push"), ["commit"]);
+  assert.deepEqual(by("rollback"), ["commit"]);
 }
 
 console.log("ok");

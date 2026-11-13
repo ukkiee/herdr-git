@@ -19,7 +19,7 @@ import { saveRequest } from "./merge-revisions-model.js";
 import { placerOn } from "./view-merge-revisions.js";
 import { runStashCreate, runStashDrop, runStashClear } from "./view-stash.js";
 import { runUnstash } from "./view-unstash.js";
-import { createBranch } from "./git-branch.js";
+import { createBranch, deleteBranch } from "./git-branch.js";
 import { serveReword, serveSquash, serveDrop } from "./log-rewrite.js";
 import { runSmartRequest } from "./view-smart.js";
 import { runTagCreate } from "./view-tag.js";
@@ -51,6 +51,9 @@ export const SERVE_ACTIONS = {
   // The New Branch dialog opened from the VCS Operations popup over the Commit panel; the
   // Log panel's own chain takes it first (view-branch-new.js serveBranch).
   "branch-create": { work: "dialogs.branch.creating", run: (git, root, args) => createBranch(git, root, { name: text(args.name) ?? "", from: text(args.from), checkout: args.checkout !== false }) },
+  // The confirmed delete of a branch with unmerged commits, from the Branches popup the
+  // VCS Operations popup opens over the Commit panel; the Log panel's chain takes it first.
+  "branch-delete": { work: "log.deleting", run: (git, root, args) => deleteBranch(git, root, text(args.name) ?? "", { confirmed: true }) },
   "rewrite-reword": { work: "rewrite.rewording", run: (git, root, args, panel) => serveReword(git, root, args, panel) },
   "rewrite-squash": { work: "rewrite.squashing", run: (git, root, args, panel) => serveSquash(git, root, args, panel) },
   "rewrite-drop": { work: "rewrite.dropping", run: (git, root, args, panel) => serveDrop(git, root, args, panel) },

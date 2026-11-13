@@ -73,6 +73,7 @@ import UpdateInfo from "./view-update-info.js";
 import Extract from "./view-extract.js";
 import Merge from "./view-merge.js";
 import Rebase from "./view-rebase.js";
+import InteractiveRebase from "./view-interactive-rebase.js";
 
 // When the system's language isn't known yet, how long to wait before each next ask.
 const ASK_AGAIN = [1000, 3000, 10000];
@@ -122,6 +123,7 @@ export const VIEWS = {
   "extract": Extract, // Extract Selected Changes dialog, and the first-commit question (view-extract.js openExtract)
   "merge": Merge, // Merge dialog (view-merge.js openMerge)
   "rebase": Rebase, // Rebase dialog (view-rebase.js openRebase)
+  "interactive-rebase": InteractiveRebase, // Rebasing Commits dialog (view-interactive-rebase.js openInteractiveRebase)
 };
 
 // `mod.open:git-tools` (cmd-k) opens a copy with no view. No single app command both

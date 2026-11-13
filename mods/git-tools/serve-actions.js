@@ -28,6 +28,7 @@ import { runRemoteEdit, runRemoteRemove } from "./view-remote.js";
 import { runRemote } from "./view-update-project.js";
 import { serveExtract, serveDropChanges } from "./view-extract.js";
 import { serveOperation } from "./view-merge.js";
+import { serveInteractive } from "./view-interactive-rebase.js";
 
 const strings = (value) => (Array.isArray(value) ? value.filter((v) => typeof v === "string" && v) : []);
 const text = (value) => (typeof value === "string" && value ? value : null);
@@ -65,6 +66,7 @@ export const SERVE_ACTIONS = {
   "rewrite-drop-changes": { work: "rewrite.droppingChanges", run: (git, root, args, panel) => serveDropChanges(git, root, args, panel) },
   "merge-start": { work: "merge.merging", run: (git, root, args, panel) => serveOperation(git, root, args, panel) },
   "rebase-start": { work: "merge.rebasing", run: (git, root, args, panel) => serveOperation(git, root, args, panel) },
+  "rebase-interactive": { work: "interactive.rebasing", run: (git, root, args, panel) => serveInteractive(git, root, args, panel) },
 };
 
 // serveAction(panel, e, cx) → true when the table has e.action and the panel now runs

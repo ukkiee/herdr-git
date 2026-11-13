@@ -39,6 +39,7 @@ import { openPatch, openFilePatch } from "./view-patch.js";
 import { goToHash } from "./view-go-to-hash.js";
 import { undoHere, editMessageHere, dropHere, squashHere } from "./log-rewrite.js";
 import { cherryPickHere, revertHere, cherryPickPicked, revertChangesHere, cherryPickChangesHere } from "./log-pick.js";
+import { interactiveHere } from "./view-interactive-rebase.js";
 import { OPTIONS_KEY, readOptions, toggleOption, readArgs, graphMenu, displayMenu, columnsMenu } from "./log-options.js";
 import { appSetting, saveAppSetting } from "./app-files.js";
 import { readMe } from "./git-log-filter.js";
@@ -154,6 +155,7 @@ const ACTIONS = {
   "branch.rebaseOnto": (host, b, cx) => operateHere(host, { type: "rebase", target: b.name }, cx),
   "branch.checkoutAndRebase": (host, b, cx) => operateHere(host, { type: "checkout-rebase", name: b.name, remote: b.scope === "remote" }, cx),
   "commit.rebaseOnto": (host, commits, cx) => { if (commits[0]?.hash) operateHere(host, { type: "rebase", target: commits[0].hash }, cx); },
+  "commit.interactiveRebase": (host, commits, cx) => interactiveHere(host, commits, cx),
 };
 
 // The bus event that tells every Log panel the options file changed.

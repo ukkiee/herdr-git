@@ -71,7 +71,7 @@ const ITEMS = {
   "commit.squashInto": { key: "log.squashInto", write: true, when: edit("squashInto") },
   "commit.drop": { key: "log.dropCommits", args: (ctx) => ({ n: ctx.count ?? 1 }), write: true, when: edit("drop") },
   "commit.squash": { key: "log.squashCommits", shown: (ctx) => (ctx.count ?? 1) >= 2, write: true, when: edit("squash") },
-  "commit.interactiveRebase": { key: "log.interactiveRebase" },
+  "commit.interactiveRebase": { key: "log.interactiveRebase", write: true, when: edit("interactiveRebase") },
   "commit.pushUpToHere": { key: "log.pushUpToHere", when: one },
   // Only for a commit outside the current branch (one in it is already under it), and
   // only on a branch.

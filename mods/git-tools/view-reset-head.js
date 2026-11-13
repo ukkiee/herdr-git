@@ -1,6 +1,6 @@
 // Reset Head dialog (VCS Operations popup: Reset HEAD…): the Git root and the current
-// branch, the reset type (Soft, Mixed, Hard), the commit to reset to as an expression
-// (HEAD at first) with Validate, Cancel and Reset. Validate, and Reset before it asks,
+// branch, the reset type as a dropdown (Soft, Mixed, Hard; Mixed at first), the commit
+// to reset to as an expression (HEAD at first) with Validate, Cancel and Reset. Validate, and Reset before it asks,
 // check the expression with git (git-reset.js checkCommit); a wrong one says so under the
 // field and nothing runs.
 //
@@ -16,13 +16,12 @@ import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { exec, theme } from "herdr";
 import { makeGit } from "./git.js";
 import { checkCommit, currentBranch } from "./git-reset.js";
-import { openDialog, dialogFrame, button, close, askOwner, writeBlock, scrollText, sentence } from "./ui.js";
-import { radio } from "./view-reset.js";
+import { openDialog, openMenu, dialogFrame, button, close, askOwner, writeBlock, scrollText, sentence, uiGlyph } from "./ui.js";
 
 const TYPES = [
-  { mode: "soft", key: "reset.soft" },
-  { mode: "mixed", key: "reset.mixed" },
-  { mode: "hard", key: "reset.hard" },
+  { mode: "soft", key: "reset.soft", hint: "reset.softHint" },
+  { mode: "mixed", key: "reset.mixed", hint: "reset.mixedHint" },
+  { mode: "hard", key: "reset.hard", hint: "reset.hardHint" },
 ];
 const SHORT = 8;
 
@@ -88,6 +87,20 @@ export default class ResetHeadView {
     });
   }
 
+  // The Reset Type dropdown's list, opened where it was pressed (at: window coordinates).
+  pickType(cx, at) {
+    if (this.waiting || this.typeOpen) return;
+    this.typeOpen = true;
+    cx.notify();
+    cx.spawn(async (cx) => {
+      const items = TYPES.map((m) => ({ label: this.t(m.key), value: m.mode, hint: m.mode === this.mode ? "✓" : "", title: this.t(m.hint) }));
+      const picked = await openMenu(this.bus, items, { width: 180, at, lang: this.lang });
+      this.typeOpen = false;
+      if (!this.waiting && TYPES.some((m) => m.mode === picked)) this.mode = picked;
+      cx.notify();
+    });
+  }
+
   shut() { if (!this.waiting) close(this.overlay); }
 
   label(t, text) { return div().w(110).flex_none().text_color(t.muted).child(text); }
@@ -97,15 +110,20 @@ export default class ResetHeadView {
     const branch = this.branch === undefined ? "…" : this.branch ?? this.t("reset.detached");
     const bad = v && !v.ok ? sentence(this.t, v.msg, v.err) : "";
     const said = this.error ?? (bad || writing);
+    const type = TYPES.find((m) => m.mode === this.mode) ?? TYPES[1];
     const body = v_flex().size_full().min_h(0).px(14).py(12).gap(10)
       .child(h_flex().w_full().items_center().child(this.label(t, this.t("reset.root"))).child(div().flex_1().min_w(0).truncate().child(this.root ?? "")))
       .child(h_flex().w_full().items_center().child(this.label(t, this.t("reset.branch"))).child(div().flex_1().min_w(0).truncate().child(branch)))
       .child(h_flex().w_full().items_center().child(this.label(t, this.t("reset.type")))
-        .child(h_flex().flex_1().gap(14).items_center().children(TYPES.map((m) =>
-          h_flex().id(`reset-head-type-${m.mode}`).gap(6).items_center().cursor_pointer()
-            .on_click((_e, cx) => { if (!this.waiting) { this.mode = m.mode; cx.notify(); } })
-            .child(radio(`reset-head-radio-${m.mode}`, this.mode === m.mode, t))
-            .child(this.t(m.key))))))
+        // While its list is open it shows no tooltip: that would cover the list.
+        .child(h_flex().id("reset-head-type").w(160).h(28).px(8).gap(6).flex_none().items_center().rounded(6).border_1()
+          .border_color(this.typeOpen ? t.accent : t.input).bg(t.background)
+          .text_color(this.waiting ? t.dim : t.foreground)
+          .when(!this.waiting && !this.typeOpen, (el) => el.tooltip(this.t(type.hint)))
+          .when(!this.waiting, (el) => el.cursor_pointer().hover((s) => s.bg(t.hover))
+            .on_mouse_down("left", (e, cx) => { cx.stop_propagation(); this.pickType(cx, e.position); }))
+          .child(div().flex_1().min_w(0).truncate().child(this.t(type.key)))
+          .child(uiGlyph("chevron-down").text_color(t.muted))))
       .child(h_flex().w_full().gap(8).items_center().child(this.label(t, this.t("reset.commit")))
         .child(div().id("reset-head-commit").flex_1().min_w(0).h(28).px(8).flex().items_center().rounded(6).border_1()
           .border_color(bad ? t.ansi1 : t.input).bg(t.background).cursor_text()

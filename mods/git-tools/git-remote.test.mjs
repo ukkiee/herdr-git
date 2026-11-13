@@ -412,5 +412,20 @@ const commitMine = (mine, path, at, word) => { edit(mine, path, at, word); sh(mi
   assert.equal(refused.ok, false);
   assert.equal(head(mine), kept);
 }
+{
+  // A file the remote branch gained, untracked here: the reset writes over it, so it is
+  // recorded too. An untracked file the remote lacks stays out.
+  const { mine, theirs } = setup();
+  sh(theirs, "echo theirs > new.txt && git add new.txt && git commit -q -m new && git push -q origin main 2>&1");
+  write(mine, "new.txt", "MY UNTRACKED\n");
+  write(mine, "loose.txt", "loose\n");
+  const r = await resetToRemote(git, mine, { copy: "0123456789abcdef" });
+  assert.equal(r.outcome, "done", r.err);
+  assert.equal(text(mine, "new.txt"), "theirs\n");
+  const list = await listSnapshots(git, mine);
+  assert.equal(list.snapshots[0].hash, r.snapshot);
+  assert.deepEqual(list.snapshots[0].files.map((f) => f.path), ["new.txt"]);
+  assert.equal(sh(mine, `git show ${r.snapshot}:new.txt`), "MY UNTRACKED\n");
+}
 
 console.log("ok");

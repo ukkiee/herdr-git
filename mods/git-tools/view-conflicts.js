@@ -349,7 +349,8 @@ export default class ConflictsView {
       note: this.note ?? "",
       onClose: () => this.shut(),
       footer: [
-        button("conflicts-close", this.t("ui.close"), t, { onClick: () => this.shut() }),
+        // Not "conflicts-close": dialogFrame gives its × that id (ui-ids.test.mjs).
+        button("conflicts-dismiss", this.t("ui.close"), t, { onClick: () => this.shut() }),
         button("conflicts-finish", this.t("conflicts.finish"), t, { disabled: !can.finish, onClick: () => this.shut() }),
         button("conflicts-manual", this.t("conflicts.resolveManually"), t, { kind: "primary", disabled: !can.resolveManually, onClick: () => this.resolveManually() }),
       ],

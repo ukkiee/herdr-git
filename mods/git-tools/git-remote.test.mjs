@@ -498,6 +498,34 @@ const commitMine = (mine, path, at, word) => { edit(mine, path, at, word); sh(mi
   assert.ok(words.includes("\nb1: ") && words.includes("\nb2: "), words);
 }
 {
+  // Branches on that remote mixed with branches on one that can be fetched: each remote
+  // is fetched once, the failed fetch fails only its own remote's branches, and the others
+  // update as usual. The words name only the failed ones.
+  const en = translator("en");
+  const { mine, theirs } = setup();
+  sh(mine, `git remote add gone ${base}/no-such-remote.git`);
+  for (const b of ["b1", "b2"]) sh(mine, `git branch ${b} && git config branch.${b}.remote gone && git config branch.${b}.merge refs/heads/main`);
+  sh(mine, "git branch --track f1 origin/main && git branch --track f2 origin/feature");
+  push(theirs, "f.txt", 0, "their-f", { to: "feature" });
+  const fetches = { gone: 0, origin: 0 };
+  const counting = Object.assign(async (cwd, args, options) => {
+    if (args[0] === "fetch") for (const remote of Object.keys(fetches)) if (args.includes(remote)) fetches[remote] += 1;
+    return git(cwd, args, options);
+  }, { read: (cwd, args, options) => git.read(cwd, args, options) });
+  const all = await updateBranches(counting, mine, { names: ["b1", "f1", "b2", "f2"] });
+  assert.deepEqual(fetches, { gone: 1, origin: 1 });
+  assert.deepEqual(all.results.map((x) => [x.name, x.outcome, Boolean(x.fetchFailed)]),
+    [["b1", "failed", true], ["f1", "empty", false], ["b2", "failed", true], ["f2", "done", false]]);
+  assert.equal(rev(mine, "f2"), rev(theirs, "feature"));
+  assert.equal(all.ok, false);
+  assert.equal(all.changed, true);
+  const words = branchesFailureText(en, all.results);
+  assert.ok(words.startsWith(`${en("remote.credentialHint")}\n\n`), words);
+  assert.equal(words.split(en("remote.credentialHint")).length, 2, "the hint once");
+  assert.ok(words.includes("\nb1: ") && words.includes("\nb2: "), words);
+  assert.ok(!words.includes("\nf1: ") && !words.includes("\nf2: "), words);
+}
+{
   // The current branch updates as the project does, with the method given.
   const { mine, theirs } = setup();
   push(theirs, "a.txt", 0, "their-a1");

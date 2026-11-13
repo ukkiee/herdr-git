@@ -1,0 +1,23 @@
+# The full offline check (tools/check.mjs) on every push to main and every pull request.
+# The runner has no Herdr app, so the `herdr-app check` step reports skipped; the tests
+# still run against real temporary git repositories.
+name: check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 26
+      - run: node tools/check.mjs

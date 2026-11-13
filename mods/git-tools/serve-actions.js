@@ -10,8 +10,13 @@
 import { exec } from "herdr";
 import { makeGit } from "./git.js";
 import { serveRequest } from "./ui.js";
+import { acceptRequest, unresolveRequest, resolveSimpleRequest } from "./conflicts-model.js";
+import { writerOn } from "./view-conflicts.js";
 
 export const SERVE_ACTIONS = {
+  "conflicts-accept": { work: "conflicts.accepting", run: (git, root, args) => acceptRequest(git, root, args) },
+  "conflicts-unresolve": { work: "conflicts.unresolving", run: (git, root, args) => unresolveRequest(git, root, args) },
+  "conflicts-resolve-simple": { work: "conflicts.resolvingSimple", run: (git, root, args) => resolveSimpleRequest(git, root, args, writerOn(typeof args.on === "string" ? args.on : null)) },
 };
 
 // serveAction(panel, e, cx) → true when the table has e.action and the panel now runs

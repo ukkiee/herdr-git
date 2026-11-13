@@ -54,9 +54,15 @@ export function openConflictsIfStopped(result, args) {
 // writerOn(on) → write(absolutePath, text): how a resolved file is written. This
 // computer's space: writeTextFile, replacing what is there now. Another machine's: in
 // parts with sh there (git-conflict.js remoteWriter), as exec has no stdin.
+// writeTextFile replaces only the text it is shown, and readTextFile reads at most 1 MiB:
+// a file it can't read is written the other machines' way, with this computer's sh.
 export function writerOn(on) {
   if (on) return remoteWriter(exec, on);
-  return async (path, text) => { await writeTextFile(path, text, await readTextFile(path)); };
+  return async (path, text) => {
+    let now;
+    try { now = await readTextFile(path); } catch { return remoteWriter(exec, null)(path, text); }
+    await writeTextFile(path, text, now);
+  };
 }
 
 export default class ConflictsView {

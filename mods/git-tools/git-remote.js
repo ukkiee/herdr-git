@@ -62,16 +62,18 @@ const ACCEPTED = new Set([...PULL_OPTIONS, "--no-rebase"]);
 const str = (value) => (typeof value === "string" ? value : "");
 
 // failureText(t, r) → the words a failed or refused result `r` is shown with, in t's
-// language: the module's sentence (msg) or git's own, then the credential hint when the
+// language: the module's sentence (msg) or git's own, after the credential hint when the
 // fetch itself failed (fetchFailed: the remote may want a password nobody can type here).
-// Every screen that shows such a result takes its words from here, once: text that came
-// from here carries no fetchFailed, so it isn't given the hint again.
+// The hint goes first: git's words can run past what a dialog's error box, the Commit
+// panel's strip or a notification shows without scrolling, and the dialog's answer keeps
+// only their start. Every screen that shows such a result takes its words from here,
+// once: text that came from here carries no fetchFailed, so it isn't given the hint again.
 export function failureText(t, r) {
   const said = sentence(t, r?.msg, r?.err).trim() || t("ui.gitFailed");
-  return r?.fetchFailed ? `${said}\n\n${t("remote.credentialHint")}` : said;
+  return r?.fetchFailed ? `${t("remote.credentialHint")}\n\n${said}` : said;
 }
 
-const refuse =(err, msg, extra = {}) => ({ ok: false, code: -1, out: "", err, msg, outcome: "refused", operation: null, updated: null, changed: false, ...extra });
+const refuse = (err, msg, extra = {}) => ({ ok: false, code: -1, out: "", err, msg, outcome: "refused", operation: null, updated: null, changed: false, ...extra });
 const failedWith = (r, extra = {}) => ({ ok: false, code: r.code ?? -1, out: r.out ?? "", err: r.err ?? "", ...(r.msg ? { msg: r.msg } : {}), outcome: "failed", operation: null, updated: null, changed: false, ...extra });
 
 async function hashOf(git, root, ref) {

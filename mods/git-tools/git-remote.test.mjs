@@ -290,8 +290,8 @@ const commitMine = (mine, path, at, word) => { edit(mine, path, at, word); sh(mi
 }
 
 // The words a failed pull or update is shown with, wherever it shows (the Pull dialog,
-// the Commit panel's strip, a notification): git's, then the credential hint once when
-// the fetch itself failed; git's alone when a later step failed.
+// the Commit panel's strip, a notification): the credential hint once when the fetch
+// itself failed, first, then git's; git's alone when a later step failed.
 {
   const en = translator("en"), ko = translator("ko");
   const { mine, theirs } = setup();
@@ -299,16 +299,18 @@ const commitMine = (mine, path, at, word) => { edit(mine, path, at, word); sh(mi
   const r = await pull(git, mine, { remote: "gone", branch: "main", options: [] });
   assert.equal(r.fetchFailed, true);
   const words = failureText(en, r);
-  assert.ok(words.startsWith(r.err.trim()), words);
-  assert.ok(words.endsWith(en("remote.credentialHint")), words);
-  assert.equal(words.split(en("remote.credentialHint")).length, 2, "the hint once");
-  assert.ok(failureText(ko, r).endsWith(ko("remote.credentialHint")));
+  assert.equal(words, `${en("remote.credentialHint")}\n\n${r.err.trim()}`);
+  assert.equal(failureText(ko, r), `${ko("remote.credentialHint")}\n\n${r.err.trim()}`);
+  // git's words can run long: the dialog keeps only their first 4000 characters, and
+  // a notification its first lines. The hint is in those either way.
+  const long = failureText(en, { ...r, err: "x".repeat(5000) });
+  assert.ok(long.startsWith(en("remote.credentialHint")), long.slice(0, 200));
 
   // Put aside by Smart and run again: still the fetch that failed.
   edit(mine, "a.txt", 0, "local-a1");
   const again = await smartRun(git, mine, { request: { type: "pull", remote: "gone", branch: "main", options: [], rebase: false, target: "gone/main" } });
   assert.equal(again.outcome, "failed");
-  assert.ok(failureText(en, again).endsWith(en("remote.credentialHint")), failureText(en, again));
+  assert.ok(failureText(en, again).startsWith(en("remote.credentialHint")), failureText(en, again));
 
   // The merge step failed (diverged, --ff-only): git's words alone.
   sh(mine, "git checkout -q -- a.txt");

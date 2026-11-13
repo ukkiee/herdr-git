@@ -1,7 +1,10 @@
 // node ui-size.test.mjs: how wide a popup menu is drawn for its labels, and where the
 // VCS widget's popup and a branch row's menu go.
 import assert from "node:assert/strict";
-import { textWidth, menuWidth, belowSpot, pressSpot, sideOf, dialogFills, widgetBlockWidth } from "./ui-size.js";
+import { readdirSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { textWidth, menuWidth, belowSpot, pressSpot, sideOf, dialogFills, dialogRoom, ERROR_BOX, ERROR_ROOM, widgetBlockWidth } from "./ui-size.js";
 
 // ---- text: a Hangul syllable is as wide as the font size, Latin letters narrower
 {
@@ -80,6 +83,33 @@ import { textWidth, menuWidth, belowSpot, pressSpot, sideOf, dialogFills, widget
     "create-patch", "apply-patch", "remotes", "mr-overwrite", "mr-unresolved"]) {
     assert.equal(dialogFills(id), true, id);
   }
+}
+
+// ---- a form dialog's room: what it was opened with plus room for its error text, so an
+// error under the rows grows the card instead of squeezing it or cutting the buttons
+{
+  assert.equal(dialogRoom("reset", 390), 390 + ERROR_ROOM);
+  assert.equal(dialogRoom("pull", 230), 230 + ERROR_ROOM);
+  assert.ok(ERROR_ROOM >= ERROR_BOX + 16, "the box, the gap above it and its padding");
+  // A dialog that fills its room keeps it: its list gives way to the error.
+  assert.equal(dialogRoom("conflicts", 460), 460);
+  assert.equal(dialogRoom("smart", 440), 440);
+  // A share of the window (up to 1) is left as it is.
+  assert.equal(dialogRoom("reset", 0.8), 0.8);
+  assert.equal(dialogRoom("reset", undefined), undefined);
+}
+
+// Every form dialog's error text stays within the room openDialog keeps for it.
+{
+  const here = dirname(fileURLToPath(import.meta.url));
+  const tall = [];
+  for (const name of readdirSync(here).filter((n) => /^view-.*\.js$/.test(n))) {
+    const text = readFileSync(join(here, name), "utf8");
+    for (const m of text.matchAll(/scrollText\("([\w-]+-error)"[^\n]*?maxHeight:\s*(\d+)/g)) {
+      if (Number(m[2]) > ERROR_BOX) tall.push(`${name} ${m[1]} ${m[2]}`);
+    }
+  }
+  assert.deepEqual(tall, [], `error text taller than ERROR_BOX (${ERROR_BOX})`);
 }
 
 // ---- the VCS widget's block: as wide as the widget plus its padding, whole pixels,

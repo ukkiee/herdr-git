@@ -137,7 +137,7 @@ export default class PullView {
     if (!targets) body = notice(this.t("remote.reading"), t, { busy: true });
     else if (!pick) body = notice(this.t("remote.noRemotes"), t);
     else {
-      body = v_flex().size_full().min_h(0).px(14).py(12).gap(10)
+      body = v_flex().w_full().px(14).py(12).gap(10)
         .child(h_flex().w_full().gap(8).items_center()
           .child(div().flex_none().px(8).h(28).flex().items_center().rounded(6).bg(t.raised).text_color(t.muted).child("git pull"))
           .child(this.picker("pull-remote", pick.remote, t, (cx) => this.chooseRemote(cx)))
@@ -148,7 +148,9 @@ export default class PullView {
             .on_click((_e, cx) => { if (!this.waiting) { this.options = togglePullOption(this.options, o); cx.notify(); } })
             .child(`${o} ×`)))));
     }
-    if (said) body = v_flex().size_full().min_h(0).child(div().flex_1().min_h(0).child(body)).child(div().px(14).pb(8).child(scrollText("pull-error", said ?? "", t, { maxHeight: 60, color: this.error ? t.ansi1 : t.muted })));
+    // The error goes under the rows, never over them: neither part may shrink, and the
+    // dialog's room has space for it (ui-size.js dialogRoom).
+    if (said) body = v_flex().w_full().child(div().flex_none().w_full().child(body)).child(div().flex_none().px(14).pb(8).child(scrollText("pull-error", said ?? "", t, { maxHeight: 60, color: this.error ? t.ansi1 : t.muted })));
     return dialogFrame("pull", this.t("remote.pullTitle", { branch }), t, {
       body, onClose: () => this.shut(), note: this.waiting ? this.t("remote.pulling") : "",
       footer: [

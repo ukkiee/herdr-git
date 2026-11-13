@@ -12,7 +12,7 @@ import { makeLocks, BEAT, sameRepo, repoName } from "./lock.js";
 import { LANGS, translator, systemLang, sentence } from "./i18n.js";
 import { fileIcon, folderIcon, darkColor } from "./icon-theme.js";
 import { iconShape, iconDraw } from "./ui-icons.js";
-import { menuWidth, dialogFills } from "./ui-size.js";
+import { menuWidth, dialogFills, dialogRoom } from "./ui-size.js";
 import { whereFocused, newPanes, rememberTab, registerTab, forgetTab } from "./focus-repo.js";
 import { en as consoleEn, ko as consoleKo } from "./messages-console.js";
 
@@ -370,9 +370,10 @@ export function serveRequest(screen, e, label, work, cx) {
 // opener's (`lang: this.lang`) from a click handler or a task: there the opener isn't
 // known here, and the system's language as last read is used.
 // width, height: the room the dialog gets. A form draws its own frame only as tall as it
-// needs inside it (dialogFrame), so the height is a ceiling there.
+// needs inside it (dialogFrame), so the height is a ceiling there: give what the form
+// needs without an error, and the room for its error text is added (ui-size.js dialogRoom).
 export function openDialog(view, props = {}, { width = 560, height = 420 } = {}) {
-  return openOverlay({ mod: MOD, kind: "dialog", modal: true, frame: "none", width, height, props: { ...props, view, lang: openingLang(props.lang) } });
+  return openOverlay({ mod: MOD, kind: "dialog", modal: true, frame: "none", width, height: dialogRoom(view, height), props: { ...props, view, lang: openingLang(props.lang) } });
 }
 
 // A tab in the shown space whose only pane is one of our screens. Its props are saved

@@ -80,6 +80,20 @@ const FILLING = new Set([
 // questions ("mr-…") sit in a card of their own inside it and fill that card.
 export const dialogFills = (id) => FILLING.has(id) || String(id).startsWith("mr-");
 
+// A form dialog's error text (git's words under its rows) is at most ERROR_BOX px tall and
+// scrolls past that. The overlay can't grow once open, so the room a form opens with
+// keeps ERROR_ROOM px for it: the box, the gap above it and padding. The card is drawn
+// as tall as what it holds, so the spare room stays unseen until an error shows.
+export const ERROR_BOX = 60, ERROR_ROOM = 80;
+
+// dialogRoom(view, height) → the height to open dialog `view` with: `height` (px, what the
+// form needs without an error) plus ERROR_ROOM; a filling dialog's height or a share of
+// the window (up to 1) as given.
+export function dialogRoom(view, height) {
+  if (!Number.isFinite(height) || height <= 1 || dialogFills(view)) return height;
+  return height + ERROR_ROOM;
+}
+
 // widgetBlockWidth(content, current, pad) → the px the VCS widget's layout block is
 // resized to so it is as wide as the widget (`content`, measured) plus `pad` on each
 // side, or null when it already is or nothing was measured: the resize then isn't asked

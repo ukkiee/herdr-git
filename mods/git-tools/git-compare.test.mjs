@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { makeGit } from "./git.js";
 import { readDiff } from "./git-diff.js";
 import { listSnapshots } from "./git-snapshot.js";
-import { branchCommits, workingTreeFiles, swapState, versionFiles, getFromRevision, fileParent, readLocalDiff, readRevisionFile } from "./git-compare.js";
+import { branchCommits, workingTreeFiles, swapState, versionFiles, getFromRevision, fileParent, readFileDiff, readRevisionFile } from "./git-compare.js";
 import { en, ko } from "./messages-compare.js";
 
 const env = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", GIT_EDITOR: "true" };
@@ -208,15 +208,24 @@ const worded = (r) => {
   assert.deepEqual(change.rows.filter((r) => r.kind === "add" || r.kind === "del").map((r) => `${r.kind} ${r.text}`), ["del 2", "add two"]);
   // Compare Before with Local: the parent's version against the working file.
   write(repo, "a.txt", "1\ntwo\nthree\nfour\n");
-  const local = await readLocalDiff(git, repo, { rev: c2, path: "a.txt" });
+  const lines = (d) => d.rows.filter((r) => r.kind === "add" || r.kind === "del").map((r) => `${r.kind} ${r.text}`);
+  const local = await readFileDiff(git, repo, { from: c2, path: "a.txt" });
   assert.equal(local.ok, true, local.err);
-  assert.deepEqual(local.rows.filter((r) => r.kind === "add" || r.kind === "del").map((r) => `${r.kind} ${r.text}`), ["del 3", "add three", "add four"]);
+  assert.deepEqual(lines(local), ["del 3", "add three", "add four"]);
   assert.deepEqual([local.from, local.to], [c2.slice(0, 7), ""]);
+  // Swapped: the working file against the revision.
+  const back = await readFileDiff(git, repo, { from: c2, path: "a.txt", reverse: true });
+  assert.deepEqual(lines(back), ["del three", "del four", "add 3"]);
+  assert.deepEqual([back.from, back.to], ["", c2.slice(0, 7)]);
+  // Two commits (Compare Versions).
+  const versions = await readFileDiff(git, repo, { from: c1, to: c3, path: "a.txt" });
+  assert.deepEqual(lines(versions), ["del 2", "del 3", "add two", "add three"]);
+  assert.deepEqual([versions.from, versions.to], [c1.slice(0, 7), c3.slice(0, 7)]);
   // Renamed since: the parent's file under its old name against the working file.
   write(repo, "moved.txt", "line one\nline two\nline three\nline 4\n");
-  const renamed = await readLocalDiff(git, repo, { rev: c2, path: "moved.txt", oldPath: "keep.txt" });
+  const renamed = await readFileDiff(git, repo, { from: c2, path: "moved.txt", oldPath: "keep.txt" });
   assert.equal(renamed.ok, true, renamed.err);
-  assert.deepEqual(renamed.rows.filter((r) => r.kind === "add" || r.kind === "del").map((r) => `${r.kind} ${r.text}`), ["del line four", "add line 4"]);
+  assert.deepEqual(lines(renamed), ["del line four", "add line 4"]);
   // Open Repository Version: the file as the commit has it.
   const v = await readRevisionFile(git, repo, { rev: c1, path: "a.txt" });
   assert.deepEqual([v.ok, v.text, v.binary], [true, "1\n2\n3\n", false]);

@@ -170,18 +170,21 @@ export async function fileParent(git, root, { commit, path, from = null } = {}) 
   return { ...r, parent: parent ?? null, path: from ?? path };
 }
 
-// readLocalDiff(git, root, { rev, path, oldPath? }) → { ok, err, binary, truncated, from, to, rows }
-//   The file as `rev` has it against the working file, as readDiff (git-diff.js) reads
-//   one: rows to draw. oldPath: the file's name in `rev` when it has been renamed since.
-//   from: the short hash; to: "" (the working tree).
-export async function readLocalDiff(git, root, { rev, path, oldPath = null } = {}) {
+// readFileDiff(git, root, { from, to?, path, oldPath?, reverse? })
+//   → { ok, err, binary, truncated, from, to, rows }
+//   One file as revision `from` has it against revision `to` (null: the working file), as
+//   readDiff (git-diff.js) reads one: rows to draw. oldPath: the file's name in `from`
+//   when it has been renamed since. reverse: the other way round (`to` against `from`).
+//   from / to in the result: short hashes; to is "" for the working tree.
+export async function readFileDiff(git, root, { from, to = null, path, oldPath = null, reverse = false } = {}) {
   const renamed = Boolean(oldPath && oldPath !== path);
-  const args = renamed
-    ? [LITERAL, "diff", ...PLAIN, "-M", "--end-of-options", String(rev), "--", oldPath, path]
-    : [LITERAL, "diff", ...PLAIN, "--no-renames", "--end-of-options", String(rev), "--", path];
+  const revs = to ? [String(from), String(to)] : [String(from)];
+  const args = [LITERAL, "diff", ...PLAIN, ...(renamed ? ["-M"] : ["--no-renames"]), ...(reverse ? ["-R"] : []),
+    "--end-of-options", ...revs, "--", ...(renamed ? [oldPath, path] : [path])];
+  const sides = reverse ? { from: to ? short(to) : "", to: short(from) } : { from: short(from), to: to ? short(to) : "" };
   const r = await git.read(root, args);
-  if (!r.ok) return { ok: false, err: r.err, binary: false, truncated: false, from: short(rev), to: "", rows: [] };
-  return { ok: true, err: "", ...parseDiff(r.out), from: short(rev), to: "" };
+  if (!r.ok) return { ok: false, err: r.err, binary: false, truncated: false, ...sides, rows: [] };
+  return { ok: true, err: "", ...parseDiff(r.out), ...sides };
 }
 
 // readRevisionFile(git, root, { rev, path }) → { ok, code, out, err, text, binary }

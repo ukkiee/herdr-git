@@ -82,6 +82,13 @@ export async function smartCheckout(repo, { name, remote = false }, { owner = nu
   return r;
 }
 
+// tellUnstaged(r, t): a Smart result whose changes came back without their staging
+// (git-smart.js `unstaged`) says so; the person would otherwise find their staged
+// changes unstaged with no word why.
+export function tellUnstaged(r, t) {
+  if (r?.unstaged) notify({ title: t("smart.unstaged"), body: t("smart.unstagedBody"), level: "warning" });
+}
+
 // What came of a Smart run, said where the person sees it: the Conflicts dialog for files
 // left in conflict, a notification when the changes stay in the stash, and a Cherry-Pick's
 // or Revert's own notifications as the run without Smart has them (pick-notes.js).
@@ -89,6 +96,7 @@ export async function smartCheckout(repo, { name, remote = false }, { owner = nu
 // notification a history edit that went through ends with.
 function tell(r, { root, on, panel, who, type, request = null }) {
   const t = panel?.t ?? ((key) => key), words = wordsFor(t, type);
+  tellUnstaged(r, t);
   const ref = r.stash?.ref ?? r.stash?.hash?.slice(0, 7) ?? "";
   const conflicts = r.operation?.conflicts?.length > 0;
   const stopped = r.outcome === "stopped" && r.operation?.kind;
@@ -137,6 +145,7 @@ export function settleSmartMark(panel, repo, op, cx) {
       try { r = await settleSmartStash(repo.git, repo.root); } catch (error) { r = { ok: false, err: String(error?.message ?? error), outcome: "failed" }; }
       panel.setBusy(null, cx);
       if (r.changed) broadcast({ type: "changed", root: repo.root });
+      if (r.outcome === "done") tellUnstaged(r, panel.t);
       if (r.outcome === "stopped" || (r.outcome === "failed" && r.stash)) tell({ ...r, kept: true }, { root: repo.root, on: repo.on ?? null, panel, who: "ui.commitPanel", type: "checkout" });
       else if (!r.ok && r.err) notify({ title: panel.t("smart.backFailed"), body: sentence(panel.t, r.msg, r.err), level: "error" });
     } finally {

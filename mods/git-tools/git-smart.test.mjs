@@ -142,6 +142,32 @@ const sorted = (paths) => [...paths].sort();
   assert.deepEqual(stashes(repo), []);
 }
 
+// Smart Checkout whose staging no longer fits the other branch (the staged diff was made
+// against a line that branch doesn't have): the changes come back unstaged, and the
+// result says so (unstaged) for the screen to tell.
+{
+  const repo = init("checkout-unstaged");
+  edit(repo, "a.txt", 0, "main-a1");
+  sh(repo, "git commit -q -am main-a1");
+  edit(repo, "a.txt", 2, "mine-a3");
+  sh(repo, "git add a.txt");
+  const r = await smartRun(git, repo, { request: { type: "checkout", name: "side" } });
+  assert.equal(r.ok, true, r.err);
+  assert.equal(r.outcome, "done");
+  assert.equal(branch(repo), "side");
+  assert.equal(r.unstaged, true);
+  assert.match(text(repo, "a.txt"), /^a1\na2\nmine-a3\na4\nside-a5\n$/);
+  assert.equal(sh(repo, "git diff --cached"), "");
+  assert.deepEqual(stashes(repo), []);
+  // Staging that comes back as it was is not flagged.
+  const clean = init("checkout-staged");
+  edit(clean, "b.txt", 0, "mine-b1");
+  sh(clean, "git add b.txt");
+  const kept = await smartRun(git, clean, { request: { type: "checkout", name: "side" }, run: (g, root) => g(root, ["checkout", "side"]) });
+  assert.equal(kept.outcome, "done");
+  assert.equal(kept.unstaged, undefined);
+}
+
 // Smart around every other request: it finishes and the changes and their staging come
 // back as they were. The requests run as git commands here (`run`); their own modules
 // name them by type.

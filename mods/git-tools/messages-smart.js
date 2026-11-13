@@ -38,6 +38,8 @@ export const en = {
   "smart.backConflictBody": "{ref} stays in the stash list until the conflicts are resolved.",
   "smart.backFailed": "Local changes could not be brought back",
   "smart.backFailedBody": "They are kept in {ref}.",
+  "smart.unstaged": "Local changes came back unstaged",
+  "smart.unstagedBody": "Their staging no longer fit, so only the changes were brought back. Stage them again if needed.",
 };
 
 export const ko = {
@@ -75,4 +77,6 @@ export const ko = {
   "smart.backConflictBody": "충돌을 해결할 때까지 {ref}은(는) 스태시 목록에 남습니다.",
   "smart.backFailed": "로컬 변경을 되돌리지 못했습니다",
   "smart.backFailedBody": "{ref}에 남아 있습니다.",
+  "smart.unstaged": "스테이징은 되돌리지 못했습니다",
+  "smart.unstagedBody": "스테이징이 맞지 않아 변경만 되돌렸습니다. 필요하면 다시 스테이징하세요.",
 };

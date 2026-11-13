@@ -184,16 +184,20 @@ async function refOf(git, root, hash) {
 //   stopped: the changes came back in conflict; the stash stays in the list for the
 //     Conflicts dialog (stash: { hash, ref }). failed: nothing came back; the stash stays.
 // When its staging can't come back (the request changed what was staged), the changes
-// come back unstaged rather than not at all.
+// come back unstaged rather than not at all, and `unstaged: true` says so.
 async function bringBack(git, root, hash) {
-  let r = await applyStash(git, root, { hash, index: true });
-  if (r.outcome === "failed" && !r.operation?.conflicts.length) r = await applyStash(git, root, { hash });
+  let r = await applyStash(git, root, { hash, index: true }), unstaged = false;
+  if (r.outcome === "failed" && !r.operation?.conflicts.length) {
+    r = await applyStash(git, root, { hash });
+    unstaged = r.outcome !== "failed";
+  }
+  const flag = unstaged ? { unstaged: true } : {};
   if (r.outcome === "done") {
     const dropped = await dropStash(git, root, { hash });
-    return { ok: true, err: "", outcome: "done", operation: r.operation, stash: null, ...(dropped.ok ? {} : { dropErr: dropped.err }) };
+    return { ok: true, err: "", outcome: "done", operation: r.operation, stash: null, ...flag, ...(dropped.ok ? {} : { dropErr: dropped.err }) };
   }
   const stash = { hash, ref: await refOf(git, root, hash) };
-  if (r.outcome === "stopped") return { ok: true, err: r.err ?? "", outcome: "stopped", operation: r.operation, stash };
+  if (r.outcome === "stopped") return { ok: true, err: r.err ?? "", outcome: "stopped", operation: r.operation, stash, ...flag };
   return { ok: false, code: r.code, out: r.out ?? "", err: r.err ?? "", ...(r.msg ? { msg: r.msg } : {}), outcome: "failed", operation: r.operation, stash };
 }
 
@@ -238,9 +242,10 @@ export async function smartRun(git, root, { request = {}, run, now = new Date() 
   }
   const back = await bringBack(git, root, hash);
   const kept = Boolean(back.stash);
-  if (word === "failed") return { ...said, ok: false, outcome: "failed", operation: back.operation ?? after, stash: back.stash, kept, changed: true };
+  const flag = back.unstaged ? { unstaged: true } : {};
+  if (word === "failed") return { ...said, ok: false, outcome: "failed", operation: back.operation ?? after, stash: back.stash, kept, changed: true, ...flag };
   if (!back.ok) return { ...back, outcome: "failed", kept, changed: true };
-  return { ...said, ok: true, err: back.err || said.err, outcome: back.outcome, operation: back.operation, stash: back.stash, kept, changed: true };
+  return { ...said, ok: true, err: back.err || said.err, outcome: back.outcome, operation: back.operation, stash: back.stash, kept, changed: true, ...flag };
 }
 
 // ---- the mark

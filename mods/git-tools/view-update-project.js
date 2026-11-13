@@ -21,7 +21,7 @@ import { makeGit } from "./git.js";
 import { pull, updateProject, resetToRemote, updateBranch, updateBranches, checkoutAndUpdate, splitRemoteBranch, readTracking } from "./git-remote.js";
 import { operationName } from "./git-operation.js";
 import { appSetting, saveAppSetting } from "./app-files.js";
-import { offerSmart } from "./view-smart.js";
+import { offerSmart, tellUnstaged } from "./view-smart.js";
 import { openConflictsIfStopped } from "./view-conflicts.js";
 import { openUpdateInfo } from "./view-update-info.js";
 import { radio } from "./view-reset.js";
@@ -48,6 +48,7 @@ function failure(t, r) {
 // itself. A result of updateBranches ({ results }) is told branch by branch.
 export function tellRemote(r, { root, on = null, panel, who = "ui.commitPanel", title = "remote.failed", quietFailure = false } = {}) {
   const t = panel?.t ?? ((key) => key), args = { root, on, owner: panel?.bus?.id ?? null, lang: panel?.lang, who };
+  tellUnstaged(r, t);
   if (Array.isArray(r?.results)) {
     const bad = r.results.filter((x) => x.outcome === "failed" || x.outcome === "refused");
     if (bad.length) notify({ title: t(bad.some((x) => x.outcome === "failed") ? title : "remote.notUpdated"), body: bad.map((x) => t("remote.branchSaid", { name: x.name, text: x.outcome === "failed" ? failure(t, x) : sentence(t, x.msg, x.err) })).join("\n"), level: "warning" });

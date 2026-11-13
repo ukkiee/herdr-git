@@ -1,6 +1,6 @@
 // node graph.test.mjs: where the commit graph puts dots and lines (pure, no git).
 import assert from "node:assert/strict";
-import { layoutGraph, collapseLinear, reachableFrom, graphWindow, indexSegments, segmentsIn, fitLabels } from "./graph.js";
+import { layoutGraph, collapseLinear, reachableFrom, longEdges, graphWindow, indexSegments, segmentsIn, fitLabels } from "./graph.js";
 
 // Commits as git-log.js gives them, newest first: [hash, ...parents].
 const commits = (...list) => list.map(([hash, ...parents]) => ({ hash, parents }));
@@ -307,6 +307,31 @@ assert.deepEqual(layoutGraph([]), { rows: [], carry: { lanes: [], next: 0 } });
   assert.deepEqual([...reachableFrom(list, "h", { firstParent: true })].sort(), ["a", "h", "x"]);
   assert.deepEqual([...reachableFrom(commits(["h", "m"], ["x"]), "h", { through: [["m", "x"]] })].sort(), ["h", "x"]);
   assert.equal(reachableFrom(list, null).size, 0);
+}
+
+// Long edges off: a line that runs `long` rows or more between its two dots shows only
+// `part` rows at each end, with an arrow where it is cut ("down" at the bottom of its top
+// part, "up" at the top of its bottom part). A line still open below the rows read is cut
+// once it is that long already. Shorter lines are left whole.
+{
+  // b's line to its parent c runs on lane 0 past x1..x5, which are on lane 1.
+  const list = commits(["b", "c"], ["x1", "x2"], ["x2", "x3"], ["x3", "x4"], ["x4", "x5"], ["x5", "c"], ["c"]);
+  const { rows } = layoutGraph(list);
+  assert.deepEqual(rows.map((r) => r.lane), [0, 1, 1, 1, 1, 1, 0]);
+  const cut = longEdges(rows, { long: 5, part: 1 });
+  // b(row 0) → c(row 6) on lane 0 is 6 rows long: rows 2..4 hide its pass-through line.
+  assert.deepEqual([...cut.keys()].sort(), [1, 2, 3, 4, 5]);
+  assert.deepEqual(cut.get(1), { hide: [], arrows: [{ lane: 0, dir: "down" }] });
+  for (const r of [2, 3, 4]) assert.deepEqual(cut.get(r), { hide: [rows[r].lines.findIndex((l) => l.from === 0 && l.to === 0)], arrows: [] });
+  assert.deepEqual(cut.get(5), { hide: [], arrows: [{ lane: 0, dir: "up" }] });
+  assert.equal(longEdges(rows, { long: 7, part: 1 }).size, 0, "6 rows is not long at 7");
+  // Open below what is read: cut after its top part.
+  const open = layoutGraph(list.slice(0, 6)).rows;
+  const openCut = longEdges(open, { long: 5, part: 1 });
+  assert.deepEqual(openCut.get(1), { hide: [], arrows: [{ lane: 0, dir: "down" }] });
+  assert.deepEqual([...openCut.keys()].sort(), [1, 2, 3, 4, 5]);
+  assert.equal(openCut.get(5).arrows.length, 0);
+  assert.equal(longEdges(open.slice(0, 3), { long: 5, part: 1 }).size, 0, "not long yet");
 }
 
 console.log("ok");

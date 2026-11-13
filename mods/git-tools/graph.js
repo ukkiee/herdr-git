@@ -140,6 +140,36 @@ export function reachableFrom(commits, start, { firstParent = false, through = [
   return out;
 }
 
+// longEdges(rows, { long, part }) → Map(row number → { hide: [line index], arrows: [{ lane, dir }] })
+//   With long edges off, a line that runs `long` rows or more from its dot to its
+//   parent's shows `part` rows at each end; the rows between leave its line out (hide)
+//   and an arrow marks each cut: "down" on the last row of the top part, "up" on the
+//   first row of the bottom part. A line still open at the end of `rows` (its parent not
+//   read yet) is cut after its top part once it is that long already. rows: every row
+//   read so far, from layoutGraph; only rows with something to change are in the map.
+export function longEdges(rows, { long = 30, part = 1 } = {}) {
+  const out = new Map();
+  const at = (r) => { let e = out.get(r); if (!e) { e = { hide: [], arrows: [] }; out.set(r, e); } return e; };
+  const open = []; // lane → { start, passes: [[row, index]] }
+  const cut = (lane, edge, end) => {
+    const last = end ?? rows.length - 1;
+    if (last - edge.start < long) return;
+    at(edge.start + part).arrows.push({ lane, dir: "down" });
+    if (end !== null) at(end - part).arrows.push({ lane, dir: "up" });
+    for (const [r, index] of edge.passes) if (r > edge.start + part && (end === null || r < end - part)) at(r).hide.push(index);
+  };
+  rows.forEach((row, r) => {
+    row.lines.forEach((l, index) => {
+      if (l.from !== null && l.to === null) { if (open[l.from]) cut(l.from, open[l.from], r); open[l.from] = null; }
+      else if (l.from !== null && l.to === l.from) open[l.from]?.passes.push([r, index]);
+      else if (l.from === null && l.to !== null && !open[l.to]) open[l.to] = { start: r, passes: [] };
+    });
+  });
+  open.forEach((edge, lane) => { if (edge) cut(lane, edge, null); });
+  for (const e of out.values()) e.hide.sort((a, b) => a - b);
+  return out;
+}
+
 // ---- the Commit list's row on screen (px, still pure)
 
 // fitLabels(labels, room, { char, pad, gap, most }) → { shown, rest }

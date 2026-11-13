@@ -1660,10 +1660,12 @@ filter or read run everywhere.
 **Herdr and UI functions used.** `herdr`: `exec`, `run` (`layout.toggle`,
 `layout.select`, `layout.show`, `tab.new`), `props`, `nextCommand`, `theme`, `settings`,
 `layout`, `spaces`, `panes`, `focused`, `watchFolder`, `readTextFile` (the Files panel's
-preview), `openOverlay` (with `at` for the
-Push dialog's ▾ menu), `closeOverlay`, `shared`, `setShared` (keys `git-tools.bus`,
-`git-tools.lock` and `git-tools.lang`), `window` (its `platform`, for reading the system
-language, the Files panel's folder reads and Reveal in Finder) and `settings().dark` (Herdr's look, for the dark icon variants only when the
+preview, a compare Diff tab's working-tree side, the Conflicts dialog's working-tree file,
+Apply Patch's patch file, and the app home's `console.jsonl` and `settings.json`),
+`openOverlay` (with `at` for the Push dialog's ▾ menu), `closeOverlay`, `shared`,
+`setShared` (keys `git-tools.bus`, `git-tools.lock` and `git-tools.lang`), `window` (its
+`platform`, for reading the system language, the Files panel's folder reads and Reveal in
+Finder) and `settings().dark` (Herdr's look, for the dark icon variants only when the
 theme's color can't be read). Also
 `localStorage` (keys `commit.grouped`, `commit.copy`, `log.branches`,
 `log.details`), `cx.timer.after`, `cx.timer.every`, `cx.focus_handle` and
@@ -2393,8 +2395,9 @@ in English.
   after. Create Patch to a file writes where the person says, on the space's machine. The
   mod reads the clipboard only for Apply Patch from Clipboard.
   The mod reads a file directly only for the Files panel's preview, a compare Diff tab's
-  working-tree side and Apply Patch's patch file (`readTextFile`, up to 1 MiB); `watchFolder` watches the repository root and its git folder, and the Files
-  panel's folder.
+  working-tree side, the Conflicts dialog's working-tree file and Apply Patch's patch file
+  (`readTextFile`, up to 1 MiB); `watchFolder` watches the repository root and its git
+  folder, and the Files panel's folder.
 - **`install.sh`** runs `node`, `herdr-app status`, `herdr-app check`,
   `herdr-app do layout.clone` (first time) and `herdr-app do layout.switch`, and writes in
   the app home: `mods/git-tools/` (only the files that differ), `layouts/main-git.json`,

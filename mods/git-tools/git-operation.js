@@ -10,6 +10,7 @@
 // and how a request ended from the state and HEAD read again after it ran.
 
 import { readStatus } from "./git-status.js";
+import { blockedBy } from "./git-smart.js";
 
 // Continue and Skip may run hooks (pre-commit, commit-msg, post-checkout) for minutes;
 // this is exec's cap.
@@ -230,9 +231,15 @@ export function settle(before, after, run, { blocked = [] } = {}) {
   return blocked.length ? "refused" : "failed";
 }
 
-// Which local changes stood in the way of a request git refused: [path]. Requests that
-// start an operation fill this; Continue, Abort and Skip have none.
-async function blockingFiles(_git, _root, _type, _before, _run) { return []; }
+// Which local changes stood in the way of a request git refused: [path], worked out by
+// git-smart.js from the request and the repository as it is now (git refused, so nothing
+// moved). Continue, Abort and Skip have none. Only a refusal that left nothing in
+// progress and HEAD where it was can be one; anything else needs no files.
+async function blockingFiles(git, root, request, before, after) {
+  if (!after.ok || after.kind || after.conflicts.length || after.head !== before.head) return [];
+  const r = await blockedBy(git, root, request);
+  return r.ok ? r.paths : [];
+}
 
 // Each request: check(before, args) → a refusal before anything runs, or null;
 // run(git, root, args, before) → git's result. Starting an operation adds its line here.
@@ -314,7 +321,7 @@ export async function runOperation(git, root, { type, ...args } = {}) {
   if (no) return { ...no, outcome: "refused", operation: before };
   const run = await request.run(git, root, args, before);
   const after = await readOperation(git, root);
-  const blocked = run.ok ? [] : await blockingFiles(git, root, type, before, run);
+  const blocked = run.ok ? [] : await blockingFiles(git, root, { type, ...args }, before, after);
   const settled = settle(before, after, run, { blocked });
   // A Continue whose commit came out empty skipped it: said so, unless it stopped again.
   const outcome = run.empty && settled === "done" ? "empty" : settled;

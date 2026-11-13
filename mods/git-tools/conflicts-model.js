@@ -7,6 +7,7 @@
 // its own language) or { text } for what is shown as it is (a commit's subject).
 
 import { merge } from "./merge-chunks.js";
+import { acceptSide, unresolve, resolveSimpleAll } from "./git-conflict.js";
 
 // A commit as the heading names it.
 const short = (hash) => String(hash ?? "").slice(0, 8);
@@ -154,6 +155,32 @@ export function editedSince(v) {
 // the Conflicts dialog. A stop without conflicts (a rebase's edit) doesn't open it.
 export function stoppedOnConflicts(result) {
   return result?.outcome === "stopped" && (result.operation?.conflicts?.length ?? 0) > 0;
+}
+
+// ---- the panel's side of the dialog's requests (serve-actions.js)
+// args come from the dialog as plain JSON: each value is checked before use.
+
+const badRequest = () => ({ ok: false, code: 1, out: "", err: "The request names no conflicted file.", msg: { key: "conflicts.badRequest" } });
+const pathOf = (args) => (typeof args?.path === "string" && args.path ? args.path : null);
+
+// acceptRequest(git, root, { path, side }) → git-conflict.js acceptSide's result.
+//   side: git's ("ours" | "theirs"), the column's `side` (columns above).
+export function acceptRequest(git, root, args) {
+  const path = pathOf(args);
+  return path ? acceptSide(git, root, path, args.side) : badRequest();
+}
+
+// unresolveRequest(git, root, { path }) → git-conflict.js unresolve's result.
+export function unresolveRequest(git, root, args) {
+  const path = pathOf(args);
+  return path ? unresolve(git, root, path) : badRequest();
+}
+
+// resolveSimpleRequest(git, root, { paths? }, write) → resolveSimpleAll's result, over the
+// paths given (the unresolved files the dialog shows), or every conflicted file.
+export function resolveSimpleRequest(git, root, args, write) {
+  const paths = Array.isArray(args?.paths) ? args.paths.filter((p) => typeof p === "string" && p) : undefined;
+  return resolveSimpleAll(git, root, { write, paths });
 }
 
 // pick(files, selected) → the path to select: `selected` while it is shown, else the first

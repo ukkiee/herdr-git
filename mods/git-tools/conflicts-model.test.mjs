@@ -5,11 +5,11 @@ import { execFile, execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
-import { heading, columns, sortFiles, controls, pick, editedSince, stoppedOnConflicts } from "./conflicts-model.js";
+import { heading, columns, sortFiles, controls, pick, editedSince, stoppedOnConflicts, acceptRequest, unresolveRequest, resolveSimpleRequest } from "./conflicts-model.js";
 import { translator } from "./i18n.js";
 import { makeGit } from "./git.js";
 import { readVersions } from "./git-conflict.js";
-import { continueOperation } from "./git-operation.js";
+import { continueOperation, readOperation } from "./git-operation.js";
 
 const en = translator("en"), ko = translator("ko");
 // A line of the heading as the dialog writes it: a message, or text shown as it is.
@@ -253,6 +253,43 @@ const picked = { hash: "0acda529c3f0e1d2b3a4958677a8b9c0d1e2f3a4", subject: "fea
     assert.equal(end.outcome, "done", end.err);
     assert.equal(stoppedOnConflicts(end), false);
   }
+  // The panel's side of the dialog's requests. Accepting "Yours" in a rebase keeps the
+  // commit being replayed (the person's), "Theirs" what it goes onto; in a merge "Yours"
+  // keeps the branch merged into.
+  {
+    const rebased = setUp("accept-rebase");
+    sh(rebased, "git checkout -q feature && git rebase main");
+    const rop = await readOperation(git, rebased);
+    const rcols = columns(rop, {});
+    assert.equal((await acceptRequest(git, rebased, { path: "m", side: rcols.yours.side })).ok, true);
+    assert.equal(readFileSync(`${rebased}/m`, "utf8"), "a\nF\n");
+    assert.equal((await acceptRequest(git, rebased, { path: "h", side: rcols.theirs.side })).ok, true);
+    assert.equal(readFileSync(`${rebased}/h`, "utf8"), "a\r\nM\r\n");
+    assert.equal(sh(rebased, "git ls-files -u -- m h"), "");
+
+    const merged = setUp("accept-merge");
+    sh(merged, "git merge feature");
+    const mcols = columns(await readOperation(git, merged), { branch: "main" });
+    assert.equal((await acceptRequest(git, merged, { path: "m", side: mcols.yours.side })).ok, true);
+    assert.equal(readFileSync(`${merged}/m`, "utf8"), "a\nM\n");
+    // Undone: in conflict again. Then the simple ones are resolved (none here is).
+    assert.equal((await unresolveRequest(git, merged, { path: "m" })).ok, true);
+    assert.notEqual(sh(merged, "git ls-files -u -- m"), "");
+    const simple = await resolveSimpleRequest(git, merged, { paths: ["m", "w", 7] }, async (p, text) => writeFileSync(p, text));
+    assert.equal(simple.ok, true, simple.err);
+    assert.deepEqual(simple.resolved, []);
+
+    // A request that names no file, or a side that isn't git's, changes nothing.
+    for (const bad of [{}, { path: 3, side: "ours" }, { path: "", side: "ours" }]) {
+      const r = await acceptRequest(git, merged, bad);
+      assert.equal(r.ok, false);
+      assert.equal(r.msg.key, "conflicts.badRequest");
+    }
+    assert.equal((await acceptRequest(git, merged, { path: "w", side: "yours" })).msg.key, "conflicts.unknownSide");
+    assert.equal((await unresolveRequest(git, merged, null)).msg.key, "conflicts.badRequest");
+    assert.notEqual(sh(merged, "git ls-files -u -- w"), "");
+  }
+
   assert.equal(stoppedOnConflicts({ ok: true, outcome: "stopped", operation: { kind: "rebase", conflicts: [] } }), false);
   assert.equal(stoppedOnConflicts({ ok: false, outcome: "failed", operation: null }), false);
   assert.equal(stoppedOnConflicts(null), false);

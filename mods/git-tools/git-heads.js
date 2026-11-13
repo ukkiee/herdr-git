@@ -5,6 +5,7 @@
 // node tests it (git-heads.test.mjs).
 
 import { readBranches } from "./git-branch.js";
+import { operationName } from "./git-operation.js";
 
 // The Recent group of the popup holds this many branches at most.
 export const RECENT = 5;
@@ -65,4 +66,100 @@ export async function readHeads(git, root) {
     tags: tags.ok ? tags.out.split("\n").filter(Boolean) : [],
     recent: recent.slice(0, RECENT),
   };
+}
+
+// ---- what the widget and the popup show (pure)
+
+// The hash a detached HEAD shows as, as the reference product writes commits.
+const SHORT = 8;
+const ABORT = { merge: "ops.abortMerge", rebase: "ops.abortRebase", "cherry-pick": "ops.abortCherryPick", revert: "ops.abortRevert" };
+// ≫ once no conflict is left: what goes on from there.
+const GO_ON = { merge: "vcs.commitMerge", rebase: "vcs.continueRebase", "cherry-pick": "vcs.continueCherryPick", revert: "vcs.continueRevert" };
+
+// widgetFace(heads, op) → what the VCS widget shows, or null (not a repository, not read):
+//   { kind: "branch", name, ahead, behind }   the branch HEAD is on
+//   { kind: "detached", name }                 the commit HEAD is on, short
+//   { kind: "progress", name, next, stop }     an operation in progress: name { key, args }
+//     (operationName), next: the ≫ button { key, run }, stop: the ■ button { key }.
+//     run: "conflicts" (open the Conflicts dialog) while a file is still in conflict,
+//     else "continue". A rebase's ≫ is Continue Rebase either way.
+// heads: readHeads' result; op: readOperation's (null when not read).
+export function widgetFace(heads, op) {
+  if (!heads?.ok) return null;
+  if (op?.kind) {
+    const run = op.conflicts?.length ? "conflicts" : "continue";
+    const key = op.kind === "rebase" || run === "continue" ? GO_ON[op.kind] : "vcs.resolveConflicts";
+    return { kind: "progress", name: operationName(op), next: { key, run }, stop: { key: ABORT[op.kind] } };
+  }
+  if (heads.head?.detached) return { kind: "detached", name: (heads.head.hash ?? "HEAD").slice(0, SHORT) };
+  return { kind: "branch", name: heads.current.name, ahead: heads.current.ahead, behind: heads.current.behind };
+}
+
+// The popup's actions, by section, in the reference product's order. The ones in the
+// middle show only while an operation is in progress (ongoingItems).
+const TOP = ["vcs.updateProject", "vcs.commit", "vcs.push"];
+const NEW = ["vcs.newBranch", "vcs.newWorktree", "vcs.checkoutRef"];
+const GROUPS = [["recent", "vcs.recent"], ["local", "vcs.local"], ["remote", "vcs.remote"], ["tags", "vcs.tags"]];
+
+// The in-progress items: { id, key, run } with run "abort" | "continue" | "conflicts" |
+// "skip" (Continue opens the Conflicts dialog while a file is in conflict, as ≫ does).
+function ongoingItems(op) {
+  if (!op?.kind) return [];
+  const go = op.conflicts?.length ? "conflicts" : "continue";
+  const abort = { id: "ops.abort", key: ABORT[op.kind], run: "abort" };
+  if (op.kind === "rebase") {
+    return [abort, { id: "ops.continue", key: "vcs.continueRebase", run: go }, ...(op.canSkip ? [{ id: "ops.skip", key: "ops.skipCommit", run: "skip" }] : [])];
+  }
+  if (op.kind === "cherry-pick") return [abort, { id: "ops.continue", key: "vcs.continueCherryPick", run: go }];
+  return [abort];
+}
+
+// popupRows({ heads, op, query, folded, handled }, t) → the popup's rows, top to bottom:
+//   { kind: "action", id, label, run? }     an action (run: an in-progress item's, above)
+//   { kind: "rule" }                         a line between sections
+//   { kind: "group", id, label, open, count } Recent, Local, Remote, Tags
+//   { kind: "folder", label }                a remote, under Remote
+//   { kind: "branch", scope, name, label, current, upstream, ahead, behind }
+//     scope: "recent" | "local" | "remote" | "tag"; name: the full short name
+//     ("origin/main"), label: as the tree shows it ("main" under origin).
+// query: the search box's text; it keeps the actions and branches whose name holds it
+// (any case), drops the groups left empty and opens the rest. folded: the group ids
+// folded. handled(id): whether the screen does that action; one it doesn't is left out.
+// t: the translator the labels are worded with.
+export function popupRows({ heads, op, query = "", folded = new Set(), handled = () => true }, t) {
+  const words = String(query).trim().toLowerCase();
+  const hit = (text) => !words || text.toLowerCase().includes(words);
+  const actions = (items) => items
+    .map((it) => (typeof it === "string" ? { id: it, key: it } : it))
+    .filter((it) => handled(it.id))
+    .map((it) => ({ kind: "action", id: it.id, label: t(it.key), ...(it.run ? { run: it.run } : {}) }))
+    .filter((r) => hit(r.label));
+  const local = new Map((heads?.local ?? []).map((b) => [b.name, b]));
+  const branch = (scope, name, label = name) => {
+    const b = scope === "recent" || scope === "local" ? local.get(name) : null;
+    return { kind: "branch", scope, name, label, current: Boolean(b?.current), upstream: b?.upstream ?? null, ahead: b?.ahead ?? 0, behind: b?.behind ?? 0 };
+  };
+  const trees = [];
+  for (const [id, key] of GROUPS) {
+    let rows;
+    if (id === "remote") {
+      rows = [];
+      let remote = null;
+      for (const b of heads?.remote ?? []) {
+        if (!hit(b.name)) continue;
+        const cut = b.name.indexOf("/"), name = cut < 0 ? "" : b.name.slice(0, cut);
+        if (name !== remote) { remote = name; rows.push({ kind: "folder", label: name }); }
+        rows.push(branch("remote", b.name, cut < 0 ? b.name : b.name.slice(cut + 1)));
+      }
+    } else {
+      const names = id === "recent" ? heads?.recent ?? [] : id === "local" ? (heads?.local ?? []).map((b) => b.name) : heads?.tags ?? [];
+      rows = names.filter(hit).map((name) => branch(id === "tags" ? "tag" : id, name));
+    }
+    const count = rows.filter((r) => r.kind === "branch").length;
+    if (!count) continue;
+    const open = Boolean(words) || !folded.has(id);
+    trees.push({ kind: "group", id, label: t(key), open, count }, ...(open ? rows : []));
+  }
+  const sections = [actions(TOP), actions(ongoingItems(op)), actions(NEW), trees].filter((s) => s.length);
+  return sections.flatMap((s, i) => (i ? [{ kind: "rule" }, ...s] : s));
 }

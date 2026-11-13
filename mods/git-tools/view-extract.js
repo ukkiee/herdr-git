@@ -24,6 +24,7 @@ import { editCheck } from "./rebase-plan.js";
 import { openDialog, dialogFrame, button, close, writeBlock, scrollText, textBox, broadcast, sentence, openCommitPanel } from "./ui.js";
 import { forcePushNote, askRewrite } from "./view-reword.js";
 import { openConflictsIfStopped } from "./view-conflicts.js";
+import { offerRewriteSmart, serveRewrite, servedWhere } from "./log-rewrite.js";
 
 const SHORT = 8;
 const strings = (value) => (Array.isArray(value) ? value.filter((v) => typeof v === "string" && v) : []);
@@ -120,8 +121,9 @@ export function dropChangesHere(host, m, cx) {
       // Released first: the panel skips reads while a write runs.
       host.setBusy(null, cx);
       if (r.ok || r.changed) broadcast({ type: "changed", root: repo.root });
-      if (r.ok) tellRewrite(r, whereOf(host, repo), { key: "rewrite.droppedChanges" });
-      else host.failedOn(repo, sentence(host.t, r.msg, r.err) || host.t("ui.gitFailed"), cx);
+      const done = { key: "rewrite.droppedChanges" };
+      if (r.ok) tellRewrite(r, whereOf(host, repo), done);
+      else if (!offerRewriteSmart(r, whereOf(host, repo), { type: "drop-changes", commit: at.hash, paths: at.paths, done })) host.failedOn(repo, sentence(host.t, r.msg, r.err) || host.t("ui.gitFailed"), cx);
       cx.notify();
     });
   });
@@ -129,18 +131,14 @@ export function dropChangesHere(host, m, cx) {
 
 // ---- what this dialog asks (serve-actions.js): (git, root, args, panel) → a result
 
-const servedWhere = (root, args, panel) => ({ root, on: typeof args.on === "string" ? args.on : null, owner: panel?.bus?.id ?? null, lang: panel?.lang, t: panel?.t ?? ((key) => key) });
-
 export async function serveExtract(git, root, args, panel) {
-  const r = await extractChanges(git, root, { commit: text(args.commit), paths: strings(args.paths), message: text(args.message) });
-  if (r.ok) tellRewrite(r, servedWhere(root, args, panel), { key: "rewrite.extracted" });
-  return r;
+  const request = { type: "extract-changes", commit: text(args.commit), paths: strings(args.paths), message: text(args.message) };
+  return serveRewrite(await extractChanges(git, root, request), servedWhere(root, args, panel), request, { key: "rewrite.extracted" });
 }
 
 export async function serveDropChanges(git, root, args, panel) {
-  const r = await dropChanges(git, root, { commit: text(args.commit), paths: strings(args.paths) });
-  if (r.ok) tellRewrite(r, servedWhere(root, args, panel), { key: "rewrite.droppedChanges" });
-  return r;
+  const request = { type: "drop-changes", commit: text(args.commit), paths: strings(args.paths) };
+  return serveRewrite(await dropChanges(git, root, request), servedWhere(root, args, panel), request, { key: "rewrite.droppedChanges" });
 }
 
 // ---- the dialog

@@ -39,6 +39,13 @@ const WORDS = {
   "cherry-pick": ["smart.nameCherryPick", "smart.verbCherryPick"],
   revert: ["smart.nameRevert", "smart.verbRevert"],
   "checkout-rebase": ["smart.nameCheckoutRebase", "smart.verbCheckoutRebase"],
+  // The history edits (git-smart.js SMART_RUNS) are rebases to git.
+  reword: ["smart.nameRebase", "smart.verbRebase"],
+  drop: ["smart.nameRebase", "smart.verbRebase"],
+  squash: ["smart.nameRebase", "smart.verbRebase"],
+  "interactive-rebase": ["smart.nameRebase", "smart.verbRebase"],
+  "extract-changes": ["smart.nameRebase", "smart.verbRebase"],
+  "drop-changes": ["smart.nameRebase", "smart.verbRebase"],
 };
 const wordsFor = (t, type) => { const [name, op] = WORDS[type] ?? WORDS.checkout; return { name: t(name), op: t(op) }; };
 
@@ -78,7 +85,8 @@ export async function smartCheckout(repo, { name, remote = false }, { owner = nu
 // What came of a Smart run, said where the person sees it: the Conflicts dialog for files
 // left in conflict, a notification when the changes stay in the stash, and a Cherry-Pick's
 // or Revert's own notifications as the run without Smart has them (pick-notes.js).
-// request: the request run, when there is one.
+// request: the request run, when there is one; its `done` ({ key, args }) is the
+// notification a history edit that went through ends with.
 function tell(r, { root, on, panel, who, type, request = null }) {
   const t = panel?.t ?? ((key) => key), words = wordsFor(t, type);
   const ref = r.stash?.ref ?? r.stash?.hash?.slice(0, 7) ?? "";
@@ -88,6 +96,7 @@ function tell(r, { root, on, panel, who, type, request = null }) {
   // in conflict.
   const ran = { ...r, outcome: r.outcome === "stopped" && !stopped ? "done" : r.outcome };
   if (request) for (const n of pickNotes(type, commitsOf(request), ran)) notify(noteText(t, n));
+  if (ran.outcome === "done" && typeof request?.done?.key === "string") notify({ title: t(request.done.key, request.done.args ?? {}), body: "", level: "info" });
   if (stopped) notify({ title: t("smart.kept"), body: t("smart.keptBody", { ref, op: words.op }), level: "warning" });
   else if (r.outcome === "stopped" && r.kept) notify({ title: t("smart.backConflict"), body: t("smart.backConflictBody", { ref }), level: "warning" });
   else if (r.kept) notify({ title: t("smart.backFailed"), body: t("smart.backFailedBody", { ref }), level: "error" });

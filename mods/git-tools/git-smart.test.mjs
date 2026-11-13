@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 import { makeGit } from "./git.js";
 import { blockedBy, checkoutBranch, smartRun, settleSmartStash, readSmartMark, forceCheckout } from "./git-smart.js";
 import { listSnapshots } from "./git-snapshot.js";
+import { editMessage, dropCommits, squashCommits, interactiveRebase, extractChanges, dropChanges } from "./git-rewrite.js";
 
 // The user's own git settings stay out of every git these tests start.
 process.env.GIT_CONFIG_GLOBAL = "/dev/null";
@@ -191,6 +192,44 @@ const marks = (repo) => sh(repo, "git config --local --get-all gittools.smart-st
   const moved = await smartRun(git, repo, { request: { type: "revert", commits: [at] } });
   assert.equal(moved.outcome, "done", moved.err);
   assert.equal(moved.skipped, undefined);
+}
+
+// The history edits that replay the current branch: git-rewrite.js refuses them while a
+// tracked file has local changes (naming them in `blocked`), and Smart runs each with the
+// changes put aside and brought back, staging included.
+{
+  const kinds = [
+    ["reword", ({ c1 }) => ({ commit: c1, message: "renamed" }), editMessage, ["three", "renamed", "first"]],
+    ["drop", ({ c1 }) => ({ commits: [c1] }), dropCommits, ["three", "first"]],
+    ["squash", ({ c1, c2 }) => ({ commits: [c2, c1], message: "both" }), squashCommits, ["both", "first"]],
+    ["interactive-rebase", ({ c1, c2 }) => ({ commit: c1, steps: [{ hash: c1, action: "pick" }, { hash: c2, action: "drop" }] }), interactiveRebase, ["two", "first"]],
+    ["extract-changes", ({ c1 }) => ({ commit: c1, paths: ["d.txt"], message: "d only" }), extractChanges, ["three", "d only", "two", "first"]],
+    ["drop-changes", ({ c1 }) => ({ commit: c1, paths: ["d.txt"] }), dropChanges, ["three", "two", "first"]],
+  ];
+  let n = 0;
+  for (const [type, argsOf, direct, subjects] of kinds) {
+    const repo = init(`rewrite-${n++}`);
+    edit(repo, "c.txt", 4, "c-two");
+    edit(repo, "d.txt", 4, "d-two");
+    sh(repo, "git commit -q -am two");
+    write(repo, "e.txt", "e\n");
+    sh(repo, "git add e.txt && git commit -q -m three");
+    const c1 = sh(repo, "git rev-parse HEAD~1").trim(), c2 = head(repo);
+    edit(repo, "a.txt", 0, "mine-a1");
+    edit(repo, "b.txt", 0, "mine-b1");
+    sh(repo, "git add b.txt");
+    const before = status(repo), args = argsOf({ c1, c2 });
+    const refused = await direct(git, repo, args);
+    assert.equal(refused.outcome, "refused", type);
+    assert.deepEqual(refused.blocked, ["a.txt", "b.txt"], type);
+    assert.equal(head(repo), c2, type);
+    const r = await smartRun(git, repo, { request: { type, ...args } });
+    assert.equal(r.outcome, "done", `${type}: ${r.err}`);
+    assert.deepEqual(sh(repo, "git log --format=%s").trim().split("\n"), subjects, type);
+    assert.deepEqual(status(repo), before, type);
+    assert.deepEqual(stashes(repo), [], type);
+    assert.deepEqual(marks(repo), [], type);
+  }
 }
 
 // main and side both change a.txt's last line: merging them stops on it.

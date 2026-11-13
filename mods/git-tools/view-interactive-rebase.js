@@ -35,6 +35,7 @@ import { editCheck, todoList } from "./rebase-plan.js";
 import { openConflictsIfStopped } from "./view-conflicts.js";
 import { openDiff } from "./view-diff.js";
 import { initialStep, forcePushNote } from "./view-reword.js";
+import { offerRewriteSmart, servedWhere } from "./log-rewrite.js";
 import { formatDateTime } from "./i18n.js";
 
 const SHORT = 8;
@@ -129,9 +130,12 @@ export function openInteractiveRebase({ root, on = null, owner = null, commit, c
 // serveInteractive(git, root, args, panel) → a result. args: { commit, steps, on }.
 export async function serveInteractive(git, root, args, panel) {
   const steps = Array.isArray(args.steps) ? args.steps.filter((s) => s && typeof s === "object") : [];
-  const r = await interactiveRebase(git, root, { commit: typeof args.commit === "string" ? args.commit : "", steps });
+  const request = { type: "interactive-rebase", commit: typeof args.commit === "string" ? args.commit : "", steps };
+  const r = await interactiveRebase(git, root, request);
   const t = panel?.t ?? ((key) => key);
   const on = typeof args.on === "string" ? args.on : null;
+  // Local changes in the way: the Smart dialog carries on, and this dialog closes.
+  if (!r.ok && offerRewriteSmart(r, servedWhere(root, args, panel), { ...request, done: { key: "interactive.done" } })) return { ok: true };
   if (r.outcome === "stopped") {
     const where = { root, on, owner: panel?.bus?.id ?? null, lang: panel?.lang, who: "ui.logPanel" };
     const subject = r.operation?.current?.subject ?? "";

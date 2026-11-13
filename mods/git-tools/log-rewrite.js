@@ -12,7 +12,9 @@
 //
 // After a write: a replay that stopped on conflicts opens the Conflicts dialog; one that
 // stopped otherwise (a commit that came out empty) says so in a notification, as does an
-// edit that ended (Dropped N commits, Commits Squashed, Commit Message Edited).
+// edit that ended (Dropped N commits, Commits Squashed, Commit Message Edited). Local
+// changes to tracked files refuse a replay: the Smart dialog then offers to put them
+// aside, replay, and bring them back (git-smart.js SMART_RUNS).
 
 import { notify } from "herdr";
 import { readEditFacts, readMessages, undoCommit, editMessage, dropCommits, squashCommits } from "./git-rewrite.js";
@@ -23,6 +25,7 @@ import { openConflictsIfStopped } from "./view-conflicts.js";
 import { openReword } from "./view-reword.js";
 import { openSquash } from "./view-squash.js";
 import { openDropCommits } from "./view-drop-commits.js";
+import { offerSmart } from "./view-smart.js";
 
 // The app setting that turns the Drop Commits confirmation off (app-files.js).
 export const DONT_ASK_DROP = "rewrite.dropDontAsk";
@@ -47,6 +50,13 @@ function finish(r, where, done) {
   }
 }
 
+// offerRewriteSmart(r, where, request) → true when local changes refused the replay and
+// the Smart dialog opened for `request` (git-smart.js SMART_RUNS: { type, ...args, done? },
+// done the notification it ends with). where: as finish's.
+export function offerRewriteSmart(r, where, request) {
+  return offerSmart(r, { root: where.root, on: where.on, owner: where.owner, lang: where.lang, who: "ui.logPanel", request });
+}
+
 const whereOf = (host, repo) => ({ root: repo.root, on: repo.on ?? null, owner: host.bus.id, lang: host.lang, t: host.t });
 
 // Reads the facts for the commits picked and checks `action` on them; then(facts, initial)
@@ -66,7 +76,8 @@ function prepare(host, commits, action, cx, then) {
 }
 
 // Runs write() as this panel's work on repo, then tells every screen and says how it ended.
-function runHere(host, repo, work, write, done, cx) {
+// request: the write as a Smart request, for when local changes refuse it.
+function runHere(host, repo, work, write, done, cx, request = null) {
   if (!host.setBusy(work, cx, repo)) return;
   cx.spawn(async (cx) => {
     let r;
@@ -75,7 +86,7 @@ function runHere(host, repo, work, write, done, cx) {
     host.setBusy(null, cx);
     if (r.ok || r.changed) broadcast({ type: "changed", root: repo.root });
     if (r.ok) finish(r, whereOf(host, repo), done);
-    else host.failedOn(repo, sentence(host.t, r.msg, r.err) || host.t("ui.gitFailed"), cx);
+    else if (!(request && offerRewriteSmart(r, whereOf(host, repo), { ...request, done }))) host.failedOn(repo, sentence(host.t, r.msg, r.err) || host.t("ui.gitFailed"), cx);
     cx.notify();
   });
 }
@@ -110,7 +121,7 @@ export function dropHere(host, commits, cx) {
   prepare(host, commits, "drop", cx, async (facts, initial) => {
     const repo = host.repo;
     if (!initial && (await appSetting(DONT_ASK_DROP, false)) === true) {
-      runHere(host, repo, { key: "rewrite.dropping" }, () => dropCommits(repo.git, repo.root, { commits: hashes }), { key: "rewrite.dropped", args: { n: hashes.length } }, cx);
+      runHere(host, repo, { key: "rewrite.dropping" }, () => dropCommits(repo.git, repo.root, { commits: hashes }), { key: "rewrite.dropped", args: { n: hashes.length } }, cx, { type: "drop", commits: hashes });
       return;
     }
     openDropCommits({ root: repo.root, on: repo.on, owner: host.bus.id, commits: hashes, branch: facts.branch, pushed: facts.pushed, initial, lang: host.lang });
@@ -130,25 +141,30 @@ export function squashHere(host, commits, cx) {
 
 // ---- what the dialogs ask (serve-actions.js): (git, root, args, panel) → a result
 
-const servedWhere = (root, args, panel) => ({ root, on: typeof args.on === "string" ? args.on : null, owner: panel?.bus?.id ?? null, lang: panel?.lang, t: panel?.t ?? ((key) => key) });
+export const servedWhere = (root, args, panel) => ({ root, on: typeof args.on === "string" ? args.on : null, owner: panel?.bus?.id ?? null, lang: panel?.lang, t: panel?.t ?? ((key) => key) });
+
+// serveRewrite(r, where, request, done) → what a dialog's history edit answers: it says how
+// r ended (finish). One that local changes refused opens the Smart dialog and counts as
+// done for the asking dialog: it closes, and the Smart dialog carries on.
+export function serveRewrite(r, where, request, done) {
+  if (r.ok) finish(r, where, done);
+  else if (offerRewriteSmart(r, where, { ...request, done })) return { ok: true };
+  return r;
+}
 
 export async function serveReword(git, root, args, panel) {
-  const r = await editMessage(git, root, { commit: text(args.commit), message: text(args.message) });
-  if (r.ok) finish(r, servedWhere(root, args, panel), { key: "rewrite.reworded" });
-  return r;
+  const request = { type: "reword", commit: text(args.commit), message: text(args.message) };
+  return serveRewrite(await editMessage(git, root, request), servedWhere(root, args, panel), request, { key: "rewrite.reworded" });
 }
 
 export async function serveSquash(git, root, args, panel) {
-  const r = await squashCommits(git, root, { commits: strings(args.commits), message: text(args.message) });
-  if (r.ok) finish(r, servedWhere(root, args, panel), { key: "rewrite.squashed" });
-  return r;
+  const request = { type: "squash", commits: strings(args.commits), message: text(args.message) };
+  return serveRewrite(await squashCommits(git, root, request), servedWhere(root, args, panel), request, { key: "rewrite.squashed" });
 }
 
 export async function serveDrop(git, root, args, panel) {
-  const commits = strings(args.commits);
+  const request = { type: "drop", commits: strings(args.commits) };
   // Saved first: the person said so whatever the drop comes to.
   if (args.dontAsk === true) await saveAppSetting(DONT_ASK_DROP, true);
-  const r = await dropCommits(git, root, { commits });
-  if (r.ok) finish(r, servedWhere(root, args, panel), { key: "rewrite.dropped", args: { n: commits.length } });
-  return r;
+  return serveRewrite(await dropCommits(git, root, request), servedWhere(root, args, panel), request, { key: "rewrite.dropped", args: { n: request.commits.length } });
 }

@@ -11,6 +11,7 @@ import { createStash, applyStash, dropStash, listStashes } from "./git-stash.js"
 import { checkout } from "./git-branch.js";
 import { record } from "./git-snapshot.js";
 import { pull } from "./git-remote.js";
+import { editMessage, dropCommits, squashCommits, interactiveRebase, extractChanges, dropChanges } from "./git-rewrite.js";
 
 // The repository setting that marks a stash Smart left behind for a request that
 // stopped: one value per stopped request, "<stash hash> <absolute git folder>". The
@@ -145,13 +146,26 @@ export async function forceCheckout(git, root, { name, remote = false, copy } = 
 export const SMART_RUNS = {
   checkout: (git, root, request) => checkout(git, root, str(request.name), { remote: request.remote === true }),
   pull: (git, root, request) => pull(git, root, request),
+  // The history edits (git-rewrite.js), each a replay of the current branch that any
+  // change to a tracked file stops. Fixup… and Squash Into… aren't here: they commit the
+  // changes the person checked, which Smart would put aside with the rest.
+  reword: (git, root, r) => editMessage(git, root, { commit: str(r.commit), message: str(r.message) }),
+  drop: (git, root, r) => dropCommits(git, root, { commits: strings(r.commits) }),
+  squash: (git, root, r) => squashCommits(git, root, { commits: strings(r.commits), message: str(r.message) }),
+  "interactive-rebase": (git, root, r) => interactiveRebase(git, root, { commit: str(r.commit), steps: Array.isArray(r.steps) ? r.steps : [] }),
+  "extract-changes": (git, root, r) => extractChanges(git, root, { commit: str(r.commit), paths: strings(r.paths), message: str(r.message) }),
+  "drop-changes": (git, root, r) => dropChanges(git, root, { commit: str(r.commit), paths: strings(r.paths) }),
 };
 const runRequest = (git, root, request) => (Object.prototype.hasOwnProperty.call(SMART_RUNS, request.type)
   ? SMART_RUNS[request.type](git, root, request)
   : runOperation(git, root, request));
 
-// The request's name in the stash message, in English as git's own messages are.
-const NAMES = { checkout: "Checkout", merge: "Merge", rebase: "Rebase", pull: "Pull", "cherry-pick": "Cherry-Pick", revert: "Revert", "checkout-rebase": "Checkout and Rebase" };
+// The request's name in the stash message, in English as git's own messages are. The
+// history edits are rebases to git.
+const NAMES = {
+  checkout: "Checkout", merge: "Merge", rebase: "Rebase", pull: "Pull", "cherry-pick": "Cherry-Pick", revert: "Revert", "checkout-rebase": "Checkout and Rebase",
+  reword: "Rebase", drop: "Rebase", squash: "Rebase", "interactive-rebase": "Rebase", "extract-changes": "Rebase", "drop-changes": "Rebase",
+};
 const two = (n) => String(n).padStart(2, "0");
 const stamp = (d) => `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())} ${two(d.getHours())}:${two(d.getMinutes())}`;
 

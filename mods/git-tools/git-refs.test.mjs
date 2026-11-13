@@ -6,7 +6,7 @@ import { mkdirSync, mkdtempSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
 import { makeGit } from "./git.js";
-import { createTag, renameBranch, readRemotes, readRemote, editRemote, fetchRemote, removeRemote, pushTag } from "./git-refs.js";
+import { createTag, renameBranch, readRemotes, readRemote, editRemote, addRemote, fetchRemote, removeRemote, pushTag } from "./git-refs.js";
 import { translator } from "./i18n.js";
 
 // The user's own git settings stay out of every git these tests start.
@@ -144,6 +144,26 @@ git branch -q feature && git checkout -q feature && echo 3 > a && git commit -q 
   worded(await editRemote(git, repo, { name: "up", to: "up", url: "" }), "refs.remoteUrlEmpty");
   assert.deepEqual(lines(repo, "git remote"), ["second", "up"]);
   assert.equal(sh(repo, "git remote get-url up").trim(), remote);
+}
+
+// Add: a new remote with its URL; an empty name or URL and a taken name are refused
+// before anything changes.
+{
+  const { repo, remote } = setup("remote-add");
+  const r = await addRemote(git, repo, { name: " up ", url: ` ${remote} ` });
+  assert.equal(r.ok, true, r.err);
+  assert.deepEqual(lines(repo, "git remote"), ["origin", "up"]);
+  assert.equal(sh(repo, "git remote get-url up").trim(), remote);
+  const taken = await addRemote(git, repo, { name: "up", url: "/elsewhere" });
+  assert.equal(taken.ok, false);
+  assert.ok(taken.err);
+  assert.equal(sh(repo, "git remote get-url up").trim(), remote);
+  worded(await addRemote(git, repo, { name: " ", url: remote }), "refs.remoteNameEmpty");
+  worded(await addRemote(git, repo, { name: "third", url: "" }), "refs.remoteUrlEmpty");
+  // A name that reads as an option is a name, not an option.
+  const odd = await addRemote(git, repo, { name: "-x", url: remote });
+  assert.equal(odd.ok, true, odd.err);
+  assert.deepEqual(lines(repo, "git remote").sort(), ["-x", "origin", "up"]);
 }
 
 // Fetch from the remote just defined: its branches arrive.

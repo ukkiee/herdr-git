@@ -65,6 +65,17 @@ export async function editRemote(git, root, { name, to, url }) {
   return git(root, ["remote", "set-url", "--end-of-options", next, where]);
 }
 
+// addRemote(git, root, { name, url }) → { ok, code, out, err, msg? }
+//   The Define Remote dialog's OK when it adds: a new remote fetching from `url`. An
+//   empty name or URL is refused before anything changes; a taken name or one git won't
+//   take fails with git's words.
+export async function addRemote(git, root, { name, url }) {
+  const next = String(name ?? "").trim(), where = String(url ?? "").trim();
+  if (!next) return refuse("The remote name is empty.", { key: "refs.remoteNameEmpty", args: {} });
+  if (!where) return refuse("The remote URL is empty.", { key: "refs.remoteUrlEmpty", args: {} });
+  return git(root, ["remote", "add", "--end-of-options", next, where]);
+}
+
 // fetchRemote(git, root, name) → { ok, code, out, err }: fetches that one remote and
 // prunes its remote branches that are gone, as the Log panel's Fetch does for all.
 export async function fetchRemote(git, root, name) {

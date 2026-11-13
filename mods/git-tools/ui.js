@@ -12,7 +12,7 @@ import { makeLocks, BEAT, sameRepo, repoName } from "./lock.js";
 import { LANGS, translator, systemLang, sentence } from "./i18n.js";
 import { fileIcon, folderIcon, darkColor } from "./icon-theme.js";
 import { iconShape, iconDraw } from "./ui-icons.js";
-import { menuWidth } from "./ui-size.js";
+import { menuWidth, dialogFills } from "./ui-size.js";
 import { en as consoleEn, ko as consoleKo } from "./messages-console.js";
 
 export const MOD = "git-tools";
@@ -370,8 +370,10 @@ export function serveRequest(screen, e, label, work, cx) {
 // props.lang: the dialog's language, so it draws in it from the start. Pass the
 // opener's (`lang: this.lang`) from a click handler or a task: there the opener isn't
 // known here, and the system's language as last read is used.
+// width, height: the room the dialog gets. A form draws its own frame only as tall as it
+// needs inside it (dialogFrame), so the height is a ceiling there.
 export function openDialog(view, props = {}, { width = 560, height = 420 } = {}) {
-  return openOverlay({ mod: MOD, kind: "dialog", modal: true, width, height, props: { ...props, view, lang: openingLang(props.lang) } });
+  return openOverlay({ mod: MOD, kind: "dialog", modal: true, frame: "none", width, height, props: { ...props, view, lang: openingLang(props.lang) } });
 }
 
 // A tab in the shown space whose only pane is one of our screens. Its props are saved
@@ -596,15 +598,28 @@ export function noteBar(id, text, t, { action, onDismiss } = {}) {
 
 // The frame of a dialog: title and close, the body, the buttons. Esc is the screen's
 // own to handle (track_focus + on_key_down on the element this returns).
+//
+// openDialog opens every dialog without Herdr's frame, and this draws it: a dialog's
+// overlay keeps the height it was opened with, so with Herdr's frame a form shorter than
+// that showed empty space under its buttons. A form's card is as tall as what it holds,
+// centered in the overlay's room (the room around it is see-through and, the dialog
+// being modal, takes no click). A dialog built around a list fills the room
+// (ui-size.js dialogFills); the Merge Revisions dialog's questions ("mr-…") sit in a
+// card of their own and draw no second one.
 export function dialogFrame(id, title, t, { body, footer = [], note, onClose } = {}) {
-  return v_flex().id(id).size_full().min_h(0).bg(t.popover).text_color(t.foreground).text_size(13)
+  const fills = dialogFills(id), inner = String(id).startsWith("mr-");
+  const frame = v_flex().id(id).w_full().min_h(0).bg(t.popover).text_color(t.foreground).text_size(13)
+    .when(fills, (el) => el.h_full())
+    .when(!inner, (el) => el.rounded(10).border_1().border_color(t.border).shadow_lg().overflow_hidden())
     .child(h_flex().h(40).flex_none().px(14).gap(8).items_center().border_b(1).border_color(t.border)
       .child(div().flex_1().min_w(0).truncate().font_semibold().child(title))
       .child(iconButton(`${id}-close`, "x", t, { title: words()("ui.close"), onClick: onClose ?? (() => {}) })))
-    .child(div().flex_1().min_h(0).child(body))
+    .child(fills ? div().flex_1().min_h(0).child(body) : div().w_full().flex_none().child(body))
     .child(h_flex().flex_none().px(14).py(10).gap(8).items_center().border_t(1).border_color(t.border)
       .child(div().flex_1().min_w(0).truncate().text_size(12).text_color(t.muted).child(note ?? ""))
       .children(footer));
+  if (fills) return frame;
+  return v_flex().id(`${id}-room`).size_full().min_h(0).items_center().justify_center().child(frame);
 }
 
 export const close = (overlay) => { if (overlay) closeOverlay(overlay); };

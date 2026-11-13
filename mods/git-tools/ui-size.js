@@ -55,6 +55,15 @@ export function belowSpot({ position, local, height = 0 }, { width = 0, right } 
   return { x: Math.max(0, x), y: y0 + height + 2 };
 }
 
+// Dialogs built around a list or panes: they need the room they were opened with, since
+// a list's height comes from its container. Every other dialog is a form.
+const FILLING = new Set(["conflicts", "deleted-branches", "interactive-rebase", "merge-revisions", "restore", "push", "rollback", "smart"]);
+
+// dialogFills(id) → whether the dialog frame `id` (ui.js dialogFrame) fills the room it
+// was opened with; false: it is as tall as what it holds. The Merge Revisions dialog's
+// questions ("mr-…") sit in a card of their own inside it and fill that card.
+export const dialogFills = (id) => FILLING.has(id) || String(id).startsWith("mr-");
+
 // sideOf(side) → which side of the popup a branch row's menu opens on: "right" as the
 // reference product does, or "left" when the popup sits at the window's right edge.
 export const sideOf = (side) => (side === "left" ? "left" : "right");

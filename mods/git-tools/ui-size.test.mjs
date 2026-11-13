@@ -1,7 +1,7 @@
 // node ui-size.test.mjs: how wide a popup menu is drawn for its labels, and where the
 // VCS widget's popup and a branch row's menu go.
 import assert from "node:assert/strict";
-import { textWidth, menuWidth, belowSpot, sideOf } from "./ui-size.js";
+import { textWidth, menuWidth, belowSpot, sideOf, dialogFills } from "./ui-size.js";
 
 // ---- text: a Hangul syllable is as wide as the font size, Latin letters narrower
 {
@@ -53,6 +53,20 @@ import { textWidth, menuWidth, belowSpot, sideOf } from "./ui-size.js";
   assert.equal(sideOf("left"), "left");
   assert.equal(sideOf(undefined), "right");
   assert.equal(sideOf("up"), "right");
+}
+
+// ---- dialogs: a form is as tall as what it holds; a dialog built around a list or panes
+// fills the room it was opened with, as do the questions drawn inside one of those
+{
+  for (const id of ["update-project", "branch-new", "rename-branch", "tag", "remote", "stash", "unstash", "reset", "reset-head",
+    "reword", "squash", "drop-commits", "extract", "extract-initial", "merge", "rebase", "pull", "worktree", "patch",
+    "vcs-abort", "conflicts-overwrite", "ir-cancel", "ir-noop", "reword-initial"]) {
+    assert.equal(dialogFills(id), false, id);
+  }
+  for (const id of ["conflicts", "deleted-branches", "interactive-rebase", "merge-revisions", "restore", "push", "rollback", "smart",
+    "mr-overwrite", "mr-unresolved"]) {
+    assert.equal(dialogFills(id), true, id);
+  }
 }
 
 console.log("ok");

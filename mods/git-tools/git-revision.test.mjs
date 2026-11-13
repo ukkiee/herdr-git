@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
 import { makeGit } from "./git.js";
 import { readRevisionFile } from "./git-compare.js";
-import { revisionTree, historyUpTo, createPatch, patchFileName } from "./git-revision.js";
+import { revisionTree, historyUpTo, createPatch, patchFileName, findCommit, relatives } from "./git-revision.js";
 
 const env = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", GIT_EDITOR: "true" };
 const exec = (cmd, args = [], { cwd } = {}) => new Promise((resolve, reject) => {
@@ -171,6 +171,73 @@ const commit = (repo, message) => { sh(repo, `git add -A && git commit -q -m "${
   const none = await createPatch(git, repo, { commits: [] });
   assert.equal(none.ok, false);
   assert.equal(none.msg.key, "revision.noCommits");
+}
+
+// ---- Go to Hash/Branch/Tag: the commit what was typed names
+{
+  const repo = init("find");
+  write(repo, "a.txt", "1\n"); const c1 = commit(repo, "one");
+  write(repo, "a.txt", "2\n"); const c2 = commit(repo, "two");
+  sh(repo, `git branch topic ${c1} && git tag v1 ${c1} && git tag -a -m note v2 ${c2}`);
+  sh(repo, `git update-ref refs/remotes/origin/main ${c1}`);
+  const found = async (text) => (await findCommit(git, repo, text)).hash;
+  assert.equal(await found(c1), c1, "a full hash");
+  assert.equal(await found(c1.slice(0, 7)), c1, "a short hash");
+  assert.equal(await found(` ${c1.slice(0, 7)}\n`), c1, "space around it is not part of it");
+  assert.equal(await found("topic"), c1, "a branch");
+  assert.equal(await found("origin/main"), c1, "a remote branch");
+  assert.equal(await found("v1"), c1, "a tag");
+  assert.equal(await found("v2"), c2, "an annotated tag: its commit");
+  assert.equal(await found("HEAD"), c2);
+  const none = await findCommit(git, repo, "nothing-here");
+  assert.equal(none.ok, false);
+  assert.equal(none.hash, null);
+  assert.equal(none.msg.key, "revision.notFound");
+  assert.equal(none.msg.args.text, "nothing-here");
+  // An option is not read as one.
+  const flag = await findCommit(git, repo, "--all");
+  assert.equal(flag.ok, false);
+  const empty = await findCommit(git, repo, "  ");
+  assert.equal(empty.ok, false);
+}
+
+// ---- Go to Parent / Child Commit: the commits next to one in the graph
+{
+  const repo = init("relatives");
+  write(repo, "a.txt", "1\n"); const root = commit(repo, "root");
+  write(repo, "a.txt", "2\n"); const m1 = commit(repo, "main one");
+  sh(repo, "git switch -q -c topic " + root);
+  write(repo, "t.txt", "t\n"); const t1 = commit(repo, "topic one");
+  sh(repo, "git switch -q main");
+  sh(repo, "git merge -q --no-ff -m merged topic");
+  const merge = sh(repo, "git rev-parse HEAD").trim();
+  sh(repo, "git switch -q -c later " + t1);
+  write(repo, "l.txt", "l\n"); const l1 = commit(repo, "later one");
+  sh(repo, "git switch -q main");
+  // A stash's commits sit on HEAD, but the Log doesn't show them: not a child.
+  write(repo, "a.txt", "stashed\n"); sh(repo, "git stash -q");
+
+  const r = await relatives(git, repo, root);
+  assert.equal(r.ok, true, r.err);
+  assert.deepEqual(r.parents, []);
+  assert.deepEqual(r.children.map((c) => c.hash).sort(), [m1, t1].sort(), "both children, on every branch");
+  assert.equal(r.children.find((c) => c.hash === m1).subject, "main one");
+
+  const m = await relatives(git, repo, merge);
+  assert.deepEqual(m.parents.map((c) => c.hash), [m1, t1], "a merge's parents, first parent first");
+  assert.equal(m.parents[1].subject, "topic one");
+  assert.deepEqual(m.children, []);
+
+  // A commit a merge and a branch both grew from.
+  const t = await relatives(git, repo, t1);
+  assert.deepEqual(t.children.map((c) => c.hash).sort(), [merge, l1].sort());
+  // Only the branches the Log shows: children elsewhere are not offered.
+  const onMain = await relatives(git, repo, t1, { branch: "refs/heads/main" });
+  assert.deepEqual(onMain.children.map((c) => c.hash), [merge]);
+
+  const none = await relatives(git, repo, "nope");
+  assert.equal(none.ok, false);
+  assert.deepEqual(none.children, []);
 }
 
 // ---- the patch file's suggested name

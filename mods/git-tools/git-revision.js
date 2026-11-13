@@ -109,6 +109,58 @@ export function patchFileName(branch, subject) {
   return `${name}.patch`;
 }
 
+// ---- Go to Hash/Branch/Tag
+
+// findCommit(git, root, text) → { ok, code, out, err, msg?, hash }
+//   The commit a typed full or short hash, branch, remote branch or tag names (an
+//   annotated tag: its commit). Space around the text is not part of it. hash: null when
+//   nothing is named that way; msg says so.
+export async function findCommit(git, root, text) {
+  const typed = String(text ?? "").trim();
+  const missing = { ok: false, code: 1, out: "", err: `Nothing named ${typed}.`, msg: { key: "revision.notFound", args: { text: typed } }, hash: null };
+  if (!typed) return missing;
+  const r = await git.read(root, ["rev-parse", "--verify", "--quiet", "--end-of-options", `${typed}^{commit}`]);
+  const hash = r.ok ? r.out.trim() : "";
+  if (hash) return { ...r, out: "", hash };
+  // --quiet: "no such name" says nothing; anything git does say is a real failure.
+  return r.err ? { ...r, hash: null } : missing;
+}
+
+// ---- Go to Parent / Child Commit
+
+// What the Log shows when it isn't limited to a branch (git-log.js readLog).
+const SHOWN = ["--branches", "--remotes", "--tags", "HEAD"];
+const SUBJECTS = ["%H", "%s"].join("%x1f");
+
+// relatives(git, root, rev, { branch? }) → { ok, code, out, err, parents, children }
+//   The commits next to `rev` in the graph: [{ hash, subject }]. parents in git's order
+//   (the first parent first); children among what the Log shows: every branch, remote
+//   branch and tag and HEAD, or only what `branch` (a ref name) reaches.
+export async function relatives(git, root, rev, { branch = null } = {}) {
+  const at = await commitOf(git, root, rev);
+  if (!at.ok) return { ...at, parents: [], children: [] };
+  const own = await git.read(root, ["rev-list", "--parents", "-n", "1", at.hash, "--"]);
+  if (!own.ok) return { ...own, parents: [], children: [] };
+  const parentHashes = own.out.trim().split(/\s+/).slice(1);
+  let parents = [];
+  if (parentHashes.length) {
+    const p = await git.read(root, ["log", "-z", "--no-walk=unsorted", `--format=${SUBJECTS}`, ...parentHashes, "--"]);
+    if (!p.ok) return { ...p, parents: [], children: [] };
+    const subject = new Map(p.out.split("\0").filter(Boolean).map((e) => e.replace(/^\n/, "").split("\x1f")));
+    parents = parentHashes.map((hash) => ({ hash, subject: subject.get(hash) ?? "" }));
+  }
+  // Only commits rev doesn't reach can have it as a parent.
+  const scope = branch ? ["--end-of-options", branch] : SHOWN;
+  const c = await git.read(root, ["log", "-z", `--format=${["%H", "%P", "%s"].join("%x1f")}`, `^${at.hash}`, ...scope, "--"]);
+  if (!c.ok) return { ...c, parents, children: [] };
+  const children = [];
+  for (const entry of c.out.split("\0")) {
+    const [hash, ps, subject] = entry.replace(/^\n/, "").split("\x1f");
+    if (hash && ps?.split(" ").includes(at.hash)) children.push({ hash, subject: subject ?? "" });
+  }
+  return { ok: true, code: 0, out: "", err: "", parents, children };
+}
+
 // ---- History up to Here
 
 // historyUpTo(git, root, { rev, path?, skip?, max? }) → { ok, code, out, err, commits, more }

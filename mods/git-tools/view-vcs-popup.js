@@ -337,7 +337,7 @@ export default class VcsPopup {
     const [title, ask] = ABORT[this.kind] ?? ABORT.merge;
     const done = (value) => { this.answered = true; answerMenu(this.bus, this.key, value); closeOverlay(this.overlay); };
     return dialogFrame("vcs-abort", this.t(title), t, {
-      body: div().text_size(13).child(this.t(ask)),
+      body: div().px(14).py(12).text_size(13).child(this.t(ask)),
       footer: [
         button("vcs-abort-cancel", this.t("dialogs.cancel"), t, { onClick: () => done(null) }),
         button("vcs-abort-yes", this.t("vcs.abort"), t, { kind: "primary", onClick: () => done("abort") }),

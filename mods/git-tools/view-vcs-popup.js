@@ -1,6 +1,7 @@
 // VCS widget popup: the search box, the actions on top, the in-progress items, New
 // Branch, and the Recent, Local, Remote and Tags trees (git-heads.js popupRows decides
-// what shows and in what order). The same screen, with props.mode "abort", is the
+// what shows and in what order; the Local and Remote branches come to it in
+// branch-order.js order, with the Branch tree's stars). The same screen, with props.mode "abort", is the
 // question before an operation is aborted.
 //
 // The popup only reads. A pick goes back to the widget that opened it (openVcsPopup
@@ -20,6 +21,8 @@ import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { exec, theme, openOverlay, closeOverlay } from "herdr";
 import { makeGit, repoRoot } from "./git.js";
 import { readHeads, popupRows } from "./git-heads.js";
+import { readFavorites } from "./git-branch.js";
+import { isFavorite, orderBranches, refOf } from "./branch-order.js";
 import { readOperation } from "./git-operation.js";
 import { smartCheckout } from "./view-smart.js";
 import { renameFrom } from "./view-rename-branch.js";
@@ -115,6 +118,7 @@ export default class VcsPopup {
     if (this.mode === "abort") return;
     this.repo = p.root ? { git: makeGit(exec, p.on ?? null), root: p.root, on: p.on ?? null } : null;
     this.heads = null;
+    this.prefs = { favorite: [], unfavorite: [] };
     this.op = null;
     this.read = false;
     this.err = null;
@@ -138,10 +142,20 @@ export default class VcsPopup {
     this.loading = true;
     cx.spawn(async (cx) => {
       const top = await repoRoot(repo.git, repo.root);
-      const [heads, op] = top.ok ? await Promise.all([readHeads(repo.git, top.root), readOperation(repo.git, top.root)]) : [{ ok: false, err: top.err }, null];
+      const [heads, op, prefs] = top.ok
+        ? await Promise.all([readHeads(repo.git, top.root), readOperation(repo.git, top.root), readFavorites(repo.git, top.root)])
+        : [{ ok: false, err: top.err }, null, null];
       this.loading = false;
       this.read = true;
-      this.heads = heads.ok ? heads : null;
+      // The Branch tree's order and stars (branch-order.js). Favorites that can't be read
+      // leave main and master starred.
+      this.prefs = prefs?.ok ? { favorite: prefs.favorite, unfavorite: prefs.unfavorite } : { favorite: [], unfavorite: [] };
+      const current = heads.ok ? heads.head.branch : null;
+      this.heads = heads.ok ? {
+        ...heads,
+        local: orderBranches(heads.local, { scope: "local", current, prefs: this.prefs }),
+        remote: orderBranches(heads.remote, { scope: "remote", current, prefs: this.prefs }),
+      } : null;
       this.op = op?.ok ? op : null;
       this.err = heads.ok ? null : heads.err;
       cx.notify();
@@ -201,9 +215,11 @@ export default class VcsPopup {
       return el.pl(26).child(uiGlyph("folder", { dark }).text_color(t.muted)).child(div().flex_1().min_w(0).truncate().text_color(t.muted).child(r.label));
     }
     const depth = r.scope === "remote" ? 44 : 26;
+    const favorite = r.scope !== "tag" && isFavorite(refOf(r.scope === "remote" ? "remote" : "local", r.name), this.prefs);
+    const glyph = r.scope === "tag" ? "tag" : r.current ? (favorite ? "current-branch-favorite" : "current-branch") : favorite ? "favorite" : "branch-item";
     return el.pl(depth).hover((s) => s.bg(t.hover))
       .on_mouse_down("left", (e, cx) => { this.at = i; this.activate(r, e.position, cx); cx.stop_propagation(); })
-      .child(uiGlyph(r.scope === "tag" ? "tag" : r.current ? "current-branch" : "branch-item", { dark }))
+      .child(uiGlyph(glyph, { dark }))
       .child(div().flex_1().min_w(0).truncate().when(r.current, (el) => el.font_semibold()).child(r.label))
       // Commits to pull (blue ↓) and to push (green ↑), and the branch it tracks.
       .when(r.behind > 0, (el) => el.child(div().flex_none().text_size(11).text_color(t.ansi4).child(`↓${r.behind}`)))

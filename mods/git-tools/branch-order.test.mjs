@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { isFavorite, nextFavorites, orderBranches, orderTreeRows, treeSettings, treeSettingsMenu, toggleTreeSetting } from "./branch-order.js";
 import { buildRows } from "./tree.js";
+import { popupRows } from "./git-heads.js";
 
 const none = { favorite: [], unfavorite: [] };
 const names = (list) => list.map((b) => b.name);
@@ -76,6 +77,19 @@ const local = (...list) => list.map((name) => ({ name }));
   const prefs = { favorite: ["refs/remotes/upstream/zeta"], unfavorite: ["refs/remotes/origin/main"] };
   assert.deepEqual(names(orderBranches(list, { scope: "remote", current: null, prefs })),
     ["origin/aaa", "origin/main", "origin/topic", "upstream/master", "upstream/zeta", "upstream/a"]);
+}
+
+// The VCS widget popup shows them in this order, each remote under its own name once.
+{
+  const prefs = { favorite: ["refs/heads/topic"], unfavorite: [] };
+  const heads = {
+    head: { branch: "feature", hash: "1", detached: false }, current: null, recent: [], tags: [],
+    local: orderBranches(local("aaa", "feature", "main", "topic"), { scope: "local", current: "feature", prefs }),
+    remote: orderBranches(local("origin/topic", "origin/main", "up/x", "up/master"), { scope: "remote", current: "feature", prefs }),
+  };
+  const rows = popupRows({ heads, op: null, handled: () => false }, (k) => k);
+  assert.deepEqual(rows.filter((r) => r.kind !== "group").map((r) => (r.kind === "folder" ? `[${r.label}]` : r.name)),
+    ["feature", "main", "topic", "aaa", "[origin]", "origin/main", "origin/topic", "[up]", "up/master", "up/x"]);
 }
 
 // ---- the grouped tree: within each folder, the current branch and favorites first

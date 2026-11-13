@@ -107,6 +107,32 @@ const A = "a".repeat(40), B = "b".repeat(40), C = "c".repeat(40), D = "d".repeat
   bad([{ hash: A, action: "move" }], "rewrite.badPlan");
   bad([{ action: "pick" }], "rewrite.badPlan");
   bad([], "rewrite.badPlan");
+  bad([{ hash: A, action: "dropChanges", paths: [] }], "rewrite.badPlan");
+  bad([{ hash: A, action: "extractChanges", paths: ["a"], message: " " }], "commit.noMessage");
+  bad([{ hash: A, action: "extractChanges", paths: [""], message: "m" }], "rewrite.badPlan");
+}
+
+// Extract and drop selected changes: the commit is picked, then exec lines take the
+// paths and the message from variables, never from the line itself. A path that starts
+// with a quote or holds a line break is written C-quoted, as git reads a pathspec file.
+{
+  const r = todoList([
+    { hash: A, action: "extractChanges", paths: ["x.txt", "two\nlines", "\"q"], message: "part $HOME" },
+    { hash: B, action: "pick" },
+    { hash: C, action: "dropChanges", paths: ["*.txt"] },
+  ]);
+  assert.equal(r.ok, true, r.err);
+  assert.equal(r.lines[0], `pick ${A}`);
+  assert.match(r.lines[1], /^exec /);
+  assert.equal(r.lines[2], `pick ${B}`);
+  assert.equal(r.lines[3], `pick ${C}`);
+  assert.match(r.lines[4], /^exec /);
+  assert.equal(r.lines.length, 5);
+  for (const line of r.lines) assert.ok(!line.includes("x.txt") && !line.includes("part") && !line.includes("*.txt"), line);
+  const values = Object.values(r.env);
+  assert.ok(values.includes("x.txt\n\"two\\nlines\"\n\"\\\"q\""), JSON.stringify(r.env));
+  assert.ok(values.includes("*.txt"));
+  assert.ok(values.includes("part $HOME"));
 }
 
 // ---- the edit check
@@ -164,6 +190,22 @@ assert.deepEqual(why("drop", facts({ mergeAbove: true, commits: [commit(B)] , he
   assert.equal(r.why, null);
   assert.deepEqual(r.confirm, { title: "rewrite.initialTitle", body: "rewrite.initialBody" });
   assert.equal(editCheck("editMessage", facts()).confirm, null);
+}
+
+// Extract and drop selected changes: off when every file of the commit is picked, or
+// none; the commit's own reasons first come from the facts, as for the other items.
+for (const action of ["extractChanges", "dropChanges"]) {
+  const key = action === "dropChanges" ? "rewrite.dropAllChanges" : "rewrite.extractAllChanges";
+  assert.deepEqual(editCheck(action, facts(), 1, { picked: 2, total: 2 }).why, { key, args: {} }, action);
+  assert.deepEqual(editCheck(action, null, 1, { picked: 1, total: 1 }).why, { key, args: {} }, action);
+  assert.deepEqual(editCheck(action, facts(), 1, { picked: 0, total: 2 }).why, { key: "rewrite.selectFiles", args: {} }, action);
+  assert.equal(editCheck(action, facts(), 1, { picked: 1, total: 2 }).why, null, action);
+  assert.equal(editCheck(action, null, 1, { picked: 1, total: 2 }).why, null, action);
+  assert.deepEqual(editCheck(action, facts({ commits: [commit(A, { parents: 2 })] }), 1, { picked: 1, total: 2 }).why, { key: "rewrite.parents", args: { n: 2 } }, action);
+  assert.deepEqual(editCheck(action, facts({ protected: "origin/main", commits: [commit(A, { pushedProtected: true })] }), 1, { picked: 1, total: 2 }).why,
+    { key: "rewrite.pushedProtected", args: { branch: "origin/main" } }, action);
+  // Local changes don't matter to the check (the replay refuses them when it runs).
+  assert.equal(editCheck(action, facts({ localChanges: false }), 1, { picked: 1, total: 3 }).why, null, action);
 }
 
 // No facts (not read yet): nothing to say beyond the selection's size.

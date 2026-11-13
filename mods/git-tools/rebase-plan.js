@@ -15,11 +15,31 @@
 // message has newlines, quotes and `$`.
 export const MESSAGE_VAR = "GITTOOLS_MSG_";
 export const ACTIONS = ["pick", "reword", "edit", "squash", "fixup", "drop"];
+// What Commit details' file menu does to one commit: a pick followed by exec lines.
+export const FILE_ACTIONS = ["extractChanges", "dropChanges"];
+// The variables the exec lines read the paths from: one per step, a path per line.
+export const PATHS_VAR = "GITTOOLS_PATHS_";
 const MELDS = new Set(["squash", "fixup"]);
 
 const refuse = (err, key, args = {}) => ({ ok: false, err, msg: { key, args }, lines: [], env: {}, groups: [] });
 const badPlan = (why) => refuse(`The rebase plan is not valid: ${why}`, "rewrite.badPlan", { why });
 const blank = (text) => !String(text ?? "").trim();
+
+// A path as a line of a pathspec file: as it is, unless git would read it otherwise (a
+// leading quote, a line break, a carriage return dropped at the line's end): then
+// C-quoted, which git takes back apart.
+const ESCAPES = { "\\": "\\\\", "\"": "\\\"", "\n": "\\n", "\t": "\\t", "\r": "\\r" };
+function pathLine(path) {
+  if (!/^"|[\x00-\x1f\x7f]/.test(path)) return path;
+  return `"${path.replace(/[\\"\x00-\x1f\x7f]/g, (ch) => ESCAPES[ch] ?? `\\${ch.charCodeAt(0).toString(8).padStart(3, "0")}`)}"`;
+}
+
+// The paths of variable `list` in the index (and the work tree) as they are in `source`:
+// the parent of the commit picked last, by default, or the empty tree when that commit is
+// the first one (`root`). A path the source lacks goes. Literal: `*.txt` is that file.
+const restore = (list, root, where, source = root ? "\"$(git hash-object -t tree /dev/null)\"" : "HEAD~1") =>
+  `printf '%s\\n' "$${list}" | GIT_LITERAL_PATHSPECS=1 git restore -q --source=${source} ${where} --pathspec-from-file=-`;
+const AMEND_SAME = "git commit --amend --no-edit --allow-empty -q";
 
 // todoList(steps, { refs }) → { ok, err?, msg?, lines, env, groups }
 //   steps: [{ hash, action, message? }] in the order to replay, oldest first; action is
@@ -31,6 +51,12 @@ const blank = (text) => !String(text ?? "").trim();
 //     git does; with one, that becomes the message of the melded commit.
 //   - fixup: melded into the commit before it, keeping that one's message (or the
 //     group's message, when a step of the group has one).
+//   - dropChanges: picked, then the changes to `paths` leave it (the files go back to
+//     how its parent had them, in the work tree too).
+//   - extractChanges: picked, then split in two: the commit without the changes to
+//     `paths` (its message), and after it a new commit of those changes with `message`
+//     and the commit's author.
+//   A file step whose commit is the first one of the history says `root: true`.
 //   refs: { [hash]: [full ref name] } branches on commits of the range that move with
 //   them (update-ref lines), each after its commit, or after the group it melds into.
 //   lines: the to-do list, one command per line. env: the messages by variable name, for
@@ -56,7 +82,7 @@ export function todoList(steps, { refs = {} } = {}) {
   for (const step of steps) {
     const { hash, action, message } = step ?? {};
     if (typeof hash !== "string" || !/^[0-9a-f]{7,64}$/.test(hash)) return badPlan("a step has no commit");
-    if (!ACTIONS.includes(action)) return badPlan(`unknown action ${String(action)}`);
+    if (!ACTIONS.includes(action) && !FILE_ACTIONS.includes(action)) return badPlan(`unknown action ${String(action)}`);
     const given = typeof message === "string" && !blank(message) ? message : null;
     if (action === "reword" && given == null) return refuse("Specify a commit message.", "commit.noMessage");
     const own = Array.isArray(refs[hash]) ? refs[hash] : [];
@@ -71,6 +97,25 @@ export function todoList(steps, { refs = {} } = {}) {
       continue;
     }
     close();
+    if (FILE_ACTIONS.includes(action)) {
+      const paths = Array.isArray(step.paths) ? step.paths : [];
+      if (!paths.length || paths.some((p) => typeof p !== "string" || !p)) return badPlan("a step has no paths");
+      if (action === "extractChanges" && given == null) return refuse("Specify a commit message.", "commit.noMessage");
+      const list = `${PATHS_VAR}${Object.keys(env).length}`;
+      env[list] = paths.map(pathLine).join("\n");
+      lines.push(`pick ${hash}`);
+      if (action === "dropChanges") lines.push(`exec ${restore(list, step.root, "--staged --worktree")} && ${AMEND_SAME}`);
+      else {
+        const name = `${MESSAGE_VAR}${Object.keys(env).length}`;
+        env[name] = given;
+        lines.push(`exec c=$(git rev-parse HEAD) && ${restore(list, step.root, "--staged")} && ${AMEND_SAME}`
+          + ` && ${restore(list, null, "--staged", "\"$c\"")} && git commit -q --allow-empty -C "$c"`
+          + ` && git commit --amend --allow-empty -q -m "$${name}"`);
+      }
+      picked = true;
+      group = { head: hash, members: [hash], message: null, refs: [...own] };
+      continue;
+    }
     if (action === "drop") {
       lines.push(`drop ${hash}`);
       for (const ref of own) lines.push(`update-ref ${ref}`);
@@ -87,7 +132,8 @@ export function todoList(steps, { refs = {} } = {}) {
 // ---- the edit check
 
 // What each edit item works on: one commit, or two and more (Squash Commits).
-const ONE = new Set(["undo", "editMessage", "fixup", "squashInto", "interactiveRebase"]);
+const ONE = new Set(["undo", "editMessage", "fixup", "squashInto", "interactiveRebase", "extractChanges", "dropChanges"]);
+const ALL_CHANGES = { extractChanges: "rewrite.extractAllChanges", dropChanges: "rewrite.dropAllChanges" };
 const DURING = { merge: "rewrite.duringMerge", rebase: "rewrite.duringRebase", "cherry-pick": "rewrite.duringCherryPick", revert: "rewrite.duringRevert" };
 const SHORT = 8;
 const no = (key, args = {}) => ({ why: { key, args }, confirm: null });
@@ -106,10 +152,17 @@ const no = (key, args = {}) => ({ why: { key, args }, confirm: null });
 //     first one, Fixup and Squash Into only with local changes.
 //   confirm: { title, body } keys when the first commit of the history is among them:
 //     editing it is asked first. null otherwise.
-export function editCheck(action, facts, count = facts?.commits?.length ?? 1) {
+//   files: for "extractChanges" and "dropChanges" (Commit details' file menu), { picked,
+//     total }: how many of the commit's files are picked. Off for none, or for all of
+//     them (the commit would be left empty), before anything the facts say.
+export function editCheck(action, facts, count = facts?.commits?.length ?? 1, files = null) {
   const n = facts?.commits?.length ?? count;
   if (ONE.has(action) && n !== 1) return no("log.selectOneCommit");
   if (action === "squash" && n < 2) return no("rewrite.selectTwo");
+  if (ALL_CHANGES[action] && files) {
+    if (!(files.picked > 0)) return no("rewrite.selectFiles");
+    if (files.picked >= files.total) return no(ALL_CHANGES[action]);
+  }
   if (!facts) return { why: null, confirm: null };
   const commits = facts.commits ?? [];
   const merge = commits.find((c) => c.parents > 1);

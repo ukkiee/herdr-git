@@ -36,7 +36,7 @@ const MODES = [
 //   language (pass this.lang).
 export function openReset({ root, on = null, owner = null, commit, lang } = {}) {
   const { hash = "", author = "", subject = "" } = commit ?? {};
-  return openDialog("reset", { root, on, owner, commit: { hash, author, subject }, lang }, { width: 560, height: 330 });
+  return openDialog("reset", { root, on, owner, commit: { hash, author, subject }, lang }, { width: 560, height: 390 });
 }
 
 // runReset(git, root, args, panel): the serving panel's side of "reset" (serve-actions.js).
@@ -108,7 +108,8 @@ export default class ResetView {
     const c = this.commit;
     const branch = this.branch === undefined ? "…" : this.branch ?? this.t("reset.detached");
     const body = v_flex().size_full().min_h(0).px(14).py(10).gap(8)
-      .child(div().w_full().truncate().font_semibold().child(this.t("reset.header", { branch, hash: c.hash.slice(0, SHORT), subject: c.subject, author: c.author })))
+      // flex_none: a truncated line may shrink to nothing when the rows below don't fit.
+      .child(div().flex_none().w_full().truncate().font_semibold().child(this.t("reset.header", { branch, hash: c.hash.slice(0, SHORT), subject: c.subject, author: c.author })))
       .child(div().w_full().text_size(12).text_color(t.muted).child(this.t("reset.description")))
       .children(MODES.map((m) => this.modeRow(m, t)))
       .when(Boolean(said), (el) => el.child(scrollText("reset-error", said ?? "", t, { maxHeight: 48, color: this.error ? t.ansi1 : t.muted })));

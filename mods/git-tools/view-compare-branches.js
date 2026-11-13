@@ -43,11 +43,12 @@ function currentOf(host) {
 }
 
 // Compare with '<current>' (a branch row) and Compare with Current (the toolbar, on the
-// cursor's branch). b: log-branches.js target.
+// cursor's branch). b: log-branches.js target. The current branch comes first: the tab
+// "Compare: <current> and <branch>", above it the commits only the current branch has.
 export function compareWithCurrent(host, b) {
   if (!host.repo || !b?.from) return;
   const current = currentOf(host);
-  openBranchCompare(host.t, { root: host.repo.root, on: host.repo.on, a: b.from, b: current.ref, aName: b.name, bName: current.name });
+  openBranchCompare(host.t, { root: host.repo.root, on: host.repo.on, a: current.ref, b: b.from, aName: current.name, bName: b.name });
 }
 
 // Show Diff with Working Tree (a branch row).

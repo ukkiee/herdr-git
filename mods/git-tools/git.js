@@ -16,6 +16,18 @@ export function recordWith(fn) { installed = typeof fn === "function" ? fn : nul
 // A command that only looks starts with the READ flags (git.read): the console leaves it out.
 const reads = (args) => args[0] === READ[0];
 
+// herdr-core runs only so many execs at once for everyone (16 when seen) and refuses the next
+// at once ("16 execs are running already"). A screen reads several things side by side and
+// every screen reads when Herdr starts, so one runner keeps at most PARALLEL of its own going
+// and queues the rest. The queue is the runner's: a copy only waits on its own execs, never on
+// another copy's (that copy's promise would run this one's work, and drop it when it closes).
+export const PARALLEL = 4;
+// A refusal by that limit ran nothing, so it is tried again (up to TRIES runs in all) once one
+// of the runner's own execs ends. With none of its own going there is nothing to wait for
+// without a timer (a module has no `cx`), and the refusal is the answer.
+const BUSY = /execs are running already/;
+const TRIES = 5;
+
 // makeGit(exec, on, { record? }) → git(cwd, args, { timeout?, env? }) → { ok, code, out, err }.
 // Never throws: a program that can't start or a machine that can't be reached is
 // { ok: false, code: -1 }. `out` is stdout exactly as git wrote it (-z output and diffs
@@ -33,15 +45,38 @@ export function makeGit(exec, on, { record } = {}) {
     if (!fn || reads(call.args)) return;
     try { await fn(call); } catch { /* the console misses one line; git's result stands */ }
   };
+  let running = 0, flying = 0;
+  const queue = [], refused = [];
+  const take = () => (running < PARALLEL ? (running++, Promise.resolve()) : new Promise((go) => queue.push(go)));
+  const give = () => { const next = queue.shift(); if (next) next(); else running--; };
+  // An exec of this runner answered (`ran`: it ran, not refused). One that ran made room for
+  // one refused call; once none is flying, nothing else will wake the rest, so all hear it.
+  const landed = (ran) => {
+    if (flying === 0) for (const go of refused.splice(0)) go(ran);
+    else if (ran) refused.shift()?.(true);
+  };
   const git = async (cwd, args, { timeout, env } = {}) => {
     const options = { cwd, on };
     if (timeout) options.timeout = timeout;
     const vars = Object.entries(env ?? {}).map(([k, v]) => `${k}=${v}`);
     const at = Date.now();
-    let r;
-    try { r = vars.length ? await exec("env", [...vars, "git", ...args], options) : await exec("git", args, options); }
-    catch (error) {
-      const err = String(error?.message ?? error);
+    let r, failed;
+    for (let tries = 1; ; tries++) {
+      await take();
+      failed = undefined;
+      flying++;
+      try { r = vars.length ? await exec("env", [...vars, "git", ...args], options) : await exec("git", args, options); }
+      catch (error) { failed = error; }
+      finally { flying--; give(); }
+      const busy = Boolean(failed) && BUSY.test(String(failed?.message ?? failed));
+      landed(!busy);
+      if (!busy || tries >= TRIES) break;
+      let ran = false;
+      while (!ran && flying > 0) ran = await new Promise((go) => refused.push(go));
+      if (!ran) break;
+    }
+    if (failed) {
+      const err = String(failed?.message ?? failed);
       await note({ at, cwd, on: on ?? null, args, code: -1, stdout: "", stderr: err });
       return { ok: false, code: -1, out: "", err };
     }

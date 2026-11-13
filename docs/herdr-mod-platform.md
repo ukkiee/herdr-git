@@ -48,6 +48,7 @@
 ## `herdr` API
 
 - `exec(command, args?, { cwd?, on?, timeout? })`: stdin·스트리밍·env 옵션이 없다. 출력 8 MiB, timeout 기본 30초·최대 10분. `on`으로 원격 머신에서 실행. [문서] 따라서 자격 증명·GPG 프롬프트를 받을 수 없고, 환경 변수는 `env VAR=… git …`로 넘긴다.
+- **동시에 도는 `exec`에는 한도가 있다.** 넘으면 아무것도 실행하지 않고 곧바로 `'herdr.exec': 16 execs are running already`로 거절한다. 문구는 herdr-core(`hc`)의 exec 처리에서 나온다. 앱을 다시 켠 직후 원격 space를 보는 창에서 패널들이 한꺼번에 읽을 때 한 번 보였고, 다음 새로고침에는 사라졌다. [관찰] 한도가 머신마다인지, 앱 연결마다인지, mod마다인지는 가르지 않았다.
 - `readTextFile`(1 MiB, 원격 가능), `writeTextFile`(로컬 전용). [문서]
 - `watchFolder(dir)`: 로컬 전용. macOS에서는 `.git` 아래 변경도 온다. 읽기 명령이 인덱스를 건드리면 새로고침이 다음 새로고침을 부르므로 `--no-optional-locks -c core.fsmonitor=false -c diff.autoRefreshIndex=false`를 붙인다. [코드: 내장 `changes`]
 - 타이머: `cx.timer.every` / `cx.timer.after`. `setTimeout` 없음. [문서]

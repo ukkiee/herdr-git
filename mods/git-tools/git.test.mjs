@@ -3,7 +3,7 @@ import { execFile, execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, realpathSync, statSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
-import { makeGit, repoRoot, chunks, READ, recordWith } from "./git.js";
+import { makeGit, repoRoot, chunks, READ, recordWith, PARALLEL } from "./git.js";
 
 const root = realpathSync(mkdtempSync(`${tmpdir()}/git-tools-`));
 // Same shape as herdr's exec: resolves with { code, stdout, stderr }, rejects when it can't start.
@@ -175,6 +175,61 @@ const git = makeGit(exec, null);
   } finally { recordWith(null); }
   await makeGit(exec, null)(repo, ["branch", "-D", "console-installed"]);
   assert.deepEqual(calls.map((c) => c.args), [["branch", "console-installed"]]);
+}
+
+// An exec that takes a while and counts how many run at once, for everyone (`all`) and the
+// most seen (`peak`). `refuseAt`: like herdr-core's limit, it refuses at once while that many
+// are running ("N execs are running already"), without running anything.
+const slowExec = ({ refuseAt = Infinity } = {}) => {
+  const seen = { all: 0, peak: 0, calls: 0, refused: 0 };
+  const exec = async (cmd, args) => {
+    seen.calls++;
+    if (seen.all >= refuseAt) { seen.refused++; throw new Error(`'herdr.exec': ${refuseAt} execs are running already`); }
+    seen.all++; seen.peak = Math.max(seen.peak, seen.all);
+    await new Promise((go) => setTimeout(go, 5));
+    seen.all--;
+    return { code: 0, stdout: args.at(-1), stderr: "" };
+  };
+  return { exec, seen };
+};
+
+// A screen reads several things side by side; one runner keeps at most PARALLEL of them
+// going and queues the rest, each still answered with its own output.
+{
+  const { exec, seen } = slowExec();
+  const git = makeGit(exec, null);
+  const out = await Promise.all(Array.from({ length: 10 }, (_, i) => git(repo, ["x", `n${i}`])));
+  assert.equal(PARALLEL, 4);
+  assert.equal(seen.peak, PARALLEL);
+  assert.deepEqual(out.map((r) => r.out), Array.from({ length: 10 }, (_, i) => `n${i}`));
+}
+
+// herdr-core is fuller than one runner's share (others hold most of it): a refusal ran
+// nothing, so the runner tries again once one of its own execs ends, and every read gets
+// its answer.
+{
+  const { exec, seen } = slowExec({ refuseAt: 2 });
+  const git = makeGit(exec, null);
+  const out = await Promise.all(Array.from({ length: 6 }, (_, i) => git(repo, ["x", `n${i}`])));
+  assert.ok(seen.refused > 0, "some were refused");
+  assert.deepEqual(out.map((r) => [r.ok, r.out]), Array.from({ length: 6 }, (_, i) => [true, `n${i}`]));
+}
+
+// With none of its own going there is nothing to wait for: the refusal is the answer, and
+// a run of refusals ends (no loop), each a result like any exec failure.
+{
+  const { exec, seen } = slowExec({ refuseAt: 0 });
+  const r = await makeGit(exec, null)(repo, ["x", "alone"]);
+  assert.equal(seen.calls, 1);
+  assert.deepEqual([r.ok, r.code], [false, -1]);
+  assert.match(r.err, /execs are running already/);
+  const all = await Promise.all(Array.from({ length: 4 }, (_, i) => makeGit(exec, null)(repo, ["x", `m${i}`])));
+  assert.ok(all.every((x) => !x.ok));
+  const many = slowExec({ refuseAt: 0 });
+  const runner = makeGit(many.exec, null);
+  const out = await Promise.all(Array.from({ length: 4 }, (_, i) => runner(repo, ["x", `k${i}`])));
+  assert.ok(out.every((x) => !x.ok && /running already/.test(x.err)));
+  assert.ok(many.seen.calls <= 4 * 5, `tries are bounded (${many.seen.calls})`);
 }
 
 console.log("ok");

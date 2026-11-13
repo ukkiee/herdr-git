@@ -14,6 +14,15 @@
 - mod를 탭(`tab.new {mod, props}`), pane(`pane.split {direction, mod, props}`), 오버레이(`openOverlay({mod, kind: "dialog" | "popup" | "window", props})`)로 열 수 있다. [문서]
 - `kind: "popup"` 오버레이는 mod가 그린 내용의 높이를 따른다. 그 안의 `size_full()`·`flex_1()`은 0이 되어, 높이를 px로 주지 않은 목록은 검색 줄 높이로만 열리고 항목이 보이지 않았다. [실험]
 - 팝업 오버레이 안에서 받은 마우스 이벤트의 `e.position`을 다음 오버레이의 위치로 넘기면, 그 오버레이가 창 오른쪽 아래 구석에 붙었다. 위치를 주지 않으면 포인터 자리(Herdr의 기본값)에 뜬다. [실험] 좌표가 어떻게 어긋나는지(배율인지, 기준점이 두 번 더해지는지)는 [미확인].
+- 팝업 오버레이 안에 두 번째 오버레이를 놓을 좌표를 얻을 수 없어서, 팝업 안의 하위 메뉴는 `gpui-base`의 `Popup`을 그 줄에 붙여 그린다. 그 내용이 팝업 오버레이 밖까지 그려지는지, 그 위를 누를 때 Herdr의 "팝업 밖 클릭 닫기"가 먼저 처리되는지는 [미확인]. 그래서 메뉴 항목은 손을 뗄 때가 아니라 누를 때 고른다.
+- 레이아웃 블록 안 요소에서 받은 마우스 이벤트의 `position - local_position`(요소의 왼쪽 위)과 요소 높이로 그 요소 바로 아래에 팝업을 놓는다. Herdr가 창 오른쪽을 넘는 팝업을 안으로 당겨 주는지는 [미확인]이라 블록 오른쪽 끝으로 직접 제한한다.
+- 팝업 오버레이의 너비는 열 때 준 값이고 내용을 따라 늘지 않는다. 라벨 길이에 맞춰 열 때 너비를 정한다. [관측]
+- `openOverlay`의 `frame: "none"`으로 연 dialog는 Herdr 테두리 없이 mod가 그린 카드만 보인다. 바깥이 투명하고 창을 어둡게 하는 효과가 그대로인지, 내용 높이 카드 안의 `size_full()`이 내용만큼으로 풀리는지는 [미확인].
+- `run("layout.resize", { id, px })`로 mod가 자기 레이아웃 블록의 너비를 바꾼다. 블록 안에서 `on_size_change`가 잘 오는지, 탭 줄이 자연스럽게 줄어드는지는 [미확인].
+- 툴팁을 숨기는 호출이 없다. 요소에 `.tooltip()`을 달지 않고 다시 그리면 빠진다. 떠 있던 툴팁이 그 자리에서 바로 사라지는지는 [미확인].
+- 파일을 고르는 API가 없고 폴더를 고르는 `pickFolder`만 있다. [문서]
+- 텍스트 칸의 `submit` 사건은 키 수식을 싣는다(`secondary`: Cmd/Ctrl). 그래서 칸 안의 ⌘↩는 칸의 `submit`으로 받는다. 창 루트의 `on_key_down`에는 편집기에 포커스가 있을 때 오지 않는다. [문서] 실제로 오는지는 [미확인].
+- 창 header mod는 `props().pane`으로 자기 pane id를 받는다. 탭 안 mod가 받는지는 문서에 없어 [미확인]이다. `tab.new` 바로 뒤의 `panes()`에 새 pane이 보이는지도 [미확인]. [문서]
 - 탭 정보(`TabInfo`)에는 그 탭을 연 mod의 props가 없다. 같은 종류의 탭을 찾으려면 탭 이름으로 찾아야 한다. [문서]
 - space의 마지막 탭을 닫으면 space가 닫힌다고 보고, 탭을 바꿔 열 때는 새 탭을 먼저 열고 옛 탭을 닫는다. [미확인]
 - `space.new {folder, machine, name}`으로 mod가 다른 머신의 폴더에도 새 space를 연다. [문서]
@@ -41,7 +50,7 @@
 - `readTextFile`(1 MiB, 원격 가능), `writeTextFile`(로컬 전용). [문서]
 - `watchFolder(dir)`: 로컬 전용. macOS에서는 `.git` 아래 변경도 온다. 읽기 명령이 인덱스를 건드리면 새로고침이 다음 새로고침을 부르므로 `--no-optional-locks -c core.fsmonitor=false -c diff.autoRefreshIndex=false`를 붙인다. [코드: 내장 `changes`]
 - 타이머: `cx.timer.every` / `cx.timer.after`. `setTimeout` 없음. [문서]
-- 상태: `localStorage`(mod 복사본별), `shared`/`setShared`(모든 mod 공유, 설정하면 창 전체 재렌더). [문서] 공유 값은 앱의 `shared.json`에 저장되어 남는다. 그래서 큰 글(병합 결과 파일 전체 등)을 실으면 다음 값으로 바뀔 때까지 저장된 상태가 무거워진다. 큰 글은 임시 파일로 넘기고 공유 값에는 경로만 싣는다. [관측]
+- 상태: `localStorage`(mod 복사본별), `shared`/`setShared`(모든 mod 공유, 설정하면 창 전체 재렌더). [문서] 공유 값은 앱의 `shared.json`에 저장되어 남는다. 그래서 큰 글(병합 결과 파일 전체 등)을 실으면 다음 값으로 바뀔 때까지 저장된 상태가 무거워진다. 큰 글은 임시 파일로 넘기고 공유 값에는 경로만 싣는다. [관측] `setShared`는 `render` 안에서 부를 수 없어 timer에서 부른다. 사본이 닫힐 때(`close`) 부른 `setShared`가 앱 종료 때도 실행되는지는 [미확인].
 - mod 명령: `<mod>.<command>`는 문자열만 전달되고 **보이는 복사본에만** 간다. [문서] 키는 `keys.json`의 `global` 또는 `mod:<name>`.
 - 파일을 에디터로 여는 앱 명령은 없다. [관측: `herdr-app commands`]
 - `notify`는 알림을 눌렀을 때 실행할 `action`을 하나만 받는다. "계속 · 중단"처럼 둘 가운데 고르게 할 수 없다. [문서]

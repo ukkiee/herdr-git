@@ -789,7 +789,8 @@ Herdr는 mod를 QuickJS로 돌린다. JIT가 없고, 한 호출이 너무 오래
 - **전역 키가 먼저 받는다.** Herdr 전역 키(F2의 탭 이름 바꾸기 등)는 mod의 `on_key_down`보다 먼저
   가져간다. 그래서 Branch tree의 이름 변경은 메뉴로만 한다.
 - **메뉴 막대.** mod가 메뉴 막대에 항목을 넣는 API를 찾지 못했다. 그래서 git 메뉴는 VCS Operations
-  popup이다. 팝업 메뉴에는 하위 메뉴가 없어 하위 메뉴는 두 번째 메뉴로 연다.
+  popup이다. Herdr에는 메뉴 부품이 없고 mod가 그리는 팝업 메뉴(`view-menu.js`)는 하위 메뉴를 그리지
+  않아서, 하위 메뉴는 두 번째 메뉴로 연다.
 - **명령.** `git-tools.<명령>`은 보이는 모든 사본에 한꺼번에 가고 어느 사본을 뜻하는지 말할 수
   없다. 그래서 저장소를 바꾸는 명령은 `props.folder`로 연 사본이나
   `git config --local gittools.scripted true`인 저장소에서만 듣는다. Rollback을 실행하는 명령은

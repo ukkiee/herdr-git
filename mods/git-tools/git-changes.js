@@ -128,7 +128,8 @@ export function revertMessage(commit, paths) {
 //   operation, conflicts, blocked?, commit? }
 //   Undoes what `commit` did to `paths` (a rename is its two paths) against its first
 //   parent, as a new commit on HEAD by the person (revertMessage). Other changes the person
-//   has, staged or not, stay out of it.
+//   has, staged or not, stay out of it; a staged change to one of `paths` is refused
+//   (pick.stagedInWay, blocked: those paths) before anything is applied.
 //   outcome: "done" (commit: the new commit's hash), "stopped" (conflicts: the files left
 //   in conflict, nothing committed: the person resolves them and commits), "empty" (those
 //   files are already as before the commit: nothing to do), "refused" (blocked: local
@@ -143,6 +144,14 @@ export async function revertChanges(git, root, args) {
   const pick = await built(git, root, { from: c.hash, to: c.parent, paths: asked.paths, message: revertMessage(c, asked.paths) });
   if (!pick.ok) return { ...result(pick), ...NOTHING };
   if (pick.same) return empty();
+  // A staged change to one of the files: git applies over it in the index, and the commit
+  // below would take it in with the revert.
+  const staged = await stagedAmong(git, root, asked.paths);
+  if (!staged.ok) return { ...result(staged), ...NOTHING };
+  if (staged.paths.length) {
+    const files = staged.paths.join(", ");
+    return { ...said(`Staged changes to ${files} would go into the revert commit: unstage or commit them first.`, { key: "pick.stagedInWay", args: { files } }), outcome: "refused", blocked: staged.paths, operation: null, conflicts: [] };
+  }
   const applied = await apply(git, root, pick.hash, asked.paths);
   if (applied.outcome !== "done") return applied;
   const changed = await stagedAmong(git, root, asked.paths);

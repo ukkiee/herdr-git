@@ -19,6 +19,7 @@ export const en = {
   "pick.nothingToRevert": "Nothing to revert",
   "pick.nothingToRevertBody": "The selected files are already as they were before {hash}",
   "pick.revertedAlready": "The changes of {hash} are already reverted",
+  "pick.stagedInWay": "Staged changes to {files} would go into the revert commit: unstage or commit them first.",
 };
 
 export const ko = {
@@ -37,4 +38,5 @@ export const ko = {
   "pick.nothingToRevert": "되돌릴 항목이 없습니다",
   "pick.nothingToRevertBody": "선택한 파일이 이미 {hash} 이전과 같습니다",
   "pick.revertedAlready": "{hash}의 변경 내용이 이미 되돌려져 있습니다",
+  "pick.stagedInWay": "{files}에 스테이징된 변경 내용이 되돌리기 커밋에 섞입니다. 먼저 스테이징을 취소하거나 커밋하세요.",
 };

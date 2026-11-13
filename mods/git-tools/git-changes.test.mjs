@@ -114,6 +114,21 @@ GIT_AUTHOR_NAME=Ann GIT_AUTHOR_EMAIL=ann@t git commit -q -m two -m 'the body of 
   assert.deepEqual(status(repo), [" M a.txt"]);
 }
 
+// A staged change to the file, even on another line: git would apply over it and the
+// commit would take it in, so it is refused, the file named, nothing changed.
+{
+  const repo = init("revert-staged");
+  const two = head(repo);
+  sh(repo, "echo mine >> a.txt && git add a.txt");
+  const r = await revertChanges(git, repo, { commit: two, paths: ["a.txt", "b.txt"] });
+  assert.equal(r.outcome, "refused", r.err);
+  assert.equal(r.ok, false);
+  assert.deepEqual(r.blocked, ["a.txt"]);
+  assert.equal(r.msg?.key, "pick.stagedInWay");
+  assert.equal(head(repo), two);
+  assert.deepEqual(status(repo), ["M  a.txt"]);
+}
+
 // Files the commit didn't change, or already put back: nothing to do.
 {
   const repo = init("revert-empty");

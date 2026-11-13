@@ -63,6 +63,7 @@ import VcsOps, { vcsOpsCommand } from "./view-vcs-ops.js";
 import Reword from "./view-reword.js";
 import Squash from "./view-squash.js";
 import DropCommits from "./view-drop-commits.js";
+import Smart from "./view-smart.js";
 
 // When the system's language isn't known yet, how long to wait before each next ask.
 const ASK_AGAIN = [1000, 3000, 10000];
@@ -102,6 +103,7 @@ export const VIEWS = {
   "reword": Reword, // Edit Commit Message dialog (view-reword.js openReword)
   "squash": Squash, // Squashed Commit Message dialog (view-squash.js openSquash)
   "drop-commits": DropCommits, // Drop Commits confirmation (view-drop-commits.js openDropCommits)
+  "smart": Smart, // Smart dialog: local changes in the way of a request (view-smart.js openSmart)
 };
 
 // `mod.open:git-tools` (cmd-k) opens a copy with no view. No single app command both

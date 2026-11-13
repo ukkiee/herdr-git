@@ -20,6 +20,7 @@ import { exec, theme, openOverlay, closeOverlay } from "herdr";
 import { makeGit, repoRoot } from "./git.js";
 import { readHeads, popupRows } from "./git-heads.js";
 import { readOperation } from "./git-operation.js";
+import { smartCheckout } from "./view-smart.js";
 import { MOD, openDialog, answerMenu, dialogFrame, button, uiGlyph, iconButton, darkLook, notice, WindowedList } from "./ui.js";
 
 export const POPUP_ACTIONS = {
@@ -29,7 +30,11 @@ export const POPUP_ACTIONS = {
   "ops.continue": (w, _p, cx) => w.goOn(cx),
   "ops.skip": (w, _p, cx) => w.skip(cx),
   "vcs.newBranch": (w, _p, cx) => w.newBranch(null, cx),
-  "branch.checkout": (w, b, cx) => w.checkout(b, cx),
+  // Local changes in the way open the Smart dialog, with the widget's host running its writes.
+  "branch.checkout": (w, b, cx) => {
+    if (!b || b.current) return;
+    w.write({ key: "log.checkingOut" }, (repo) => smartCheckout(repo, { name: b.name, remote: b.scope === "remote" }, { owner: w.host.bus.id, lang: w.host.lang, who: w.who }), cx);
+  },
   "branch.newFrom": (w, b, cx) => w.newBranch(b, cx),
   "branch.delete": (w, b, cx) => w.remove(b, cx),
 };

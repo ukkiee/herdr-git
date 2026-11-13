@@ -21,7 +21,8 @@
 import { div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { theme } from "herdr";
-import { readBranches, checkout, deleteBranch } from "./git-branch.js";
+import { readBranches, deleteBranch } from "./git-branch.js";
+import { smartCheckout } from "./view-smart.js";
 import { readOperation } from "./git-operation.js";
 import { shortenMiddle } from "./git-log.js";
 import { buildRows, folderKeys, parentIndex } from "./tree.js";
@@ -310,7 +311,9 @@ export default class LogBranches {
 
   checkout(b, cx) {
     if (!b || b.current || b.scope === "head") return;
-    this.act({ key: "log.checkingOut" }, (repo) => checkout(repo.git, repo.root, b.name, { remote: b.scope === "remote" }), cx);
+    // Local changes in the way open the Smart dialog, with this panel running its writes.
+    const host = this.host;
+    this.act({ key: "log.checkingOut" }, (repo) => smartCheckout(repo, { name: b.name, remote: b.scope === "remote" }, { owner: host.bus.id, lang: host.lang, who: "ui.logPanel" }), cx);
   }
 
   newBranch(b, cx) {

@@ -121,7 +121,10 @@ export async function checkoutBranch(git, root, { name, remote = false } = {}) {
 export async function forceCheckout(git, root, { name, remote = false, copy } = {}) {
   const none = { snapshot: null, changed: false };
   const target = await checkoutTarget(git, root, { name: str(name), remote: remote === true });
-  if (!target) return { ok: false, code: -1, out: "", err: `'${str(name)}' is not a branch.`, msg: { key: remote ? "log.notRemoteBranch" : "log.notLocalBranch", args: { name: str(name) } }, ...none };
+  if (!target) {
+    const msg = remote ? { key: "log.notRemoteBranch", args: { name: str(name) } } : { key: "log.notLocalBranch", args: { name: str(name) } };
+    return { ok: false, code: -1, out: "", err: `'${str(name)}' is not a branch.`, msg, ...none };
+  }
   const st = await readStatus(git, root);
   if (!st.ok) return { ok: false, code: -1, out: "", err: st.err, ...(st.msg ? { msg: st.msg } : {}), ...none };
   const made = await record(git, root, st.changes.map((c) => c.path), copy, "Checkout");

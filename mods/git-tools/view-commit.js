@@ -38,6 +38,7 @@ import { servePush } from "./view-push.js";
 import { serveAction } from "./serve-actions.js";
 import { openDiff } from "./view-diff.js";
 import StashTab from "./commit-stash-tab.js";
+import { settleSmartMark } from "./view-smart.js";
 
 // The groups' names are worded when drawn (groupName): rows outlive a change of language.
 // "last" is the Last commit group: only while Amend is on (see items).
@@ -273,6 +274,8 @@ export default class CommitView {
           // Unread (git failed on the state files): the operation shown before stays, and
           // the commit module reads it again before committing anyway.
           if (op?.ok) this.op = op;
+          // Nothing in progress: what a stopped Smart left in the stash comes back now.
+          settleSmartMark(this, repo, op, cx);
           this.apply(status);
           this.error = last && !last.ok ? sentence(this.t, last.msg, last.err) : op && !op.ok ? sentence(this.t, op.msg, op.err) : null;
         }

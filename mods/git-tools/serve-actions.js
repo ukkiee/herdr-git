@@ -21,6 +21,7 @@ import { runStashCreate, runStashDrop, runStashClear } from "./view-stash.js";
 import { runUnstash } from "./view-unstash.js";
 import { createBranch } from "./git-branch.js";
 import { serveReword, serveSquash, serveDrop } from "./log-rewrite.js";
+import { runSmartRequest } from "./view-smart.js";
 
 const strings = (value) => (Array.isArray(value) ? value.filter((v) => typeof v === "string" && v) : []);
 const text = (value) => (typeof value === "string" && value ? value : null);
@@ -45,6 +46,7 @@ export const SERVE_ACTIONS = {
   "rewrite-reword": { work: "rewrite.rewording", run: (git, root, args, panel) => serveReword(git, root, args, panel) },
   "rewrite-squash": { work: "rewrite.squashing", run: (git, root, args, panel) => serveSquash(git, root, args, panel) },
   "rewrite-drop": { work: "rewrite.dropping", run: (git, root, args, panel) => serveDrop(git, root, args, panel) },
+  "smart-run": { work: "smart.working", run: (git, root, args, panel) => runSmartRequest(git, root, args, panel) },
 };
 
 // serveAction(panel, e, cx) → true when the table has e.action and the panel now runs

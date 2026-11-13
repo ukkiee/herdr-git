@@ -3,10 +3,10 @@
 // that tab was opened on. No `herdr` import: node tests it (focus-repo.test.mjs).
 //
 // Herdr tells a mod which pane has the focus but not a mod pane's props, so the tabs are
-// recorded when they open: openTab (ui.js) notes which pane tab.new added and keeps
-// { pane: { root, on } } in a shared value. Without the record a tab has no folder of its
-// own, and the panels would follow the space's folder: the wrong repository once the
-// terminals have moved to another one.
+// recorded in a shared value, { pane: { root, on } }: each tab's screen records its own
+// pane (registerTab, from main.js), and newTab (ui.js) notes which pane tab.new added.
+// Without the record a tab has no folder of its own, and the panels would follow the
+// space's folder: the wrong repository once the terminals have moved to another one.
 
 const MOD = "git-tools";
 const str = (v) => (typeof v === "string" && v ? v : null);
@@ -44,4 +44,43 @@ export function rememberTab(record, added, { root, on } = {}, panes = []) {
   }
   if (str(root)) for (const pane of added) out[pane] = { root, on: str(on) };
   return out;
+}
+
+// isTabScreen(props) → whether a copy with these props is a tab's screen of a repository:
+// it has a root and is no dialog or menu (props.overlay).
+export function isTabScreen(p) {
+  return Boolean(p && !p.overlay && str(p.root));
+}
+
+// registerTab(record, { props, focused, panes }) → { pane, record } to store for a copy
+// that is a tab's screen, or null when there is nothing to store.
+//   props: the copy's props(); its repository is props.root and props.on. A dialog or a
+//   menu (props.overlay) and a screen without a root (a layout block, the console) are
+//   no tab of a repository.
+//   The copy's pane: props.pane when Herdr gives one, and that replaces whatever is
+//   recorded for it. Without it, a guess: the focused pane, when it is this mod's only
+//   pane in its tab and nothing is recorded for it (a tab just opened has the focus).
+//   Never a recorded pane: right after tab.new the focus may still be on the tab before.
+export function registerTab(record, { props: p, focused, panes = [] } = {}) {
+  if (!isTabScreen(p)) return null;
+  const repo = { root: p.root, on: str(p.on) };
+  const tabs = record && typeof record === "object" ? record : {};
+  const pane = str(p.pane) ?? guessPane(tabs, focused, panes);
+  if (!pane) return null;
+  const had = tabs[pane];
+  if (had && had.root === repo.root && (had.on ?? null) === repo.on) return null;
+  return { pane, record: rememberTab(tabs, [pane], repo, panes) };
+}
+
+// forgetTab(record, pane) → the record without `pane`, or null when it has no entry.
+export function forgetTab(record, pane) {
+  if (!str(pane) || !record || typeof record !== "object" || !(pane in record)) return null;
+  const { [pane]: _gone, ...rest } = record;
+  return rest;
+}
+
+function guessPane(tabs, focused, panes) {
+  const f = focused?.pane ? panes.find((p) => p.pane === focused.pane) : null;
+  if (!f || f.mod !== MOD || tabs[f.pane]) return null;
+  return panes.filter((p) => p.mod === MOD && p.tab === f.tab).length === 1 ? f.pane : null;
 }

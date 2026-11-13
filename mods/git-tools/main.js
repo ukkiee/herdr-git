@@ -27,7 +27,8 @@
 
 import { View, div } from "gpui-kit";
 import { props, nextCommand, theme } from "herdr";
-import { subscribe, lockSide, LOCK_BEAT, UNKNOWN, openCommitPanel, close, speakAs, fixedLang, rememberedLang, rememberLang, readSystemLang } from "./ui.js";
+import { subscribe, lockSide, LOCK_BEAT, UNKNOWN, openCommitPanel, close, speakAs, fixedLang, rememberedLang, rememberLang, readSystemLang, claimTab, releaseTab, tabRecorded } from "./ui.js";
+import { isTabScreen } from "./focus-repo.js";
 import { translator } from "./i18n.js";
 import { warmIcons } from "./icon-theme.js";
 import Commit from "./view-commit.js";
@@ -168,6 +169,12 @@ export default class GitTools extends View {
     // same function, before its screen can run git.
     recordWith(recordGit);
     this.say(() => this.screen.init(p, cx));
+    // A tab's screen records its pane with its repository, so the panels follow that
+    // repository while the tab has the focus (ui.js claimTab). Again from render while
+    // it has no record: the pane may be known only once the tab has the focus.
+    this.props = p;
+    this.tabPane = null;
+    this.claimTab(cx);
     if (!fixed) this.askLang(cx, 0);
     // A lock this copy holds stays alive only while it beats (lock.js STALE). Writes
     // nothing while the copy holds none.
@@ -237,7 +244,18 @@ export default class GitTools extends View {
       this.turning = true;
       cx.timer.after(0, (cx) => { this.turning = false; this.turnTo(rememberedLang(), cx); });
     }
+    if (isTabScreen(this.props) && !tabRecorded(this.tabPane)) this.claimTab(cx);
     return this.say(() => this.screen.render(cx));
+  }
+
+  // In a timer: the shared value can't be set from inside render.
+  claimTab(cx) {
+    if (this.claiming || !isTabScreen(this.props)) return;
+    this.claiming = true;
+    cx.timer.after(0, () => {
+      this.claiming = false;
+      this.tabPane = claimTab(this.props) ?? this.tabPane;
+    });
   }
 
   async close(cx) {
@@ -246,6 +264,7 @@ export default class GitTools extends View {
     this.events.stop(UNKNOWN);
     // First and synchronous: the 250 ms may run out in the screen's own close.
     this.locks.releaseAll();
+    releaseTab(this.tabPane);
     await this.say(() => this.screen.close?.(cx));
   }
 }

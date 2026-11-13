@@ -13,7 +13,7 @@ import { LANGS, translator, systemLang, sentence } from "./i18n.js";
 import { fileIcon, folderIcon, darkColor } from "./icon-theme.js";
 import { iconShape, iconDraw } from "./ui-icons.js";
 import { menuWidth, dialogFills } from "./ui-size.js";
-import { whereFocused, newPanes, rememberTab } from "./focus-repo.js";
+import { whereFocused, newPanes, rememberTab, registerTab, forgetTab } from "./focus-repo.js";
 import { en as consoleEn, ko as consoleKo } from "./messages-console.js";
 
 export const MOD = "git-tools";
@@ -385,8 +385,30 @@ export function openTab(view, props = {}, name) {
 
 // newTab(name, props): a tab in the shown space whose only pane is this mod with `props`,
 // recorded with its repository (props.root, props.on) so the panels follow that
-// repository while the tab has the focus (focus-repo.js).
+// repository while the tab has the focus (focus-repo.js). The record here is a first try:
+// panes() may not show the new pane yet, and the tab's screen records itself (claimTab).
 const TABS = "git-tools.tabs";
+
+// claimTab(props): a tab's screen records its own pane with its repository. Returns the
+// pane recorded, or null (not a tab's screen, or its pane not known yet).
+export function claimTab(p) {
+  const got = registerTab(shared(TABS), { props: p, focused: focused(), panes: panes() });
+  if (got) setShared(TABS, got.record);
+  return got?.pane ?? null;
+}
+
+// releaseTab(pane): a tab's screen that closes takes its pane out of the record.
+export function releaseTab(pane) {
+  const next = forgetTab(shared(TABS), pane);
+  if (next) setShared(TABS, next);
+}
+
+// tabRecorded(pane) → whether the record has `pane`.
+export function tabRecorded(pane) {
+  const record = shared(TABS);
+  return Boolean(pane && record && typeof record === "object" && record[pane]);
+}
+
 export function newTab(name, props) {
   const before = panes();
   run("tab.new", { name, mod: MOD, props });

@@ -269,7 +269,8 @@ export default class ConflictsView {
         .child(div().min_w(0).truncate().child(r.label));
     }
     const selected = r.path === this.selected;
-    const name = r.path.split("/").pop(), folder = r.path.slice(0, r.path.length - name.length - 1);
+    const cut = r.path.lastIndexOf("/");
+    const name = r.path.slice(cut + 1), folder = cut > 0 ? r.path.slice(0, cut) : "";
     return h_flex().id(`conflicts-row-${i}`).w_full().h(h).flex_none().items_center()
       .bg(selected ? t.selected : t.background).hover((s) => s.bg(selected ? t.selected : t.hover))
       .on_click((e, cx) => {

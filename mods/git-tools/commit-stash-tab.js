@@ -20,7 +20,7 @@ import { h_flex, v_flex } from "gpui-base";
 import { listStashes, stashFiles } from "./git-stash.js";
 import { buildRows, folderKeys } from "./tree.js";
 import { formatDateTime } from "./i18n.js";
-import { tip, uiGlyph, ICON, fileGlyph, folderGlyph, darkLook, panelFrame, toolbar, spacer, iconButton, button, row, notice, errorStrip, WindowedList, openMenu, broadcast, sentence } from "./ui.js";
+import { tip, uiGlyph, ICON, fileGlyph, folderGlyph, darkLook, panelFrame, toolbar, spacer, iconButton, button, row, notice, errorStrip, WindowedList, openMenu, broadcast, sentence, progressBar, writeName } from "./ui.js";
 import { sameRepo } from "./lock.js";
 import { openDiff } from "./view-diff.js";
 import { openStash, openStashConfirm } from "./view-stash.js";
@@ -305,6 +305,7 @@ export default class StashTab {
       : this.fileList.render(this.rows.length, (i) => this.fileRow(i, t), t);
     const redraw = (fn) => (_e, cx) => { fn(cx); cx.notify(); };
     const busy = Boolean(blocked);
+    const writing = blocked;
     return panelFrame("commit-panel", t)
       .child(this.header(t))
       .child(toolbar(t)
@@ -321,6 +322,8 @@ export default class StashTab {
       .child(h_flex().id("stash-buttons").flex_none().px(10).py(8).gap(8).items_center().border_t(1).border_color(t.border)
         .child(button("stash-apply", tr("stash.apply"), t, { kind: "primary", disabled: !s || busy, title: blocked ?? undefined, onClick: (_e, cx) => this.unstash(false, cx) }))
         .child(button("stash-pop", tr("stash.pop"), t, { disabled: !s || busy, title: blocked ?? undefined, onClick: (_e, cx) => this.unstash(true, cx) })))
+      // The same strip as the Changes tab's: any write on this repository, by name.
+      .when(Boolean(writing), (el) => el.child(progressBar("stash-progress", t, { label: writeName(this.host, this.repo), title: writing, state: this.host.progress })))
       .when(Boolean(this.host.writeError), (el) => el.child(errorStrip("stash-write-error", this.host.writeError ?? "", t, (_e, cx) => { this.host.writeError = null; cx.notify(); })));
   }
 }

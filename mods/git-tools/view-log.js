@@ -48,6 +48,7 @@ import { remoteDialog } from "./view-remote.js";
 import { pushUpTo, pushBranch } from "./view-push.js";
 import { updateHere, checkoutUpdateHere, pullHere, updateSelected } from "./view-update-project.js";
 import { aimHere, extractHere, dropChangesHere } from "./view-extract.js";
+import { operateHere } from "./view-merge.js";
 
 // Column widths, px. The Commit list takes what the side columns leave and never gets
 // narrower than LIST_MIN: when the panel is too narrow, Commit details goes first, then
@@ -149,6 +150,10 @@ const ACTIONS = {
   "file.revertSelected": (host, m, cx) => revertChangesHere(host, m, cx),
   "file.cherryPickSelected": (host, m, cx) => cherryPickChangesHere(host, m, cx),
   "details.revertSelected": (host, m, cx) => revertChangesHere(host, m, cx),
+  "branch.mergeInto": (host, b, cx) => operateHere(host, { type: "merge", target: b.name }, cx),
+  "branch.rebaseOnto": (host, b, cx) => operateHere(host, { type: "rebase", target: b.name }, cx),
+  "branch.checkoutAndRebase": (host, b, cx) => operateHere(host, { type: "checkout-rebase", name: b.name, remote: b.scope === "remote" }, cx),
+  "commit.rebaseOnto": (host, commits, cx) => { if (commits[0]?.hash) operateHere(host, { type: "rebase", target: commits[0].hash }, cx); },
 };
 
 // The bus event that tells every Log panel the options file changed.

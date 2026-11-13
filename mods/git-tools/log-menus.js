@@ -73,7 +73,9 @@ const ITEMS = {
   "commit.squash": { key: "log.squashCommits", shown: (ctx) => (ctx.count ?? 1) >= 2, write: true, when: edit("squash") },
   "commit.interactiveRebase": { key: "log.interactiveRebase" },
   "commit.pushUpToHere": { key: "log.pushUpToHere", when: one },
-  "commit.rebaseOnto": { key: "log.rebaseOntoCommit", args: current },
+  // Only for a commit outside the current branch (one in it is already under it), and
+  // only on a branch.
+  "commit.rebaseOnto": { key: "log.rebaseOntoCommit", args: current, write: true, when: (ctx) => one(ctx) ?? (!ctx.current || ctx.edit?.commits?.[0]?.onBranch ? { text: "" } : null) },
   "commit.newBranch": { key: "log.newBranch", write: true, when: one },
   "commit.newTag": { key: "log.newTag", write: true, when: one },
   // The Commit list's left and right keys (log-list.js).
@@ -105,12 +107,12 @@ const ITEMS = {
   // ---- the Branch tree: a branch row's menu, a remote's folder
   "branch.checkout": { key: "log.checkout", write: true },
   "branch.newFrom": { key: "log.newBranchFrom", args: name, write: true },
-  "branch.checkoutAndRebase": { key: "branches.checkoutAndRebase", args: current },
+  "branch.checkoutAndRebase": { key: "branches.checkoutAndRebase", args: current, write: true },
   "branch.checkoutAndUpdate": { key: "branches.checkoutAndUpdate", write: true, when: tracked },
   "branch.compareWith": { key: "branches.compareWith", args: current },
   "branch.showDiffWithWorkingTree": { key: "branches.showDiffWithWorkingTree" },
-  "branch.rebaseOnto": { key: "branches.rebaseOnto", args: both },
-  "branch.mergeInto": { key: "branches.mergeInto", args: both },
+  "branch.rebaseOnto": { key: "branches.rebaseOnto", args: both, write: true },
+  "branch.mergeInto": { key: "branches.mergeInto", args: both, write: true },
   "branch.newWorktreeFrom": { key: "branches.newWorktreeFrom", args: name },
   "branch.update": { key: "branches.update", write: true, when: (ctx) => (ctx.name === ctx.current ? null : tracked(ctx)) },
   "branch.push": { key: "branches.push" },

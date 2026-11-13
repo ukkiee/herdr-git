@@ -26,6 +26,7 @@ import { renameFrom } from "./view-rename-branch.js";
 import { pushBranch } from "./view-push.js";
 import { pushTagMenu } from "./view-tag.js";
 import { startUpdateProject, updateHere, checkoutUpdateHere, pullHere } from "./view-update-project.js";
+import { operateFromWidget } from "./view-merge.js";
 import { MOD, openDialog, answerMenu, dialogFrame, button, uiGlyph, iconButton, darkLook, notice, WindowedList } from "./ui.js";
 
 export const POPUP_ACTIONS = {
@@ -51,6 +52,9 @@ export const POPUP_ACTIONS = {
   "branch.checkoutAndUpdate": (w, b, cx) => checkoutUpdateHere(w.host, w.repo, w.who, b, cx),
   "branch.pullRebase": (w, b, cx) => pullHere(w.host, w.repo, w.who, b, true, cx),
   "branch.pullMerge": (w, b, cx) => pullHere(w.host, w.repo, w.who, b, false, cx),
+  "branch.mergeInto": (w, b, cx) => { if (b) operateFromWidget(w, { type: "merge", target: b.name }, cx); },
+  "branch.rebaseOnto": (w, b, cx) => { if (b) operateFromWidget(w, { type: "rebase", target: b.name }, cx); },
+  "branch.checkoutAndRebase": (w, b, cx) => { if (b) operateFromWidget(w, { type: "checkout-rebase", name: b.name, remote: b.scope === "remote" }, cx); },
 };
 export const popupHandles = (id) => Object.prototype.hasOwnProperty.call(POPUP_ACTIONS, id);
 

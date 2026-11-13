@@ -27,6 +27,7 @@ import { runRenameBranch } from "./view-rename-branch.js";
 import { runRemoteEdit, runRemoteRemove } from "./view-remote.js";
 import { runRemote } from "./view-update-project.js";
 import { serveExtract, serveDropChanges } from "./view-extract.js";
+import { serveOperation } from "./view-merge.js";
 
 const strings = (value) => (Array.isArray(value) ? value.filter((v) => typeof v === "string" && v) : []);
 const text = (value) => (typeof value === "string" && value ? value : null);
@@ -62,6 +63,8 @@ export const SERVE_ACTIONS = {
   "remote-reset": { work: "remote.resetting", run: (git, root, args, panel) => runRemote(git, root, { ...args, type: "reset" }, panel) },
   "rewrite-extract": { work: "rewrite.extracting", run: (git, root, args, panel) => serveExtract(git, root, args, panel) },
   "rewrite-drop-changes": { work: "rewrite.droppingChanges", run: (git, root, args, panel) => serveDropChanges(git, root, args, panel) },
+  "merge-start": { work: "merge.merging", run: (git, root, args, panel) => serveOperation(git, root, args, panel) },
+  "rebase-start": { work: "merge.rebasing", run: (git, root, args, panel) => serveOperation(git, root, args, panel) },
 };
 
 // serveAction(panel, e, cx) → true when the table has e.action and the panel now runs

@@ -26,6 +26,8 @@ import { openUnstash } from "./view-unstash.js";
 import { listStashes } from "./git-stash.js";
 import { startUpdateProject } from "./view-update-project.js";
 import { openPull } from "./view-pull.js";
+import { openMerge } from "./view-merge.js";
+import { openRebase } from "./view-rebase.js";
 
 // What each item does, run in the owning panel's copy: run(panel, cx, how).
 //   panel: the Log panel (kind "log") or the Commit panel (kind "commit"): repo, bus, t,
@@ -64,6 +66,8 @@ export const VCS_ACTIONS = {
   "console": { run: (panel) => openConsole(panel.t) },
   "updateProject": { run: (panel, cx, how) => startUpdateProject(panel, repoOf(panel), WHO[how.kind], cx, { alt: how.alt }) },
   "pull": { run: (panel, _cx, how) => { const r = repoOf(panel); if (r) openPull({ root: r.root, on: r.on ?? null, owner: panel.bus.id, lang: panel.lang, who: WHO[how.kind] }); } },
+  "merge": { run: (panel, _cx, how) => { const r = repoOf(panel); if (r) openMerge({ root: r.root, on: r.on ?? null, owner: panel.bus.id, who: WHO[how.kind], lang: panel.lang }); } },
+  "rebase": { run: (panel, _cx, how) => { const r = repoOf(panel); if (r) openRebase({ root: r.root, on: r.on ?? null, owner: panel.bus.id, who: WHO[how.kind], lang: panel.lang }); } },
 };
 
 const handledBy = (kind) => (id) => Object.prototype.hasOwnProperty.call(VCS_ACTIONS, id) && (!VCS_ACTIONS[id].by || VCS_ACTIONS[id].by.includes(kind));

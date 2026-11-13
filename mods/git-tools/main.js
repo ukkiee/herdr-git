@@ -71,6 +71,8 @@ import Pull from "./view-pull.js";
 import UpdateProject from "./view-update-project.js";
 import UpdateInfo from "./view-update-info.js";
 import Extract from "./view-extract.js";
+import Merge from "./view-merge.js";
+import Rebase from "./view-rebase.js";
 
 // When the system's language isn't known yet, how long to wait before each next ask.
 const ASK_AGAIN = [1000, 3000, 10000];
@@ -118,6 +120,8 @@ export const VIEWS = {
   "update-project": UpdateProject, // Update Project dialog (view-update-project.js openUpdateProject)
   "update-info": UpdateInfo, // Update Info tab: what an update brought in (view-update-info.js openUpdateInfo)
   "extract": Extract, // Extract Selected Changes dialog, and the first-commit question (view-extract.js openExtract)
+  "merge": Merge, // Merge dialog (view-merge.js openMerge)
+  "rebase": Rebase, // Rebase dialog (view-rebase.js openRebase)
 };
 
 // `mod.open:git-tools` (cmd-k) opens a copy with no view. No single app command both

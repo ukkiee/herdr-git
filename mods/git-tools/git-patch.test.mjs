@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
 import { makeGit } from "./git.js";
 import { createPatch } from "./git-revision.js";
-import { changesCommit, readPatchFiles, applyPatch } from "./git-patch.js";
+import { changesCommit, readPatchFiles, applyPatch, READ_LIMIT, readMayBeCut, homePath } from "./git-patch.js";
 
 const env = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", GIT_EDITOR: "true" };
 const exec = (cmd, args = [], { cwd } = {}) => new Promise((resolve, reject) => {
@@ -236,11 +236,81 @@ const unmerged = (repo) => [...new Set(run(repo, ["ls-files", "-u", "-z"]).split
 // Every file checked.
 {
   const { repo, file } = patched("apply-all");
-  const r = await applyPatch(git, repo, { file, paths: ["[x] *.txt", "a.txt", "add.txt", "b.txt", "gone.txt", "new.txt", "x b.txt"], every: true });
+  const r = await applyPatch(git, repo, { file, paths: ["[x] *.txt", "a.txt", "add.txt", "b.txt", "gone.txt", "new.txt", "x b.txt"] });
   assert.equal(r.ok, true, r.err);
   assert.equal(read(repo, "b.txt"), "b patched\n");
   assert.equal(read(repo, "x b.txt"), "xb patched\n2\n3\n4\n5\n6\n");
   assert.equal(read(repo, "add.txt"), "new\n");
+}
+
+// The dialog's read: a patch read up to READ_LIMIT bytes may be cut short, counted in
+// UTF-8 bytes (a Korean line takes three per character), not in characters.
+{
+  assert.equal(READ_LIMIT, 1024 * 1024);
+  assert.equal(readMayBeCut("a".repeat(READ_LIMIT - 10)), false);
+  assert.equal(readMayBeCut("a".repeat(READ_LIMIT)), true);
+  const korean = "가".repeat(Math.ceil(READ_LIMIT / 3));
+  assert.ok(korean.length < READ_LIMIT);
+  assert.equal(readMayBeCut(korean), true);
+  assert.equal(readMayBeCut("가".repeat(1000)), false);
+}
+
+// A typed "~" path is the home folder of the machine the patch is on.
+{
+  assert.equal(homePath("~/p/x.patch", "/home/me"), "/home/me/p/x.patch");
+  assert.equal(homePath("~", "/home/me/"), "/home/me");
+  assert.equal(homePath("/abs/x.patch", "/home/me"), "/abs/x.patch");
+  assert.equal(homePath("~other/x.patch", "/home/me"), "~other/x.patch");
+  // No home known: left as typed (the read then fails with git's or the reader's words).
+  assert.equal(homePath("~/x.patch", ""), "~/x.patch");
+}
+
+// Only the files named go in, even when they are every file the dialog listed: a file
+// git reads in the patch that the list missed (read differently, or past a cut read)
+// stays as it was.
+{
+  const { repo, file } = patched("apply-listed-only");
+  const r = await applyPatch(git, repo, { file, paths: ["a.txt", "add.txt"] });
+  assert.equal(r.ok, true, r.err);
+  assert.equal(read(repo, "a.txt"), "1\n2 patched\n3\n4\n5\n6\n7\n8\n");
+  assert.equal(read(repo, "add.txt"), "new\n");
+  assert.equal(read(repo, "b.txt"), "b\n");
+  assert.equal(read(repo, "gone.txt"), "bye\n");
+}
+
+// More files than one command takes: the list goes in parts, as it is and with the 3-way
+// merge, and every part lands (a conflict in one part doesn't stop the next).
+{
+  const names = Array.from({ length: 1500 }, (_, i) => `many/f${String(i).padStart(4, "0")}.txt`);
+  // A patch made on a copy: a.txt's line 2 changed, and the many new files.
+  const manyPatch = (name) => {
+    const { repo } = patched(name);
+    const other = `${repo}-many`;
+    run(base, ["clone", "-q", repo, other]);
+    write(other, "a.txt", "1\n2 patched\n3\n4\n5\n6\n7\n8\n");
+    for (const n of names) write(other, n, `${n}\n`);
+    run(other, ["add", "-A"]);
+    const file = `${base}/${name}-many.patch`;
+    writeFileSync(file, run(other, ["diff", "--cached", "--no-color"]));
+    return { repo, file };
+  };
+  const { repo, file } = manyPatch("apply-many");
+  const r = await applyPatch(git, repo, { file, paths: ["a.txt", ...names] });
+  assert.equal(r.ok, true, r.err);
+  assert.equal(r.threeWay, false);
+  assert.equal(read(repo, "a.txt"), "1\n2 patched\n3\n4\n5\n6\n7\n8\n");
+  assert.equal(read(repo, names[0]), `${names[0]}\n`);
+  assert.equal(read(repo, names[1499]), `${names[1499]}\n`);
+
+  // a.txt changed on both sides: it stays in conflict, and the files after it still land.
+  const { repo: clash, file: clashFile } = manyPatch("apply-many-3way");
+  write(clash, "a.txt", "1\n2 here\n3\n4\n5\n6\n7\n8\n");
+  commit(clash, "diverge");
+  const merged = await applyPatch(git, clash, { file: clashFile, paths: ["a.txt", ...names] });
+  assert.equal(merged.ok, true, merged.err);
+  assert.equal(merged.threeWay, true);
+  assert.deepEqual(merged.conflicts, ["a.txt"]);
+  assert.equal(read(clash, names[1499]), `${names[1499]}\n`);
 }
 
 // A patch that doesn't fit as it is: applied again with a 3-way merge. Lines changed on
@@ -294,7 +364,7 @@ const unmerged = (repo) => [...new Set(run(repo, ["ls-files", "-u", "-z"]).split
   assert.equal(none.msg.key, "patch.noFiles");
   writeFileSync(`${base}/not.patch`, "hello world\n");
   for (const bad of [`${base}/not.patch`, `${base}/missing.patch`]) {
-    const r = await applyPatch(git, repo, { file: bad, paths: ["a.txt"], every: true });
+    const r = await applyPatch(git, repo, { file: bad, paths: ["a.txt"] });
     assert.equal(r.ok, false, bad);
     assert.ok(r.err);
   }

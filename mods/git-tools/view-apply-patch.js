@@ -14,16 +14,14 @@
 
 import { div } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input } from "gpui-base";
-import { exec, theme, notify, readTextFile, pickFolder, appHome } from "herdr";
-import { readPatchFiles, applyPatch } from "./git-patch.js";
+import { exec, theme, notify, readTextFile, pickFolder, appHome, home } from "herdr";
+import { readPatchFiles, applyPatch, readMayBeCut, homePath } from "./git-patch.js";
 import { stageText, dropStaged, isStaged } from "./git-conflict.js";
 import { openConflicts } from "./view-conflicts.js";
 import { CheckedFiles } from "./view-create-patch.js";
 import { openDialog, dialogFrame, button, iconButton, notice, errorStrip, close, askOwner, writeBlock, sentence } from "./ui.js";
 
 const strings = (value) => (Array.isArray(value) ? value.filter((v) => typeof v === "string" && v) : []);
-// readTextFile reads at most this much: a longer patch would list only some of its files.
-const READ_LIMIT = 1024 * 1024;
 // Typing the path reads the file once the typing stops this long.
 const SETTLE = 350;
 // This computer's staged files go in the app's own folder (as the Merge Revisions dialog's).
@@ -36,7 +34,7 @@ export function openApplyPatch(panel, repo, who, { clipboard = false } = {}) {
   openDialog("apply-patch", { root: repo.root, on: repo.on ?? null, owner: panel.bus.id, who, clipboard, lang: panel.lang }, { width: 600, height: clipboard ? 460 : 500 });
 }
 
-// The panel's side of "patch-apply" { file, staged, paths, every, who }. A staged file
+// The panel's side of "patch-apply" { file, staged, paths, who }. A staged file
 // (the clipboard's text) is removed after; a request naming any other file as staged is
 // refused. Lines left in conflict open the Conflicts dialog, owned by this panel.
 export async function runPatchApply(git, root, args, panel) {
@@ -44,7 +42,7 @@ export async function runPatchApply(git, root, args, panel) {
   const staged = args.staged === true;
   if (staged && !isStaged(file)) return { ok: false, code: -1, out: "", err: "Enter the patch file's path.", msg: { key: "patch.noFile", args: {} } };
   let r;
-  try { r = await applyPatch(git, root, { file, paths: strings(args.paths), every: args.every === true }); }
+  try { r = await applyPatch(git, root, { file, paths: strings(args.paths) }); }
   finally { if (staged) await dropStaged(exec, on, file); }
   if (r.conflicts.length) openConflicts({ root, on, owner: panel.bus.id, lang: panel.lang, who: typeof args.who === "string" ? args.who : "ui.commitPanel" });
   else if (r.ok && r.threeWay) notify({ title: panel.t("patch.appliedThreeWay"), level: "info" });
@@ -89,10 +87,22 @@ export default class ApplyPatchView {
     this.tree.set(r.files);
   }
 
-  path() {
+  // The typed path as the reader and git take it: relative to the repository, and "~" as
+  // the home folder of the machine the patch is on.
+  async path() {
     const typed = this.pathInput?.value().trim() ?? "";
     if (!typed) return "";
+    if (typed === "~" || typed.startsWith("~/")) return homePath(typed, await this.homeFolder());
     return typed.startsWith("/") || typed.startsWith("~") ? typed : `${this.root.replace(/\/+$/, "")}/${typed}`;
+  }
+
+  // Asked once; "" when it can't be known (the "~" path then stays as typed and fails to read).
+  async homeFolder() {
+    if (this.home === undefined) {
+      try { this.home = this.on ? (await exec("printenv", ["HOME"], { on: this.on })).stdout?.trim() ?? "" : String(await home() ?? ""); }
+      catch { this.home = ""; }
+    }
+    return this.home;
   }
 
   // Reads the typed file when the typing has stopped.
@@ -102,16 +112,17 @@ export default class ApplyPatchView {
   }
 
   load(cx) {
-    const file = this.path(), seq = ++this.seq;
-    if (!file) { this.text = null; this.problem = null; this.tree.set([]); cx.notify(); return; }
+    const seq = ++this.seq;
+    if (!this.pathInput?.value().trim()) { this.text = null; this.problem = null; this.tree.set([]); cx.notify(); return; }
     this.reading = true;
     cx.notify();
     cx.spawn(async (cx) => {
+      const file = await this.path();
       let text = null, why = null;
       try { text = await readTextFile(file, { on: this.on }); } catch (error) { why = String(error?.message ?? error); }
       if (seq !== this.seq) return;
       this.reading = false;
-      if (typeof text === "string" && text.length >= READ_LIMIT) why = this.t("patch.tooLarge");
+      if (typeof text === "string" && readMayBeCut(text)) why = this.t("patch.tooLarge");
       if (why !== null || typeof text !== "string") {
         this.text = null; this.tree.set([]);
         this.problem = this.t("patch.cantRead", { file, why: why ?? "" });
@@ -138,7 +149,7 @@ export default class ApplyPatchView {
   confirm(cx) {
     if (!this.ready()) return;
     const chosen = this.tree.chosen();
-    const args = { root: this.root, on: this.on, paths: chosen.map((f) => f.path), every: chosen.length === this.tree.files.length, who: this.who };
+    const args = { root: this.root, on: this.on, paths: chosen.map((f) => f.path), who: this.who };
     this.running = true; this.error = null;
     cx.notify();
     cx.spawn(async (cx) => {
@@ -146,7 +157,7 @@ export default class ApplyPatchView {
         const staged = await stageText(exec, this.on, this.text, { dir: this.on ? null : `${appHome()}/${STAGE_DIR}` });
         if (!staged.ok) { this.running = false; this.error = staged.err || this.t("ui.gitFailed"); cx.notify(); return; }
         args.file = staged.file; args.staged = true;
-      } else args.file = this.path();
+      } else args.file = await this.path();
       askOwner(this, "patch-apply", args, this.who, cx, (r) => {
         this.running = false;
         // Nobody took it: the staged file is this dialog's to remove.

@@ -130,6 +130,31 @@ export function readPatchFiles(text) {
 
 // ---- Apply Patch
 
+// The most of a patch file the Apply Patch dialog reads (readTextFile's limit, in bytes).
+export const READ_LIMIT = 1024 * 1024;
+
+// readMayBeCut(text) → whether `text`, as readTextFile gave it, may be only the start of a
+// longer file. Counted in UTF-8 bytes (no TextEncoder: the app's runtime may lack it),
+// with room for one character cut in two at the end.
+export function readMayBeCut(text) {
+  let n = 0;
+  for (const ch of text) {
+    const c = ch.codePointAt(0);
+    n += c < 0x80 ? 1 : c < 0x800 ? 2 : c < 0x10000 ? 3 : 4;
+    if (n >= READ_LIMIT - 3) return true;
+  }
+  return false;
+}
+
+// homePath(typed, home) → the path with a leading "~" (alone or before "/") as `home`,
+// the home folder of the machine the file is on. git and the reader run without a
+// shell, so nothing else would expand it. "~name" and other paths are left as typed.
+export function homePath(typed, home) {
+  if (!home || !(typed === "~" || typed.startsWith("~/"))) return typed;
+  const top = home.replace(/\/+$/, "");
+  return typed === "~" ? top || "/" : `${top}${typed.slice(1)}`;
+}
+
 // A name as a git apply --include pattern that matches that file only.
 const literal = (path) => path.replace(/[\\*?[]/g, (ch) => `\\${ch}`);
 // A big patch on another machine outlasts exec's default 30 s.
@@ -147,36 +172,51 @@ async function unmerged(git, root) {
   return { ok: true, paths };
 }
 
-// applyPatch(git, root, { file, paths, every? }) → { ok, code, out, err, msg?, threeWay, conflicts, changed }
+// applyPatch(git, root, { file, paths }) → { ok, code, out, err, msg?, threeWay, conflicts, changed }
 //   Applies the patch in `file` (a path on the repository's machine) to the working tree,
-//   only its files named in `paths` (as readPatchFiles names them). every: they are all
-//   of the patch's files (no list goes to git then).
+//   only its files named in `paths` (as readPatchFiles names them). They are always named
+//   to git, even when they are every file the dialog listed: a file git reads that the
+//   list missed stays out. A long list goes in parts (chunks), one git apply each.
 //   When it fits as it is, only the working tree changes. When it doesn't, it is applied
 //   again as a 3-way merge, which git does on the index too: lines changed on one side
 //   only merge, and lines changed on both stay in a conflict in the index (conflicts:
 //   those paths, for the Conflicts dialog; ok is still true, msg patch.appliedConflicts).
-//   threeWay: the 3-way merge applied it. A refusal (git's words, ok false) changes nothing.
+//   threeWay: the 3-way merge applied it. A refusal (git's words, ok false) changes
+//   nothing when the list is one part; a part refused after others leaves those applied.
 //   Which way it went is read from the index's conflicts, never from git's words.
-export async function applyPatch(git, root, { file, paths = [], every = false } = {}) {
+export async function applyPatch(git, root, { file, paths = [] } = {}) {
   const out = (r, more) => ({ ok: r.ok, code: r.code, out: r.out ?? "", err: r.err ?? "", ...(r.msg ? { msg: r.msg } : {}), threeWay: false, conflicts: [], changed: false, ...more });
   const list = paths.filter((path) => typeof path === "string" && path);
   if (!list.length) return out(refuse("No files are checked.", { key: "patch.noFiles", args: {} }));
   if (typeof file !== "string" || !file) return out(refuse("Enter the patch file's path.", { key: "patch.noFile", args: {} }));
-  const pick = every ? [] : list.map((path) => `--include=${literal(path)}`);
-  const check = await git.read(root, ["apply", "--check", ...pick, "--", file], { timeout: TIMEOUT });
+  // "--include=" and an escape before each special character: at most twice the path.
+  const parts = chunks(list, (path) => path.length * 6 + 11);
+  const apply = (run, more, part) => run(root, ["apply", ...more, ...part.map((path) => `--include=${literal(path)}`), "--", file], { timeout: TIMEOUT });
+  let check;
+  for (const part of parts) { check = await apply(git.read, ["--check"], part); if (!check.ok) break; }
   if (check.ok) {
-    const r = await git(root, ["apply", ...pick, "--", file], { timeout: TIMEOUT });
+    let r;
+    for (const part of parts) { r = await apply(git, [], part); if (!r.ok) break; }
     return out({ ...r, ...(r.ok ? { msg: { key: "patch.applied", args: {} } } : {}) }, { changed: true });
   }
   // git can't even read it: no 3-way would.
   if (check.code > 1) return out(check);
   const before = await unmerged(git, root);
   if (!before.ok) return out(before);
-  const r = await git(root, ["apply", "--3way", ...pick, "--", file], { timeout: TIMEOUT });
-  if (r.ok) return out({ ...r, msg: { key: "patch.appliedThreeWay", args: {} } }, { threeWay: true, changed: true });
-  const after = await unmerged(git, root);
-  const was = new Set(before.paths), conflicts = after.ok ? after.paths.filter((path) => !was.has(path)) : [];
-  if (!conflicts.length) return out({ ...r, err: r.err || check.err }, { changed: true });
+  // A part that fails leaving new conflicts was applied (its conflicts kept); one that
+  // fails without any was refused, and the parts after it aren't tried.
+  const seen = new Set(before.paths), conflicts = [];
+  let r, refused = null;
+  for (const part of parts) {
+    r = await apply(git, ["--3way"], part);
+    if (r.ok) continue;
+    const now = await unmerged(git, root);
+    const fresh = now.ok ? now.paths.filter((path) => !seen.has(path)) : [];
+    if (!fresh.length) { refused = r; break; }
+    for (const path of fresh) { seen.add(path); conflicts.push(path); }
+  }
+  if (refused) return out({ ...refused, err: refused.err || check.err }, { changed: true, threeWay: conflicts.length > 0, conflicts });
+  if (!conflicts.length) return out({ ...r, msg: { key: "patch.appliedThreeWay", args: {} } }, { threeWay: true, changed: true });
   const n = conflicts.length;
   return out({ ...r, ok: true, err: "", msg: { key: "patch.appliedConflicts", args: { n } } }, { threeWay: true, conflicts, changed: true });
 }

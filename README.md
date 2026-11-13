@@ -310,7 +310,7 @@ restored after that). `git config --remove-section gittools` drops the favorites
   path, or pick its folder with 📁 in a space on this computer. A patch file over 1 MiB
   is refused. Create Patch and Apply Patch have no diff pane.
 - Apply Patch applies a long file list in parts: over 1,000 files, or paths that add up
-  past 60,000 when each counts as six times its length plus 11 (with English names, about
+  past 60,000 when each counts as 6 times its length plus 11 (with English names, about
   10,000 characters of names). When git refuses a later part, the parts before it stay
   applied.
 - The panels follow a git-tools tab's repository only once that tab has recorded itself

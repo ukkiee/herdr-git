@@ -303,9 +303,13 @@ restored after that). `git config --remove-section gittools` drops the favorites
   widget cuts a branch name that would make it wider than 360px.
 - After editing the message at a stopped squash or fixup, when another squash follows
   right after it, the message you wrote also stands in for that next commit's message.
+- At a rebase stopped for editing, when you made more commits on top and then edit the
+  message and Continue, git's own Continue runs and the message you wrote isn't used.
 - Apply Patch has no file picker (Herdr offers a folder picker only): type the patch's
   path, or pick its folder with 📁 in a space on this computer. A patch file over 1 MiB
   is refused. Create Patch and Apply Patch have no diff pane.
+- Apply Patch applies a very long file list in parts (over 1,000 files, or a command line
+  of about 60 KB). When git refuses a later part, the parts before it stay applied.
 - The panels follow a git-tools tab's repository only once that tab has recorded itself
   (when it opens, or when it gets the focus); until then they follow the space's folder.
 - The Merge Revisions dialog's middle pane is drawn, not an editor with colored lines: to

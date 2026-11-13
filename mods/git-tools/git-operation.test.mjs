@@ -197,6 +197,32 @@ git checkout -q a`);
   assert.equal(here.branch, "main");
 }
 
+// What a merge merges in is named as the person chose it, and what a rebase goes onto by
+// its local branch first, even when a remote branch and a tag sit on the same commit.
+{
+  const twins = (name) => {
+    const repo = init(name);
+    sh(repo, "git update-ref refs/remotes/origin/side side && git tag aa-side side && git update-ref refs/remotes/origin/main main && git tag aa-main main");
+    return repo;
+  };
+  const local = twins("target-local");
+  start(local, "git merge side");
+  assert.equal((await quietly(local)).target, "side");
+  const remote = twins("target-remote");
+  start(remote, "git merge origin/side");
+  assert.equal((await quietly(remote)).target, "origin/side");
+  const tag = twins("target-tag");
+  start(tag, "git merge aa-side");
+  assert.equal((await quietly(tag)).target, "aa-side");
+  // Merged by its hash: the commit's local branch.
+  const byHash = twins("target-hash");
+  start(byHash, `git merge ${hash(byHash, "side")}`);
+  assert.equal((await quietly(byHash)).target, "side");
+  const rebase = twins("target-rebase");
+  start(rebase, "git checkout -q side && git rebase main");
+  assert.equal((await quietly(rebase)).target, "main");
+}
+
 // The name the VCS widget and the Commit panel give an operation in progress: the branch
 // it happens on (a rebase: the branch it rewrites), in both languages.
 {

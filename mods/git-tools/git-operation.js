@@ -44,8 +44,9 @@ const NONE = { kind: null, branch: null, target: null, rebasing: null, current: 
 //     A stash pop or apply that conflicted leaves no operation: kind null with conflicts.
 //   head: the commit HEAD is on (null without commits).
 //   branch: the branch HEAD is on, null on a detached HEAD (a rebase always runs on one).
-//   target: what a merge merges in, or what a rebase goes onto: a branch or tag name
-//     pointing at that commit, else its short hash.
+//   target: what a merge merges in, or what a rebase goes onto. A merge's is the name it
+//     was asked for ("feature", "origin/feature"); else a branch, remote branch or tag
+//     pointing at that commit, in that order, else its short hash.
 //   rebasing: the branch a rebase rewrites (null when it started on a detached HEAD).
 //   current: { hash, subject, author } of the commit being merged, picked, reverted or
 //     replayed, or null (a sequence stopped between commits).
@@ -87,7 +88,8 @@ export async function readOperation(git, root, { status } = {}) {
   const targetHash = kind === "merge" ? currentHash : rebase ? first(`${rebase}/onto`) || null : null;
   const known = await describe(git, root, [currentHash, targetHash].filter(Boolean));
   const current = currentHash && known.get(currentHash) ? { hash: currentHash, ...known.get(currentHash).who } : null;
-  const target = targetHash ? known.get(targetHash)?.name ?? targetHash.slice(0, 7) : null;
+  const named = kind === "merge" ? mergedName(files.read.get("MERGE_MSG")) : null;
+  const target = named ?? (targetHash ? known.get(targetHash)?.name ?? targetHash.slice(0, 7) : null);
   const headName = rebase ? first(`${rebase}/head-name`) : "";
   const step = !rebase ? null
     : rebase === "rebase-merge" ? { n: Number(first("rebase-merge/msgnum")) || 0, total: Number(first("rebase-merge/end")) || 0 }
@@ -146,20 +148,37 @@ async function readStateFiles(git, root) {
 }
 
 // The commits by hash: Map(hash → { who: { subject, author }, name, message }). name: a
-// branch, remote branch or tag on it (local first), or undefined.
+// branch, remote branch or tag on it, in that order, or undefined. git lists a commit's
+// refs in no such order (tags and remote branches may come first), so the full names
+// are read and sorted here.
+const REF_ORDER = [["refs/heads/", 0], ["refs/remotes/", 1], ["refs/tags/", 2]];
 async function describe(git, root, hashes) {
   const out = new Map();
   if (!hashes.length) return out;
-  const r = await git.read(root, ["log", "--no-walk=unsorted", "-z", "--decorate-refs=refs/heads/", "--decorate-refs=refs/remotes/", "--decorate-refs=refs/tags/",
+  const r = await git.read(root, ["log", "--no-walk=unsorted", "-z", "--decorate=full", "--decorate-refs=refs/heads/", "--decorate-refs=refs/remotes/", "--decorate-refs=refs/tags/",
     "--format=%H%x1f%s%x1f%an%x1f%D%x1f%B", ...new Set(hashes), "--"]);
   if (!r.ok) return out;
   for (const record of r.out.split("\0")) {
     const [hash, subject, author, refs, body] = record.split("\x1f");
     if (!hash) continue;
-    const names = (refs ?? "").split(", ").map((ref) => ref.replace(/^HEAD -> /, "").replace(/^tag: /, "")).filter((ref) => ref && ref !== "HEAD");
-    out.set(hash.trim(), { who: { subject: subject ?? "", author: author ?? "" }, name: names[0], message: (body ?? "").replace(/\s+$/, "") });
+    const names = (refs ?? "").split(", ")
+      .map((ref) => ref.replace(/^HEAD -> /, "").replace(/^tag: /, ""))
+      .map((ref) => { const kind = REF_ORDER.find(([prefix]) => ref.startsWith(prefix)); return kind ? { rank: kind[1], name: ref.slice(kind[0].length) } : null; })
+      .filter(Boolean)
+      .sort((a, b) => a.rank - b.rank);
+    out.set(hash.trim(), { who: { subject: subject ?? "", author: author ?? "" }, name: names[0]?.name, message: (body ?? "").replace(/\s+$/, "") });
   }
   return out;
+}
+
+// What a merge merges in, as the person named it: git's message starts "Merge branch
+// 'feature'", "Merge remote-tracking branch 'origin/feature'" or "Merge tag 'v1'" (in
+// English whatever the language: it is the commit message), followed by " into side"
+// off the main branch. A commit merged by its hash, several branches at once or a
+// message given with -m say no name: null.
+function mergedName(lines = []) {
+  const m = /^Merge (?:branch|remote-tracking branch|tag) '([^']+)'/.exec(lines[0] ?? "");
+  return m ? m[1] : null;
 }
 
 // operationName(op, { step }?) → { key, args } for t(), or null when nothing is in

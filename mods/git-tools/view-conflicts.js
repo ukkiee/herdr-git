@@ -19,7 +19,7 @@ import { exec, theme, readTextFile, writeTextFile } from "herdr";
 import { makeGit } from "./git.js";
 import { readOperation } from "./git-operation.js";
 import { readVersions, remoteWriter } from "./git-conflict.js";
-import { heading, columns, sortFiles, controls, pick, editedSince, stoppedOnConflicts } from "./conflicts-model.js";
+import { heading, columns, sortFiles, controls, pick, editedSince, editedAmong, stoppedOnConflicts } from "./conflicts-model.js";
 import { openDialog, dialogFrame, button, close, askOwner, writeBlock, scrollText, sentence, openMenu, uiGlyph, fileGlyph, darkLook, WindowedList, ROW } from "./ui.js";
 
 // The dialog's size; the Commit panel's "Resolve" link opens it the same size.
@@ -56,6 +56,9 @@ export function openConflictsIfStopped(result, args) {
 // parts with sh there (git-conflict.js remoteWriter), as exec has no stdin.
 // writeTextFile replaces only the text it is shown, and readTextFile reads at most 1 MiB:
 // a file it can't read is written the other machines' way, with this computer's sh.
+// readerOn(on) → read(absolutePath): a file's text on the space's machine (readTextFile).
+export const readerOn = (on) => (path) => readTextFile(path, { on });
+
 export function writerOn(on) {
   if (on) return remoteWriter(exec, on);
   return async (path, text) => {
@@ -88,6 +91,7 @@ export default class ConflictsView {
     this.note = null;
     this.running = null; // "simple" while Resolve All Simple Conflicts runs
     this.simpleFrom = null; // unresolved files before it ran, until the next read
+    this.simpleKept = 0; // files it left because they were edited by hand
     this.reading = false;
     this.turn = 0;
     this.handle = cx.focus_handle();
@@ -123,8 +127,10 @@ export default class ConflictsView {
       this.loaded = true;
       // Resolve All Simple Conflicts that left every file as it was says so.
       if (this.simpleFrom !== null) {
-        if (sorted.unresolved.length === this.simpleFrom) this.note = this.t("conflicts.noneSimple");
+        if (this.simpleKept > 0) this.note = this.t("conflicts.simpleKept", { n: this.simpleKept });
+        else if (sorted.unresolved.length === this.simpleFrom) this.note = this.t("conflicts.noneSimple");
         this.simpleFrom = null;
+        this.simpleKept = 0;
       }
       cx.notify();
     });
@@ -172,13 +178,21 @@ export default class ConflictsView {
     this.ask("conflicts-accept", { path, side: this.cols[column].side }, cx);
   }
 
+  // The panel leaves a file edited by hand as it is; the answer carries no list, so the
+  // files edited are found here first to say how many were left.
   resolveSimple(cx) {
     if (!this.can().resolveSimple) return;
-    const before = this.files.unresolved.length;
-    this.running = "simple";
-    this.ask("conflicts-resolve-simple", { paths: this.files.unresolved.map((f) => f.path) }, cx, (r) => {
-      // The answer carries no list: the files read again (load) tell whether any was simple.
-      this.simpleFrom = r.ok ? before : null;
+    const before = this.files.unresolved.length, paths = this.files.unresolved.map((f) => f.path);
+    this.running = "simple"; this.checking = true;
+    cx.notify();
+    cx.spawn(async (cx) => {
+      const kept = await editedAmong(this.git, this.root, paths, readerOn(this.on));
+      this.checking = false;
+      this.ask("conflicts-resolve-simple", { paths }, cx, (r) => {
+        // The files read again (load) tell whether any was simple.
+        this.simpleFrom = r.ok ? before : null;
+        this.simpleKept = r.ok ? kept.length : 0;
+      });
     });
   }
 

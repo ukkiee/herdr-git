@@ -7,7 +7,7 @@
 // its own language) or { text } for what is shown as it is (a commit's subject).
 
 import { merge } from "./merge-chunks.js";
-import { acceptSide, unresolve, resolveSimpleAll } from "./git-conflict.js";
+import { acceptSide, unresolve, resolveSimpleAll, readVersions } from "./git-conflict.js";
 
 // A commit as the heading names it.
 const short = (hash) => String(hash ?? "").slice(0, 8);
@@ -150,6 +150,17 @@ export function editedSince(v) {
   return !(sameText(sides.ours, mergedTo(state, "ours")) && sameText(sides.theirs, mergedTo(state, "theirs")));
 }
 
+// editedAmong(git, root, paths, read) → the paths of `paths` edited since git left them
+// (editedSince; the disk read with `read`). A file whose versions can't be read is left out.
+export async function editedAmong(git, root, paths, read) {
+  const out = [];
+  for (const path of paths) {
+    const v = await readVersions(git, root, path, { read });
+    if (v.ok && editedSince(v)) out.push(path);
+  }
+  return out;
+}
+
 // stoppedOnConflicts(result) → true when a request (git-operation.js runOperation, or one
 // that starts an operation) stopped with files in conflict: the screen that ran it opens
 // the Conflicts dialog. A stop without conflicts (a rebase's edit) doesn't open it.
@@ -176,11 +187,15 @@ export function unresolveRequest(git, root, args) {
   return path ? unresolve(git, root, path) : badRequest();
 }
 
-// resolveSimpleRequest(git, root, { paths? }, write) → resolveSimpleAll's result, over the
-// paths given (the unresolved files the dialog shows), or every conflicted file.
-export function resolveSimpleRequest(git, root, args, write) {
+// resolveSimpleRequest(git, root, { paths? }, write, read) → resolveSimpleAll's result, over
+// the paths given (the unresolved files the dialog shows), or every conflicted file. A file
+// edited since git left it (editedSince, the disk read with `read`) is left as it is and
+// listed in `kept`: what the person wrote is never written over. A file that can't be read
+// counts as edited.
+export function resolveSimpleRequest(git, root, args, write, read) {
   const paths = Array.isArray(args?.paths) ? args.paths.filter((p) => typeof p === "string" && p) : undefined;
-  return resolveSimpleAll(git, root, { write, paths });
+  const reader = typeof read === "function" ? read : async () => null;
+  return resolveSimpleAll(git, root, { write, paths, read: reader, keep: editedSince });
 }
 
 // pick(files, selected) → the path to select: `selected` while it is shown, else the first

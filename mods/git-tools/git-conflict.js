@@ -143,7 +143,9 @@ export async function unresolve(git, root, path) {
 // conflicts on different lines. Files with a real conflict, a deleted side or that can't
 // be shown as text are left as they are. A save that fails stops nothing: the file is
 // left, and the first failure is the result's err and msg.
-export async function resolveSimpleAll(git, root, { write, paths } = {}) {
+// read, keep: with both, each file's versions are read with `read` (readVersions) and a
+// file `keep(versions)` says yes to is left as it is too, in `kept` as well as `left`.
+export async function resolveSimpleAll(git, root, { write, paths, read, keep } = {}) {
   let list = paths;
   if (!list) {
     const { r, entries } = await unmergedEntries(git, root);
@@ -151,20 +153,22 @@ export async function resolveSimpleAll(git, root, { write, paths } = {}) {
     list = Object.keys(entries);
   }
   list = [...new Set(list)].sort();
-  const done_ = [], left = [];
+  const done_ = [], left = [], kept = [];
+  const checking = typeof read === "function" && typeof keep === "function";
   let failure = null;
   for (const path of list) {
-    const v = await readVersions(git, root, path);
+    const v = await readVersions(git, root, path, checking ? { read } : {});
     if (!v.ok || v.binary || v.ours === null || v.theirs === null) { left.push(path); continue; }
     const state = resolveSimple(applyNonConflicting(merge(v.base ?? "", v.ours, v.theirs), "all"));
     if (!resolved(state)) { left.push(path); continue; }
+    if (checking && keep(v)) { left.push(path); kept.push(path); continue; }
     const saved = await saveResult(git, root, path, resultText(state), { write });
     if (saved.ok) done_.push(path);
     else { left.push(path); failure ??= saved; }
   }
   return failure
-    ? { ...failure, resolved: done_, left }
-    : done({ resolved: done_, left });
+    ? { ...failure, resolved: done_, left, kept }
+    : done({ resolved: done_, left, kept });
 }
 
 // The most text one remote call carries. Linux refuses a single argument over 128 KiB.

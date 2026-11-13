@@ -11,7 +11,7 @@ import { exec } from "herdr";
 import { makeGit } from "./git.js";
 import { serveRequest } from "./ui.js";
 import { acceptRequest, unresolveRequest, resolveSimpleRequest } from "./conflicts-model.js";
-import { writerOn } from "./view-conflicts.js";
+import { writerOn, readerOn } from "./view-conflicts.js";
 import { runReset } from "./view-reset.js";
 import { applySnapshot } from "./git-snapshot.js";
 import { createPatch } from "./git-revision.js";
@@ -37,7 +37,7 @@ const text = (value) => (typeof value === "string" && value ? value : null);
 export const SERVE_ACTIONS = {
   "conflicts-accept": { work: "conflicts.accepting", run: (git, root, args) => acceptRequest(git, root, args) },
   "conflicts-unresolve": { work: "conflicts.unresolving", run: (git, root, args) => unresolveRequest(git, root, args) },
-  "conflicts-resolve-simple": { work: "conflicts.resolvingSimple", run: (git, root, args) => resolveSimpleRequest(git, root, args, writerOn(typeof args.on === "string" ? args.on : null)) },
+  "conflicts-resolve-simple": { work: "conflicts.resolvingSimple", run: (git, root, args) => resolveSimpleRequest(git, root, args, writerOn(typeof args.on === "string" ? args.on : null), readerOn(typeof args.on === "string" ? args.on : null)) },
   "reset": { work: "reset.running", run: (git, root, args, panel) => runReset(git, root, args, panel) },
   "restore-3way": { work: "restore.running", run: (git, root, args) => applySnapshot(git, root, { snapshot: typeof args.snapshot === "string" ? args.snapshot : "" }) },
   "patch-create": { work: "revision.creating", run: (git, root, args) => (text(args.file)

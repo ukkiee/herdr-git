@@ -5,7 +5,7 @@ import { execFile, execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
-import { heading, columns, sortFiles, controls, pick, editedSince, stoppedOnConflicts, acceptRequest, unresolveRequest, resolveSimpleRequest } from "./conflicts-model.js";
+import { heading, columns, sortFiles, controls, pick, editedSince, editedAmong, stoppedOnConflicts, acceptRequest, unresolveRequest, resolveSimpleRequest } from "./conflicts-model.js";
 import { translator } from "./i18n.js";
 import { makeGit } from "./git.js";
 import { readVersions } from "./git-conflict.js";
@@ -288,6 +288,29 @@ const picked = { hash: "0acda529c3f0e1d2b3a4958677a8b9c0d1e2f3a4", subject: "fea
     assert.equal((await acceptRequest(git, merged, { path: "w", side: "yours" })).msg.key, "conflicts.unknownSide");
     assert.equal((await unresolveRequest(git, merged, null)).msg.key, "conflicts.badRequest");
     assert.notEqual(sh(merged, "git ls-files -u -- w"), "");
+  }
+
+  // Resolve All Simple Conflicts leaves a file the person already edited by hand as it is,
+  // in conflict, and says so (kept); the untouched simple one is resolved.
+  {
+    const repo = `${base}/simple-kept`;
+    mkdirSync(repo, { recursive: true });
+    sh(repo, "git init -q -b main && git config user.email t@t && git config user.name t");
+    for (const f of ["s1", "s2"]) put(repo, f, "1\n2\n3\n");
+    sh(repo, "git add -A && git commit -qm base && git checkout -qb feature");
+    for (const f of ["s1", "s2"]) put(repo, f, "1\nTWO\n3\n");
+    sh(repo, "git commit -qam feature && git checkout -q main");
+    for (const f of ["s1", "s2"]) put(repo, f, "ONE\n2\n3\n");
+    sh(repo, "git commit -qam main && (git merge feature >/dev/null 2>&1 || true)");
+    put(repo, "s2", "mine, by hand\n");
+    const read = async (p) => readFileSync(p, "utf8");
+    assert.deepEqual(await editedAmong(git, repo, ["s1", "s2"], read), ["s2"]);
+    const r = await resolveSimpleRequest(git, repo, { paths: ["s1", "s2"] }, async (p, text) => writeFileSync(p, text), read);
+    assert.equal(r.ok, true, r.err);
+    assert.deepEqual([r.resolved, r.kept], [["s1"], ["s2"]]);
+    assert.equal(readFileSync(`${repo}/s1`, "utf8"), "ONE\nTWO\n3\n");
+    assert.equal(readFileSync(`${repo}/s2`, "utf8"), "mine, by hand\n");
+    assert.notEqual(sh(repo, "git ls-files -u -- s2"), "");
   }
 
   assert.equal(stoppedOnConflicts({ ok: true, outcome: "stopped", operation: { kind: "rebase", conflicts: [] } }), false);

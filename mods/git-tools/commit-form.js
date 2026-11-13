@@ -282,7 +282,7 @@ export default class CommitForm {
 
   // The form while a target is set: its line with Cancel, the message for Squash Into, the
   // Force Push note for a pushed commit, and Commit and Rebase….
-  renderTarget(target, t, { spinning, elsewhere }) {
+  renderTarget(target, t, { spinning }) {
     const host = this.host, why = this.targetBlocked();
     return v_flex().id("commit-form").flex_none().w_full().min_w(0).border_t(1).border_color(t.border)
       .track_focus(this.handle)
@@ -301,9 +301,7 @@ export default class CommitForm {
             kind: "primary", disabled: Boolean(why), busy: spinning === "rebase",
             title: why ?? host.t("rewrite.commitAndRebaseTitle", { hash: target.commit.slice(0, SHORT) }),
             onClick: (_e, cx) => this.rebase(cx),
-          })))
-        .when(Boolean(elsewhere), (el) => el.child(
-          div().id("commit-form-running").w_full().min_w(0).text_size(12).text_color(t.muted).child(elsewhere ?? ""))))
+          }))))
       .when(Boolean(this.error), (el) => el.child(
         errorStrip("commit-form-error", this.error ?? "", t, (_e, cx) => { this.error = null; cx.notify(); })));
   }
@@ -428,13 +426,11 @@ export default class CommitForm {
       cx.timer.after(0, (cx) => { this.relabeling = false; this.relabel(cx); });
     }
     // This panel's commit on the shown repository shows as the spinner on the button that
-    // started it. Any other write that blocks this one is named under the buttons:
-    // another copy's here, this panel's on another repository, or this panel's that has
-    // no button here (a dialog's Push or Rollback).
+    // started it. Every write that blocks this one (that commit too) is named by the
+    // panel's progress strip under the form (view-commit.js).
     const writing = host.writeBlock(), spinning = this.running && writingOn(host, host.repo) ? this.running : null;
-    const elsewhere = writing && !spinning ? writing : null;
     const target = this.aimed();
-    if (target) return this.renderTarget(target, t, { spinning, elsewhere });
+    if (target) return this.renderTarget(target, t, { spinning });
     const canAmend = Boolean(host.hasHead) && !writing && !op;
     const why = this.blocked(), amending = this.amending();
     const whyNoAmend = canAmend ? null : !host.hasHead ? host.t("commit.noCommitsToAmend") : op ? host.t("ops.noAmend") : writing;
@@ -481,9 +477,7 @@ export default class CommitForm {
           .child(button("commit-run-push", host.t(amending ? "commit.amendCommitAndPush" : "commit.commitAndPush"), t, {
             disabled: Boolean(why), busy: spinning === "push", title: why ?? host.t(amending ? "commit.amendCommitAndPushTitle" : "commit.commitAndPushTitle"),
             onClick: (_e, cx) => this.run(true, cx),
-          })))
-        .when(Boolean(elsewhere), (el) => el.child(
-          div().id("commit-form-running").w_full().min_w(0).text_size(12).text_color(t.muted).child(elsewhere ?? ""))))
+          }))))
       .when(Boolean(this.error), (el) => el.child(
         errorStrip("commit-form-error", this.error ?? "", t, (_e, cx) => { this.error = null; cx.notify(); })));
   }

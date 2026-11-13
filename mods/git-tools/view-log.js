@@ -17,7 +17,7 @@ import { exec, theme, watchFolder } from "herdr";
 import { makeGit, repoRoot } from "./git.js";
 import { readRefsState, readGitDir, refsChanged, resolveCommit } from "./git-log.js";
 import { fetchAll, restoreBranch } from "./git-branch.js";
-import { location, panelFrame, toolbar, spacer, iconButton, notice, notRepository, errorStrip, noteBar, sentence, toggleLogPanel, logPanelShown, broadcast, scriptedRepo, takeWrite, releaseWrite, writeBlock, writeName, writingOn, readBlocked, fromRepo, gitButtonPlaced, openMenu } from "./ui.js";
+import { location, panelFrame, toolbar, spacer, iconButton, notice, notRepository, errorStrip, noteBar, sentence, toggleLogPanel, logPanelShown, broadcast, scriptedRepo, takeWrite, releaseWrite, writeBlock, writeName, writingOn, readBlocked, fromRepo, gitButtonPlaced, openMenu, progressBar } from "./ui.js";
 import { sameRepo } from "./lock.js";
 import { serveBranch } from "./view-branch-new.js";
 import { serveDeletedBranches } from "./view-deleted-branches.js";
@@ -208,6 +208,7 @@ export default class LogView {
     this.detailsOf = ""; // the hashes Commit details was last told to show
     this.busy = null; // the work of the git write running now ({ key }, ui.js takeWrite)
     this.held = null; // the repository this panel's write lock is on (ui.js takeWrite)
+    this.progress = {}; // the progress strip's measured width (ui.js progressBar)
     this.error = null;
     this.writeError = null; // the strip's text when it came from a dialog's write
     // The branch deleted last, for the Restore notice: deleteBranch's `deleted` plus
@@ -739,7 +740,6 @@ export default class LogView {
 
   body(cx, t) {
     const c = this.columns(), loading = this.list.loading || this.resolving, writing = this.writeBlock();
-    const writeLabel = writeName(this, this.repo);
     this.listWidth = c.list;
     // A plain flex row: its children stretch to the panel's height.
     return div().id("log-columns").flex().flex_1().min_h(0).w_full()
@@ -758,13 +758,9 @@ export default class LogView {
         .child(toolbar(t)
           .when(this.drawsWidget(), (el) => el.child(div().id("log-vcs-widget").flex_none().max_w(260).min_w(0).child(this.widget.render(cx))))
           // The filter row keeps FILTERS_MIN while the column has it (what the toolbar's
-          // padding and three buttons leave, TOOLBAR_REST): the write's words below are
-          // cut short first, so the search box stays wide enough to read.
+          // padding and three buttons leave, TOOLBAR_REST), so the search box stays wide
+          // enough to read. A running write is named by the progress strip under the panel.
           .child(div().flex_1().min_w(Math.min(FILTERS_MIN, Math.max(0, c.list - TOOLBAR_REST))).h_full().child(this.filters.render(cx)))
-          // The running write's name first ("Committing…", "Checking out… (another repository)")
-          // so a cut keeps it; the full sentence is the tooltip.
-          .when(Boolean(writing), (el) => el.child(div().id("log-writing").flex_initial().min_w(0).max_w(320).truncate().px(6).text_size(12).text_color(t.muted)
-            .tooltip(writing ?? "").child(writeLabel ?? "")))
           .children(this.items("logTools", { writing, picked: this.picks.picked.size }).map((it) => this.toolButton(it, t, it.id === "log.refresh" && loading))))
         .child(div().flex_1().min_h(0).w_full().child(this.list.render(cx))))
       .when(c.showDetails, (el) => el
@@ -809,6 +805,8 @@ export default class LogView {
           .when(!this.fixed, (el) => el.child(iconButton("log-hide", "x", t, { title: this.t("log.hide"), onClick: () => toggleLogPanel() }))))
         .child(div().flex_1().min_h(0).child(this.notRepo ? notice(notRepository(this.folder, this.t), t) : !this.read ? notice(this.t("ui.loading"), t, { busy: true }) : notice("", t)));
     const gone = this.deleted && sameRepo(this.deleted.repo, this.repo) ? this.deleted : null;
+    // Any write on this repository (or this panel's elsewhere): its name over a moving bar.
+    const writing = this.repo ? this.writeBlock() : null;
     // The layout pads this block left and right only; the gap above is work-body's own
     // padding, the gap to the status bar is this one. A Log tab is padded by its pane.
     return div().id("log-root").size_full().min_h(0).when(!this.fixed, (el) => el.pb(8))
@@ -819,6 +817,7 @@ export default class LogView {
         this.width = width;
         cx.notify();
       })
-      .child(filled.when(Boolean(gone), (el) => el.child(this.deletedNote(gone, t))).when(Boolean(this.error), (el) => el.child(errorStrip("log-error", this.error ?? "", t, (_e, cx) => { this.error = null; cx.notify(); }))));
+      .child(filled.when(Boolean(writing), (el) => el.child(progressBar("log-progress", t, { label: writeName(this, this.repo), title: writing, state: this.progress })))
+        .when(Boolean(gone), (el) => el.child(this.deletedNote(gone, t))).when(Boolean(this.error), (el) => el.child(errorStrip("log-error", this.error ?? "", t, (_e, cx) => { this.error = null; cx.notify(); }))));
   }
 }

@@ -534,6 +534,27 @@ export function button(id, label, t, { kind = "plain", disabled = false, busy = 
     .on_click((e, cx) => { cx.stop_propagation(); onClick?.(e, cx); });
 }
 
+// progressBar(id, t, { label, title, state }) → the strip at the bottom of a panel while
+// a git write runs there: the write's name ("Updating…") over a bar that slides back and
+// forth, since how long a fetch or a pull takes isn't known. title: the tooltip (the
+// whole sentence when the name is cut). state: an object the screen keeps ({}), where the
+// strip remembers its measured width; the slide runs natively, render isn't called for it.
+const SLIDE = 1600;
+export function progressBar(id, t, { label, title, state }) {
+  const width = state?.width ?? 240, piece = Math.max(40, Math.round(width * 0.3));
+  return v_flex().id(id).flex_none().w_full().min_w(0).px(10).pt(6).pb(8).gap(5).border_t(1).border_color(t.border)
+    .when(Boolean(label), (el) => el.child(div().id(`${id}-label`).w_full().min_w(0).truncate().text_size(12).text_color(t.foreground)
+      .when(Boolean(title), (el) => el.tooltip(title ?? "")).child(label ?? "")))
+    .child(div().id(`${id}-track`).relative().w_full().h(4).rounded(2).bg(t.border).overflow_hidden()
+      .on_size_change((size, cx) => {
+        if (!state || size.width === state.width) return;
+        state.width = size.width;
+        cx.notify();
+      })
+      .child(div().absolute().top(0).h(4).w(piece).rounded(2).bg(t.accent)
+        .loop("left", { from: 0, to: Math.max(0, width - piece), period: SLIDE })));
+}
+
 // Centered words for an empty, loading or not-a-repository state. t: the theme.
 // "Loading…" is the shared loading word: it comes out in the screen's language whichever
 // way the screen spells it (the English word or t("ui.loading")).

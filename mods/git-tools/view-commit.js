@@ -29,7 +29,7 @@ import { readStatus } from "./git-status.js";
 import { readOperation } from "./git-operation.js";
 import { readLastCommit } from "./git-show.js";
 import { buildRows, checkState, toggleIncluded, keepIncluded, folderKeys, parentIndex } from "./tree.js";
-import { location, uiGlyph, ICON, fileGlyph, folderGlyph, darkLook, panelFrame, toolbar, spacer, iconButton, checkbox, row, notice, notRepository, errorStrip, noteBar, WindowedList, logPanelShown, toggleLogPanel, gitButtonPlaced, openMenu, openDialog, takeWrite, releaseWrite, writeBlock, readBlocked, sentence, copyId } from "./ui.js";
+import { location, uiGlyph, ICON, fileGlyph, folderGlyph, darkLook, panelFrame, toolbar, spacer, iconButton, checkbox, row, notice, notRepository, errorStrip, noteBar, WindowedList, logPanelShown, toggleLogPanel, gitButtonPlaced, openMenu, openDialog, takeWrite, releaseWrite, writeBlock, writeName, readBlocked, sentence, copyId, progressBar } from "./ui.js";
 import { sameRepo } from "./lock.js";
 import CommitForm from "./commit-form.js";
 import { openRollback, serveRollback } from "./view-rollback.js";
@@ -97,6 +97,7 @@ export default class CommitView {
     this.rows = []; this.checks = new Map();
     this.selected = null; this.at = -1;
     this.busy = null; this.held = null; // ui.js takeWrite
+    this.progress = {}; // the progress strip's measured width (ui.js progressBar)
     this.writeError = null;
     // The Rollback notice: { repo, snapshot, n }, or null (see rolledBack).
     this.note = null;
@@ -656,6 +657,7 @@ export default class CommitView {
       cx.timer.after(0, (cx) => { this.moving = false; if (this.waiting && !this.readBlocked()) this.refresh(cx); });
     }
     const t = theme(), shown = logPanelShown(), r = this.current();
+    const writing = this.repo ? this.writeBlock() : null;
     if (this.stashTab.showing()) return this.stashTab.render(cx, t);
     this.dark = darkLook();
     const note = this.note && sameRepo(this.note.repo, this.repo) ? this.note : null;
@@ -687,6 +689,8 @@ export default class CommitView {
         })
         .child(body))
       .when(Boolean(this.repo), (el) => el.child(this.form.render(cx)))
+      // Any write on this repository (or this panel's elsewhere): its name over a moving bar.
+      .when(Boolean(writing), (el) => el.child(progressBar("commit-progress", t, { label: writeName(this, this.repo), title: writing, state: this.progress })))
       .when(Boolean(note), (el) => el.child(noteBar("commit-note", this.t("restore.rolledBack", { n: note?.n ?? 0 }), t, {
         action: { label: this.t("restore.open"), onClick: (_e, cx) => { this.restore(note?.snapshot ?? null); cx.notify(); } },
         onDismiss: (_e, cx) => { this.note = null; cx.notify(); },

@@ -272,6 +272,45 @@ export async function dropCommits(git, root, { commits } = {}) {
   return replay(git, root, facts, (hashes) => hashes.map((hash) => ({ hash, action: gone.has(hash) ? "drop" : "pick" })));
 }
 
+// ---- Interactively Rebase from Here
+
+// readRebaseCommits(git, root, commit) → { ok, err, msg?, commits }
+//   What the Rebasing Commits dialog lists: `commit` (a full hash) and every commit after
+//   it up to HEAD, oldest first: [{ hash, subject, message (whole), author, time (unix
+//   seconds, authored) }]. Not checked against the edit check: interactiveRebase is.
+export async function readRebaseCommits(git, root, commit) {
+  if (!HASH.test(String(commit ?? ""))) return { ...unknown(commit ?? ""), commits: [] };
+  const parents = await git.read(root, ["rev-list", "--no-walk", "--parents", commit, "--"]);
+  if (!parents.ok) return { ...unknown(commit), commits: [] };
+  const isRoot = lines(parents.out)[0]?.split(" ").length === 1;
+  const r = await git.read(root, ["log", "--reverse", "--topo-order", "-z", "--format=%H%x1f%an%x1f%at%x1f%B", isRoot ? "HEAD" : `${commit}^..HEAD`, "--"]);
+  if (!r.ok) return { ...result(r), commits: [] };
+  const commits = r.out.split("\0").filter((rec) => rec.includes("\x1f")).map((rec) => {
+    const [hash, author, time, ...rest] = rec.split("\x1f");
+    const message = rest.join("\x1f").replace(/\n+$/, "");
+    return { hash: hash.trim(), subject: message.split("\n")[0], message, author, time: Number(time) };
+  });
+  return { ok: true, code: 0, out: "", err: "", commits };
+}
+
+// interactiveRebase(git, root, { commit, steps }) → a result
+//   Start Rebasing: replays the current branch from `commit` with steps (rebase-plan.js
+//   todoList), one for each commit readRebaseCommits listed, in the order to replay. A
+//   list that isn't those commits any more (the branch moved since the dialog read it)
+//   is refused. Every step a drop: the branch goes back to the commit before `commit`.
+//   A step `edit` stops the rebase there (outcome "stopped", a rebase in progress).
+export async function interactiveRebase(git, root, { commit, steps } = {}) {
+  const { no } = await checked(git, root, [commit], "interactiveRebase");
+  if (no) return no;
+  const list = Array.isArray(steps) ? steps : [];
+  const now = await readRebaseCommits(git, root, commit);
+  if (!now.ok) return { ...now, outcome: "failed", operation: null, changed: false };
+  const given = list.map((s) => s?.hash), there = now.commits.map((c) => c.hash);
+  const same = given.length === there.length && new Set(given).size === given.length && given.every((h) => there.includes(h));
+  if (!same) return refused("The branch has changed since its commits were listed. Open the dialog again.", { key: "interactive.moved", args: {} });
+  return runPlan(git, root, { oldest: commit, steps: list });
+}
+
 // squashCommits(git, root, { commits, message }) → a result
 //   Squash Commits: two or more commits become one with `message`, where the oldest of
 //   them was (its author); the other commits keep their order after it.

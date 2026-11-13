@@ -6,7 +6,8 @@ import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
 import { makeGit } from "./git.js";
-import { readEditFacts, readMessages, undoCommit, editMessage, dropCommits, squashCommits } from "./git-rewrite.js";
+import { readEditFacts, readMessages, undoCommit, editMessage, dropCommits, squashCommits, readRebaseCommits, interactiveRebase } from "./git-rewrite.js";
+import { continueOperation } from "./git-operation.js";
 import { en } from "./messages-rewrite.js";
 
 // The user's own git settings stay out of every git these tests start. An editor or a
@@ -329,6 +330,118 @@ const TRICKY = "it's \"quoted\"\n\n#12 costs $HOME `x` \\ end";
   assert.equal(f.ok, false);
   assert.equal(f.msg.key, "rewrite.unknownCommit");
   checkMsg(f);
+}
+
+// ---- Interactively Rebase from Here
+
+// Six commits: the four, then five and six.
+const sixCommits = (name) => {
+  const { repo, hashes } = fourCommits(name);
+  for (const n of ["five", "six"]) {
+    writeFileSync(`${repo}/${n}.txt`, `${n}\n`);
+    sh(repo, `git add ${n}.txt && git commit -q -m ${n}`);
+    hashes.push(head(repo));
+  }
+  return { repo, hashes };
+};
+const step = (hash, action, message) => ({ hash, action, ...(message == null ? {} : { message }) });
+
+// What the dialog lists: the commit picked and every one after it, oldest first.
+{
+  const { repo, hashes } = fourCommits("interactive-read");
+  writeFileSync(`${repo}/one.txt`, "one\nmore\n");
+  sh(repo, "git commit -q -am 'five\n\nbody of five'");
+  const r = await readRebaseCommits(git, repo, hashes[2]);
+  assert.equal(r.ok, true, r.err);
+  assert.deepEqual(r.commits.map((c) => c.subject), ["three", "four", "five"]);
+  assert.deepEqual(r.commits.map((c) => c.hash), [hashes[2], hashes[3], head(repo)]);
+  assert.equal(r.commits[0].author, "author-three");
+  assert.equal(r.commits[2].message, "five\n\nbody of five");
+  assert.equal(typeof r.commits[0].time, "number");
+  // From the first commit of the history.
+  assert.equal((await readRebaseCommits(git, repo, hashes[0])).commits.length, 5);
+  const no = await readRebaseCommits(git, repo, "0".repeat(40));
+  assert.equal(no.ok, false);
+  assert.equal(no.msg.key, "rewrite.unknownCommit");
+}
+
+// Moving commits: the order given is the order replayed; the last tree is the same.
+{
+  const { repo, hashes } = fourCommits("interactive-order");
+  const tree = run(repo, ["rev-parse", "HEAD^{tree}"]).trim();
+  const r = await interactiveRebase(git, repo, { commit: hashes[1], steps: [step(hashes[3], "pick"), step(hashes[1], "pick"), step(hashes[2], "pick")] });
+  assert.equal(r.ok, true, r.err);
+  assert.equal(r.outcome, "done");
+  assert.deepEqual(history(repo).map((c) => c.message), ["one", "four", "two", "three"]);
+  assert.deepEqual(history(repo)[1].files, ["four.txt", "one.txt"]);
+  assert.equal(run(repo, ["rev-parse", "HEAD^{tree}"]).trim(), tree);
+  assert.equal(inProgress(repo), false);
+}
+
+// Every action in one plan: squash with the group's message, drop, reword, fixup.
+{
+  const { repo, hashes } = sixCommits("interactive-each");
+  const [, two, three, four, five, six] = hashes;
+  const r = await interactiveRebase(git, repo, { commit: two, steps: [
+    step(two, "pick"), step(three, "squash", "two and three"), step(four, "drop"), step(five, "reword", TRICKY), step(six, "fixup"),
+  ] });
+  assert.equal(r.ok, true, r.err);
+  assert.equal(r.outcome, "done");
+  const h = history(repo);
+  assert.deepEqual(h.map((c) => c.message), ["one", "two and three", TRICKY]);
+  assert.deepEqual(h[1].files, ["one.txt", "three.txt", "two.txt"]);
+  assert.deepEqual(h[2].files, ["five.txt", "one.txt", "six.txt", "three.txt", "two.txt"]);
+  assert.equal(h[1].author, "author-two");
+  assert.deepEqual(status(repo), []);
+}
+
+// Stop to Edit: the rebase stops after the commit, in progress; Continue ends it with
+// what was amended there.
+{
+  const { repo, hashes } = fourCommits("interactive-edit");
+  const r = await interactiveRebase(git, repo, { commit: hashes[2], steps: [step(hashes[2], "edit"), step(hashes[3], "pick")] });
+  assert.equal(r.ok, true, r.err);
+  assert.equal(r.outcome, "stopped");
+  assert.equal(r.operation.kind, "rebase");
+  assert.equal(inProgress(repo), true);
+  assert.equal(head(repo), hashes[2]);
+  writeFileSync(`${repo}/three.txt`, "three, edited\n");
+  sh(repo, "git commit -q -a --amend --no-edit");
+  const c = await continueOperation(git, repo);
+  assert.equal(c.ok, true, c.err);
+  assert.equal(c.outcome, "done");
+  assert.equal(inProgress(repo), false);
+  assert.deepEqual(history(repo).map((x) => x.message), ["one", "two", "three", "four"]);
+  assert.equal(run(repo, ["show", "HEAD~1:three.txt"]), "three, edited\n");
+}
+
+// Every commit dropped: the branch goes back to the commit before the one picked.
+{
+  const { repo, hashes } = fourCommits("interactive-noop");
+  const r = await interactiveRebase(git, repo, { commit: hashes[1], steps: hashes.slice(1).map((h) => step(h, "drop")) });
+  assert.equal(r.ok, true, r.err);
+  assert.equal(r.outcome, "done");
+  assert.equal(head(repo), hashes[0]);
+}
+
+// A list that isn't the branch any more (a commit since, or one missing) is refused and
+// nothing moves; so is a meld with nothing before it, and the edit check's refusals.
+{
+  const { repo, hashes } = fourCommits("interactive-moved");
+  const missing = await interactiveRebase(git, repo, { commit: hashes[1], steps: [step(hashes[1], "pick"), step(hashes[2], "pick")] });
+  assert.equal(missing.ok, false);
+  assert.equal(missing.outcome, "refused");
+  assert.equal(missing.msg.key, "interactive.moved");
+  assert.equal(head(repo), hashes[3]);
+  const meld = await interactiveRebase(git, repo, { commit: hashes[2], steps: [step(hashes[2], "fixup"), step(hashes[3], "pick")] });
+  assert.equal(meld.outcome, "refused");
+  assert.equal(meld.msg.key, "rewrite.nothingToMeld");
+  sh(repo, "git checkout -q -b side HEAD~1 && git commit -q --allow-empty -m side && git checkout -q main");
+  const side = run(repo, ["rev-parse", "side"]).trim();
+  const away = await interactiveRebase(git, repo, { commit: side, steps: [step(side, "pick")] });
+  assert.equal(away.outcome, "refused");
+  assert.equal(away.msg.key, "rewrite.notInBranch");
+  assert.equal(head(repo), hashes[3]);
 }
 
 console.log("ok");

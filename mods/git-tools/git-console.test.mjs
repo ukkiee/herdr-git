@@ -37,6 +37,21 @@ const bytes = (s) => Buffer.byteLength(s, "utf8");
   assert.equal(consoleEntry(call({ args: ["checkout", "x".repeat(60)] })).command, `git checkout ${"x".repeat(60)}`);
 }
 
+// A password or token in a URL never reaches the log, in the command or in git's output.
+// A user name without a password stays (ssh://git@…); over http(s) the whole user part
+// goes, since a token is often given as the user.
+{
+  const e = consoleEntry(call({
+    args: ["remote", "set-url", "origin", "https://me:s3cret@example.com/r.git"],
+    stderr: "fatal: unable to access 'https://ghp_TOKEN@example.com/r.git/': error\n",
+  }));
+  assert.equal(e.command, "git remote set-url origin 'https://***@example.com/r.git'");
+  assert.equal(e.output, "fatal: unable to access 'https://***@example.com/r.git/': error");
+  assert.equal(consoleEntry(call({ args: ["remote", "add", "o", "ssh://git:pw@example.com/r.git"] })).command, "git remote add o 'ssh://git:***@example.com/r.git'");
+  assert.equal(consoleEntry(call({ args: ["remote", "add", "o", "ssh://git@example.com/r.git"] })).command, "git remote add o ssh://git@example.com/r.git");
+  assert.equal(consoleEntry(call({ args: ["remote", "add", "o", "git@example.com:r.git"] })).command, "git remote add o git@example.com:r.git");
+}
+
 // Output is cut at 4,000 characters; so is a command line of many paths.
 {
   assert.equal(OUTPUT_CHARS, 4000);

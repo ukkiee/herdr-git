@@ -16,8 +16,17 @@ const clip = (text, max) => (text.length > max ? `${text.slice(0, max)}…` : te
 const SAFE = /^[A-Za-z0-9_@%+=:,./-]+$/;
 const quote = (arg) => (SAFE.test(arg) ? arg : `'${arg.replace(/'/g, "'\\''")}'`);
 
+// A URL's credentials as "***": over http(s) the whole user part (a token often stands as
+// the user), elsewhere only the password (ssh://git@… keeps its user).
+const CREDENTIALS = /\b([A-Za-z][A-Za-z0-9+.-]*):\/\/([^\s/@'"]+)@/g;
+const hidden = (text) => String(text ?? "").replace(CREDENTIALS, (all, scheme, user) => {
+  if (/^https?$/i.test(scheme)) return `${scheme}://***@`;
+  const at = user.indexOf(":");
+  return at < 0 ? all : `${scheme}://${user.slice(0, at)}:***@`;
+});
+
 function shortened(arg) {
-  const s = String(arg ?? ""), first = s.split("\n")[0];
+  const s = hidden(arg), first = s.split("\n")[0];
   if (first.length > ARG_CHARS) return `${first.slice(0, ARG_CHARS)}…`;
   return first === s ? s : `${first}…`;
 }
@@ -30,7 +39,7 @@ const newId = (at) => `${Number(at).toString(36)}-${Math.random().toString(36).s
 // then stderr, trimmed, cut at OUTPUT_CHARS.
 export function consoleEntry(call) {
   const command = clip(["git", ...(call.args ?? []).map((arg) => quote(shortened(arg)))].join(" "), OUTPUT_CHARS);
-  const output = [call.stdout, call.stderr].map((s) => String(s ?? "").trim()).filter(Boolean).join("\n");
+  const output = [call.stdout, call.stderr].map((s) => hidden(s).trim()).filter(Boolean).join("\n");
   return { id: newId(call.at), at: call.at, root: call.cwd ?? null, on: call.on ?? null, command, code: call.code, output: clip(output, OUTPUT_CHARS) };
 }
 

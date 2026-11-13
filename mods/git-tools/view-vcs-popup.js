@@ -25,6 +25,7 @@ import { smartCheckout } from "./view-smart.js";
 import { renameFrom } from "./view-rename-branch.js";
 import { pushBranch } from "./view-push.js";
 import { pushTagMenu } from "./view-tag.js";
+import { startUpdateProject, updateHere, checkoutUpdateHere, pullHere } from "./view-update-project.js";
 import { MOD, openDialog, answerMenu, dialogFrame, button, uiGlyph, iconButton, darkLook, notice, WindowedList } from "./ui.js";
 
 export const POPUP_ACTIONS = {
@@ -45,6 +46,11 @@ export const POPUP_ACTIONS = {
   "branch.push": (w, b) => pushBranch(w.host, w.repo, b),
   "branch.trackedBranch": (w, b, cx) => { if (b?.upstream) w.branchMenu({ name: b.upstream, scope: "remote", current: false }, null, cx); },
   "tag.push": (w, b, cx) => pushTagMenu(w, b, null, cx),
+  "vcs.updateProject": (w, _p, cx) => startUpdateProject(w.host, w.repo, w.who, cx),
+  "branch.update": (w, b, cx) => updateHere(w.host, w.repo, w.who, b, cx),
+  "branch.checkoutAndUpdate": (w, b, cx) => checkoutUpdateHere(w.host, w.repo, w.who, b, cx),
+  "branch.pullRebase": (w, b, cx) => pullHere(w.host, w.repo, w.who, b, true, cx),
+  "branch.pullMerge": (w, b, cx) => pullHere(w.host, w.repo, w.who, b, false, cx),
 };
 export const popupHandles = (id) => Object.prototype.hasOwnProperty.call(POPUP_ACTIONS, id);
 

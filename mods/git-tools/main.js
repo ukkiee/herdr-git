@@ -67,6 +67,9 @@ import Smart from "./view-smart.js";
 import Tag from "./view-tag.js";
 import RenameBranch from "./view-rename-branch.js";
 import Remote from "./view-remote.js";
+import Pull from "./view-pull.js";
+import UpdateProject from "./view-update-project.js";
+import UpdateInfo from "./view-update-info.js";
 
 // When the system's language isn't known yet, how long to wait before each next ask.
 const ASK_AGAIN = [1000, 3000, 10000];
@@ -110,6 +113,9 @@ export const VIEWS = {
   "tag": Tag, // New Tag dialog (view-tag.js openTag)
   "rename-branch": RenameBranch, // Rename Branch dialog (view-rename-branch.js openRenameBranch)
   "remote": Remote, // Define Remote dialog and the Remove Remote question (view-remote.js)
+  "pull": Pull, // Pull dialog (view-pull.js openPull)
+  "update-project": UpdateProject, // Update Project dialog (view-update-project.js openUpdateProject)
+  "update-info": UpdateInfo, // Update Info tab: what an update brought in (view-update-info.js openUpdateInfo)
 };
 
 // `mod.open:git-tools` (cmd-k) opens a copy with no view. No single app command both

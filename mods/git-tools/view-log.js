@@ -45,6 +45,7 @@ import { newTagAt } from "./view-tag.js";
 import { renameFrom } from "./view-rename-branch.js";
 import { remoteDialog } from "./view-remote.js";
 import { pushUpTo, pushBranch } from "./view-push.js";
+import { updateHere, checkoutUpdateHere, pullHere, updateSelected } from "./view-update-project.js";
 
 // Column widths, px. The Commit list takes what the side columns leave and never gets
 // narrower than LIST_MIN: when the panel is too narrow, Commit details goes first, then
@@ -131,6 +132,11 @@ const ACTIONS = {
   "branch.trackedBranch": (host, b, cx) => { const up = host.branches.data?.local.find((x) => x.name === b?.name)?.upstream; if (up) host.branches.menu({ kind: "branch", scope: "remote", key: `remote:${up}`, label: up, branch: { name: up } }, cx); },
   "remote.edit": (host, r) => remoteDialog(host, host.repo, r?.remote, "edit"),
   "remote.remove": (host, r) => remoteDialog(host, host.repo, r?.remote, "remove"),
+  "branch.update": (host, b, cx) => updateHere(host, host.repo, "ui.logPanel", b, cx),
+  "branch.checkoutAndUpdate": (host, b, cx) => checkoutUpdateHere(host, host.repo, "ui.logPanel", b, cx),
+  "branch.pullRebase": (host, b, cx) => pullHere(host, host.repo, "ui.logPanel", b, true, cx),
+  "branch.pullMerge": (host, b, cx) => pullHere(host, host.repo, "ui.logPanel", b, false, cx),
+  "branches.updateSelected": (host, b, cx) => updateSelected(host, host.repo, "ui.logPanel", b, cx),
 };
 
 // The bus event that tells every Log panel the options file changed.

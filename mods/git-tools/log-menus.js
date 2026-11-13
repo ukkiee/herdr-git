@@ -32,6 +32,8 @@ const unread = (ctx) => (ctx.loaded === false ? { text: "" } : null);
 const name = (ctx) => ({ name: ctx.name });
 const current = (ctx) => ({ current: ctx.current });
 const both = (ctx) => ({ name: ctx.name, current: ctx.current });
+// A branch without a tracked branch has nothing to update from: off, nothing to say.
+const tracked = (ctx) => (ctx.upstream ? null : { text: "" });
 // A history edit: off for the edit check's reason (rebase-plan.js). ctx.edit: the edit
 // facts of the commits picked (git-rewrite.js readEditFacts) when the menu has them; without
 // them only the number picked is checked, and the item checks the rest when picked.
@@ -89,17 +91,17 @@ const ITEMS = {
   "branch.checkout": { key: "log.checkout", write: true },
   "branch.newFrom": { key: "log.newBranchFrom", args: name, write: true },
   "branch.checkoutAndRebase": { key: "branches.checkoutAndRebase", args: current },
-  "branch.checkoutAndUpdate": { key: "branches.checkoutAndUpdate" },
+  "branch.checkoutAndUpdate": { key: "branches.checkoutAndUpdate", write: true, when: tracked },
   "branch.compareWith": { key: "branches.compareWith", args: current },
   "branch.showDiffWithWorkingTree": { key: "branches.showDiffWithWorkingTree" },
   "branch.rebaseOnto": { key: "branches.rebaseOnto", args: both },
   "branch.mergeInto": { key: "branches.mergeInto", args: both },
   "branch.newWorktreeFrom": { key: "branches.newWorktreeFrom", args: name },
-  "branch.update": { key: "branches.update" },
+  "branch.update": { key: "branches.update", write: true, when: (ctx) => (ctx.name === ctx.current ? null : tracked(ctx)) },
   "branch.push": { key: "branches.push" },
   "branch.trackedBranch": { key: "branches.trackedBranch", args: (ctx) => ({ upstream: ctx.upstream }), shown: (ctx) => Boolean(ctx.upstream) },
-  "branch.pullRebase": { key: "branches.pullRebase", args: current },
-  "branch.pullMerge": { key: "branches.pullMerge", args: current },
+  "branch.pullRebase": { key: "branches.pullRebase", args: current, write: true },
+  "branch.pullMerge": { key: "branches.pullMerge", args: current, write: true },
   // F2 on the Branch tree's cursor row does the same (log-branches.js). A detached HEAD
   // has no branch name to change.
   "branch.rename": { key: "branches.rename", write: true, hint: "F2", shown: (ctx) => ctx.scope !== "head" },
@@ -112,7 +114,7 @@ const ITEMS = {
   // ---- the Branch tree's vertical toolbar
   "branches.hide": { key: "branches.hide" },
   "branches.new": { key: "log.newBranch", write: true, when: unread },
-  "branches.updateSelected": { key: "branches.updateSelected" },
+  "branches.updateSelected": { key: "branches.updateSelected", write: true, work: "remote.updating" },
   "branches.delete": { key: "log.deleteBranch", args: name, write: true, when: deleteBlock, work: "log.deleting" },
   // The branches deleted here, kept to restore: after Delete Branch, its neighbor.
   "branches.deleted": { key: "branches.openDeleted", when: unread },

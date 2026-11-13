@@ -25,6 +25,7 @@ import { runSmartRequest } from "./view-smart.js";
 import { runTagCreate } from "./view-tag.js";
 import { runRenameBranch } from "./view-rename-branch.js";
 import { runRemoteEdit, runRemoteRemove } from "./view-remote.js";
+import { runRemote } from "./view-update-project.js";
 
 const strings = (value) => (Array.isArray(value) ? value.filter((v) => typeof v === "string" && v) : []);
 const text = (value) => (typeof value === "string" && value ? value : null);
@@ -55,6 +56,9 @@ export const SERVE_ACTIONS = {
   "branch-rename": { work: "refs.renaming", run: (git, root, args) => runRenameBranch(git, root, args) },
   "remote-edit": { work: "refs.editingRemote", run: (git, root, args) => runRemoteEdit(git, root, args) },
   "remote-remove": { work: "refs.removingRemote", run: (git, root, args) => runRemoteRemove(git, root, args) },
+  "remote-pull": { work: "remote.pulling", run: (git, root, args, panel) => runRemote(git, root, { ...args, type: "pull" }, panel) },
+  "remote-update": { work: "remote.updating", run: (git, root, args, panel) => runRemote(git, root, { ...args, type: "update" }, panel) },
+  "remote-reset": { work: "remote.resetting", run: (git, root, args, panel) => runRemote(git, root, { ...args, type: "reset" }, panel) },
 };
 
 // serveAction(panel, e, cx) → true when the table has e.action and the panel now runs

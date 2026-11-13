@@ -20,6 +20,7 @@ import { placerOn } from "./view-merge-revisions.js";
 import { runStashCreate, runStashDrop, runStashClear } from "./view-stash.js";
 import { runUnstash } from "./view-unstash.js";
 import { createBranch } from "./git-branch.js";
+import { serveReword, serveSquash, serveDrop } from "./log-rewrite.js";
 
 const strings = (value) => (Array.isArray(value) ? value.filter((v) => typeof v === "string" && v) : []);
 const text = (value) => (typeof value === "string" && value ? value : null);
@@ -41,6 +42,9 @@ export const SERVE_ACTIONS = {
   // The New Branch dialog opened from the VCS Operations popup over the Commit panel; the
   // Log panel's own chain takes it first (view-branch-new.js serveBranch).
   "branch-create": { work: "dialogs.branch.creating", run: (git, root, args) => createBranch(git, root, { name: text(args.name) ?? "", from: text(args.from), checkout: args.checkout !== false }) },
+  "rewrite-reword": { work: "rewrite.rewording", run: (git, root, args, panel) => serveReword(git, root, args, panel) },
+  "rewrite-squash": { work: "rewrite.squashing", run: (git, root, args, panel) => serveSquash(git, root, args, panel) },
+  "rewrite-drop": { work: "rewrite.dropping", run: (git, root, args, panel) => serveDrop(git, root, args, panel) },
 };
 
 // serveAction(panel, e, cx) → true when the table has e.action and the panel now runs

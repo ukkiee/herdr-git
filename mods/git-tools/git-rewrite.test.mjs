@@ -6,7 +6,7 @@ import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
 import { makeGit } from "./git.js";
-import { readEditFacts, undoCommit, editMessage, dropCommits, squashCommits } from "./git-rewrite.js";
+import { readEditFacts, readMessages, undoCommit, editMessage, dropCommits, squashCommits } from "./git-rewrite.js";
 import { en } from "./messages-rewrite.js";
 
 // The user's own git settings stay out of every git these tests start. An editor or a
@@ -279,6 +279,21 @@ const TRICKY = "it's \"quoted\"\n\n#12 costs $HOME `x` \\ end";
   const r = await undoCommit(git, repo, { commit: head(repo) });
   assert.equal(r.outcome, "refused");
   assert.equal(r.msg.key, "rewrite.duringMerge");
+}
+
+// The messages the dialogs start from, whole, by hash; `joined`, the squash dialog's: the
+// messages of the commits given newest first (as the Commit list picks them), oldest
+// first, a blank line between.
+{
+  const { repo, hashes } = fourCommits("messages");
+  sh(repo, `git commit -q --allow-empty -m 'subject' -m 'body $x'`);
+  const five = head(repo);
+  const r = await readMessages(git, repo, [five, hashes[2], hashes[0]]);
+  assert.equal(r.ok, true, r.err);
+  assert.deepEqual(r.messages, { [five]: "subject\n\nbody $x", [hashes[2]]: "three", [hashes[0]]: "one" });
+  assert.equal(r.joined, "one\n\nthree\n\nsubject\n\nbody $x");
+  const no = await readMessages(git, repo, ["0".repeat(40)]);
+  assert.equal(no.ok, false);
 }
 
 // A commit that isn't there.

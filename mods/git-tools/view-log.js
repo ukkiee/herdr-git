@@ -37,6 +37,7 @@ import { showRepositoryAt } from "./view-revision-tree.js";
 import { historyUpToHere } from "./view-history-tab.js";
 import { openPatch, openFilePatch } from "./view-patch.js";
 import { goToHash } from "./view-go-to-hash.js";
+import { undoHere, editMessageHere, dropHere, squashHere } from "./log-rewrite.js";
 
 // Column widths, px. The Commit list takes what the side columns leave and never gets
 // narrower than LIST_MIN: when the panel is too narrow, Commit details goes first, then
@@ -109,6 +110,10 @@ const ACTIONS = {
   "log.goToHash": (host, _t, cx) => goToHash(host, cx),
   "commit.goToChild": (host, commits, cx) => host.list.goToRelative("children", commits[0], cx),
   "commit.goToParent": (host, commits, cx) => host.list.goToRelative("parents", commits[0], cx),
+  "commit.undo": (host, commits, cx) => undoHere(host, commits, cx),
+  "commit.editMessage": (host, commits, cx) => editMessageHere(host, commits, cx),
+  "commit.drop": (host, commits, cx) => dropHere(host, commits, cx),
+  "commit.squash": (host, commits, cx) => squashHere(host, commits, cx),
 };
 const handled = (id) => Object.prototype.hasOwnProperty.call(ACTIONS, id);
 

@@ -170,4 +170,28 @@ const all = (name, ctx = {}, t = ko) => look(menuItems(name, everything, ctx), t
   assert.equal(hints["commit.revert"], null);
 }
 
+// The history edits: off with the edit check's reason (rebase-plan.js editCheck) when the
+// menu has the edit facts (ctx.edit, git-rewrite.js readEditFacts), else on the number of
+// commits picked alone; off while a git write runs.
+{
+  const reason = (id, ctx) => {
+    const it = menuItems("commit", everything, ctx).find((x) => x.id === id);
+    return it.disabled ? (it.why.text ?? ko(it.why.key, it.why.args)) : null;
+  };
+  const H = "a".repeat(40), P = "b".repeat(40);
+  const facts = (more = {}) => ({ head: H, operation: null, protected: null, mergeAbove: false, commits: [{ hash: H, parents: 1, onBranch: true, pushedProtected: false }], ...more });
+  const pushed = facts({ protected: "origin/main", commits: [{ hash: H, parents: 1, onBranch: true, pushedProtected: true }] });
+  for (const id of ["commit.undo", "commit.editMessage", "commit.drop"]) {
+    assert.equal(reason(id, { count: 1, edit: facts() }), null, id);
+    assert.equal(reason(id, { count: 1, edit: pushed }), "현재 브랜치의 커밋이 이미 보호된 브랜치 origin/main에 푸시되었습니다", id);
+    assert.equal(reason(id, { count: 1, writing: "busy" }), "busy", id);
+  }
+  assert.equal(reason("commit.undo", { count: 1, edit: facts({ head: P }) }), "선택한 커밋이 현재 브랜치의 마지막 커밋이 아닙니다");
+  assert.equal(reason("commit.editMessage", { count: 2 }), "커밋을 하나만 선택하세요");
+  assert.equal(reason("commit.drop", { count: 2 }), null);
+  assert.equal(reason("commit.squash", { count: 2 }), null);
+  assert.equal(reason("commit.squash", { count: 2, edit: facts({ operation: "merge", commits: [facts().commits[0], { hash: P, parents: 1, onBranch: true, pushedProtected: false }] }) }), "병합 중에는 커밋을 편집할 수 없습니다");
+  assert.equal(menuItems("commit", everything, { count: 1 }).some((x) => x.id === "commit.squash"), false);
+}
+
 console.log("ok");

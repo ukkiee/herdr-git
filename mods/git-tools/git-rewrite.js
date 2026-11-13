@@ -112,6 +112,26 @@ export async function readEditFacts(git, root, hashes) {
   };
 }
 
+// readMessages(git, root, hashes) → { ok, err, msg?, messages, joined }
+//   messages: { [hash]: the whole message, without the newlines git ends it with }.
+//   joined: the messages of `hashes` given newest first (as the Commit list picks them),
+//   oldest first with a blank line between: where Squashed Commit Message starts.
+export async function readMessages(git, root, hashes) {
+  const wanted = (hashes ?? []).filter((h) => typeof h === "string" && HASH.test(h));
+  if (!wanted.length) return { ...unknown(hashes?.[0] ?? ""), messages: {}, joined: "" };
+  const r = await git.read(root, ["log", "--no-walk=unsorted", "-z", "--format=%H%x1f%B", ...wanted, "--"]);
+  if (!r.ok) {
+    for (const h of wanted) if (!(await git.read(root, ["cat-file", "-e", `${h}^{commit}`])).ok) return { ...unknown(h), messages: {}, joined: "" };
+    return { ...result(r), messages: {}, joined: "" };
+  }
+  const messages = {};
+  for (const record of r.out.split("\0")) {
+    const at = record.indexOf("\x1f");
+    if (at > 0) messages[record.slice(0, at).trim()] = record.slice(at + 1).replace(/\n+$/, "");
+  }
+  return { ok: true, code: 0, out: "", err: "", messages, joined: [...wanted].reverse().map((h) => messages[h] ?? "").join("\n\n") };
+}
+
 function unknown(hash) {
   const short = String(hash).slice(0, 8);
   return { ok: false, code: -1, out: "", err: `Commit ${short} is not in this repository.`, msg: { key: "rewrite.unknownCommit", args: { hash: short } } };

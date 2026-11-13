@@ -15,9 +15,12 @@
 // key that does the same where the menu opens, drawn dim on the item's right.
 //
 // ctx, as each screen hands it:
-//   commit menu:   { count (commits selected), current (branch name), writing }
+//   commit menu:   { count (commits selected), current (branch name), writing, edit? (the
+//                  edit facts of the commits selected, git-rewrite.js readEditFacts) }
 //   branch menus:  { name, current, upstream, writing, deleteBlock }
 //   toolbars:      { loaded, name, writing, deleteBlock, fixed (a Log tab on a chosen folder) }
+
+import { editCheck } from "./rebase-plan.js";
 
 const RULE = "|";
 
@@ -28,6 +31,10 @@ const unread = (ctx) => (ctx.loaded === false ? { text: "" } : null);
 const name = (ctx) => ({ name: ctx.name });
 const current = (ctx) => ({ current: ctx.current });
 const both = (ctx) => ({ name: ctx.name, current: ctx.current });
+// A history edit: off for the edit check's reason (rebase-plan.js). ctx.edit: the edit
+// facts of the commits picked (git-rewrite.js readEditFacts) when the menu has them; without
+// them only the number picked is checked, and the item checks the rest when picked.
+const edit = (action) => (ctx) => editCheck(action, ctx.edit ?? null, ctx.count ?? 1).why;
 
 const ITEMS = {
   // ---- the commit row's menu
@@ -40,12 +47,12 @@ const ITEMS = {
   "commit.compareWithLocal": { key: "log.compareWithLocal", shown: (ctx) => (ctx.count ?? 1) === 1 },
   "commit.resetToHere": { key: "log.resetToHere", write: true, when: one },
   "commit.revert": { key: "log.revertCommit" },
-  "commit.undo": { key: "log.undoCommit" },
-  "commit.editMessage": { key: "log.editMessage" },
+  "commit.undo": { key: "log.undoCommit", write: true, when: edit("undo") },
+  "commit.editMessage": { key: "log.editMessage", write: true, when: edit("editMessage") },
   "commit.fixup": { key: "log.fixup" },
   "commit.squashInto": { key: "log.squashInto" },
-  "commit.drop": { key: "log.dropCommits", args: (ctx) => ({ n: ctx.count ?? 1 }) },
-  "commit.squash": { key: "log.squashCommits", shown: (ctx) => (ctx.count ?? 1) >= 2 },
+  "commit.drop": { key: "log.dropCommits", args: (ctx) => ({ n: ctx.count ?? 1 }), write: true, when: edit("drop") },
+  "commit.squash": { key: "log.squashCommits", shown: (ctx) => (ctx.count ?? 1) >= 2, write: true, when: edit("squash") },
   "commit.interactiveRebase": { key: "log.interactiveRebase" },
   "commit.pushUpToHere": { key: "log.pushUpToHere" },
   "commit.rebaseOnto": { key: "log.rebaseOntoCommit", args: current },

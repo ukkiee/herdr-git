@@ -60,6 +60,9 @@ import Unstash from "./view-unstash.js";
 import VcsWidget from "./view-vcs-widget.js";
 import VcsPopup from "./view-vcs-popup.js";
 import VcsOps, { vcsOpsCommand } from "./view-vcs-ops.js";
+import Reword from "./view-reword.js";
+import Squash from "./view-squash.js";
+import DropCommits from "./view-drop-commits.js";
 
 // When the system's language isn't known yet, how long to wait before each next ask.
 const ASK_AGAIN = [1000, 3000, 10000];
@@ -96,6 +99,9 @@ export const VIEWS = {
   "vcs-widget": VcsWidget, // VCS widget: the `git-vcs-widget` block left of the Git button
   "vcs-popup": VcsPopup, // VCS widget popup, and the question before an abort
   "vcs-ops": VcsOps, // VCS Operations popup (cmd-shift-v, view-vcs-ops.js vcsOpsCommand)
+  "reword": Reword, // Edit Commit Message dialog (view-reword.js openReword)
+  "squash": Squash, // Squashed Commit Message dialog (view-squash.js openSquash)
+  "drop-commits": DropCommits, // Drop Commits confirmation (view-drop-commits.js openDropCommits)
 };
 
 // `mod.open:git-tools` (cmd-k) opens a copy with no view. No single app command both

@@ -57,7 +57,10 @@ export function belowSpot({ position, local, height = 0 }, { width = 0, right } 
 
 // Dialogs built around a list or panes: they need the room they were opened with, since
 // a list's height comes from its container. Every other dialog is a form.
-const FILLING = new Set(["conflicts", "deleted-branches", "interactive-rebase", "merge-revisions", "restore", "push", "rollback", "smart"]);
+const FILLING = new Set([
+  "conflicts", "deleted-branches", "interactive-rebase", "merge-revisions", "restore", "push", "rollback", "smart",
+  "create-patch", "apply-patch", "remotes",
+]);
 
 // dialogFills(id) → whether the dialog frame `id` (ui.js dialogFrame) fills the room it
 // was opened with; false: it is as tall as what it holds. The Merge Revisions dialog's

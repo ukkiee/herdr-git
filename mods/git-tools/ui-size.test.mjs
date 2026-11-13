@@ -64,7 +64,7 @@ import { textWidth, menuWidth, belowSpot, sideOf, dialogFills } from "./ui-size.
     assert.equal(dialogFills(id), false, id);
   }
   for (const id of ["conflicts", "deleted-branches", "interactive-rebase", "merge-revisions", "restore", "push", "rollback", "smart",
-    "mr-overwrite", "mr-unresolved"]) {
+    "create-patch", "apply-patch", "remotes", "mr-overwrite", "mr-unresolved"]) {
     assert.equal(dialogFills(id), true, id);
   }
 }

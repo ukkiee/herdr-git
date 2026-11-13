@@ -59,7 +59,7 @@ import Stash from "./view-stash.js";
 import Unstash from "./view-unstash.js";
 import VcsWidget from "./view-vcs-widget.js";
 import VcsPopup from "./view-vcs-popup.js";
-import VcsOps from "./view-vcs-ops.js";
+import VcsOps, { vcsOpsCommand } from "./view-vcs-ops.js";
 
 // When the system's language isn't known yet, how long to wait before each next ask.
 const ASK_AGAIN = [1000, 3000, 10000];
@@ -137,7 +137,9 @@ export default class GitTools extends View {
     cx.spawn(async (cx) => {
       for (;;) {
         const name = await nextCommand();
-        this.say(() => this.screen.command?.(name, cx));
+        // cmd-shift-v reaches every shown copy; the Log or Commit panel opens the popup.
+        if (name === "vcs-ops") this.say(() => vcsOpsCommand(this.screen, p.view, cx, { folder: p.folder ?? null }));
+        else this.say(() => this.screen.command?.(name, cx));
         cx.notify();
       }
     });

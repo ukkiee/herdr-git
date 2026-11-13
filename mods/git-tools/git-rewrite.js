@@ -1,0 +1,240 @@
+// Editing the current branch's history: Undo Commit, Edit Commit Message, Drop Commits,
+// Squash Commits, and the one way they all replay commits (runPlan). No `herdr` import:
+// node tests it against real repositories (git-rewrite.test.mjs).
+//
+// Every function takes `git` from makeGit (git.js) and the repository root and returns a
+// result instead of throwing: { ok, code, out, err, msg?, outcome, operation, changed }.
+//   outcome: "done", "stopped" (a rebase is in progress afterwards: a conflict, or a stop
+//     the plan asked for), "refused" (checked before anything ran: nothing changed, msg
+//     says why), or "failed" (git's words in err).
+//   operation: git-operation.js readOperation afterwards, so the screen can open the
+//     Conflicts dialog (view-conflicts.js openConflictsIfStopped) or show the rebase.
+//   changed: the repository may have changed.
+//
+// The replay is `git rebase -i` with the to-do list rebase-plan.js makes, handed in as
+// the sequence editor; a message goes in from an exec line (see docs/adr/0004). Each
+// write reads the edit facts again first and refuses what rebase-plan.js editCheck turns
+// off, whatever the menu showed when it opened.
+
+import { readOperation, settle } from "./git-operation.js";
+import { PROTECTED } from "./git-push.js";
+import { editCheck, todoList } from "./rebase-plan.js";
+import { translator } from "./i18n.js";
+
+// The English of a refusal's reason, for err (the screen words msg in its own language).
+const english = translator("en");
+
+// Hooks (pre-commit, commit-msg on every reworded commit) may run for minutes.
+const TIMEOUT = 600000;
+const HASH = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/;
+// The sequence editor: writes the list from a variable into the file git hands it (exec
+// has no stdin, and a file can't be written on another machine). Given as the variable,
+// which beats both sequence.editor and an exported GIT_SEQUENCE_EDITOR of the person's.
+const SEQUENCE_EDITOR = `sh -c 'printf "%s\\n" "$GITTOOLS_TODO" > "$1"' -`;
+
+const result = (r, extra = {}) => ({ ok: Boolean(r.ok), code: r.code ?? (r.ok ? 0 : -1), out: r.out ?? "", err: r.err ?? "", ...(r.msg ? { msg: r.msg } : {}), ...extra });
+const refused = (err, msg, operation = null) => ({ ok: false, code: -1, out: "", err, msg, outcome: "refused", operation, changed: false });
+const lines = (text) => String(text ?? "").split("\n").map((l) => l.trim()).filter(Boolean);
+
+// ---- reading
+
+// Whether `a` is an ancestor of (or the same as) `b`: true, false, or null when git failed.
+async function isAncestor(git, root, a, b) {
+  const r = await git.read(root, ["merge-base", "--is-ancestor", a, b]);
+  return r.code === 0 ? true : r.code === 1 ? false : null;
+}
+
+// The remote branch the current one tracks: { ref, name } ("refs/remotes/origin/main",
+// "origin/main") with whether it is a protected branch, or null.
+async function tracked(git, root, branch) {
+  if (!branch) return null;
+  const r = await git.read(root, ["for-each-ref", "--format=%(upstream)%00%(upstream:short)%00%(upstream:remotename)", `refs/heads/${branch}`]);
+  if (!r.ok) return null;
+  const [ref, name, remote] = (r.out.split("\n")[0] ?? "").split("\0");
+  if (!ref?.startsWith("refs/remotes/") || !remote) return null;
+  const target = ref.slice(`refs/remotes/${remote}/`.length);
+  return { ref, name, protected: PROTECTED.includes(target) };
+}
+
+// readEditFacts(git, root, hashes) → { ok, err, msg?, head, branch, operation, protected,
+//   mergeAbove, pushed, oldest, commits }
+//   What the edit check (rebase-plan.js editCheck) needs for the commits picked:
+//   head: HEAD's hash. branch: the current branch, or null on a detached HEAD.
+//   operation: the kind in progress (git-operation.js), or null.
+//   protected: the remote branch the current one tracks ("origin/main") when it is a
+//     protected one, else null.
+//   commits: [{ hash, parents (a count), onBranch (reachable from HEAD), pushedProtected
+//     (reachable from that protected branch) }], in the order given.
+//   oldest: the commit picked that the others descend from (where a replay starts), or
+//     null when they aren't all on one line from HEAD.
+//   mergeAbove: a merge commit between `oldest` and HEAD.
+//   pushed: `oldest` is on some remote branch: rewriting it needs a force push next.
+export async function readEditFacts(git, root, hashes) {
+  const wanted = [...new Set((hashes ?? []).filter((h) => typeof h === "string"))];
+  const bad = wanted.find((h) => !HASH.test(h));
+  if (!wanted.length || bad) return unknown(bad ?? "");
+  const [headR, branchR, op] = await Promise.all([
+    git.read(root, ["rev-parse", "--verify", "-q", "HEAD"]),
+    git.read(root, ["symbolic-ref", "-q", "--short", "HEAD"]),
+    readOperation(git, root),
+  ]);
+  if (!headR.ok) return result(headR);
+  const head = headR.out.trim(), branch = branchR.ok ? branchR.out.trim() : null;
+  const parentsR = await git.read(root, ["rev-list", "--no-walk=unsorted", "--parents", ...wanted, "--"]);
+  if (!parentsR.ok) {
+    for (const h of wanted) if (!(await git.read(root, ["cat-file", "-e", `${h}^{commit}`])).ok) return unknown(h);
+    return result(parentsR);
+  }
+  const parents = new Map(lines(parentsR.out).map((l) => { const [h, ...ps] = l.split(" "); return [h, ps.length]; }));
+  const upstream = await tracked(git, root, branch);
+  const commits = await Promise.all(wanted.map(async (hash) => ({
+    hash,
+    parents: parents.get(hash) ?? 0,
+    onBranch: (await isAncestor(git, root, hash, head)) === true,
+    pushedProtected: upstream?.protected ? (await isAncestor(git, root, hash, upstream.ref)) === true : false,
+  })));
+  let oldest = null, mergeAbove = false, pushed = false;
+  if (commits.every((c) => c.onBranch)) {
+    const mb = wanted.length === 1 ? { ok: true, out: wanted[0] } : await git.read(root, ["merge-base", "--octopus", ...wanted]);
+    oldest = mb.ok && wanted.includes(mb.out.trim()) ? mb.out.trim() : null;
+    if (oldest) {
+      const [merges, remote] = await Promise.all([
+        git.read(root, ["rev-list", "--min-parents=2", "--count", `${oldest}..${head}`]),
+        git.read(root, ["for-each-ref", "--count=1", "--format=%(refname)", "--contains", oldest, "refs/remotes/"]),
+      ]);
+      mergeAbove = merges.ok && Number(merges.out.trim()) > 0;
+      pushed = remote.ok && remote.out.trim() !== "";
+    }
+  }
+  return {
+    ok: true, code: 0, out: "", err: "", head, branch, operation: op.ok ? op.kind : null,
+    protected: upstream?.protected ? upstream.name : null, mergeAbove, pushed, oldest, commits,
+  };
+}
+
+function unknown(hash) {
+  const short = String(hash).slice(0, 8);
+  return { ok: false, code: -1, out: "", err: `Commit ${short} is not in this repository.`, msg: { key: "rewrite.unknownCommit", args: { hash: short } } };
+}
+
+// Reads the facts and checks `action` on them: { facts } to go on, or { no } (a result).
+async function checked(git, root, hashes, action) {
+  const facts = await readEditFacts(git, root, hashes);
+  if (!facts.ok) return { no: { ...result(facts), outcome: "failed", operation: null, changed: false } };
+  const { why } = editCheck(action, facts, hashes.length);
+  if (why) return { no: refused(english(why.key, why.args), why) };
+  return { facts };
+}
+
+// ---- the replay
+
+// The commits from `oldest` to HEAD, oldest first.
+async function range(git, root, oldest, root0) {
+  const r = await git.read(root, ["rev-list", "--reverse", "--topo-order", root0 ? "HEAD" : `${oldest}^..HEAD`, "--"]);
+  return r.ok ? { ok: true, hashes: lines(r.out) } : result(r);
+}
+
+// The branches that move with the replayed commits, as git would move them with the
+// person's rebase.updateRefs: local branches on a commit of the range, except any checked
+// out (the current one included). { [hash]: [full ref] }; {} when the setting is off.
+async function movingRefs(git, root, hashes) {
+  const on = await git.read(root, ["config", "--type=bool", "--get", "rebase.updateRefs"]);
+  if (!on.ok || on.out.trim() !== "true") return {};
+  const r = await git.read(root, ["for-each-ref", "--format=%(objectname)%00%(refname)%00%(worktreepath)", "refs/heads/"]);
+  if (!r.ok) return {};
+  const inRange = new Set(hashes), refs = {};
+  for (const line of r.out.split("\n")) {
+    const [hash, ref, worktree] = line.split("\0");
+    if (!ref || worktree || !inRange.has(hash)) continue;
+    (refs[hash] ??= []).push(ref);
+  }
+  return refs;
+}
+
+// runPlan(git, root, { oldest, steps }) → a result (top of the file)
+//   Replays the current branch from `oldest` (a full hash on it) with steps
+//   (rebase-plan.js todoList), one for every commit from `oldest` to HEAD, in the order to
+//   replay. `steps` is the list, or a function of the commits from `oldest` to HEAD
+//   (oldest first) that makes it. The edit check is the caller's. Local changes are put
+//   aside and back (--autostash): a rebase refuses to start on changed files.
+export async function runPlan(git, root, { oldest, steps } = {}) {
+  const parents = HASH.test(String(oldest ?? "")) ? await git.read(root, ["rev-list", "--no-walk", "--parents", oldest, "--"]) : { ok: false };
+  if (!parents.ok) return { ...unknown(oldest ?? ""), outcome: "failed", operation: null, changed: false };
+  const isRoot = lines(parents.out)[0]?.split(" ").length === 1;
+  const span = await range(git, root, oldest, isRoot);
+  if (!span.ok) return { ...span, outcome: "failed", operation: null, changed: false };
+  const plan = todoList(typeof steps === "function" ? steps(span.hashes) : steps, { refs: await movingRefs(git, root, span.hashes) });
+  if (!plan.ok) return refused(plan.err, plan.msg);
+  const before = await readOperation(git, root);
+  const run = await git(root, ["rebase", "-i", "--autostash", "--no-autosquash", isRoot ? "--root" : `${oldest}^`], {
+    timeout: TIMEOUT,
+    env: { GIT_SEQUENCE_EDITOR: SEQUENCE_EDITOR, GIT_EDITOR: "true", GITTOOLS_TODO: plan.lines.join("\n"), ...plan.env },
+  });
+  const after = await readOperation(git, root);
+  const outcome = settle(before, after, run);
+  return result({ ...run, ok: outcome === "done" || outcome === "stopped" }, { outcome, operation: after.ok ? after : null, changed: true });
+}
+
+// Every commit from `facts.oldest` to HEAD as a step: `pick` unless `change` says else.
+async function replay(git, root, facts, change) {
+  if (!facts.oldest) return refused("The selected commits are not in one line of history from the current commit.", { key: "rewrite.notOneLine", args: {} });
+  return runPlan(git, root, { oldest: facts.oldest, steps: change });
+}
+
+// ---- the edits
+
+// undoCommit(git, root, { commit }) → a result
+//   Undo Commit: the current branch goes back one commit (`reset --soft`); what the
+//   commit held stays staged, a new file as added. Only on the last commit (`commit`
+//   must be HEAD) and not on the first one.
+export async function undoCommit(git, root, { commit } = {}) {
+  const { facts, no } = await checked(git, root, [commit], "undo");
+  if (no) return no;
+  const r = await git(root, ["reset", "-q", "--soft", `${facts.head}~1`, "--"]);
+  return result(r, { outcome: r.ok ? "done" : "failed", operation: null, changed: true });
+}
+
+// editMessage(git, root, { commit, message }) → a result
+//   Edit Commit Message: HEAD gets the message by amending only the message (nothing
+//   staged goes in); an older commit is replayed with it (reword).
+export async function editMessage(git, root, { commit, message } = {}) {
+  if (typeof message !== "string" || !message.trim()) return refused("Specify a commit message.", { key: "commit.noMessage", args: {} });
+  const { facts, no } = await checked(git, root, [commit], "editMessage");
+  if (no) return no;
+  if (commit === facts.head) {
+    const r = await git(root, ["commit", "--amend", "--only", "--allow-empty", "-q", "-m", message], { timeout: TIMEOUT, env: { GIT_EDITOR: "true" } });
+    return result(r, { outcome: r.ok ? "done" : "failed", operation: null, changed: r.ok });
+  }
+  return replay(git, root, facts, (hashes) => hashes.map((hash) => (hash === commit ? { hash, action: "reword", message } : { hash, action: "pick" })));
+}
+
+// dropCommits(git, root, { commits }) → a result
+//   Drop Commits: the commits leave the current branch; the ones after them are replayed.
+export async function dropCommits(git, root, { commits } = {}) {
+  const list = Array.isArray(commits) ? commits : [];
+  const { facts, no } = await checked(git, root, list, "drop");
+  if (no) return no;
+  const gone = new Set(list);
+  return replay(git, root, facts, (hashes) => hashes.map((hash) => ({ hash, action: gone.has(hash) ? "drop" : "pick" })));
+}
+
+// squashCommits(git, root, { commits, message }) → a result
+//   Squash Commits: two or more commits become one with `message`, where the oldest of
+//   them was (its author); the other commits keep their order after it.
+export async function squashCommits(git, root, { commits, message } = {}) {
+  const list = Array.isArray(commits) ? commits : [];
+  const { facts, no } = await checked(git, root, list, "squash");
+  if (no) return no;
+  if (typeof message !== "string" || !message.trim()) return refused("Specify a commit message.", { key: "commit.noMessage", args: {} });
+  const picked = new Set(list);
+  return replay(git, root, facts, (hashes) => {
+    const steps = [];
+    for (const hash of hashes) {
+      if (hash === facts.oldest) {
+        steps.push({ hash, action: "pick" });
+        hashes.filter((h) => picked.has(h) && h !== hash).forEach((h, i) => steps.push({ hash: h, action: "fixup", ...(i === 0 ? { message } : {}) }));
+      } else if (!picked.has(hash)) steps.push({ hash, action: "pick" });
+    }
+    return steps;
+  });
+}

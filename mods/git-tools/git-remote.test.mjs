@@ -8,7 +8,10 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
 import { makeGit } from "./git.js";
-import { pull, readPullTargets, pullDefault, togglePullOption, splitRemoteBranch, readTracking, updateBranch, updateBranches, checkoutAndUpdate, updateProject, resetToRemote, readUpdate, failureText, branchesFailureText } from "./git-remote.js";
+import { pull, readPullTargets, pullDefault, togglePullOption, splitRemoteBranch, readTracking, updateBranch, updateBranches, checkoutAndUpdate, updateProject, resetToRemote, readUpdate, failureText, branchesFailureText, cannotReach, remoteFailure } from "./git-remote.js";
+import { push as pushBranch } from "./git-push.js";
+import { pushTag, fetchRemote } from "./git-refs.js";
+import { fetchAll } from "./git-branch.js";
 import { smartRun } from "./git-smart.js";
 import { translator } from "./i18n.js";
 import { listSnapshots } from "./git-snapshot.js";
@@ -323,6 +326,111 @@ const commitMine = (mine, path, at, word) => { edit(mine, path, at, word); sh(mi
   const picked = await pull(git, mine, { remote: "", branch: "", options: [] });
   assert.equal(failureText(ko, picked), ko("remote.pickBranch"));
   assert.equal(failureText(en, { ok: false, err: "" }), en("ui.gitFailed"));
+}
+
+// A push, a tag push and a fetch that could not talk to the remote get the credential
+// hint once, first; a push the remote or a hook refused gets git's words alone. git
+// answers 128 when it could not reach or read the remote, 1 when a push was refused
+// (non-fast-forward, a stale lease, a pre-push or pre-receive hook) and when `fetch --all`
+// could not fetch one of its remotes.
+{
+  const en = translator("en"), ko = translator("ko"), hint = en("remote.credentialHint");
+  const { mine, theirs } = setup();
+  sh(mine, `git remote add gone ${base}/no-such-remote.git`);
+  const once = (words) => words.split(hint).length === 2;
+
+  // A branch whose upstream is on a remote that isn't there.
+  sh(mine, "git branch away && git config branch.away.remote gone && git config branch.away.merge refs/heads/away");
+  const away = await pushBranch(git, mine, { branch: "away" });
+  assert.equal(away.code, 128, away.err);
+  assert.match(away.err, /does not appear to be a git repository\nfatal: Could not read from remote repository\./);
+  assert.equal(cannotReach(away, "push"), true);
+  const awayWords = remoteFailure(en, away, "push");
+  assert.equal(awayWords.ok, false);
+  assert.equal(awayWords.err, `${hint}\n\n${away.err.trim()}`);
+  assert.equal(remoteFailure(ko, away, "push").err, `${ko("remote.credentialHint")}\n\n${away.err.trim()}`);
+
+  // A remote that wants a password: nobody can type it here.
+  const server = createServer((_req, res) => { res.writeHead(401, { "WWW-Authenticate": 'Basic realm="x"' }); res.end(); });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  sh(mine, `git remote add asking http://127.0.0.1:${server.address().port}/repo.git`);
+  sh(mine, "git branch locked && git config branch.locked.remote asking && git config branch.locked.merge refs/heads/locked");
+  const locked = await pushBranch(git, mine, { branch: "locked" });
+  server.close();
+  assert.equal(locked.code, 128, locked.err);
+  assert.ok(remoteFailure(en, locked, "push").err.startsWith(`${hint}\n\n`));
+
+  // A tag pushed to a remote that isn't there.
+  sh(mine, "git tag v1");
+  const tag = await pushTag(git, mine, { tag: "v1", remote: "gone" });
+  assert.equal(tag.code, 128, tag.err);
+  assert.equal(remoteFailure(en, tag, "push").err, `${hint}\n\n${tag.err.trim()}`);
+
+  // The Log panel's Fetch fetches every remote: one it can't reach makes it fail with 1.
+  const all = await fetchAll(git, mine);
+  assert.equal(all.code, 1, all.err);
+  assert.match(all.err, /error: could not fetch gone/);
+  assert.equal(cannotReach(all, "fetch"), true);
+  assert.equal(remoteFailure(en, all, "fetch").err, `${hint}\n\n${all.err.trim()}`);
+  // The fetch after a remote is defined fetches that one.
+  const one = await fetchRemote(git, mine, "gone");
+  assert.equal(one.code, 128, one.err);
+  assert.ok(once(remoteFailure(en, one, "fetch").err));
+
+  // git's words can run long: the dialog keeps their first 4000 characters, a
+  // notification its first lines. The hint is in those either way, once.
+  const long = remoteFailure(en, { ...away, err: "x".repeat(5000) }, "push").err;
+  assert.ok(long.startsWith(hint) && once(long));
+
+  // Refused: theirs moved main since mine last fetched.
+  push(theirs, "a.txt", 0, "their-a1");
+  commitMine(mine, "b.txt", 0, "my-b1");
+  const unseen = await pushBranch(git, mine, {});
+  assert.equal(unseen.code, 1, unseen.err);
+  assert.match(unseen.err, /! \[rejected\] +main -> main \(fetch first\)/);
+  assert.equal(remoteFailure(en, unseen, "push").err, unseen.err.trim());
+  sh(mine, "git fetch -q origin");
+  const behind = await pushBranch(git, mine, {});
+  assert.equal(behind.code, 1, behind.err);
+  assert.match(behind.err, /! \[rejected\] +main -> main \(non-fast-forward\)/);
+  assert.equal(cannotReach(behind, "push"), false);
+  assert.equal(remoteFailure(en, behind, "push").err, behind.err.trim());
+
+  // Force Push refused: theirs moved feature since mine last saw it.
+  sh(mine, "git checkout -q -b feature origin/feature");
+  push(theirs, "a.txt", 1, "their-f1", { to: "feature" });
+  commitMine(mine, "c.txt", 0, "my-c1");
+  const stale = await pushBranch(git, mine, { force: true });
+  assert.equal(stale.code, 1, stale.err);
+  assert.match(stale.err, /\(stale info\)/);
+  assert.equal(remoteFailure(en, stale, "push").err, stale.err.trim());
+
+  // A pre-push hook that says no.
+  writeFileSync(`${mine}/.git/hooks/pre-push`, "#!/bin/sh\necho hook says no >&2\nexit 1\n");
+  sh(mine, "chmod +x .git/hooks/pre-push && git checkout -q -b fresh");
+  const hooked = await pushBranch(git, mine, {});
+  assert.equal(hooked.code, 1, hooked.err);
+  assert.match(hooked.err, /^hook says no\n/);
+  assert.equal(remoteFailure(en, hooked, "push").err, hooked.err.trim());
+  sh(mine, "rm .git/hooks/pre-push");
+
+  // A pre-receive hook on the remote that says no.
+  writeFileSync(`${theirs}/../remote.git/hooks/pre-receive`, "#!/bin/sh\necho server says no >&2\nexit 1\n");
+  sh(theirs, "chmod +x ../remote.git/hooks/pre-receive");
+  const declined = await pushBranch(git, mine, {});
+  assert.equal(declined.code, 1, declined.err);
+  assert.match(declined.err, /\(pre-receive hook declined\)/);
+  assert.equal(remoteFailure(en, declined, "push").err, declined.err.trim());
+
+  // Refused before git ran, in the module's own words: no hint.
+  sh(mine, "git checkout -q --detach");
+  const detached = await pushBranch(git, mine, {});
+  assert.equal(cannotReach(detached, "push"), false);
+  assert.equal(remoteFailure(ko, detached, "push").err, ko("dialogs.push.detached"));
+
+  // Went well: the result as it was.
+  const fine = { ok: true, code: 0, out: "", err: "" };
+  assert.equal(remoteFailure(en, fine, "push"), fine);
 }
 
 // ---- updating a branch that isn't checked out: fast-forward only

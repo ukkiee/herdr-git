@@ -73,6 +73,29 @@ export function failureText(t, r) {
   return r?.fetchFailed ? `${t("remote.credentialHint")}\n\n${said}` : said;
 }
 
+// cannotReach(r, how) → true when a failed push or fetch (how: "push" | "fetch") could not
+// talk to the remote at all: the remote may want a password or passphrase nobody can type
+// here, or its host key, address or path is wrong.
+//   push: git answers 128 when it could not reach or read the remote, and 1 when the
+//   remote or a hook refused (non-fast-forward, a stale --force-with-lease, a protected
+//   branch, a pre-push or pre-receive hook). Those get git's words alone.
+//   fetch: any failure. `fetch --all` answers 1 for a remote it could not reach, and a
+//   fetch with the default refspecs has nothing of its own to refuse.
+// A refusal of the mod's own (a msg, code -1) never counts: git didn't run.
+export function cannotReach(r, how) {
+  if (!r || r.ok || typeof r.code !== "number" || r.code <= 0) return false;
+  return how === "fetch" || r.code === 128;
+}
+
+// remoteFailure(t, r, how) → r when it went well; else r worded for a screen in t's
+// language: failureText's words in err (the credential hint first when cannotReach) and no
+// msg, so every screen shows the same and none adds the hint again.
+export function remoteFailure(t, r, how) {
+  if (r?.ok) return r;
+  const err = failureText(t, { ...r, fetchFailed: Boolean(r?.fetchFailed) || cannotReach(r, how) });
+  return { ...r, err, msg: undefined, fetchFailed: undefined };
+}
+
 // branchesFailureText(t, results) → the words for updateBranches' results that failed or
 // were refused, a line per branch. The credential hint goes once, first, when any of them
 // failed on its fetch: branches on one remote would repeat it, and a notification shows

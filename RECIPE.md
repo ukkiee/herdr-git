@@ -1117,7 +1117,18 @@ The rules and their reasons are in `docs/design.md` (section 4); what a person s
   operation (also a stopped one's cleanup, and Update Project) could bring the changes
   back only without their staging. `Patch applied with a 3-way merge. Its files are
   staged.` when a patch needed a 3-way merge and nothing conflicts; with conflicts the
-  Conflicts dialog opens instead.
+  Conflicts dialog opens instead. `The remote <name> is defined, but fetching from it
+  failed` with git's words when Define Remote added or changed the remote and only its
+  Fetch from the remote failed: the dialog closes and the remote stays.
+- **Apply Patch's path.** `~` and `~/…` mean the home folder of the machine the patch is
+  on; `~name` stays as typed. A patch over 1 MiB, counted in UTF-8 bytes, shows
+  `Couldn't read <file>: the patch is larger than 1 MiB`. The checked files are always
+  named to git; with more than 1,000 of them (or very long names) they go in parts, and a
+  part git refuses after others leaves those others applied.
+- **Continue on a rebase with an edited message.** A pick stopped on conflicts keeps its
+  author and author date; a commit stopped for editing is amended with the message (and
+  what is staged). When more commits were made on top of that stop, git's own Continue
+  runs and the edited message is not used.
 - **Reading.** The Commit panel reads the operation in progress on every refresh; the
   VCS widget when it starts, when its folder changes, on a write to its repository and
   every 10 s while shown; the Conflicts dialog every 2 s; the Stash tab on writes in any
@@ -1575,9 +1586,9 @@ the git ones run against real temporary repositories):
 | `git-stash.js`, `git-reset.js`, `git-rewrite.js`, `rebase-plan.js`, `git-changes.js` | stash; reset and the record before a hard one; history edits through one rebase plan (`editCheck`, `readEditFacts`); file-level revert and cherry-pick |
 | `git-remote.js`, `git-refs.js`, `git-heads.js` | pull, update, Update Project, the Update Info range; tags, branch names, remotes, Push Tag; what the VCS widget shows |
 | `git-compare.js`, `git-revision.js`, `git-worktree.js` | comparisons, patches, Get from, Show Changes to Parents (`parentDiffs`); a revision's files, history, child commits; new worktrees and Checkout Tag or Revision |
-| `git-patch.js` | `readPatchFiles(text)` (pure: a patch's files, statuses and names as `git apply -p1` takes them), `applyPatch(git, root, { file, paths, every })` (checked files only; a 3-way retry; conflicts from `ls-files -u`), `changesCommit(git, root, { paths, message })` (a commit of the checked local changes on HEAD, no ref) |
+| `git-patch.js` | `readPatchFiles(text)` (pure: a patch's files, statuses and names as `git apply -p1` takes them), `applyPatch(git, root, { file, paths })` (checked files only, always named with `--include`, in parts when there are many; a 3-way retry; conflicts from `ls-files -u`), `READ_LIMIT`, `readMayBeCut(text)` (the 1 MiB read limit in UTF-8 bytes), `homePath(typed, home)` (a leading `~` or `~/` as that machine's home), `changesCommit(git, root, { paths, message })` (a commit of the checked local changes on HEAD, no ref) |
 | `git-console.js`, `log-menus.js`, `log-select.js`, `log-options.js`, `branch-order.js`, `vcs-ops.js`, `ui-icons.js` | console records, with a URL's credentials hidden; the Log panel's menus; picking commits; graph and view options; branch order and favorites (the widget popup's favorites first); the VCS Operations popup's items; UI icons |
-| `ui-size.js`, `focus-repo.js` | `textWidth`, `menuWidth`, `belowSpot`, `sideOf`, `dialogFills`, `widgetBlockWidth`; `whereFocused`, `newPanes`, `rememberTab`, `isTabScreen`, `registerTab`, `forgetTab` |
+| `ui-size.js`, `focus-repo.js` | `textWidth`, `menuWidth`, `belowSpot`, `pressSpot`, `sideOf`, `dialogFills`, `widgetBlockWidth`; `whereFocused`, `newPanes`, `rememberTab`, `isTabScreen`, `registerTab`, `forgetTab` |
 
 Each of these files' header says what it exports and why.
 
@@ -2311,6 +2322,8 @@ in English.
   repository for the search (stopping past 20,000 files). For a folder on a Windows
   computer, `powershell -NoProfile -Command` with `Get-ChildItem` instead (also when a
   space's machine has no `sh`). Reveal in Finder runs `open -R <path>` on this computer.
+- **For Apply Patch's `~` path**, once per dialog: `printenv HOME` on the space's machine
+  when it has one, Herdr's `home()` on this computer.
 - **To read the system language**, on the computer the window is on (never a space's
   machine): `defaults read -g AppleLanguages` on macOS, and on Linux
   `sh -c 'printf "%s\n%s\n%s\n" "$LC_ALL" "$LC_MESSAGES" "$LANG"'`, and on Windows
@@ -2377,8 +2390,8 @@ in English.
   file (mode 0600) while a merge result is saved or a clipboard patch is applied, removed
   after. Create Patch to a file writes where the person says, on the space's machine. The
   mod reads the clipboard only for Apply Patch from Clipboard.
-  The mod reads a file directly only for the Files panel's preview (`readTextFile`, up to
-  1 MiB); `watchFolder` watches the repository root and its git folder, and the Files
+  The mod reads a file directly only for the Files panel's preview, a compare Diff tab's
+  working-tree side and Apply Patch's patch file (`readTextFile`, up to 1 MiB); `watchFolder` watches the repository root and its git folder, and the Files
   panel's folder.
 - **`install.sh`** runs `node`, `herdr-app status`, `herdr-app check`,
   `herdr-app do layout.clone` (first time) and `herdr-app do layout.switch`, and writes in

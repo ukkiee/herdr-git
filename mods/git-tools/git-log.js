@@ -6,7 +6,7 @@ import { formatTime } from "./i18n.js";
 // Fields end in NUL and -z ends each commit in NUL, so a subject may hold anything a
 // commit message can (quotes, pipes, control characters): nothing is split on text.
 // %aN/%aE: the author as .mailmap maps them, the names the User list and filter use.
-const FIELDS = ["%H", "%P", "%aN", "%aE", "%ct", "%D", "%s"];
+const FIELDS = ["%H", "%P", "%aN", "%aE", "%ct", "%at", "%D", "%s"];
 const FORMAT = `--format=${FIELDS.join("%x00")}`;
 
 // "HEAD -> refs/heads/main, tag: refs/tags/v1.0, refs/remotes/origin/main" → refs.
@@ -37,13 +37,24 @@ function parseRefs(text) {
 //   the full read takes in a repository with tens of thousands of them.
 //   extra: more `git log` arguments, from git-log-filter.js (already safe to pass on):
 //   options first, then optionally "--" and paths.
-//   → { ok, err, commits }
-//   commit: { hash, parents: [hash], subject, author, email, time, refs }
-//     time: commit date, unix seconds. refs: [{ name, kind, current? }] with kind
-//     "head" | "local" | "remote" | "tag". "head" marks the commit HEAD is on; the
-//     branch HEAD is on has current: true (a detached HEAD has "head" and no current).
+//   The graph options (log-options.js readArgs):
+//   order: "date" (children before parents, then newest first) or "topo" (a merged
+//   branch's commits together under the merge). Both keep children before parents.
+//   firstParent: follow only first parents from each starting point. A merge still
+//   lists both parents; graph.js draws the first.
+//   noMerges: merge commits are left out. git keeps the real parents of the commits
+//   under a merge (`--no-merges` rewrites nothing), so merges are read and dropped here,
+//   and the answer has through: [[merge, its first parent]] for graph.js to join the
+//   lines across them, and read: how many commits git gave, which is what `skip` goes
+//   on from (a batch may show fewer than it read).
+//   → { ok, err, commits } (with noMerges also { read, through })
+//   commit: { hash, parents: [hash], subject, author, email, time, authorTime, refs }
+//     time: commit date, authorTime: author date, unix seconds. refs: [{ name, kind,
+//     current? }] with kind "head" | "local" | "remote" | "tag". "head" marks the commit
+//     HEAD is on; the branch HEAD is on has current: true (a detached HEAD has "head"
+//     and no current).
 //   A repository without commits is { ok: true, commits: [] }.
-export async function readLog(git, root, { skip = 0, count = 1000, branch = null, extra = [], tags = true } = {}) {
+export async function readLog(git, root, { skip = 0, count = 1000, branch = null, extra = [], tags = true, order = "date", firstParent = false, noMerges = false } = {}) {
   const cut = extra.indexOf("--");
   const options = cut < 0 ? extra : extra.slice(0, cut), paths = cut < 0 ? [] : extra.slice(cut + 1);
   let revs;
@@ -54,16 +65,30 @@ export async function readLog(git, root, { skip = 0, count = 1000, branch = null
     if (!head.ok && head.code !== 1) return { ok: false, err: head.err, commits: [] };
     revs = ["--branches", "--remotes", ...(tags ? ["--tags"] : []), ...(head.ok ? ["HEAD"] : [])];
   }
-  const r = await git.read(root, ["log", "-z", FORMAT, "--date-order", "--decorate=full", ...(tags ? [] : ["--decorate-refs-exclude=refs/tags/*"]), "--no-show-signature", "--no-color",
+  const r = await git.read(root, ["log", "-z", FORMAT, order === "topo" ? "--topo-order" : "--date-order", ...(firstParent ? ["--first-parent"] : []),
+    "--decorate=full", ...(tags ? [] : ["--decorate-refs-exclude=refs/tags/*"]), "--no-show-signature", "--no-color",
     `--skip=${Math.max(0, skip)}`, `--max-count=${Math.max(0, count)}`, ...options, ...revs, "--", ...paths]);
   if (!r.ok) return { ok: false, err: r.err, commits: [] };
   const parts = r.out.split("\0");
   const commits = [];
   for (let i = 0; i + FIELDS.length <= parts.length; i += FIELDS.length) {
-    const [hash, parents, author, email, time, refs, subject] = parts.slice(i, i + FIELDS.length);
-    commits.push({ hash, parents: parents ? parents.split(" ") : [], subject, author, email, time: Number(time), refs: parseRefs(refs) });
+    const [hash, parents, author, email, time, authorTime, refs, subject] = parts.slice(i, i + FIELDS.length);
+    commits.push({ hash, parents: parents ? parents.split(" ") : [], subject, author, email, time: Number(time), authorTime: Number(authorTime), refs: parseRefs(refs) });
   }
-  return { ok: true, err: "", commits };
+  if (!noMerges) return { ok: true, err: "", commits };
+  const through = commits.filter((c) => c.parents.length > 1).map((c) => [c.hash, c.parents[0]]);
+  return { ok: true, err: "", commits: commits.filter((c) => c.parents.length <= 1), read: commits.length, through };
+}
+
+// readNotPicked(git, root, branch) → { ok, err, notPicked: [hash] }
+//   The commits of `branch` whose change the current branch (HEAD) has no copy of: not
+//   reachable from HEAD and no commit there with an equal patch (`git cherry`'s "+").
+//   Every other commit of the branch is already on the current branch.
+export async function readNotPicked(git, root, branch) {
+  const r = await git.read(root, ["cherry", "HEAD", branch]);
+  if (!r.ok) return { ok: false, err: r.err || `git cherry failed (${r.code})`, notPicked: [] };
+  const notPicked = r.out.split("\n").filter((line) => line.startsWith("+ ")).map((line) => line.slice(2).trim());
+  return { ok: true, err: "", notPicked };
 }
 
 // readRefsState(git, root) → { ok, err, state }

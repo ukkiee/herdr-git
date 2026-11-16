@@ -287,7 +287,9 @@ toolbar (`Git` semibold, `Log` 12px `muted`, Refresh, Hide) and the notice.
     name or email, or `not set in git`; `dim` and off when git has neither), then each
     typed value in force (hint `contains`), then the repository's authors that match the
     input, by name. An author row's hint is its email, or the first email and `+N` when
-    the name has several. Checked rows have the 12px `check`. While the authors are first
+    the name has several: the hint takes at most 110px and only the email is cut with
+    `…`, never the `+N`. The row's tooltip is the name and every email, one per line.
+    Checked rows have the 12px `check`. While the authors are first
     read, a `Loading…` row (`dim`); a typed input that matches none, `No matching users`;
     a failed read, git's words at 12px `ansi1`. Last, at 11px `dim`:
     `Enter checks a row or adds the text`. The button's value is the one entry (`me`, a
@@ -3201,7 +3203,8 @@ pre-push 20 s, reference-transaction 12 s, each made to fail when a check says s
 two emails, and one author reached only by a tag)
 
 83. Open User: `me` and the authors by name; `Bob Stone` is one row with
-    `<first email> +1`; the tag-only author isn't listed.
+    `<first email> +1`, the `+1` whole even when the email is cut; resting on it shows
+    both emails; the tag-only author isn't listed.
 84. Type `oan`: only `Joann` remains. Clear it, click `Ann` and `Joann`: both checked,
     the popup stays open, the Commit list holds both one's and the other's commits
     only, and the button reads `2 users` with the tooltip `User: Ann, Joann`.

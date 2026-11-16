@@ -326,7 +326,7 @@ export default class MergeRevisionsView {
     const bar = toolbar(this.file.state);
     const on = this.free() && !this.editor;
     const glyphButton = (id, text, title, enabled, onClick) => div().id(id).h(24).px(6).flex_none().flex().items_center().justify_center().rounded(5)
-      .text_color(enabled ? t.muted : t.dim).map((el) => tip(el, title))
+      .text_color(enabled ? t.muted : t.dim).map((el) => tip(el, title, id))
       .when(enabled, (el) => el.cursor_pointer().hover((s) => s.bg(t.hover).text_color(t.foreground))
         .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
         .on_click((_e, cx) => { cx.stop_propagation(); onClick(); cx.notify(); }))

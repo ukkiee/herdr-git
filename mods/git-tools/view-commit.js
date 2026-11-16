@@ -613,7 +613,7 @@ export default class CommitView {
       const last = this.last;
       // A commit made with an empty message has no subject: its short hash stands in.
       // A subject can be long, so it is the one cut and the file count stays whole.
-      return tip(el, last?.hash ?? "")
+      return tip(el, last?.hash ?? "", `commit-row-${r.id}`)
         .child(div().flex_initial().min_w(0).truncate().font_semibold().child(last?.subject || (last?.hash ?? "").slice(0, 8)))
         .child(div().flex_none().text_size(12).text_color(t.dim).child(count));
     }

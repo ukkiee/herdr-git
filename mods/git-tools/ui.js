@@ -489,10 +489,23 @@ function menuShown(key, open) {
   if (shared(MENUS) !== openMenus.size) setShared(MENUS, openMenus.size);
 }
 
-// tip(el, text) → el with the tooltip `text`, unless a menu is open or text is empty.
+// tip(el, text, id) → el with the tooltip `text`, unless a menu is open or text is empty.
 // Screens attach every tooltip with it (ui-ids.test.mjs); the menu screens draw their own.
-export function tip(el, text) {
-  return text && !openMenus.size ? el.tooltip(text) : el;
+// Herdr builds a tooltip once, when the pointer comes to rest, and keeps it while the
+// element stays the same one: a text that changes under a resting pointer (Commit turning
+// back from Amend Commit, Push naming another branch) would stay as it was. Pass the
+// element's own `id` where the text can change: the element is then named after its text
+// too, so a new text is a new element, and its tooltip is built again.
+export function tip(el, text, id) {
+  if (!text || openMenus.size) return el;
+  return (id ? el.id(`${id}~${textKey(text)}`) : el).tooltip(text);
+}
+
+// A short name for a text (FNV-1a), to tell one tooltip text from another in an id.
+function textKey(text) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 0x01000193);
+  return (h >>> 0).toString(36);
 }
 
 // ---- small parts
@@ -563,7 +576,7 @@ export function iconButton(id, name, t, { title, disabled = false, active = fals
     .when(active, (el) => el.bg(t.selected))
     .when(disabled, (el) => el.opacity(0.5))
     .child(busy ? svg(icon("spinner")).size(15).spin(900) : uiGlyph(name, { dark: darkLook(t.background), disabled, size: Math.min(ICON, size - 2) }));
-  el = tip(el, title);
+  el = tip(el, title, id);
   if (disabled) return el;
   return el.cursor_pointer().hover((s) => s.bg(t.hover).text_color(t.foreground))
     .on_mouse_down("left", stop)
@@ -592,7 +605,7 @@ export function button(id, label, t, { kind = "plain", disabled = false, busy = 
     .text_color(disabled ? t.dim : primary ? t.solid_foreground : t.foreground)
     .when(busy, (el) => el.child(svg(icon("spinner")).size(12).spin(900)))
     .child(label);
-  el = tip(el, title);
+  el = tip(el, title, id);
   if (disabled || busy) return el;
   return el.cursor_pointer().hover((s) => s.opacity(0.88))
     .on_mouse_down("left", stop)
@@ -609,7 +622,7 @@ export function progressBar(id, t, { label, title, state }) {
   const width = state?.width ?? 240, piece = Math.max(40, Math.round(width * 0.3));
   return v_flex().id(id).flex_none().w_full().min_w(0).px(10).pt(6).pb(8).gap(5).border_t(1).border_color(t.border)
     .when(Boolean(label), (el) => el.child(div().id(`${id}-label`).w_full().min_w(0).truncate().text_size(12).text_color(t.foreground)
-      .map((el) => tip(el, title)).child(label ?? "")))
+      .map((el) => tip(el, title, `${id}-label`)).child(label ?? "")))
     .child(div().id(`${id}-track`).relative().w_full().h(4).rounded(2).bg(t.border).overflow_hidden()
       .on_size_change((size, cx) => {
         if (!state || size.width === state.width) return;

@@ -273,7 +273,7 @@ export default class CommitForm {
     const host = this.host, writing = host.writeBlock();
     const words = host.t(target.squash ? "rewrite.squashTarget" : "rewrite.fixupTarget", { hash: target.commit.slice(0, SHORT), subject: target.subject });
     return h_flex().id("commit-target").w_full().min_w(0).gap(6).items_center()
-      .child(div().id("commit-target-name").flex_1().min_w(0).truncate().font_semibold().map((el) => tip(el, target.commit)).child(words))
+      .child(div().id("commit-target-name").flex_1().min_w(0).truncate().font_semibold().map((el) => tip(el, target.commit, "commit-target-name")).child(words))
       .child(button("commit-target-cancel", host.t("dialogs.cancel"), t, {
         disabled: Boolean(this.running), title: writing ?? undefined,
         onClick: (_e, cx) => { if (!this.running) this.dropTarget(); cx.notify(); },

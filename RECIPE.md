@@ -1530,7 +1530,12 @@ filter and branch changes and next batch run anyway).
 **Two more shared values.** `git-tools.menus`: how many popup menus `openMenu` has open;
 while it isn't 0, `tip(el, text)` in `ui.js` attaches no tooltip, and every screen
 attaches its tooltips only through `tip` (`ui-ids.test.mjs` fails on a `.tooltip(` call
-anywhere else; the menu screens draw their own). `git-tools.tabs`:
+anywhere else; the menu screens draw their own). Herdr builds a tooltip once, when the
+pointer comes to rest, and keeps it while the element is the same, so `tip(el, text, id)`
+takes the element's id where the text can change under a resting pointer (Commit after
+Amend Commit, Push naming another branch, every `button` and `iconButton`): it names the
+element `<id>~<a short hash of the text>`, and a new text drops the old tooltip and
+builds a new one at the next rest. `git-tools.tabs`:
 `{ <pane id>: { root, on } }`, the git-tools tabs and the repository each was opened on
 (`focus-repo.js`: `registerTab`, `forgetTab`, `whereFocused`); `location()` in `ui.js`
 follows a recorded pane's repository while it has the focus. A pane id is Herdr's

@@ -369,7 +369,7 @@ export default class InteractiveRebaseView {
   tool(id, label, t, { off, title, onPress, onClick }) {
     let el = h_flex().id(id).h(24).px(8).flex_none().items_center().rounded(4).text_size(12.5)
       .text_color(off ? t.dim : t.foreground);
-    el = tip(el, title);
+    el = tip(el, title, id);
     if (off) return el.child(label);
     return el.cursor_pointer().hover((s) => s.bg(t.hover))
       .when(Boolean(onPress), (el) => el.on_mouse_down("left", (e, cx) => onPress(e, cx)))

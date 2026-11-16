@@ -393,9 +393,9 @@ export default class PushView {
     let main = half("push-run").px(14).gap(6)
       .when(busy, (el) => el.child(svg(icon("spinner")).size(12).spin(900)))
       .child(this.t(this.pushing === "force" ? "dialogs.push.forcePushing" : busy ? "dialogs.push.pushing" : "dialogs.push.push"))
-      .map((el) => tip(el, why ?? this.t("dialogs.push.pushTo", { branch: this.plan.branch, remote: this.plan.remote, target: this.plan.target })));
+      .map((el) => tip(el, why ?? this.t("dialogs.push.pushTo", { branch: this.plan.branch, remote: this.plan.remote, target: this.plan.target }), "push-run"));
     let more = half("push-more").w(24).child(uiGlyph("chevron-down"));
-    if (!this.menuOpen) more = tip(more, why ?? this.t("dialogs.push.more"));
+    if (!this.menuOpen) more = tip(more, why ?? this.t("dialogs.push.more"), "push-more");
     if (on) {
       main = live(main, (_e, cx) => this.run(false, cx));
       // A click carries no position: the press before it does.

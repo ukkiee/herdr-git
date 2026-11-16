@@ -697,6 +697,8 @@ another machine runs every git command on that machine. A panel opened with
   Operations popup, or Fixup… / Squash Into… opened the panel; not the Changes button):
   ↑ ↓ move, ← folds (or goes to the parent), →
   unfolds (or goes to the first child), Space checks, Enter opens the Diff tab or folds.
+  Tab puts the keyboard in the commit message (not while a Fixup target, which has no
+  message box, is set); Shift-Tab in the message comes back to the list.
 - **Right-click** a row: selects it and opens its menu.
 - **View Options**: the menu toggles Group By: Directory. The choice is kept.
 - **Expand All / Collapse All**: every group (the Last commit group too) and every folder.
@@ -3047,7 +3049,8 @@ Each line is one check: do what it says, see what follows.
 36. With the side panel at its 280px minimum, the Commit panel's toolbar, Amend line and
     both buttons don't overlap.
 37. With the keyboard only: `cmd-k` opens the Commit panel; in its list ↑ ↓ ← → Space
-    Enter work; `cmd-enter` in the message commits; Esc closes the Rollback and Push
+    Enter work; Tab goes to the message, where typed text lands (Shift-Tab goes back to
+    the list); `cmd-enter` in the message commits; Esc closes the Rollback and Push
     dialogs; ↑ ↓ Enter work in a popup menu and in the Branch tree.
 38. Press `cmd-shift-l` until `main` shows (it moves to the next layout each time):
     Herdr's own Changes shows under the Changes button, Herdr's own Files under the

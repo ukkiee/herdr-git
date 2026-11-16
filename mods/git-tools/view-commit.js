@@ -683,6 +683,12 @@ export default class CommitView {
         .when(shown !== null && !gitButtonPlaced(), (el) => el.child(iconButton("commit-log", "panel-bottom", t, { title: this.t("commit.gitLog"), active: shown === true, onClick: () => toggleLogPanel() }))))
       .child(div().id("commit-list").flex_1().min_h(0).track_focus(this.handle)
         .on_key_down((e, cx) => {
+          // Tab goes on to the message box, so the keyboard alone gets from picking files
+          // to cmd-enter (Shift-Tab there comes back: commit-form.js).
+          if (e.keystroke === "tab") {
+            if (this.repo && this.form.focusMessage()) { cx.stop_propagation(); cx.notify(); }
+            return;
+          }
           const name = { up: "up", down: "down", left: "left", right: "right", space: "space", enter: "enter" }[e.keystroke];
           if (!name) return;
           this.act(name);

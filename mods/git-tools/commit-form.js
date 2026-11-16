@@ -216,6 +216,24 @@ export default class CommitForm {
   // The target on the shown repository, or null.
   aimed() { return this.target && sameRepo(this.target, this.host.repo) ? this.target : null; }
 
+  // Tab from the panel's list: the keyboard goes into the message box, when one shows (a
+  // Fixup target has none). True when it went.
+  focusMessage() {
+    const target = this.aimed();
+    if (target && !target.squash) return false;
+    this.text.focus();
+    return true;
+  }
+
+  // Shift-Tab in the form: back to the panel's list.
+  backToList(e, cx) {
+    if (e.key !== "tab" || !e.modifiers?.shift || !this.host.handle) return false;
+    this.host.handle.focus();
+    cx.stop_propagation();
+    cx.notify();
+    return true;
+  }
+
   // Back to plain committing: the box gets back what it held before a Squash Into.
   dropTarget() {
     const was = this.target;
@@ -287,7 +305,7 @@ export default class CommitForm {
     return v_flex().id("commit-form").flex_none().w_full().min_w(0).border_t(1).border_color(t.border)
       .track_focus(this.handle)
       .on_key_down((e, cx) => {
-        if (e.keystroke !== "cmd-enter") return;
+        if (this.backToList(e, cx) || e.keystroke !== "cmd-enter") return;
         cx.stop_propagation();
         this.rebase(cx);
       })
@@ -440,7 +458,7 @@ export default class CommitForm {
     return v_flex().id("commit-form").flex_none().w_full().min_w(0).border_t(1).border_color(t.border)
       .track_focus(this.handle)
       .on_key_down((e, cx) => {
-        if (e.keystroke !== "cmd-enter") return;
+        if (this.backToList(e, cx) || e.keystroke !== "cmd-enter") return;
         cx.stop_propagation();
         this.run(false, cx);
       })

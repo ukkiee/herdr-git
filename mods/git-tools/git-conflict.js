@@ -95,15 +95,22 @@ export function saveResult(git, root, path, text, { write } = {}) {
 // saveStaged(git, root, path, file, placer) → result, as saveResult, with the text in a
 // staged file (stageText) instead of in hand. placer: localPlacer or remotePlacer. The
 // staged file is removed afterwards, whatever happened.
-export async function saveStaged(git, root, path, file, placer) {
+export async function saveStaged(git, root, path, file, placer, { resolve = true } = {}) {
   try {
-    return await saveWith(git, root, path, placer ? (target) => placer.place(file, target) : null);
+    return await saveWith(git, root, path, placer ? (target) => placer.place(file, target) : null, { resolve });
   } finally {
     try { await placer?.drop(file); } catch { /* nothing more to do with it */ }
   }
 }
 
-async function saveWith(git, root, path, put) {
+// keepStaged(git, root, path, file, placer) → result, as saveStaged without marking the
+// file resolved: the text is put in the working file and the conflict and the index stay
+// as they are (an unfinished result kept to go on with).
+export function keepStaged(git, root, path, file, placer) {
+  return saveStaged(git, root, path, file, placer, { resolve: false });
+}
+
+async function saveWith(git, root, path, put, { resolve = true } = {}) {
   const { r, entries } = await unmergedEntries(git, root, path);
   if (!entries) return r;
   if (!entries[path]) return notConflicted(path);
@@ -114,7 +121,7 @@ async function saveWith(git, root, path, put) {
   } catch (error) {
     return writeFailed(path, String(error?.message ?? error));
   }
-  return git(root, ["add", "--", literal(path)]);
+  return resolve ? git(root, ["add", "--", literal(path)]) : done();
 }
 
 // unresolve(git, root, path) → result. The path is in conflict again, with the stages the

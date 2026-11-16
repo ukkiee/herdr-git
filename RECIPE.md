@@ -603,7 +603,13 @@ dialog's own (`openDialog` in its file).
   Edit Result Directly and the count; bottom Accept Left, Accept Right │ Save and Close,
   Apply Changes (default). Arrows and chunk buttons are characters, not icons. Its
   questions (`Unprocessed Changes`, `Overwrite Changes`, and the one when the file changed
-  on disk since the dialog read it, with Overwrite) are 460px cards over it.
+  on disk since the dialog read it, with Overwrite) are 460px cards over it. × and Esc
+  close it without asking: a result changed since the file was opened is written to the
+  working file first (still in conflict, its staging unchanged; `conflicts-keep`), and
+  an unchanged one writes nothing. Opening the file again goes on from the working file
+  when it has no conflict marks (`<<<<<<<` / `>>>>>>>` lines); with git's marks the
+  result starts from the three versions as before. When keeping fails, git's words show
+  and the next × or Esc closes without keeping.
 - **Smart dialog** (560×440): `Git <name> Problem`, a sentence, the blocking files' tree
   with Group By: Directory, Expand All, Collapse All; buttons Force Checkout, `Don't
   Checkout` and `Smart Checkout` (default) for a checkout, Cancel and `Smart <name>`
@@ -1581,7 +1587,8 @@ it moved (the answer then has `moved: true`). Every other dialog's write is a li
 `SERVE_ACTIONS` in `serve-actions.js`: `"<name>": { work: "<words key>", run: (git, root,
 args, panel) => … }`, served by the Commit panel, the Log panel and the VCS widget block
 alike: `conflicts-accept`, `conflicts-unresolve`, `conflicts-resolve-simple`,
-`conflicts-save` (the result travels as a temporary file's path), `reset`,
+`conflicts-save` (the result travels as a temporary file's path), `conflicts-keep` (the
+same, written to the working file without marking it resolved), `reset`,
 `restore-3way`, `patch-create`, `stash-create`, `stash-apply`, `stash-drop`,
 `stash-clear`, `branch-create`, `rewrite-reword`, `rewrite-squash`, `rewrite-drop`,
 `rewrite-extract`, `rewrite-drop-changes`, `rebase-interactive`, `smart-run`,
@@ -3832,6 +3839,10 @@ and `b.txt` and a new file `c.txt`)
 261. Resolve Manually, then edit `a.txt` in a terminal and press Apply Changes (or Save and
      Close): a question says the file was changed on disk, with Overwrite. Edit it by
      hand before opening and press Accept Left: the overwrite question shows first.
+     In Resolve Manually, take one side with » and close with ×: no question, `a.txt`
+     now holds that result and is still in conflict (`git status` shows it unmerged, the
+     staging unchanged); Resolve Manually again shows that result. Close without changing
+     anything: the file is untouched.
 262. With two simple conflicts, one of them edited by hand, press Resolve All Simple
      Conflicts: the edited file stays as you left it and the bottom reads `1 file edited
      by hand was left as it is.` A file at the repository's top shows no folder beside

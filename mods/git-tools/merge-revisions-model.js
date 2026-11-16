@@ -10,8 +10,8 @@
 //
 // Words come back as { key, args } for messages-conflicts.js.
 
-import { merge, counts, resolved } from "./merge-chunks.js";
-import { stageText, saveStaged, isStaged } from "./git-conflict.js";
+import { merge, counts, resolved, edit } from "./merge-chunks.js";
+import { stageText, saveStaged, keepStaged, isStaged } from "./git-conflict.js";
 
 const short = (hash) => String(hash ?? "").slice(0, 8);
 
@@ -43,14 +43,22 @@ export function paneTitles(op, { branch = null, stash = null } = {}) {
 
 // openFile(versions, cols) → { mode, state? }
 //   versions: git-conflict.js readVersions. cols: conflicts-model.js columns.
-//   mode: "text" (state: merge-chunks.js merge of base, left, right), "binary" or "deleted"
-//   (a side has no file): those get no panes, only Accept Left and Accept Right.
+//   mode: "text" (state: merge-chunks.js merge of base, left, right, with the working file
+//   (versions.worktree) as the result when it has no conflict marks), "binary" or
+//   "deleted" (a side has no file): those get no panes, only Accept Left and Accept Right.
 export function openFile(v, cols) {
   if (v.binary) return { mode: "binary" };
   const left = v[cols.yours.side], right = v[cols.theirs.side];
   if (left === null || left === undefined || right === null || right === undefined) return { mode: "deleted" };
-  return { mode: "text", state: merge(v.base ?? "", left, right) };
+  const state = merge(v.base ?? "", left, right);
+  // A working file without git's conflict marks is a result already: one kept when the
+  // dialog was closed (keepRequest), or one written by hand. The dialog goes on from it.
+  if (typeof v.worktree === "string" && !MARKED.test(v.worktree)) return { mode: "text", state: edit(state, v.worktree) };
+  return { mode: "text", state };
 }
+
+// A line that opens or closes one of git's conflict blocks.
+const MARKED = /^(?:<{7}|>{7})(?: |\r?$)/m;
 
 // Whether a chunk still waits for a decision (merge-chunks.js keeps its own copy private).
 function open(chunk) {
@@ -206,4 +214,14 @@ export function saveRequest(git, root, args, placer) {
   const path = typeof args?.path === "string" && args.path ? args.path : null;
   if (!path || !isStaged(args.file)) return badRequest();
   return saveStaged(git, root, path, args.file, placer);
+}
+
+// keepRequest(git, root, { path, file }, placer) → git-conflict.js keepStaged's result:
+// as saveRequest, but the file stays in conflict with its index as it was. The dialog
+// closed with a changed result asks for it ("conflicts-keep"), so the result isn't lost
+// and opening the dialog again goes on from it (openFile).
+export function keepRequest(git, root, args, placer) {
+  const path = typeof args?.path === "string" && args.path ? args.path : null;
+  if (!path || !isStaged(args.file)) return badRequest();
+  return keepStaged(git, root, path, args.file, placer);
 }

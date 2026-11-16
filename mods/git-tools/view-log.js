@@ -16,7 +16,7 @@ import { v_flex } from "gpui-base";
 import { exec, theme } from "herdr";
 import { makeGit, repoRoot } from "./git.js";
 import { readRefsState, readGitDir, refsChanged, resolveCommit } from "./git-log.js";
-import { fetchAll, restoreBranch } from "./git-branch.js";
+import { fetchAll, restoreBranch, trackedBranch } from "./git-branch.js";
 import { remoteFailure } from "./git-remote.js";
 import { location, watchSettled, panelFrame, toolbar, spacer, iconButton, notice, notRepository, errorStrip, noteBar, sentence, toggleLogPanel, logPanelShown, broadcast, scriptedRepo, takeWrite, releaseWrite, writeBlock, writeName, writingOn, readBlocked, fromRepo, gitButtonPlaced, openMenu, progressBar } from "./ui.js";
 import { sameRepo } from "./lock.js";
@@ -136,7 +136,7 @@ const ACTIONS = {
   "branch.rename": (host, b) => renameFrom(host, host.repo, b),
   "branch.push": (host, b) => pushBranch(host, host.repo, b),
   // The tracked branch's own menu, as its row under Remote has it.
-  "branch.trackedBranch": (host, b, cx) => { const up = host.branches.data?.local.find((x) => x.name === b?.name)?.upstream; if (up) host.branches.menu({ kind: "branch", scope: "remote", key: `remote:${up}`, label: up, branch: { name: up } }, cx); },
+  "branch.trackedBranch": (host, b, cx) => { const up = trackedBranch(host.branches.data?.local.find((x) => x.name === b?.name)); if (up) host.branches.menu({ kind: "branch", scope: "remote", key: `remote:${up}`, label: up, branch: { name: up } }, cx); },
   "remote.edit": (host, r) => remoteDialog(host, host.repo, r?.remote, "edit"),
   "remote.remove": (host, r) => remoteDialog(host, host.repo, r?.remote, "remove"),
   "branch.update": (host, b, cx) => updateHere(host, host.repo, "ui.logPanel", b, cx),

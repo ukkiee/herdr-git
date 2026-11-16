@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import { makeGit } from "./git.js";
 import { readHeads, widgetFace, popupRows } from "./git-heads.js";
 import { translator } from "./i18n.js";
+import { menuItems } from "./log-menus.js";
 
 // The person's own git settings stay out of every repository here.
 process.env.GIT_CONFIG_GLOBAL = "/dev/null";
@@ -207,6 +208,17 @@ const shape = (rows, tr = en) => rows.map((r) => r.kind === "rule" ? "|"
   assert.deepEqual(popupRows({ heads: heads(), op: op(), query: "", folded: new Set(), handled: all }, ko).filter((r) => r.kind !== "branch" && r.kind !== "folder").map((r) => r.kind === "rule" ? "|" : r.label), [
     "프로젝트 업데이트…", "커밋…", "푸시…", "|", "새 브랜치…", "새 워크트리…", "태그 또는 리비전 체크아웃…", "|", "최근", "로컬", "원격", "태그",
   ]);
+}
+
+// A branch whose remote branch is gone shows as one that tracks nothing: no name on its
+// right, so its menu has no tracked branch and nothing to update from.
+{
+  const gone = heads({ local: [{ name: "done", upstream: "origin/done", gone: true, ahead: 0, behind: 0, current: false }], recent: ["done"] });
+  const rows = popupRows({ heads: gone, op: op(), query: "", folded: new Set(), handled: all }, en);
+  assert.deepEqual(rows.filter((r) => r.name === "done").map((r) => [r.scope, r.upstream]), [["recent", null], ["local", null]]);
+  const menu = menuItems("localBranch", () => true, { name: "done", current: "main", upstream: rows.find((r) => r.name === "done").upstream ?? "" });
+  const items = new Map(menu.map((it) => [it.id, it.disabled]));
+  assert.deepEqual([items.get("branch.checkoutAndUpdate"), items.get("branch.update"), items.has("branch.trackedBranch")], [true, true, false]);
 }
 
 // Remote branches sit under their remote's folder; tags by name.

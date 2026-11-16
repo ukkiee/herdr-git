@@ -224,7 +224,9 @@ toolbar (`Git` semibold, `Log` 12px `muted`, Refresh, Hide) and the notice.
   level. Branch rows: `branch-item` icon (13px) in `ansi3` for the current branch (whose
   name is semibold), `ansi2` for other local branches, `ansi5` for remote ones; then
   `↑N` (`ansi2`) and `↓N` (`ansi4`) at 11px against its upstream. Tooltip: the name, or
-  `<name> → <upstream>`. The row the Commit list is limited to has the `selected`
+  `<name> → <upstream>`. A branch whose upstream is gone from the remote (deleted there
+  and pruned here, git's `[gone]`) shows as one that tracks nothing: no `→ <upstream>`,
+  no Tracked Branch menu, and Update and Checkout and Update are off. The row the Commit list is limited to has the `selected`
   background; the keyboard's cursor row has `hover`. `origin/HEAD` is not listed.
 - Filtering with no match: `No branches match`.
 
@@ -557,7 +559,8 @@ dialog's own (`openDialog` in its file).
   search box `Search for branches and actions` with Refresh; Update Project…, Commit…,
   Push…; the in-progress items; New Branch…, New Worktree…, Checkout Tag or Revision…;
   then Recent (up to 5), Local, Remote and Tags trees, each branch row with a › opening
-  the same menu as the Branch tree beside it. Local and Remote read favorites (★) first,
+  the same menu as the Branch tree beside it. A Recent row shows the branch it tracks on
+  its right (11px `dim`), none when that branch is gone from the remote. Local and Remote read favorites (★) first,
   then the current branch, then by name.
 - **VCS Operations popup** (`cmd-shift-v`, 300px wide, as tall as its rows): title `VCS
   Operations`, group `Git`, then Commit…, Push…, Update Project…, Pull…, Fetch │ Merge…,
@@ -1592,7 +1595,7 @@ the git ones run against real temporary repositories):
 | `git-diff.js` | `MAX_ROWS` (5000), `MAX_CHARS` (400000), `parseDiff`, `readDiff` (`oldPath`: a renamed file's path before its commit), `touchesDiff(changed, root, path)` (whether watched changes can change a working file's diff) |
 | `git-push.js` | `PROTECTED` (`["main", "master"]`), `readPushPlan`, `readPushFiles`, `push` |
 | `git-log.js` | `readLog`, `readRefsState`, `readGitDir(git, root, { own })` (the common git folder, or with `own` the checkout's own), `refsChanged`, `stateChanged(dir, paths)` (a ref, HEAD, an operation's state files or the index moved), `resolveCommit`, `shortenMiddle`, `labelRefs`, `formatCommitTime`, `readNotPicked(git, root, branch)` → `{ ok, err, notPicked: [hash] }` (the branch's commits whose change HEAD has no copy of, `git cherry`'s "+") |
-| `git-branch.js` | `readBranches`, `readTags(git, root)` → `{ ok, code, out, err, tags: [{ name, hash }] }`, `readFavorites(git, root)`, `setFavorite(git, root, ref, on)` (the `gittools.favorite` and `gittools.unfavorite` marks), `readMyBranches(git, root)` → `{ ok, code, out, err, email, mine }` (`mine`: branches holding a commit by `user.email`), `checkout`, `checkoutRevision`, `checkBranchName`, `createBranch`, `fetchAll`, `deleteBranch` (refuses a branch checked out in another worktree before recording, `branches.checkedOutElsewhere`; records the branch first and deletes nothing when that fails; a branch it removed comes back as `deleted: { name, hash, upstream }`, `upstream` `{ remote, merge }` or null, read before `branch -D`), `restoreBranch(git, root, { name, hash, upstream })`, `readDeletedBranches(git, root)` → `{ ok, err, branches: [{ name, hash, subject, time, upstream, restorable, reason, msg? }] }` (newest first, at most 50), `restoreBranches(git, root, branches)` → `{ ok, code, out, err, msg?, restored: [{ name, hash }], skipped: [{ name, hash, reason, msg? }], untracked: [{ name, hash, err }] }` (`untracked`: restored branches whose upstream config failed, with git's words) |
+| `git-branch.js` | `readBranches` (each local branch's `upstream` and `gone`), `trackedBranch(b)` (its upstream, null when gone), `readTags(git, root)` → `{ ok, code, out, err, tags: [{ name, hash }] }`, `readFavorites(git, root)`, `setFavorite(git, root, ref, on)` (the `gittools.favorite` and `gittools.unfavorite` marks), `readMyBranches(git, root)` → `{ ok, code, out, err, email, mine }` (`mine`: branches holding a commit by `user.email`), `checkout`, `checkoutRevision`, `checkBranchName`, `createBranch`, `fetchAll`, `deleteBranch` (refuses a branch checked out in another worktree before recording, `branches.checkedOutElsewhere`; records the branch first and deletes nothing when that fails; a branch it removed comes back as `deleted: { name, hash, upstream }`, `upstream` `{ remote, merge }` or null, read before `branch -D`), `restoreBranch(git, root, { name, hash, upstream })`, `readDeletedBranches(git, root)` → `{ ok, err, branches: [{ name, hash, subject, time, upstream, restorable, reason, msg? }] }` (newest first, at most 50), `restoreBranches(git, root, branches)` → `{ ok, code, out, err, msg?, restored: [{ name, hash }], skipped: [{ name, hash, reason, msg? }], untracked: [{ name, hash, err }] }` (`untracked`: restored branches whose upstream config failed, with git's words) |
 | `git-log-filter.js` | `DATE_PRESETS` (`{ label, key, since }`: `label` is the saved English name, `key` the words), `datePreset(label)`, `dateText(t, { dateLabel, since, until })`, `isDate`, `filterArgs` (`users: [{ name } \| { text }]` besides `user`), `isHash`, `readMe`, `userOf`, `readAuthors(git, root)` → `{ ok, err, authors: [{ name, emails }] }`, `matchAuthors(authors, query)`, `readBranchNames` |
 | `i18n.js` | `LANGS` (`["en", "ko"]`), `pickLang(tags)`, `readAppleLanguages(stdout)`, `readLocaleEnv(stdout)`, `systemLang(platform, read)` (→ `"ko" \| "en"`, or null when it isn't known; `platform` `"macos"`, `"linux"` or `"windows"`, where an empty answer is not known), `TABLES`, `translator(lang, tables?)` → `t(key, args)` (`t.lang`), `sentence(t, msg, text)`, `formatTime(seconds, lang, now?)`, `formatDateTime(seconds, lang)` |
 | `messages-<area>.js` | `en` and `ko` (one file per area, see "Words") |
@@ -3695,7 +3698,10 @@ commit `main` lacks)
      local commit, and the 7-char hash on a detached HEAD, as the Branch tree's `HEAD (…)`.
 231. Click it: a 380×520 popup with `Search for branches and actions`, Update Project…,
      Commit…, Push…, New Branch…, New Worktree…, Checkout Tag or Revision…, then Recent,
-     Local, Remote and Tags; typing narrows branches and actions together.
+     Local, Remote and Tags; typing narrows branches and actions together. A branch
+     whose remote branch was deleted and pruned (`git fetch --prune`) shows no
+     `origin/…` on its right, and its › menu has Update and Checkout and Update off and
+     no Tracked Branch; the Branch tree's row and menu say the same.
 232. Checkout Tag or Revision… with a tag name: HEAD is detached at it; an unknown name
      shows a notification.
 233. New Worktree…: `New Worktree` with Source branch ▾, New branch, Location and Create

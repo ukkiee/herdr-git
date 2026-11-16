@@ -57,6 +57,11 @@ export async function readBranches(git, root) {
   return { ok: true, err: "", head, local, remote };
 }
 
+// trackedBranch(b) → the remote branch a local branch (readBranches' local) shows as
+// tracked and updates from, or null. A gone one shows as none: there is nothing there to
+// update from or to open.
+export const trackedBranch = (b) => (b?.gone ? null : b?.upstream ?? null);
+
 // checkout(git, root, name, { remote })
 //   A local branch: switch to it. remote: true → `name` is a remote branch
 //   ("origin/x"): create local "x" tracking it and switch, or switch to "x" if it exists.

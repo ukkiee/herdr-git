@@ -27,7 +27,7 @@
 import { div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { theme } from "herdr";
-import { readBranches, deleteBranch, readFavorites, setFavorite, readMyBranches, readTags } from "./git-branch.js";
+import { readBranches, trackedBranch, deleteBranch, readFavorites, setFavorite, readMyBranches, readTags } from "./git-branch.js";
 import { isFavorite, nextFavorites, orderBranches, orderTreeRows, refOf as fullRef, treeSettings, treeSettingsMenu, toggleTreeSetting } from "./branch-order.js";
 import { appSetting, saveAppSetting } from "./app-files.js";
 import { smartCheckout } from "./view-smart.js";
@@ -249,17 +249,17 @@ export default class LogBranches {
   // What an action on a row works on: { name, from, scope, current, upstream }, or null
   // for a folder. `from` is what a new branch would start at: the full ref name, since a
   // tag or a local branch may share the short one. upstream: the branch a local one
-  // tracks, else null. A tag's scope is "tag".
+  // tracks (git-branch.js trackedBranch: none when gone), else null. A tag's scope is "tag".
   target(m) {
     const d = this.data;
     if (!m || !d) return null;
     if (m.kind === "branch") {
       const from = `${m.scope === "remote" ? "refs/remotes/" : "refs/heads/"}${m.branch.name}`;
-      return { name: m.branch.name, from, scope: m.scope, current: m.scope === "local" && m.branch.current, upstream: m.scope === "local" ? m.branch.upstream ?? null : null };
+      return { name: m.branch.name, from, scope: m.scope, current: m.scope === "local" && m.branch.current, upstream: m.scope === "local" ? trackedBranch(m.branch) : null };
     }
     if (m.kind === "tag") return { name: m.branch.name, from: `refs/tags/${m.branch.name}`, scope: "tag", current: false, upstream: null };
     if (m.kind !== "head") return null;
-    if (d.head.branch) return { name: d.head.branch, from: `refs/heads/${d.head.branch}`, scope: "local", current: true, upstream: d.local.find((b) => b.name === d.head.branch)?.upstream ?? null };
+    if (d.head.branch) return { name: d.head.branch, from: `refs/heads/${d.head.branch}`, scope: "local", current: true, upstream: trackedBranch(d.local.find((b) => b.name === d.head.branch)) };
     return d.head.hash ? { name: d.head.hash.slice(0, 7), from: d.head.hash, scope: "head", current: true, upstream: null } : null;
   }
 
@@ -493,7 +493,7 @@ export default class LogBranches {
     const { host } = this, b = this.target(m), which = m ? this.menuOf(m, b) : null;
     if (!which) return;
     const d = this.data, tr = host.t;
-    const upstream = m.kind === "branch" && m.scope === "local" ? m.branch.upstream : null;
+    const upstream = m.kind === "branch" && m.scope === "local" ? trackedBranch(m.branch) : null;
     const ctx = {
       name: b ? shortenMiddle(b.name, 30) : m.label, current: d?.head.branch ?? (d?.head.hash ? d.head.hash.slice(0, 7) : "HEAD"),
       upstream: upstream ?? "", writing: host.writeBlock(), deleteBlock: b ? this.deleteBlock(b) : null, scope: b?.scope ?? null,
@@ -597,7 +597,7 @@ export default class LogBranches {
       if (was !== this.hovered) cx.notify();
     });
     // No tooltip while this row's menu is open.
-    if (this.menuRow !== m.key) el = tip(el, m.scope === "local" && b.upstream ? `${b.name} → ${b.upstream}` : b.name);
+    if (this.menuRow !== m.key) el = tip(el, m.scope === "local" && trackedBranch(b) ? `${b.name} → ${trackedBranch(b)}` : b.name);
     return el
       .child(star)
       .child(div().flex_1().min_w(0).truncate().when(here, (el) => el.font_semibold()).child(m.label))

@@ -4,7 +4,7 @@
 // and the repository root, and returns a result instead of throwing. No `herdr` import:
 // node tests it (git-heads.test.mjs).
 
-import { readBranches } from "./git-branch.js";
+import { readBranches, trackedBranch } from "./git-branch.js";
 import { operationName } from "./git-operation.js";
 
 // The Recent group of the popup holds this many branches at most.
@@ -138,7 +138,7 @@ export function popupRows({ heads, op, query = "", folded = new Set(), handled =
   const local = new Map((heads?.local ?? []).map((b) => [b.name, b]));
   const branch = (scope, name, label = name) => {
     const b = scope === "recent" || scope === "local" ? local.get(name) : null;
-    return { kind: "branch", scope, name, label, current: Boolean(b?.current), upstream: b?.upstream ?? null, ahead: b?.ahead ?? 0, behind: b?.behind ?? 0 };
+    return { kind: "branch", scope, name, label, current: Boolean(b?.current), upstream: trackedBranch(b), ahead: b?.ahead ?? 0, behind: b?.behind ?? 0 };
   };
   const trees = [];
   for (const [id, key] of GROUPS) {

@@ -762,6 +762,16 @@ export function dialogFrame(id, title, t, { body, footer = [], note, onClose, wi
 
 export const close = (overlay) => { if (overlay) closeOverlay(overlay); };
 
+// takeEscape(el, onEscape) → el, taking Herdr's Esc for an inner menu or card. Herdr's Esc
+// is its `overlay.close` action, bound to escape over an overlay: it comes before any
+// on_key_down and closes the whole dialog or popup. An element on the keyboard's path that
+// answers the action keeps the overlay open, as Herdr's own Settings does while its font
+// list is open. Put it on the element that holds the keyboard, only while the inner part
+// is open; onEscape(cx) closes that part.
+export function takeEscape(el, onEscape) {
+  return el.on_action("overlay.close", (_e, cx) => { cx.stop_propagation(); onEscape(cx); cx.notify(); });
+}
+
 // A framed multi-line text box around a TextareaState (make the state once, in init:
 // TextareaState.new({ placeholder, rows })). The height comes from `rows` or .h().
 export function textBox(id, state, t, { focused = false } = {}) {

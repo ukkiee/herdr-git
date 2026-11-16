@@ -27,7 +27,7 @@
 import { div } from "gpui-kit";
 import { h_flex, v_flex, TextareaState } from "gpui-base";
 import { theme, exec, notify } from "herdr";
-import { tip, openDialog, dialogFrame, button, close, askOwner, writeBlock, scrollText, sentence, textBox, row, spacer, notice, WindowedList, fileGlyph, darkLook, strokePath, openMenu, ROW } from "./ui.js";
+import { tip, openDialog, dialogFrame, button, close, askOwner, writeBlock, scrollText, sentence, textBox, row, spacer, notice, WindowedList, fileGlyph, darkLook, strokePath, openMenu, ROW, takeEscape } from "./ui.js";
 import { makeGit } from "./git.js";
 import { readCommit } from "./git-show.js";
 import { readEditFacts, readRebaseCommits, interactiveRebase } from "./git-rewrite.js";
@@ -495,7 +495,8 @@ export default class InteractiveRebaseView {
     const first = initialStep(this, "interactive-rebase", t);
     if (first) return first;
     const asked = this.question(t);
-    if (asked) return asked.track_focus(this.handle).on_key_down((e, cx) => {
+    // Esc closes only the question; the dialog stays.
+    if (asked) return takeEscape(asked, () => { this.asking = null; }).track_focus(this.handle).on_key_down((e, cx) => {
       if (e.key === "escape") { this.asking = null; cx.stop_propagation(); cx.notify(); }
     });
     const plan = this.plan();
@@ -526,11 +527,14 @@ export default class InteractiveRebaseView {
           onClick: (_e, cx) => this.run(cx),
         }),
       ],
-    }).track_focus(this.handle).on_key_down((e, cx) => {
-      if (!this.keyDown(e, cx)) return;
-      cx.stop_propagation();
-      cx.notify();
-    });
+    })
+      // Esc leaves a reword (asking first when it was changed); the dialog stays.
+      .when(Boolean(this.editing), (el) => takeEscape(el, () => { this.leaveReword(); this.handle.focus(); }))
+      .track_focus(this.handle).on_key_down((e, cx) => {
+        if (!this.keyDown(e, cx)) return;
+        cx.stop_propagation();
+        cx.notify();
+      });
   }
 
   // Keys (the reference product's are unconfirmed): arrows move the cursor (Shift

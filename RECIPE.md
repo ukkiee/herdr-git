@@ -629,8 +629,8 @@ dialog's own (`openDialog` in its file).
   Edit Result Directly and the count; bottom Accept Left, Accept Right │ Save and Close,
   Apply Changes (default). Arrows and chunk buttons are characters, not icons. Its
   questions (`Unprocessed Changes`, `Overwrite Changes`, and the one when the file changed
-  on disk since the dialog read it, with Overwrite) are 460px cards over it. × and Esc
-  close it without asking about what is left to decide: a result changed since the file
+  on disk since the dialog read it, with Overwrite) are 460px cards over it; Esc on a card
+  closes only the card. × and Esc close it without asking about what is left to decide: a result changed since the file
   was opened is written to the working file first (still in conflict, its staging
   unchanged; `conflicts-keep`), and an unchanged one writes nothing. When the working file
   changed on disk since the dialog read it, the same Overwrite question comes first:
@@ -1551,7 +1551,9 @@ opening copy's, `this.bus` on a screen, `host.bus` in a Log panel part; `at`: `{
 in window coordinates, a mouse event's `position`, passed to `openOverlay` as its `at`),
 `answerMenu(bus, key, value)`,
 `menuMetrics`; `panelFrame`, `toolbar`, `spacer`, `row`, `iconButton`, `checkbox`,
-`button`, `notice`, `notRepository`, `errorStrip`, `scrollText`, `dialogFrame`, `close`, `textBox`,
+`button`, `notice`, `notRepository`, `errorStrip`, `scrollText`, `dialogFrame`, `close`,
+`takeEscape(el, onEscape)` (answers Herdr's `overlay.close` on `el`, so Esc runs
+`onEscape(cx)` and the overlay stays; only while an inner menu, card or question is open), `textBox`,
 `strokePath`, and `WindowedList` (draws only the rows in view, its own wheel handling
 and a 6px thumb; `render`, `reveal`, `scrollBy`, `scrollTo`, `nearEnd`, and an
 `onWheel(rows, cx)` hook told of every wheel step, moved or not: the Commit list reads a
@@ -1770,7 +1772,8 @@ filter or read run everywhere.
 `layout`, `spaces`, `panes`, `focused`, `watchFolder`, `readTextFile` (the Files panel's
 preview, a compare Diff tab's working-tree side, the Conflicts dialog's working-tree file,
 Apply Patch's patch file, and the app home's `console.jsonl` and `settings.json`),
-`openOverlay` (with `at` for the Push dialog's ▾ menu), `closeOverlay`, `shared`,
+`openOverlay` (with `at` for the Push dialog's ▾ menu), `closeOverlay`, the app action
+`overlay.close` (Esc; answered with `on_action`), `shared`,
 `setShared` (keys `git-tools.bus`, `git-tools.lock`, `git-tools.lang`, `git-tools.menus`
 and `git-tools.tabs`), `window` (its `platform`, for reading the system language, the
 Files panel's folder reads and Reveal in Finder) and `settings().dark` (Herdr's look, for
@@ -2580,11 +2583,14 @@ in English.
   large.
 - `close(cx)` gets 250 ms, and isn't called when a copy crashes or is killed. `main.js`
   releases the copy's locks first, synchronously, before the screen's own `close`.
-- Herdr closes a dialog on Esc whatever the mod does (`on_key_down` can't stop it; Cancel
-  and × can be ignored, Esc can't). git goes on, but nothing after the closed copy's
-  current `await` runs: no `changed`, no error shown, no lock released. Hence a dialog
-  only asks (`askOwner`) and the panel copy that opened it runs the write. A panel copy
-  lives long, so its locks rarely go without being released.
+- Herdr's Esc is its `overlay.close` action, bound to escape over an overlay. It comes
+  before any `on_key_down` and closes the top dialog or popup: a key handler can't stop it,
+  only an element holding the keyboard that answers the action (`on_action`). git-tools
+  answers it only while an inner menu, card or question is open (`takeEscape` in `ui.js`),
+  so Esc on a dialog itself still closes it, even while it waits. git goes on, but nothing
+  after the closed copy's current `await` runs: no `changed`, no error shown, no lock
+  released. Hence a dialog only asks (`askOwner`) and the panel copy that opened it runs
+  the write. A panel copy lives long, so its locks rarely go without being released.
 
 **The write lock**
 
@@ -3734,7 +3740,8 @@ commit `main` lacks)
      Squash's ▾ opens its Fixup menu right under the ▾, inside the dialog.
 202. In that dialog Squash, Fixup, Drop and Reword (double-click the subject) a commit
      each and start: the history shows exactly that. Closing with changes asks `Cancel
-     Rebase` first.
+     Rebase` first; Esc on that question closes only the question. Esc in a reword's box
+     leaves the reword (asking first when its text changed) and the dialog stays.
 203. Mark a commit Stop to Edit and start: the notification `Rebase Stopped for Editing`
      says to continue or abort from the VCS widget or the Commit panel; Continue Rebase
      there finishes.

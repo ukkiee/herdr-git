@@ -39,7 +39,7 @@ import { compareWithCurrent, diffWithWorkingTree } from "./view-compare-branches
 import { shortenMiddle } from "./git-log.js";
 import { menuItems } from "./log-menus.js";
 import { menuWidth, sideOf } from "./ui-size.js";
-import { MOD, openDialog, answerMenu, dialogFrame, button, uiGlyph, iconButton, darkLook, notice, writeBlock, menuMetrics, WindowedList } from "./ui.js";
+import { MOD, openDialog, answerMenu, dialogFrame, button, uiGlyph, iconButton, darkLook, notice, writeBlock, menuMetrics, WindowedList, takeEscape } from "./ui.js";
 
 export const POPUP_ACTIONS = {
   "vcs.commit": (w) => w.openCommit(),
@@ -167,8 +167,8 @@ export default class VcsPopup {
     this.sub = null;
     this.list = new WindowedList("vcs-popup-rows", { rowHeight: ROW_H });
     // The popup's own keyboard place, held while a branch's menu is open: a press on a row
-    // takes the keyboard from the search box, and keys that reach no handler here go to
-    // Herdr, whose Esc closes the whole popup.
+    // takes the keyboard from the search box, and the menu's keys need a handler on the
+    // keyboard's path. Esc is Herdr's, and closes the whole popup unless taken (takeEscape).
     this.handle = cx.focus_handle();
     this.makeInput("");
     this.input.focus();
@@ -381,15 +381,18 @@ export default class VcsPopup {
       : this.err ? notice(this.err, t)
         : !n ? notice(this.t("vcs.nothing"), t)
           : this.list.render(n, (i) => this.rowFor(rows[i], i, t), t);
+    const shutSub = () => { this.sub = null; this.keysTo(); };
     return v_flex().id("vcs-popup").w_full().h(HEIGHT).p(PAD).bg(t.popover).text_size(12.8)
       .track_focus(this.handle)
+      // Esc closes an open branch menu and leaves the popup open.
+      .when(Boolean(this.sub), (el) => takeEscape(el, shutSub))
       .on_key_down((e, cx) => {
         // While a branch's menu is open the keys move in it; ← or Esc closes it.
         if (this.sub) {
           if (e.key === "down") this.moveSub(1);
           else if (e.key === "up") this.moveSub(-1);
           else if (e.key === "enter") this.pickSub(this.sub.at);
-          else if (e.key === "left" || e.key === "escape") { this.sub = null; this.keysTo(); }
+          else if (e.key === "left" || e.key === "escape") shutSub();
           else return;
           cx.stop_propagation();
           cx.notify();

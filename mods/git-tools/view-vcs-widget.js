@@ -308,7 +308,8 @@ export default class VcsWidgetBlock {
   }
 
   // A dialog's write that failed (ui.js serveRequest): the block has no room for a strip.
-  writeFailed(text) { if (text) notify({ title: text, level: "error" }); }
+  // A notification's title is cut to one line, so git's words go in its body.
+  writeFailed(text) { if (text) notify({ title: this.t("ui.gitFailed"), body: text, level: "error" }); }
 
   event(e, cx) { this.widget.event(e, cx); }
 

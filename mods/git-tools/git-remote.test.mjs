@@ -121,8 +121,7 @@ const commitMine = (mine, path, at, word) => { edit(mine, path, at, word); sh(mi
   assert.equal(info.files, 1);
 }
 {
-  // --squash leaves the change staged, uncommitted. (On diverged branches git first wants
-  // to be told how to reconcile them, as it does for a pull without options.)
+  // --squash leaves the change staged, uncommitted.
   const { mine, theirs } = setup();
   push(theirs, "a.txt", 0, "their-a1");
   const before = head(mine);
@@ -183,6 +182,21 @@ const commitMine = (mine, path, at, word) => { edit(mine, path, at, word); sh(mi
   assert.equal(rev(m2, "HEAD"), rev(t2, "main"));
   assert.deepEqual(status(m2), before);
   assert.equal(text(m2, "a.txt").split("\n")[0], "their-a1");
+}
+{
+  // Diverged, no option picked and no pull setting: it merges (git alone would refuse and
+  // ask how to reconcile them), the tracked branch and another branch of the remote alike.
+  const { mine, theirs } = setup();
+  push(theirs, "a.txt", 0, "their-a1");
+  commitMine(mine, "b.txt", 0, "my-b1");
+  const merged = await pull(git, mine, { remote: "origin", branch: "main", options: [] });
+  assert.equal(merged.outcome, "done", merged.err);
+  assert.equal(parents(mine, "HEAD"), 2);
+  assert.equal(rev(mine, "HEAD^2"), rev(theirs, "main"));
+  const other = await pull(git, mine, { remote: "origin", branch: "feature", options: [] });
+  assert.equal(other.outcome, "done", other.err);
+  assert.equal(rev(mine, "HEAD^2"), rev(mine, "origin/feature"));
+  assert.equal(branch(mine), "main");
 }
 {
   // A repository set to pull by rebasing (pull.rebase, or the branch's own rebase setting)
@@ -412,6 +426,15 @@ const commitMine = (mine, path, at, word) => { edit(mine, path, at, word); sh(mi
   assert.equal(hooked.code, 1, hooked.err);
   assert.match(hooked.err, /^hook says no\n/);
   assert.equal(remoteFailure(en, hooked, "push").err, hooked.err.trim());
+  // git leaves what a pre-push hook prints on stdout there: the words still come first,
+  // before git's own, for a branch and for a tag.
+  writeFileSync(`${mine}/.git/hooks/pre-push`, "#!/bin/sh\necho 'pre-push: refuses this push'\nexit 1\n");
+  const quiet = await pushBranch(git, mine, {});
+  assert.equal(quiet.code, 1, quiet.err);
+  assert.match(remoteFailure(en, quiet, "push").err, /^pre-push: refuses this push\n(.*\n)*error: failed to push some refs/);
+  assert.match(remoteFailure(ko, await pushTag(git, mine, { tag: "v1", remote: "origin" }), "push").err, /^pre-push: refuses this push\nerror: failed to push some refs/);
+  // With nothing on stderr, `err` already is stdout (git.js): said once.
+  assert.equal(remoteFailure(en, { ok: false, code: 1, out: "only on stdout\n", err: "only on stdout" }, "push").err, "only on stdout");
   sh(mine, "rm .git/hooks/pre-push");
 
   // A pre-receive hook on the remote that says no.

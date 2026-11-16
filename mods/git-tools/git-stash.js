@@ -13,8 +13,6 @@
 import { readCommit } from "./git-show.js";
 import { readOperation } from "./git-operation.js";
 
-// A stash can hold a large tree; creating and applying it rewrite the working tree.
-const TIMEOUT = 5 * 60 * 1000;
 const HASH = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/;
 
 // The reflog subject git writes for a stash, in English whatever the locale:
@@ -107,7 +105,7 @@ export async function applyStash(git, root, { hash, pop = false, index = false, 
   }
   const before = await readOperation(git, root);
   const args = name ? ["stash", "branch", name, target] : ["stash", pop ? "pop" : "apply", ...(index ? ["--index"] : []), target];
-  const r = await git(root, args, { timeout: TIMEOUT });
+  const r = await git(root, args);
   const after = await readOperation(git, root);
   const operation = after.ok ? after : null;
   const stopped = Boolean(operation?.conflicts.length) && !(before.ok && before.conflicts.length);
@@ -150,7 +148,7 @@ export async function createStash(git, root, { message = "", keepIndex = false, 
   if (untracked) args.push("--include-untracked");
   const text = String(message ?? "").trim();
   if (text) args.push("-m", text);
-  const r = await git(root, args, { timeout: TIMEOUT });
+  const r = await git(root, args);
   const after = await newest(git, root);
   const made = after !== null && after !== before;
   if (!r.ok) return { ...r, hash: made ? after : null, changed: true };

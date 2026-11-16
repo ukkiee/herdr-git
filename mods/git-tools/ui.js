@@ -300,7 +300,7 @@ export const ASK_WITHIN = 3000;
 export const UNKNOWN = { ok: false, unknown: true, err: "" };
 // An answer travels in the shared value, which is saved with the person's state.
 const CLIP = 4000;
-const clip = (text) => { const s = String(text ?? ""); return s.length > CLIP ? `${s.slice(0, CLIP)}…` : s; };
+export const clip = (text) => { const s = String(text ?? ""); return s.length > CLIP ? `${s.slice(0, CLIP)}…` : s; };
 
 // askOwner(screen, action, args, who, cx, done)
 //   From a dialog (screen.owner, screen.bus). done(r, cx) gets the panel's answer

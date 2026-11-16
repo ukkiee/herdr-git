@@ -568,6 +568,8 @@ export default class CommitView {
     // cmd-k or another way of opening this panel in this window (ui.js openCommitPanel).
     if (e.type === "commit-focus" && e.space === activeSpaceId()) this.handle.focus();
     if (e.type === "changed" && (!e.root || e.root === this.repo?.root)) this.refresh(cx);
+    // A push another copy ran for a Push dialog failed (view-push.js): its words go here too.
+    if (e.type === "push-failed" && e.from !== this.bus.id && sameRepo({ root: e.root, on: e.on ?? null }, this.repo)) this.writeFailed(e.text, cx);
     // Fixup… or Squash Into… picked in the Log panel on this repository (view-extract.js).
     if (e.type === "rewrite-target" && sameRepo({ root: e.root, on: e.on ?? null }, this.repo)) this.form.aim(e, cx);
     // Another write on the noticed repository, whichever copy ran it, ends the notice; the

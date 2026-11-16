@@ -27,6 +27,10 @@ export const PARALLEL = 4;
 // without a timer (a module has no `cx`), and the refusal is the answer.
 const BUSY = /execs are running already/;
 const TRIES = 5;
+// The time limit of a command that may write and names none: exec's cap. A hook
+// (reference-transaction, post-checkout) may run past exec's 30 s default, and git
+// stopped halfway may leave a ref half written or a lock behind.
+const WRITE_TIMEOUT = 600000;
 
 // herdr's exec gives up on a command at its timeout (30 s unless given) and rejects, yet its
 // answer has been seen to go missing: no process left and a promise that never settles. A
@@ -45,7 +49,7 @@ const never = new Promise(() => {});
 // empty (hooks and some git errors print there).
 // `on`: the space's machine, null for this computer. `env`: herdr's exec has no env
 // option, so variables go through the `env` program. `timeout`: ms (exec's default is 30 s,
-// its cap 10 min).
+// its cap 10 min); a command without the READ flags that names none gets WRITE_TIMEOUT.
 // record(call): gets every command that may write once it ended, { at (ms), cwd, on,
 // args (git's, without env), code, stdout, stderr }, and is awaited so one copy's records
 // land in order. Default: the installed one (recordWith). Its failure never fails git.
@@ -78,6 +82,7 @@ export function makeGit(exec, on, { record, wait } = {}) {
   const git = async (cwd, args, { timeout, env } = {}) => {
     const options = { cwd, on };
     if (timeout) options.timeout = timeout;
+    else if (!reads(args)) options.timeout = WRITE_TIMEOUT;
     const vars = Object.entries(env ?? {}).map(([k, v]) => `${k}=${v}`);
     const at = Date.now(), limit = (timeout || EXEC_TIMEOUT) + LATE;
     // `threw` apart from `failed`: an exec may reject with no error at all (undefined, "").

@@ -18,8 +18,6 @@ import { editMessage, dropCommits, squashCommits, interactiveRebase, extractChan
 // settings are shared by every worktree of a repository, and each worktree only brings
 // back its own.
 export const SMART_MARK = "gittools.smart-stash";
-// A checkout rewrites the working tree; hooks may run.
-const TIMEOUT = 5 * 60 * 1000;
 
 const str = (value) => (typeof value === "string" ? value : "");
 const strings = (value) => (Array.isArray(value) ? value.filter((v) => typeof v === "string" && v) : []);
@@ -135,7 +133,7 @@ export async function forceCheckout(git, root, { name, remote = false, copy } = 
   // remote ref, as git-branch.js checkout does.
   const args = target.exists ? ["checkout", "--force", "--end-of-options", target.local, "--"]
     : ["checkout", "--force", "-b", target.local, "--track", target.ref, "--"];
-  const r = await git(root, args, { timeout: TIMEOUT });
+  const r = await git(root, args);
   return { ...r, snapshot: made.snapshot, changed: true };
 }
 

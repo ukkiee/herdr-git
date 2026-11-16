@@ -427,7 +427,13 @@ Modal, 760×480, title `Restore Rolled-Back Changes`.
 - A record made on another commit than HEAD now shows `Recorded on another commit:
   Restore applies all of it 3-way, and lines changed on both sides may be left as
   conflicts.`, its checkboxes are locked, and Restore applies the whole record; lines
-  left in conflict show in the Commit panel's Merge Conflicts node.
+  left in conflict show in the Commit panel's Merge Conflicts node. A changed file HEAD
+  doesn't have now (the commit the reset went to came before it) is not merged: it comes
+  back as the record's working tree had it, staged as it was when it was staged, else
+  untracked, and the result row ends `Not in HEAD now, so brought back as they were in
+  the rollback:` with those paths. When something is on disk where such a file would come
+  back, nothing is restored: `Nothing was restored: something is on disk now where a
+  file HEAD doesn't have would come back:` and the paths.
 - Right, line on its left: a 28px row with a checkbox for all the files and `N files`
   (`No files checked` when none is checked) at 12px `dim`, then the selected snapshot's
   files as a folder tree (compact folders, Icon theme icons, a fold arrow on folders,
@@ -973,18 +979,22 @@ another machine runs every git command on that machine. A panel opened with
   the dialog opens, the list or the files still unread are read again.
 - Target: the branch's upstream; without one, `origin` and the same name, and the push
   sets the upstream.
-- **Push** pushes exactly what the dialog shows, or nothing. The Commit panel that
-  opened the dialog runs it: right before `git push` it reads the plan again, and when
+- **Push** pushes exactly what the dialog shows, or nothing. The screen that opened the
+  dialog (the Commit panel, the Log panel or the VCS widget) runs it: right before
+  `git push` it reads the plan again, and when
   the branch, remote, target or newest commit differ from what the dialog shows, nothing
   is pushed, the dialog says what changed and shows the new plan. While it runs both
   buttons, × and Cancel do nothing. Success: every screen reads again and the dialog
-  closes. Failure: git's output stays in the dialog and in the Commit panel's error
-  strip, the commit is already made, Push can be pressed again.
+  closes. Failure: git's output stays in the dialog and in the error strip of every
+  Commit panel on the repository (the Log panel shows it in its own strip too, the VCS
+  widget in a notification), the commit is already made, Push can be pressed again.
+  git's output is what a pre-push hook printed (git leaves it on stdout), then git's
+  own words.
 - Esc closes the dialog even while it pushes (Herdr does that; the mod can't stop it).
-  The push goes on in the Commit panel: every screen reads again when it ends, and a
-  failure shows in the Commit panel's error strip.
-- When the Commit panel doesn't take the request within 3 s (it closed), nothing is
-  pushed and Push can be pressed again.
+  The push goes on in the screen that opened it: every screen reads again when it ends,
+  and a failure shows in the Commit panel's error strip.
+- When the screen that opened it doesn't take the request within 3 s (it closed),
+  nothing is pushed and Push can be pressed again.
 - **Force Push** is `--force-with-lease`: git refuses when someone pushed to the remote
   branch since your last fetch. Disabled when the branch or its target is `main` or
   `master`, and when there is nothing to push.
@@ -1606,7 +1616,7 @@ the git ones run against real temporary repositories):
 | `git-status.js` | `readStatus` |
 | `git-commit.js` | `commit`, `lastMessage`, `headIsPushed` |
 | `git-rollback.js` | `rollback` (→ `{ ok, code, out, err, msg?, snapshot, skipped: [{ path, reason, msg }] }`; `snapshot`: the Rollback snapshot's hash or null), `wordRollback(t, r)` (`r.msg` with its list of reasons worded again in `t`'s language) |
-| `git-snapshot.js` | `SNAPSHOTS` (`"refs/git-tools/rollback"`), `LIST_LIMIT` (50), `ACTIONS` (`["Rollback", "Reset", "Checkout"]`: the write a snapshot was taken before, its message's first word), `record(git, root, paths, copy)` → `{ ok, code, out, err, snapshot }` (only Rollback calls it), `listSnapshots(git, root)` → `{ ok, code, err, snapshots: [{ hash, time, files: [{ path, status }] }] }` (newest first, `status` `modified` / `added` / `deleted`), `restore(git, root, { snapshot, paths, copy })` → `{ ok, code, out, err, msg?, restored: [path], skipped: [{ path, reason, msg }], stagingSkipped: [{ path, reason, msg }], changed }` (`stagingSkipped`: restored paths whose staging stayed as it is now; `changed`: anything on disk changed, also when git failed partway), `applySnapshot(git, root, { snapshot })` (a snapshot made on another HEAD put back whole and 3-way, the way `git stash apply --index` applies a stash; conflicts left for the Conflicts dialog), `reasonList(skipped, word?)`, `wordRestore(t, r)` (r.msg with the skipped reasons, the staging reasons and a worded cause in t's language) |
+| `git-snapshot.js` | `SNAPSHOTS` (`"refs/git-tools/rollback"`), `LIST_LIMIT` (50), `ACTIONS` (`["Rollback", "Reset", "Checkout"]`: the write a snapshot was taken before, its message's first word), `record(git, root, paths, copy)` → `{ ok, code, out, err, snapshot }` (only Rollback calls it), `listSnapshots(git, root)` → `{ ok, code, err, snapshots: [{ hash, time, files: [{ path, status }] }] }` (newest first, `status` `modified` / `added` / `deleted`), `restore(git, root, { snapshot, paths, copy })` → `{ ok, code, out, err, msg?, restored: [path], skipped: [{ path, reason, msg }], stagingSkipped: [{ path, reason, msg }], changed }` (`stagingSkipped`: restored paths whose staging stayed as it is now; `changed`: anything on disk changed, also when git failed partway), `applySnapshot(git, root, { snapshot, copy })` (a snapshot made on another HEAD put back whole and 3-way, the way `git stash apply --index` applies a stash; conflicts left for the Conflicts dialog; changed files HEAD no longer has are written as the snapshot had them instead, in `revived`), `reasonList(skipped, word?)`, `wordRestore(t, r)` (r.msg with the skipped reasons, the staging reasons and a worded cause in t's language) |
 | `git-diff.js` | `MAX_ROWS` (5000), `MAX_CHARS` (400000), `parseDiff`, `readDiff` (`oldPath`: a renamed file's path before its commit), `touchesDiff(changed, root, path)` (whether watched changes can change a working file's diff) |
 | `git-push.js` | `PROTECTED` (`["main", "master"]`), `readPushPlan`, `readPushFiles`, `push` |
 | `git-log.js` | `readLog`, `readRefsState`, `readGitDir`, `refsChanged`, `resolveCommit`, `shortenMiddle`, `labelRefs`, `formatCommitTime`, `readNotPicked(git, root, branch)` → `{ ok, err, notPicked: [hash] }` (the branch's commits whose change HEAD has no copy of, `git cherry`'s "+") |
@@ -2618,8 +2628,10 @@ in English.
   most 1,000 paths and 60,000 bytes; Commit passes all checked paths in one call, so
   checking a very large number of files can hit the system's argument-length limit.
 - `exec` has no env option: variables go through `env`. It stops a command after 30 s
-  unless told: commit and push wait up to 10 min (hooks, network), fetch 5 min, each
-  rollback call 2 min. Its output is capped at 8 MiB.
+  unless told: fetch waits up to 5 min; each call of Rollback, Restore and Apply Patch
+  2 min; every other command that may write (commit, push, checkout, a new or deleted
+  branch, a tag, a stash, …) 10 min (`git.js`), since hooks and the network may take that long and git stopped halfway may
+  leave a ref half written or a lock behind. Its output is capped at 8 MiB.
 - Reads must not write under `.git` (`git.js` `READ`), or the folder watch wakes the next
   read and the panel reads forever.
 - A commit refused by git (a hook, a merge in progress) takes back the
@@ -3562,9 +3574,12 @@ commit `main` lacks)
      `--root`, `--update-refs`); Rebase is off until a target is picked.
 171. VCS Operations popup → Pull…: `Pull to main` with `git pull` │ origin ▾ │ main ▾,
      Modify options ▾, Cancel and Pull. Pull brings the commit in and an `Update Info` tab
-     opens: `1 file(s) updated in 1 commit(s)`, the commit, and its files.
+     opens: `1 file(s) updated in 1 commit(s)`, the commit, and its files. With no option
+     picked and no `pull.rebase` set, Pull merges (`git pull --no-rebase`): after a local
+     commit that origin/main lacks, it makes a merge commit instead of asking how to
+     reconcile the branches.
 172. Pick another remote branch in the Pull dialog, pull, open it again: that branch is
-     picked.
+     picked. One that diverged from `main` is merged in the same way.
 173. VCS widget → Update Project…: `Update Project` with `Merge incoming changes into the
      current branch` (picked) and `Rebase the current branch on top of incoming changes`,
      Reset to the Remote Branch, Cancel and OK, with no empty space below them. OK
@@ -3613,7 +3628,9 @@ commit `main` lacks)
      Hard's in the warning color; picking Hard turns the button into `Hard Reset`.
 190. With a staged and an unstaged change, Hard Reset to an older commit: Restore
      Rolled-Back Changes… lists `Reset` with the 3-way note and locked checkboxes; Restore
-     brings back both changes and the staging.
+     brings back both changes and the staging. A changed file the older commit doesn't
+     have comes back as it was (staged only if it was staged), with no conflict, and the
+     result names it under `Not in HEAD now, so brought back as they were in the rollback:`.
 191. Keep with a local change to a file that differs between the commits: git's words show
      and nothing changes.
 192. VCS Operations popup → Reset HEAD…: `Reset Head` with Git Root, Current Branch, Reset

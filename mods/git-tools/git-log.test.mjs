@@ -450,4 +450,28 @@ const all = await readLog(git, repo);
   ]);
 }
 
+// A branch and a tag of one name: limited to the branch by its short name, the list is the
+// branch's (git alone would read the name as the tag). A remote branch likewise.
+{
+  const same = `${tmp}/same-name`, origin = `${tmp}/same-name-origin.git`;
+  mkdirSync(same);
+  raw(same, ["init", "-q", "-b", "main"]);
+  commit(same, "a.txt", "base", 0);
+  raw(same, ["checkout", "-q", "-b", "release"]);
+  raw(same, ["tag", "release"]);
+  raw(same, ["tag", "origin/release"]);
+  commit(same, "a.txt", "release fix", 1);
+  raw(same, ["init", "-q", "--bare", origin]);
+  raw(same, ["remote", "add", "origin", origin]);
+  raw(same, ["push", "-q", "origin", "refs/heads/release"]);
+  const local = await readLog(git, same, { branch: "release" });
+  assert.equal(local.ok, true, local.err);
+  assert.deepEqual(local.commits.map((c) => c.subject), ["release fix", "base"]);
+  const remote = await readLog(git, same, { branch: "origin/release" });
+  assert.deepEqual(remote.commits.map((c) => c.subject), ["release fix", "base"]);
+  // By its full name the tag is still the tag.
+  const tag = await readLog(git, same, { branch: "refs/tags/release" });
+  assert.deepEqual(tag.commits.map((c) => c.subject), ["base"]);
+}
+
 console.log("ok");

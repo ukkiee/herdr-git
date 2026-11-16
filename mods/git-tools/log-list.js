@@ -258,6 +258,9 @@ export default class LogList {
     this.collapsed = on;
     this.relayout();
     this.settleRows();
+    // A picked commit folded away is no row any more: the ones still shown stay picked,
+    // so Commit details and the toolbar act on the same commits.
+    if (this.host.picks.picked.size) this.host.keepPicks(cx);
     cx.notify();
   }
 

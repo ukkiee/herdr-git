@@ -27,11 +27,23 @@ function parseRefs(text) {
   return refs;
 }
 
+// A branch's short name ("main", "origin/main") as the ref git is to read: that branch,
+// local before remote. Left to itself git reads a tag of the same name first. Anything
+// else (HEAD, a full ref name, a hash) stays as given.
+async function branchRef(git, root, name) {
+  if (name === "HEAD" || name.startsWith("refs/")) return name;
+  const wanted = [`refs/heads/${name}`, `refs/remotes/${name}`];
+  const r = await git.read(root, ["for-each-ref", "--format=%(refname)", ...wanted]);
+  const found = r.ok ? r.out.split("\n") : [];
+  return wanted.find((ref) => found.includes(ref)) ?? name;
+}
+
 // readLog(git, root, { skip, count, branch, extra, tags })
 //   git: from makeGit (git.js). root: the repository root.
 //   skip / count: the batch (count defaults to 1,000). branch: null → every branch, remote
 //   branch and tag plus HEAD, in commit-date order (children before their parents, which
-//   graph.js relies on); a ref name → only what that ref reaches.
+//   graph.js relies on); a ref name → only what that ref reaches (a branch's short name
+//   is the branch, also where a tag has the same name).
 //   tags: false leaves tags out, as labels and as places to start from (so a commit only
 //   a tag reaches is missing). git then opens no tag at all, which is most of the time
 //   the full read takes in a repository with tens of thousands of them.
@@ -58,7 +70,7 @@ export async function readLog(git, root, { skip = 0, count = 1000, branch = null
   const cut = extra.indexOf("--");
   const options = cut < 0 ? extra : extra.slice(0, cut), paths = cut < 0 ? [] : extra.slice(cut + 1);
   let revs;
-  if (branch) revs = ["--end-of-options", branch];
+  if (branch) revs = ["--end-of-options", await branchRef(git, root, branch)];
   else {
     // HEAD is named so a detached HEAD's commits show; an unborn HEAD can't be named.
     const head = await git.read(root, ["rev-parse", "--verify", "--quiet", "HEAD^{commit}"]);

@@ -24,7 +24,7 @@ import { readCommit, readContaining } from "./git-show.js";
 import { smartCheckoutRevision } from "./view-smart.js";
 import { readEditFacts } from "./git-rewrite.js";
 import { buildRows, folderKeys, parentIndex } from "./tree.js";
-import { combineChanges } from "./log-select.js";
+import { combineChanges, newestChange } from "./log-select.js";
 import { oneAtATime } from "./one-at-a-time.js";
 import { openDiff } from "./view-diff.js";
 import { openBranchNew } from "./view-branch-new.js";
@@ -255,7 +255,12 @@ export default class LogDetails {
       } else {
         if (this.failed && this.host.error === this.failed) this.host.fail(null, cx);
         this.failed = null;
-        const files = combineChanges(read).map((f) => ({ ...f, commit: read.find((r) => r.files.some((x) => x.path === f.path))?.hash }));
+        // commit, own: the newest commit that changed the file and its own change of it,
+        // which Show Diff and the file menu act on.
+        const files = combineChanges(read).map((f) => {
+          const newest = newestChange(read, f.path);
+          return { ...f, commit: newest?.commit, own: newest?.change };
+        });
         this.info = { ok: true, many: true, files };
         this.build();
       }
@@ -360,11 +365,13 @@ export default class LogDetails {
 
   // Show Diff: the commit's change to that file, in a Diff tab (view-diff.js compares
   // the commit with its first parent; the first commit shows as all added; a renamed
-  // file is compared with the file it was).
+  // file is compared with the file it was). With several commits picked it is the newest
+  // commit's own change (`own`): the row's status and old name are the whole range's.
   showDiff(m) {
     const repo = this.host.repo;
     if (!repo || !this.info?.ok || !m || m.folder) return false;
-    openDiff({ root: repo.root, on: repo.on, path: m.path, commit: m.item.commit ?? this.info.hash, status: m.item.status, oldPath: m.item.from ?? null });
+    const change = m.item.own ?? m.item;
+    openDiff({ root: repo.root, on: repo.on, path: m.path, commit: m.item.commit ?? this.info.hash, status: change.status, oldPath: change.from ?? null });
     return true;
   }
 

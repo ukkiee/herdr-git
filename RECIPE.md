@@ -3665,7 +3665,8 @@ commit `main` lacks)
      opens: `1 file(s) updated in 1 commit(s)`, the commit, and its files. With no option
      picked and no `pull.rebase` set, Pull merges (`git pull --no-rebase`): after a local
      commit that origin/main lacks, it makes a merge commit instead of asking how to
-     reconcile the branches.
+     reconcile the branches. With `--no-ff`, `--squash` or `--no-commit` picked, Pull
+     merges that way also where `pull.rebase` is set.
 172. Pick another remote branch in the Pull dialog, pull, open it again: that branch is
      picked. One that diverged from `main` is merged in the same way.
 173. VCS widget → Update Project…: `Update Project` with `Merge incoming changes into the

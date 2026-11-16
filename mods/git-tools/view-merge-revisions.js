@@ -225,7 +225,7 @@ export default class MergeRevisionsView {
       const now = await this.disk();
       this.checking = false;
       const kind = saveQuestion(state, { opened: this.opened, now, passed });
-      if (kind) { this.confirm = { kind, then, passed }; cx.notify(); return; }
+      if (kind) { this.confirm = { kind, then, passed }; this.handle.focus(); cx.notify(); return; }
       if (this.editor) { this.editor.release(); this.editor = null; }
       const text = resultText(state);
       this.waiting = true;
@@ -255,7 +255,7 @@ export default class MergeRevisionsView {
     cx.spawn(async (cx) => {
       const v = await readVersions(this.git, this.root, this.path, { read: readerOn(this.on) });
       this.checking = false;
-      if (v.ok && editedSince(v)) { this.confirm = { kind: "accept", column }; cx.notify(); return; }
+      if (v.ok && editedSince(v)) { this.confirm = { kind: "accept", column }; this.handle.focus(); cx.notify(); return; }
       take(cx);
     });
   }
@@ -294,7 +294,7 @@ export default class MergeRevisionsView {
       const now = await this.disk();
       this.checking = false;
       const kind = leaveQuestion({ opened: this.opened, now, passed });
-      if (kind) { this.confirm = { kind, then: "leave", passed }; cx.notify(); return; }
+      if (kind) { this.confirm = { kind, then: "leave", passed }; this.handle.focus(); cx.notify(); return; }
       if (this.editor) { this.editor.release(); this.editor = null; }
       this.waiting = true;
       cx.notify();

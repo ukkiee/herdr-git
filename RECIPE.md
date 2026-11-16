@@ -3460,8 +3460,10 @@ conflicting file, and an ignored folder `node_modules`)
      Resolution: it is under Unresolved again and `git status` lists it as conflicted.
 151. Edit `a.txt` by hand while it is in conflict, then press Accept: `Overwrite Changes`
      asks first, with Discard and Accept.
-152. Check `a.txt` with its conflict markers left and press Commit, or Amend: nothing is
-     committed and the reason shows.
+152. While `a.txt` is still in conflict (`git status` lists it as unmerged), check it and
+     press Commit, or Amend: nothing is committed and the reason (`Resolve the conflicts
+     first: 1 file(s) still in conflict.`) shows. Once `git add a.txt` marks it resolved,
+     its content is not checked: it is committed as it is, conflict markers included.
 153. On `feature`, run `git rebase main` in a terminal: the widget reads `⚠ Rebasing
      feature`, the Log panel's HEAD row shows `Detached HEAD`, and the Conflicts dialog's
      Yours column is the commit being rebased (accepting it keeps feature's line). The

@@ -15,7 +15,7 @@ import { div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { exec, theme, run, pickFolder } from "herdr";
 import { makeGit } from "./git.js";
-import { worktreeSources, worktreePath, createWorktree } from "./git-worktree.js";
+import { worktreeSources, worktreePath, createWorktree, sourceTaken } from "./git-worktree.js";
 import { openDialog, openMenu, dialogFrame, button, checkbox, iconButton, uiGlyph, close, askOwner, writeBlock, scrollText, sentence } from "./ui.js";
 
 // openNewWorktree(host, repo, source, who): New Worktree… from the VCS widget popup
@@ -164,7 +164,7 @@ export default class NewWorktree {
           .on_mouse_down("left", (e, cx) => { this.pickSource(cx, e.position); cx.stop_propagation(); })
           .child(div().flex_1().min_w(0).truncate().child(name))
           .child(uiGlyph("chevron-down").text_color(t.muted))))
-      .when(Boolean(b?.checkedOut), (el) => el.child(h_flex().w_full().pl(LABEL_W).gap(6).items_center().text_color(t.ansi3)
+      .when(sourceTaken(b, { newBranch: this.makeBranch }), (el) => el.child(h_flex().w_full().pl(LABEL_W).gap(6).items_center().text_color(t.ansi3)
         .child(div().flex_1().min_w(0).child(`⚠ ${this.t("worktree.checkedOut")}`))))
       .child(h_flex().w_full().items_center()
         .child(h_flex().w(LABEL_W).flex_none().gap(6).items_center()

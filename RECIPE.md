@@ -3706,7 +3706,9 @@ commit `main` lacks)
      shows a notification.
 233. New Worktree…: `New Worktree` with Source branch ▾, New branch, Location and Create
      Worktree and Open; a branch checked out elsewhere shows `The selected branch is
-     already checked out in another worktree`; Create opens a new space on that folder.
+     already checked out in another worktree`, which goes as soon as New branch is on (the
+     source is then only where the new branch starts); Create opens a new space on that
+     folder.
 234. Press `cmd-shift-v` with the Commit panel showing: a `VCS Operations` popup with
      group Git and numbered items; press a number to run one, Esc closes it. With only the
      Files panel showing, nothing opens.

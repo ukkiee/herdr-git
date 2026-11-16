@@ -1,14 +1,14 @@
 #!/bin/sh
-# Installs or updates git-tools in the Herdr app's home, builds the main-git layout from
+# Installs or updates git-tools in the Herdr app's home, builds the git-tools layout from
 # the current main layout and shows it. Run it again after `git pull` and after every
-# Herdr update (main-git is a copy: it doesn't follow Herdr's main by itself).
+# Herdr update (the layout is a copy: it doesn't follow Herdr's main by itself).
 # Herdr's own main layout is never changed; cmd-shift-l moves to the next layout, main among them.
 # Keys: adds the ones in keys.json unless they're already bound to something else.
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 home=${HERDR_APP_HOME:-$HOME/.config/herdr-app}
 main="$home/layouts/main.json"
-out="$home/layouts/main-git.json"
+out="$home/layouts/git-tools.json"
 
 if ! command -v node >/dev/null 2>&1; then
   echo "node not found: it's needed to build the layout. Nothing was changed."
@@ -38,16 +38,16 @@ herdr-app check "$home/mods/git-tools"
 # layout.clone refuses a name that exists, so after that the file is rebuilt in place:
 # layouts apply live, and a file edit wins over a click on the same field.
 if [ ! -f "$out" ]; then
-  herdr-app do layout.clone '{"name":"main","as":"main-git"}' >/dev/null
+  herdr-app do layout.clone '{"name":"main","as":"git-tools"}' >/dev/null
 fi
 node "$here/layout.mjs" "$main" "$out"
-herdr-app do layout.switch '{"name":"main-git"}' >/dev/null
-if [ -f "$home/layouts/main-git.error" ]; then
+herdr-app do layout.switch '{"name":"git-tools"}' >/dev/null
+if [ -f "$home/layouts/git-tools.error" ]; then
   echo "Herdr refused the new layout:"
-  cat "$home/layouts/main-git.error"
+  cat "$home/layouts/git-tools.error"
   exit 1
 fi
-echo "Layout main-git is shown. cmd-shift-l switches layouts; Herdr's main is unchanged."
+echo "Layout git-tools is shown. cmd-shift-l switches layouts; Herdr's main is unchanged."
 
 # keys.json holds every key, the defaults included, so it's only ever added to.
 if [ ! -f "$home/keys.json" ]; then

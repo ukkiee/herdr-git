@@ -116,7 +116,7 @@ Log panel이 있습니다. 커밋할 파일을 골라 커밋하거나 고쳐 쓰
 창이 있는 컴퓨터의 언어를 따릅니다. 시스템 언어를 바꾸면 Herdr를 다시 시작하세요. git
 자신의 메시지는 git이 쓴 그대로 보입니다.
 
-모두 Herdr의 `main`을 복사한 `main-git` 레이아웃 안에 있습니다. Herdr의 원래 레이아웃과
+모두 Herdr의 `main`을 복사한 `git-tools` 레이아웃 안에 있습니다. Herdr의 원래 레이아웃과
 Changes·Files 패널은 그대로 둡니다.
 
 ## 추가하기 전에
@@ -161,7 +161,7 @@ Changes·Files 패널은 그대로 둡니다.
   않습니다. 지운 브랜치를 복원하면 그 브랜치의 `branch.<name>.remote`, `.merge` 설정도
   되돌립니다.
 - **Herdr 앱 홈의 파일**(`~/.config/herdr-app` 또는 `$HERDR_APP_HOME`): `install.sh`가
-  `mods/git-tools/`와 `layouts/main-git.json`을 쓰고 `keys.json`에 키 세 개를 더합니다.
+  `mods/git-tools/`와 `layouts/git-tools.json`을 쓰고 `keys.json`에 키 세 개를 더합니다.
   mod는 `shared.json`에 작은 값 다섯 개를 둡니다. `git-tools.bus`는 화면끼리 저장소가
   바뀌었다고 알리는 데, `git-tools.lock`은 어느 저장소에서 git-tools의 쓰기가 돌고 있는지
   적는 데, `git-tools.lang`은 마지막으로 읽은 시스템 언어(`"en"` 또는 `"ko"`)를 적는 데,
@@ -184,7 +184,7 @@ git clone https://github.com/ukkiee/herdr-git
 cd herdr-git && ./install.sh
 ```
 
-`install.sh`는 mod를 복사하고(설치된 것과 다른 파일만), 지금의 `main` 레이아웃으로 `main-git`을 만들어 그리로
+`install.sh`는 mod를 복사하고(설치된 것과 다른 파일만), 지금의 `main` 레이아웃으로 `git-tools` 레이아웃을 만들어 그리로
 바꾸고, 키를 더합니다. `main` 레이아웃의 구조가 예상과 다르면 어느 부분이 없는지 알리고
 아무것도 바꾸지 않습니다.
 
@@ -196,27 +196,27 @@ cd herdr-git && ./install.sh
 | `cmd-shift-g` | Log panel을 보이거나 숨깁니다 |
 | `cmd-shift-v` | VCS 작업 팝업을 엽니다(Commit panel이나 Log panel이 보일 때) |
 
-세 키는 `main-git` 레이아웃에서만 동작합니다. 이미 다른 기능에 쓰는 키는 건드리지
+세 키는 `git-tools` 레이아웃에서만 동작합니다. 이미 다른 기능에 쓰는 키는 건드리지
 않습니다. `install.sh`가 그 사실을 알려 주니, `keys.json`에서 다른 키에 묶으면 됩니다.
 
 ### Herdr를 업데이트한 뒤
 
-`main-git`은 복사본이라 Herdr가 `main`에 준 변경을 따라가지 않습니다. **Herdr를
+`git-tools` 레이아웃은 복사본이라 Herdr가 `main`에 준 변경을 따라가지 않습니다. **Herdr를
 업데이트할 때마다 `./install.sh`를 다시 실행하세요**(이 저장소를 `git pull`한 뒤에도).
-지금의 `main`으로 `main-git`을 다시 만듭니다. `main-git.json`을 손으로 고친 내용은 이때
+지금의 `main`으로 이 레이아웃을 다시 만듭니다. `git-tools.json`을 손으로 고친 내용은 이때
 사라집니다.
 
 ### `main`으로 돌아가기
 
 `cmd-shift-l`(Herdr의 레이아웃 전환 키)을 누르세요. 누를 때마다 다음 레이아웃으로
 넘어가니, 레이아웃이 둘보다 많으면 `main`이 보일 때까지 누릅니다. Herdr의 원래 Changes
-패널이 그대로 있습니다. 돌아오려면 `main-git`이 보일 때까지 누르거나 `./install.sh`를
+패널이 그대로 있습니다. 돌아오려면 `git-tools` 레이아웃이 보일 때까지 누르거나 `./install.sh`를
 실행하세요.
 
 ### 지우기
 
-먼저 `main`으로 바꾼 뒤, 앱 홈에서 `mods/git-tools/`, `git-tools/`, `layouts/main-git.json`을
-지우고 `keys.json`의 `layout:main-git` 절을 지우세요. Herdr가 `layouts/.state/main-git.json`과
+먼저 `main`으로 바꾼 뒤, 앱 홈에서 `mods/git-tools/`, `git-tools/`, `layouts/git-tools.json`을
+지우고 `keys.json`의 `layout:git-tools` 절을 지우세요. Herdr가 `layouts/.state/git-tools.json`과
 `shared.json`의 `git-tools.bus`, `git-tools.lock`, `git-tools.lang`, `git-tools.menus`,
 `git-tools.tabs` 키를 남겨 두었을 수
 있는데, 모두 지워도 됩니다. 롤백 기록과 지운 브랜치 기록은 git이 정리할 때까지 각 저장소에

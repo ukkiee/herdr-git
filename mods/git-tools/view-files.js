@@ -5,7 +5,7 @@
 // timer (everywhere), like the Commit panel; the timer keeps reading while the panel is
 // hidden. Each space and folder keeps its open folders and its previewed file.
 //
-// props: { view: "files" }: the `files` block of the main-git layout.
+// props: { view: "files" }: the `files` block of the git-tools layout.
 //
 // Reading is files-data.js's and every decision (which rows show, what a mark means for
 // a row) files-tree.js's; this file draws. The rows as drawn are `this.rows`

@@ -198,6 +198,23 @@ const forms = (value) => (typeof value === "string" ? [value] : value && typeof 
   }
 }
 
+// A Korean particle right after a placeholder is written in both forms, as 을(를),
+// 이(가), 은(는), 와(과), (으)로: which one fits depends on the last sound of whatever
+// fills the hole ("main을", "feature를"), and the table can't know it. Particles that
+// don't change (에, 의, 에서, 까지) are free.
+{
+  const fixed = /\{\w+\}['"’”)\]]?(을|를|이|가|은|는|와|과|으로|로|이나|나|이랑|랑)(?![가-힣(])/;
+  const problems = [];
+  for (const { name, mod } of tables) {
+    for (const [key, value] of Object.entries(mod.ko)) {
+      for (const s of forms(value)) if (fixed.test(s)) problems.push(`${name}: ko ${key}: ${s}`);
+    }
+  }
+  assert.deepEqual(problems, [], "Korean particles after a placeholder are written in both forms");
+  const ko = translator("ko");
+  assert.equal(ko("branches.rebaseOnto", { current: "main", name: "feature" }), "'main'을(를) 'feature'(으)로 리베이스");
+}
+
 // The shared parts' words, as a Korean screen shows them.
 {
   const ko = translator("ko"), en = translator("en");

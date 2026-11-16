@@ -54,7 +54,7 @@ const all = (name, ctx = {}, t = ko) => look(menuItems(name, everything, ctx), t
   assert.deepEqual(all("localBranch", ctx), [
     "체크아웃", "'feature'에서 새 브랜치…", "체크아웃하고 'main'에 리베이스", "체크아웃 후 업데이트", "─",
     "'main'와(과) 비교", "작업 트리로 차이점 표시", "─",
-    "'main'를 'feature'으로 리베이스", "'main'에 'feature' 병합", "─",
+    "'main'을(를) 'feature'(으)로 리베이스", "'main'에 'feature' 병합", "─",
     "'feature'(으)로부터 새 워크트리…", "─",
     "업데이트", "푸시…", "─",
     "이름 변경…", "삭제",
@@ -73,7 +73,7 @@ const all = (name, ctx = {}, t = ko) => look(menuItems(name, everything, ctx), t
   assert.deepEqual(all("remoteBranch", { name: "origin/main", current: "main" }), [
     "체크아웃", "'origin/main'에서 새 브랜치…", "체크아웃하고 'main'에 리베이스", "─",
     "'main'와(과) 비교", "작업 트리로 차이점 표시", "─",
-    "'main'를 'origin/main'으로 리베이스", "'main'에 'origin/main' 병합", "─",
+    "'main'을(를) 'origin/main'(으)로 리베이스", "'main'에 'origin/main' 병합", "─",
     "'origin/main'(으)로부터 새 워크트리…", "─",
     "리베이스를 사용하여 'main'(으)로 풀 처리", "병합을 사용하여 'main'(으)로 풀 처리", "─",
     "삭제",

@@ -47,7 +47,7 @@ export const ko = {
   "reset.headTitle": "HEAD 재설정",
   "reset.root": "Git 루트:",
   "reset.branch": "현재 브랜치:",
-  "reset.type": "타입 재설정:",
+  "reset.type": "재설정 종류:",
   "reset.commit": "커밋으로:",
   "reset.validate": "유효성 검사",
   "reset.invalidCommit": "지정한 커밋 표현식이 유효성 검사를 통과하지 못했습니다.",

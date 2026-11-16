@@ -7,7 +7,7 @@ import { mkdtempSync, writeFileSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
 import { makeGit } from "./git.js";
-import { readHeads, widgetFace, popupRows } from "./git-heads.js";
+import { readHeads, widgetFace, popupRows, popupStep } from "./git-heads.js";
 import { translator } from "./i18n.js";
 
 // The person's own git settings stay out of every repository here.
@@ -237,6 +237,22 @@ const shape = (rows, tr = en) => rows.map((r) => r.kind === "rule" ? "|"
   assert.deepEqual(shape(popupRows({ heads: heads(), op: op(), query: "push", folded: new Set(), handled: all }, en)), ["Push…"]);
   assert.deepEqual(shape(popupRows({ heads: heads(), op: op(), query: "브랜치", folded: new Set(), handled: all }, ko), ko), ["새 브랜치…"]);
   assert.deepEqual(popupRows({ heads: heads(), op: op(), query: "nothing-like-this", folded: new Set(), handled: all }, en), []);
+}
+
+// ↓ and ↑ in the popup skip lines and remote folders. While searching, the groups stay
+// open whatever is pressed, so their heads are skipped too: ↓ after typing lands on the
+// first branch. Without a search a head folds and unfolds, and the keys stop on it.
+{
+  const query = "TOP";
+  const rows = popupRows({ heads: heads(), op: op(), query, folded: new Set(), handled: all }, en);
+  const label = (i) => shape([rows[i]])[0];
+  assert.equal(label(popupStep(rows, -1, 1, { query })), "recent:topic");
+  assert.equal(label(popupStep(rows, popupStep(rows, -1, 1, { query }), 1, { query })), "local:topic");
+  assert.equal(label(popupStep(rows, -1, -1, { query })), "remote:origin/topic");
+  const plain = popupRows({ heads: heads(), op: op(), query: "", folded: new Set(["recent", "local", "remote", "tags"]), handled: all }, en);
+  assert.equal(shape([plain[popupStep(plain, -1, 1, { query: "" })]])[0], shape(plain)[0]);
+  assert.equal(shape([plain[popupStep(plain, -1, -1, { query: "" })]])[0], "[Tags]");
+  assert.equal(popupStep([], -1, 1, { query: "" }), -1);
 }
 
 console.log("git-heads: ok");

@@ -577,7 +577,11 @@ dialog's own (`openDialog` in its file).
   default); off, the files are a flat list with each file's folder dim beside it.
 - **The VCS widget popup's branch menus** open inside the popup beside the row (click,
   right-click, Enter or →; ← or Esc closes), on the popup's left on macOS and its right
-  elsewhere; an item is picked as it is pressed.
+  elsewhere; an item is picked as it is pressed. While a menu is open the popup holds the
+  keyboard (opened with the mouse too), so ↑ ↓ Enter ← Esc work in the menu and Esc
+  leaves the popup open; once it closes, typing goes to the search box again. ↓ and ↑
+  skip lines and remote folders, and while searching the group heads too (a search
+  keeps every group open): ↓ after typing lands on the first match.
 - **Commit panel in progress**: above the tree a row `⚠ <operation>` with Continue (≫),
   Abort and, for a rebase or several picks, Skip Commit; a `Merge Conflicts` node with a
   `Resolve` link and the conflicted files in the conflict color; the files the operation
@@ -1619,7 +1623,7 @@ the git ones run against real temporary repositories):
 | `conflicts-model.js`, `merge-revisions-model.js` | what the two conflict dialogs show and allow |
 | `git-smart.js` | the blocking files per request, `smartRun`, the `gittools.smart-stash` mark |
 | `git-stash.js`, `git-reset.js`, `git-rewrite.js`, `rebase-plan.js`, `git-changes.js` | stash; reset and the record before a hard one; history edits through one rebase plan (`editCheck`, `readEditFacts`); file-level revert and cherry-pick |
-| `git-remote.js`, `git-refs.js`, `git-heads.js` | pull, update, Update Project, the Update Info range; tags, branch names, remotes, Push Tag; what the VCS widget shows |
+| `git-remote.js`, `git-refs.js`, `git-heads.js` | pull, update, Update Project, the Update Info range; tags, branch names, remotes, Push Tag; what the VCS widget shows, the popup's rows (`popupRows`) and where ↑ ↓ go among them (`popupStep`) |
 | `git-compare.js`, `git-revision.js`, `git-worktree.js` | comparisons, patches, Get from, Show Changes to Parents (`parentDiffs`); a revision's files, history, child commits; new worktrees and Checkout Tag or Revision |
 | `git-patch.js` | `readPatchFiles(text)` (pure: a patch's files, statuses and names as `git apply -p1` takes them), `applyPatch(git, root, { file, paths })` (checked files only, always named with `--include`, in parts when there are many; a 3-way retry; conflicts from `ls-files -u`), `READ_LIMIT`, `readMayBeCut(text)` (the 1 MiB read limit in UTF-8 bytes), `homePath(typed, home)` (a leading `~` or `~/` as that machine's home), `changesCommit(git, root, { paths, message })` (a commit of the checked local changes on HEAD, no ref) |
 | `git-console.js`, `log-menus.js`, `log-select.js`, `log-options.js`, `branch-order.js`, `vcs-ops.js`, `ui-icons.js` | console records, with a URL's credentials hidden; the Log panel's menus; picking commits; graph and view options; branch order and favorites (the widget popup's favorites first); the VCS Operations popup's items; UI icons |
@@ -3795,7 +3799,9 @@ and `b.txt` and a new file `c.txt`)
      window.
 255. In the popup, branch rows have ›. Click one, right-click it, or press Enter or →: the
      popup stays open and the branch's menu shows beside the row (on the popup's left);
-     an item runs when pressed; ← and Esc close the menu. On the current branch,
+     an item runs when pressed; ← and Esc close the menu and leave the popup open, also
+     when the menu was opened with the mouse. Type a name and press ↓: the first matching
+     branch is highlighted, not a group's head. On the current branch,
      `Tracked Branch 'origin/main'` turns the menu into `origin/main`'s menu in place.
 256. Mark a branch as a favorite: in the popup's Local and Remote groups ★ branches come
      first, then the current branch, then by name; the Branch tree keeps the current
@@ -3814,7 +3820,7 @@ and `b.txt` and a new file `c.txt`)
 
 260. While `a.txt` is in conflict, edit it by hand and press Accept in the Conflicts
      dialog: `Overwrite Changes` is a small card over the dialog with the dialog dim
-     behind it; Esc, Enter and Cancel work on it.
+     behind it; Esc, Enter and Cancel work on it, and Esc closes only the card.
 261. Resolve Manually, then edit `a.txt` in a terminal and press Apply Changes (or Save and
      Close): a question says the file was changed on disk, with Overwrite. Edit it by
      hand before opening and press Accept Left: the overwrite question shows first.

@@ -1683,6 +1683,7 @@ the git ones run against real temporary repositories):
 | `git.js` | `READ`, `makeGit(exec, on, { record, wait })` → `git(cwd, args, { timeout, env })` → `{ ok, code, out, err }` and `git.read` (with the screen's clock `wait`, a command whose answer hasn't come 5 s past its timeout is given up on: a read is asked once more, then it is `git did not answer in N s.`), `PARALLEL` (4: the git commands one runner keeps going at once; the rest wait their turn, and one Herdr refuses for too many execs at once is tried again after one of the runner's own ends, five runs at most), `repoRoot(git, folder)`, `chunks(paths, cost?)` (a path list split to fit one command each), `recordWith(fn)` (the recorder for runners made without one) |
 | `read-turns.js` | `readTurns({ stuck, now, most })` → `{ start, ask, again, busy, stuck, use, end, drop }` (a screen's repeated read: going only for `stuck` ms after it starts, a newer one may always start, up to `most` going at once through `ask`, the asks past it kept as one that `again` starts once a read ends; an answer is dropped only when a newer one was used), `pageAt(list, skip, page)` (the list with a page read from `skip` after it, or null when the list no longer ends there: a next page answered twice is placed once), `STUCK` (80 s) |
 | `one-at-a-time.js` | `oneAtATime(run)` → `ask(arg)` (at most one `run` going; a newer ask replaces a waiting one, which resolves undefined without running: Commit details' branch walks while arrowing through the log) |
+| `let-go.js` | `letGo(screen)` (a closing copy empties its screen: each field that holds data gets an empty value of its kind, `""` for a string over 1,000 characters, `[]` for an array, a new Map or Set, and for a plain object a copy with its own fields emptied the same way, one level deep; the screen's parts, the objects whose `host` it is, are emptied the same way; numbers, flags, functions and objects of a class stay) |
 | `git-status.js` | `readStatus` |
 | `git-commit.js` | `commit`, `lastMessage`, `headIsPushed` |
 | `git-rollback.js` | `rollback` (→ `{ ok, code, out, err, msg?, snapshot, skipped: [{ path, reason, msg }] }`; `snapshot`: the Rollback snapshot's hash or null), `wordRollback(t, r)` (`r.msg` with its list of reasons worded again in `t`'s language), `rollbackNotice(files, r)` (→ `{ snapshot, n }` for the Rollback notice, or null when no snapshot was recorded or every file was skipped) |
@@ -2696,11 +2697,25 @@ in English.
 - `overlay.close` closes the topmost overlay, toasts included. Saving any file of the mod
   (and so an `install.sh` that changes one) restarts every copy: open dialogs close and
   what screens held (checks, a typed message, filters) starts over.
-- Each of those reloads costs memory Herdr doesn't give back, about 5 MB with the two
-  panels and the Git button up. After about 45 in one run of the app (some 256 MB),
-  reloads fail with `Null"null"` in `herdr-app status` and every mod's view shows
-  `out of memory` until Herdr is restarted. While working on the mod, restart Herdr now
-  and then.
+- Each of those reloads ties up about 23 MB of the JS heap all mods share (256 MB) until
+  Herdr is restarted, with the panels on a big repository: the old module code and what
+  the old copies held stay, and a reload doesn't call their `close`. Files written in one
+  burst are one reload. After about ten, every mod's view shows `This view could not be
+  re-rendered … Null"null"`, and `herdr-app status` doesn't list it. While working on the
+  mod, restart Herdr now and then.
+- The app's JS engine frees no reference cycles: garbage that points at itself stays until
+  Herdr is restarted, with all it holds. So code that runs again and again makes none.
+  Recursion is a function of the module that is handed what it needs (`tree.js`
+  `walkRows`, `branch-order.js` `levelRows`, `files-tree.js` `walkOpen`, `view-vcs-ops.js`
+  `openGroup`), never a closure that calls itself: that one keeps every row it made (with
+  the Commit panel up, one pull that changed 9,000 files left 20 MB). `git.js`'s runner has
+  no `read` that closes over the runner, and its clock holds nothing of an answer
+  (`ringLater`): raced against the answer with `Promise.race`, the clock kept each answer
+  until it rang.
+- A closed screen stays as well (it and its handlers point at each other), so a closing
+  copy empties it: `main.js` `close` calls `letGo(screen)` after the screen's own `close`.
+  Closing a Log tab on a big repository gives back about 7 of its 11 MB. node frees
+  cycles, so neither rule shows in a node test: measure in QuickJS.
 - `herdr-app status` lists overlays by mod name only.
 
 **Git**
@@ -3096,7 +3111,7 @@ Each line is one check: do what it says, see what follows.
 **Offline**
 
 1. Run `node layout.test.mjs` at the root, `node <file>` for every `*.test.mjs` in
-   `mods/git-tools` (55 files) and `node tools/gen-icon-theme.test.mjs`: each prints
+   `mods/git-tools` (56 files) and `node tools/gen-icon-theme.test.mjs`: each prints
    `ok` (the last one after `skip: …` unless `ICON_THEME_SOURCE` is set).
 2. Run `herdr-app check mods/git-tools`: it passes.
 

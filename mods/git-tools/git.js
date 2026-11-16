@@ -42,7 +42,14 @@ const WRITE_TIMEOUT = 600000;
 const EXEC_TIMEOUT = 30000;
 const LATE = 5000;
 const UNANSWERED = Symbol("unanswered");
-const never = new Promise(() => {});
+
+// The clock's only hold on a call is `call.ring`, which the call clears once exec answers.
+// A clock outlives most answers (a read's runs 35 s, and one whose copy closed may never
+// settle), and what a pending promise's handlers reach stays alive: handed the answer's
+// own promise (Promise.race), it kept every answer until it rang. A big repository's ref
+// list is megabytes, and all mods share one heap. A function of its own, so its handler
+// shares no scope with the answer.
+const ringLater = (clock, call) => { clock.then(() => call.ring?.(), () => {}); };
 
 // makeGit(exec, on, { record?, wait? }) → git(cwd, args, { timeout?, env? }) → { ok, code, out, err }.
 // Never throws: a program that can't start, a machine that can't be reached or an answer
@@ -74,14 +81,24 @@ export function makeGit(exec, on, { record, wait } = {}) {
     if (flying === 0) for (const go of refused.splice(0)) go(ran);
     else if (ran) refused.shift()?.(true);
   };
-  // The exec's answer, or UNANSWERED once the clock rings first.
+  // The exec's answer, or UNANSWERED once the clock rings first. A clock that rejects (its
+  // copy closed) never rings: the call waits for exec, as without a clock.
   const answer = (running, ms) => {
-    let alarm;
-    try { alarm = wait ? Promise.resolve(wait(ms)).then(() => UNANSWERED, () => never) : null; }
-    catch { alarm = null; }
-    return alarm ? Promise.race([running, alarm]) : running;
+    let clock;
+    try { clock = wait ? Promise.resolve(wait(ms)) : null; }
+    catch { clock = null; }
+    if (!clock) return running;
+    const call = { ring: null };
+    ringLater(clock, call);
+    return new Promise((resolve, reject) => {
+      call.ring = () => resolve(UNANSWERED);
+      Promise.resolve(running).then(
+        (r) => { call.ring = null; resolve(r); },
+        (error) => { call.ring = null; reject(error); },
+      );
+    });
   };
-  const git = async (cwd, args, { timeout, env } = {}) => {
+  const run = async (cwd, args, { timeout, env } = {}) => {
     const options = { cwd, on };
     if (timeout) options.timeout = timeout;
     else if (!reads(args)) options.timeout = WRITE_TIMEOUT;
@@ -117,8 +134,12 @@ export function makeGit(exec, on, { record, wait } = {}) {
     await note({ at, cwd, on: on ?? null, args, code: r.code, stdout: out, stderr: r.stderr ?? "" });
     return { ok: r.code === 0, code: r.code, out, err: (r.stderr ?? "").trim() || out.trim() };
   };
+  // Two functions over `run`, not `run` with a `read` that calls it: a function holding a
+  // closure over itself is a cycle, and the app's JS engine frees no cycles, so every
+  // runner made (a panel makes one per folder it shows, some reads one each) would stay.
+  const git = (cwd, args, options) => run(cwd, args, options);
   // For anything that only looks: status, log, diff, for-each-ref, rev-parse.
-  git.read = (cwd, args, options) => git(cwd, [...READ, ...args], options);
+  git.read = (cwd, args, options) => run(cwd, [...READ, ...args], options);
   return git;
 }
 

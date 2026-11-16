@@ -92,23 +92,27 @@ export function orderBranches(list, { scope = "local", current = null, prefs, fa
 // buildRows has each level by name already (and one folder's branches are all one
 // remote's), so the branches are only split by kind, each kind keeping its order.
 export function orderTreeRows(rows, how) {
-  const at = { scope: how.scope, current: how.current, prefs: how.prefs };
-  let i = 0;
-  // The rows from i on that sit at `depth` or deeper, as one level in order.
-  const level = (depth) => {
-    const kinds = [[], [], []], folders = [];
-    while (i < rows.length && rows[i].depth >= depth) {
-      const r = rows[i++];
-      if (r.folder) {
-        folders.push(r);
-        for (const x of level(r.depth + 1)) folders.push(x);
-      } else kinds[rank(r.path, at)].push(r);
-    }
-    return kinds[0].concat(kinds[1], folders, kinds[2]);
-  };
+  const walk = { rows, i: 0, at: { scope: how.scope, current: how.current, prefs: how.prefs } };
   const out = [];
-  while (i < rows.length) for (const r of level(rows[i].depth)) out.push(r);
+  while (walk.i < rows.length) for (const r of levelRows(walk, rows[walk.i].depth)) out.push(r);
   return out;
+}
+
+// The rows from walk.i on that sit at `depth` or deeper, as one level in order; walk.i
+// moves past them. A function of the module, handed the walk: a closure inside
+// orderTreeRows that called itself would hold itself, and the rows with it, in a cycle,
+// and the app's JS engine frees no cycles.
+function levelRows(walk, depth) {
+  const { rows, at } = walk;
+  const kinds = [[], [], []], folders = [];
+  while (walk.i < rows.length && rows[walk.i].depth >= depth) {
+    const r = rows[walk.i++];
+    if (r.folder) {
+      folders.push(r);
+      for (const x of levelRows(walk, r.depth + 1)) folders.push(x);
+    } else kinds[rank(r.path, at)].push(r);
+  }
+  return kinds[0].concat(kinds[1], folders, kinds[2]);
 }
 
 // ---- the Branch tree's settings (⋮ Branches Pane Settings), and its toggles

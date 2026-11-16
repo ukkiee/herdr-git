@@ -32,6 +32,7 @@ import { View, div } from "gpui-kit";
 import { props, nextCommand, theme } from "herdr";
 import { subscribe, lockSide, LOCK_BEAT, UNKNOWN, openCommitPanel, close, speakAs, fixedLang, rememberedLang, rememberLang, readSystemLang, claimTab, releaseTab, tabRecorded } from "./ui.js";
 import { isTabScreen } from "./focus-repo.js";
+import { letGo } from "./let-go.js";
 import { translator } from "./i18n.js";
 import { warmIcons } from "./icon-theme.js";
 import Commit from "./view-commit.js";
@@ -271,6 +272,9 @@ export default class GitTools extends View {
     // First and synchronous: the 250 ms may run out in the screen's own close.
     this.locks.releaseAll();
     releaseTab(this.tabPane);
-    await this.say(() => this.screen.close?.(cx));
+    // The screen's own close first (it answers a menu, releases an editor), then what the
+    // screen held: closed, it is never freed, so its data goes now (let-go.js).
+    try { await this.say(() => this.screen.close?.(cx)); }
+    finally { letGo(this.screen); }
   }
 }

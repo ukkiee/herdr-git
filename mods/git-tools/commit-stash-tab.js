@@ -63,6 +63,7 @@ export default class StashTab {
     if (!sameRepo(repo, this.repo)) {
       this.repo = repo; this.stashes = []; this.selected = null; this.files = new Map(); this.rows = []; this.fileAt = -1;
       this.stashList.top = 0; this.fileList.top = 0;
+      this.reads.drop(); this.again = false;
     }
     if (!repo) return;
     // One read at a time, but never behind one whose answer never came (read-turns.js).

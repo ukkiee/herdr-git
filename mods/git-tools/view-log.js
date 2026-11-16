@@ -650,7 +650,8 @@ export default class LogView {
     if (this.drawsWidget() && this.shown()) this.widget.refresh(cx);
     const repo = this.repo, lost = this.lost || this.finding.stuck();
     if (this.readBlocked() || !this.shown()) { this.stale = Boolean(repo) || lost; return; }
-    if (lost) { this.stale = false; this.refresh(cx); return; }
+    // Not beside a search still going: on a slow machine the checks would pile them up.
+    if (lost) { this.stale = false; if (!this.finding.busy()) this.refresh(cx); return; }
     if (!repo) { this.stale = false; return; }
     if (this.polls.busy()) { this.again = true; return; }
     const turn = this.polls.start();

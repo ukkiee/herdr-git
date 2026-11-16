@@ -313,8 +313,9 @@ export default class VcsWidgetBlock {
 
   // The block is the window's top right corner, so its popup keeps inside the block's right
   // edge and a branch's menu opens on the popup's left. origin: the widget's top left,
-  // which sits PAD in from the block's left edge.
-  popupRight(origin) { return this.width ? origin.x - PAD + this.width : undefined; }
+  // which sits PAD in from the block's left edge. The block's width is the one fit() gave it:
+  // a size watch on the strip would make it a press target and stop the window drag.
+  popupRight(origin) { return this.fitted ? origin.x - PAD + this.fitted : undefined; }
   popupSide() { return "left"; }
 
   setBusy(work, cx, repo = this.repo) {
@@ -345,7 +346,6 @@ export default class VcsWidgetBlock {
     // Like the tab bar's own root the strip has no id: a press on its padding is the block's
     // window_drag (layout.mjs) and moves the window. Only the widget stops the press.
     return h_flex().size_full().min_w(0).px(PAD).items_center().overflow_hidden().bg(t.chrome).border_b(1).border_color(t.border)
-      .on_size_change((size, cx) => { if (size.width !== this.width) { this.width = size.width; cx.notify(); } })
       .child(h_flex().id("vcs-widget-fit").flex_none().max_w(WIDGET_MAX).min_w(0).items_center()
         .on_size_change((size) => this.fit(size.width))
         .child(this.widget.render(cx, { background: t.chrome })));

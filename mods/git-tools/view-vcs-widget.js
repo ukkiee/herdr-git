@@ -342,7 +342,9 @@ export default class VcsWidgetBlock {
     // its left, right after the tab bar's Changes button. The block is resized to the
     // widget's own width (measured on the wrapper, which doesn't shrink with the block), so
     // no empty space is left by the Git button; a long name is cut at WIDGET_MAX.
-    return h_flex().id("vcs-widget-strip").size_full().min_w(0).px(PAD).items_center().overflow_hidden().bg(t.chrome).border_b(1).border_color(t.border)
+    // Like the tab bar's own root the strip has no id: a press on its padding is the block's
+    // window_drag (layout.mjs) and moves the window. Only the widget stops the press.
+    return h_flex().size_full().min_w(0).px(PAD).items_center().overflow_hidden().bg(t.chrome).border_b(1).border_color(t.border)
       .on_size_change((size, cx) => { if (size.width !== this.width) { this.width = size.width; cx.notify(); } })
       .child(h_flex().id("vcs-widget-fit").flex_none().max_w(WIDGET_MAX).min_w(0).items_center()
         .on_size_change((size) => this.fit(size.width))

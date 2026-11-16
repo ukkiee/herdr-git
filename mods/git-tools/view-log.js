@@ -13,12 +13,12 @@
 
 import { div } from "gpui-kit";
 import { v_flex } from "gpui-base";
-import { exec, theme, watchFolder } from "herdr";
+import { exec, theme } from "herdr";
 import { makeGit, repoRoot } from "./git.js";
 import { readRefsState, readGitDir, refsChanged, resolveCommit } from "./git-log.js";
 import { fetchAll, restoreBranch } from "./git-branch.js";
 import { remoteFailure } from "./git-remote.js";
-import { location, panelFrame, toolbar, spacer, iconButton, notice, notRepository, errorStrip, noteBar, sentence, toggleLogPanel, logPanelShown, broadcast, scriptedRepo, takeWrite, releaseWrite, writeBlock, writeName, writingOn, readBlocked, fromRepo, gitButtonPlaced, openMenu, progressBar } from "./ui.js";
+import { location, watchSettled, panelFrame, toolbar, spacer, iconButton, notice, notRepository, errorStrip, noteBar, sentence, toggleLogPanel, logPanelShown, broadcast, scriptedRepo, takeWrite, releaseWrite, writeBlock, writeName, writingOn, readBlocked, fromRepo, gitButtonPlaced, openMenu, progressBar } from "./ui.js";
 import { sameRepo } from "./lock.js";
 import { serveBranch } from "./view-branch-new.js";
 import { serveDeletedBranches } from "./view-deleted-branches.js";
@@ -601,14 +601,8 @@ export default class LogView {
     if (repo.on) return;
     cx.spawn(async (cx) => {
       const where = await readGitDir(repo.git, repo.root);
-      if (!where.ok) return;
-      try {
-        while (this.repo === repo) {
-          const paths = await watchFolder(where.dir);
-          if (this.repo !== repo) return;
-          if (refsChanged(where.dir, paths)) this.poll(cx);
-        }
-      } catch { /* the folder can't be watched: the timer still polls */ }
+      if (!where.ok || this.repo !== repo) return;
+      watchSettled(where.dir, { live: () => this.repo === repo, wakes: (paths) => refsChanged(where.dir, paths), wake: (cx) => this.poll(cx) }, cx);
     });
   }
 

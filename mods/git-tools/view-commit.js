@@ -23,13 +23,14 @@
 
 import { div } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { exec, theme, watchFolder } from "herdr";
+import { exec, theme } from "herdr";
 import { makeGit, repoRoot } from "./git.js";
 import { readStatus } from "./git-status.js";
+import { readGitDir, stateChanged } from "./git-log.js";
 import { readOperation } from "./git-operation.js";
 import { readLastCommit } from "./git-show.js";
 import { buildRows, checkState, toggleIncluded, keepIncluded, folderKeys, parentIndex } from "./tree.js";
-import { tip, location, uiGlyph, ICON, fileGlyph, folderGlyph, darkLook, panelFrame, toolbar, spacer, iconButton, checkbox, row, notice, notRepository, errorStrip, noteBar, WindowedList, logPanelShown, toggleLogPanel, gitButtonPlaced, openMenu, openDialog, takeWrite, releaseWrite, writeBlock, writeName, readBlocked, sentence, copyId, progressBar, activeSpaceId } from "./ui.js";
+import { tip, location, watchSettled, uiGlyph, ICON, fileGlyph, folderGlyph, darkLook, panelFrame, toolbar, spacer, iconButton, checkbox, row, notice, notRepository, errorStrip, noteBar, WindowedList, logPanelShown, toggleLogPanel, gitButtonPlaced, openMenu, openDialog, takeWrite, releaseWrite, writeBlock, writeName, readBlocked, sentence, copyId, progressBar, activeSpaceId } from "./ui.js";
 import { sameRepo } from "./lock.js";
 import CommitForm from "./commit-form.js";
 import { openRollback, serveRollback } from "./view-rollback.js";
@@ -336,21 +337,20 @@ export default class CommitView {
 
   // Only this computer's folders can be watched. Reads don't write under .git (git.js
   // READ), so a refresh never wakes its own watch. One loop per root: a newer watch, or
-  // leaving the repository, ends the older loop the next time it wakes.
+  // leaving the repository, ends the older loop the next time it wakes. The repository's
+  // git folder is watched too: a linked worktree's state (its HEAD, index, MERGE_HEAD)
+  // is not inside its root.
   watch(cx) {
     const repo = this.repo;
     if (!repo || repo.on || this.watching?.root === repo.root) return;
     const mine = this.watching = { root: repo.root };
+    const live = () => this.watching === mine;
+    const failed = () => { this.watching = null; };
+    watchSettled(mine.root, { live, wake: (cx) => this.refresh(cx), failed }, cx);
     cx.spawn(async (cx) => {
-      try {
-        while (this.watching === mine) {
-          await watchFolder(mine.root);
-          if (this.watching === mine) this.refresh(cx);
-        }
-      } catch {
-        // The folder can't be watched (too large on Linux, gone): the timer still reads.
-        if (this.watching === mine) this.watching = null;
-      }
+      const where = await readGitDir(repo.git, repo.root, { own: true });
+      if (!where.ok || !live() || where.dir.startsWith(`${mine.root}/`)) return;
+      watchSettled(where.dir, { live, wakes: (paths) => stateChanged(where.dir, paths), wake: (cx) => this.refresh(cx) }, cx);
     });
   }
 

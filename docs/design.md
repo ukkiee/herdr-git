@@ -689,7 +689,11 @@ Rollback은 Rollback dialog의 버튼으로만 실행되고, 쓰기 전에 버�
 
 ### VCS widget과 VCS Operations popup
 
-- 위젯은 시작할 때, 따라가는 폴더가 바뀔 때, 그 저장소의 `changed`, 보이는 동안 10초마다 읽는다
+- 위젯은 시작할 때, 따라가는 폴더가 바뀔 때, 그 저장소의 `changed`, git 폴더에서 ref·HEAD·진행 중
+  동작의 상태 파일·index가 바뀔 때(이 컴퓨터만, `git-log.js`의 `stateChanged`), 보이는 동안 10초마다 읽는다.
+  터미널의 `git merge`·`checkout`은 파일을 여럿 쓰는데 감시는 첫 파일에 깨어나고, 다음 감시를 걸기 전에
+  쓰인 나머지는 놓칠 수 있다. 그래서 감시로 깬 화면(Commit panel, Log panel, 위젯)은 곧바로 읽고 1초 뒤에
+  한 번 더 읽는다(`ui.js`의 `watchSettled`)
   (`git-heads.js`의 `widgetFace`가 무엇을 보일지 정한다). 최근 브랜치는 HEAD reflog의
   `checkout: moving from X to Y`에서 최대 5개, 지금 있는 로컬 브랜치만이다. 팝업은 380×520 고정이고
   거르면 항목만 준다.

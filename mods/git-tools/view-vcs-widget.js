@@ -19,7 +19,8 @@
 // Delete Branch (view-branch-new.js serveBranch) and Push (view-push.js servePush).
 //
 // The widget reads (readHeads, readOperation) when it starts, when the folder it follows
-// changes, on "changed" for its repository, and every POLL while shown. Its writes
+// changes, on "changed" for its repository, when its git folder changes (this computer
+// only), and every POLL while shown. Its writes
 // (Abort, Continue, Skip, Checkout, Delete) run as the host copy's own work under the
 // repository's lock; their failures and stops show as notifications.
 
@@ -28,11 +29,12 @@ import { h_flex } from "gpui-base";
 import { exec, theme, notify, run } from "herdr";
 import { makeGit, repoRoot } from "./git.js";
 import { readHeads, widgetFace } from "./git-heads.js";
+import { readGitDir, stateChanged } from "./git-log.js";
 import { readOperation, continueOperation, abortOperation, skipOperation, operationName } from "./git-operation.js";
 import { checkout, deleteBranch } from "./git-branch.js";
 import { pressSpot, widgetBlockWidth } from "./ui-size.js";
 import { openConflicts, openConflictsIfStopped } from "./view-conflicts.js";
-import { location, uiGlyph, iconButton, darkLook, broadcast, openCommitPanel, openMenu, takeWrite, releaseWrite, writeBlock, readBlocked, sentence } from "./ui.js";
+import { location, watchSettled, uiGlyph, iconButton, darkLook, broadcast, openCommitPanel, openMenu, takeWrite, releaseWrite, writeBlock, readBlocked, sentence } from "./ui.js";
 import { openPush, servePush } from "./view-push.js";
 import { openBranchNew, openBranchDelete, serveBranch } from "./view-branch-new.js";
 import { serveAction } from "./serve-actions.js";
@@ -56,6 +58,7 @@ export class VcsWidget {
     this.op = null; // readOperation's result, null when not read
     this.context = null;
     this.loading = false;
+    this.watching = null; // the repository its git folder watch belongs to (watch)
   }
 
   contextKey() { const { folder, on } = this.host.where(); return JSON.stringify([folder, on]); }
@@ -86,11 +89,26 @@ export class VcsWidget {
         this.repo = repo;
         this.heads = heads;
         this.op = op.ok ? op : null;
+        this.watch(repo, cx);
       } finally {
         this.loading = false;
         if (this.again) { this.again = false; cx.timer.after(0, (cx) => this.refresh(cx)); }
         cx.notify();
       }
+    });
+  }
+
+  // On this computer: read again when a terminal's git moves a ref or HEAD, starts or
+  // ends an operation, or resolves a conflict. One loop per repository followed: another
+  // folder ends it the next time it wakes. The reads write nothing there (git.js READ).
+  watch(repo, cx) {
+    if (repo.on || this.watching === repo) return;
+    this.watching = repo;
+    cx.spawn(async (cx) => {
+      const where = await readGitDir(repo.git, repo.root);
+      const live = () => this.watching === repo && this.repo === repo;
+      if (!where.ok || !live()) return;
+      watchSettled(where.dir, { live, wakes: (paths) => stateChanged(where.dir, paths), wake: (cx) => this.refresh(cx) }, cx);
     });
   }
 

@@ -679,9 +679,12 @@ another machine runs every git command on that machine. A panel opened with
 
 ### Commit panel
 
-- **Reads**: when the folder changes on disk (this computer only), every 10 s, on
+- **Reads**: when the folder changes on disk (this computer only; for a linked worktree
+  also its own git folder: HEAD, the index, an operation's state files), every 10 s, on
   Refresh, when the focused folder changes, and when another screen reports a change to
-  this repository. A read asked for during a read, or while any screen writes to this
+  this repository. A change on disk is read at once and again 1 s later: a terminal's
+  `git merge` or `checkout` writes many files, and the watch may wake at the first and
+  miss the rest. A read asked for during a read, or while any screen writes to this
   repository, runs once that ends (when the write lets go of the repository, without
   waiting for its report). A failed read keeps the list and shows git's words.
 - **Moving to another repository** (the focused pane's folder changes) shows that
@@ -809,8 +812,8 @@ another machine runs every git command on that machine. A panel opened with
 ### Log panel
 
 - **Reads**: on Refresh and when the folder changes; after that only when a branch, tag
-  or HEAD moved: the panel watches the repository's git folder (this computer) and checks
-  every 10 s (one `for-each-ref`). While the panel is hidden it doesn't check; it catches
+  or HEAD moved: the panel watches the repository's git folder (this computer; a change
+  is checked at once and again 1 s later) and checks every 10 s (one `for-each-ref`). While the panel is hidden it doesn't check; it catches
   up when it shows again. After a commit, checkout, branch, delete, fetch or push it reads
   again without Refresh. While any screen writes to the repository it doesn't check; it
   catches up once the write lets go.
@@ -1141,8 +1144,9 @@ The rules and their reasons are in `docs/design.md` (section 4); what a person s
   what is staged). When more commits were made on top of that stop, git's own Continue
   runs and the edited message is not used.
 - **Reading.** The Commit panel reads the operation in progress on every refresh; the
-  VCS widget when it starts, when its folder changes, on a write to its repository and
-  every 10 s while shown; the Conflicts dialog every 2 s; the Stash tab on writes in any
+  VCS widget when it starts, when its folder changes, on a write to its repository, when
+  its git folder shows a moved ref or HEAD, an operation's state files or the index
+  (this computer only; at once and again 1 s later) and every 10 s while shown; the Conflicts dialog every 2 s; the Stash tab on writes in any
   worktree of the repository and every 10 s.
 - **Remembered.** Update Project's method (the dialog opens every time), the Pull dialog's branch
   per repository, Drop Commits' Don't ask again, the graph and view options, Commit
@@ -1587,7 +1591,7 @@ the git ones run against real temporary repositories):
 | `git-snapshot.js` | `SNAPSHOTS` (`"refs/git-tools/rollback"`), `LIST_LIMIT` (50), `ACTIONS` (`["Rollback", "Reset", "Checkout"]`: the write a snapshot was taken before, its message's first word), `record(git, root, paths, copy)` → `{ ok, code, out, err, snapshot }` (only Rollback calls it), `listSnapshots(git, root)` → `{ ok, code, err, snapshots: [{ hash, time, files: [{ path, status }] }] }` (newest first, `status` `modified` / `added` / `deleted`), `restore(git, root, { snapshot, paths, copy })` → `{ ok, code, out, err, msg?, restored: [path], skipped: [{ path, reason, msg }], stagingSkipped: [{ path, reason, msg }], changed }` (`stagingSkipped`: restored paths whose staging stayed as it is now; `changed`: anything on disk changed, also when git failed partway), `applySnapshot(git, root, { snapshot })` (a snapshot made on another HEAD put back whole and 3-way, the way `git stash apply --index` applies a stash; conflicts left for the Conflicts dialog), `reasonList(skipped, word?)`, `wordRestore(t, r)` (r.msg with the skipped reasons, the staging reasons and a worded cause in t's language) |
 | `git-diff.js` | `MAX_ROWS` (5000), `MAX_CHARS` (400000), `parseDiff`, `readDiff` (`oldPath`: a renamed file's path before its commit), `touchesDiff(changed, root, path)` (whether watched changes can change a working file's diff) |
 | `git-push.js` | `PROTECTED` (`["main", "master"]`), `readPushPlan`, `readPushFiles`, `push` |
-| `git-log.js` | `readLog`, `readRefsState`, `readGitDir`, `refsChanged`, `resolveCommit`, `shortenMiddle`, `labelRefs`, `formatCommitTime`, `readNotPicked(git, root, branch)` → `{ ok, err, notPicked: [hash] }` (the branch's commits whose change HEAD has no copy of, `git cherry`'s "+") |
+| `git-log.js` | `readLog`, `readRefsState`, `readGitDir(git, root, { own })` (the common git folder, or with `own` the checkout's own), `refsChanged`, `stateChanged(dir, paths)` (a ref, HEAD, an operation's state files or the index moved), `resolveCommit`, `shortenMiddle`, `labelRefs`, `formatCommitTime`, `readNotPicked(git, root, branch)` → `{ ok, err, notPicked: [hash] }` (the branch's commits whose change HEAD has no copy of, `git cherry`'s "+") |
 | `git-branch.js` | `readBranches`, `readTags(git, root)` → `{ ok, code, out, err, tags: [{ name, hash }] }`, `readFavorites(git, root)`, `setFavorite(git, root, ref, on)` (the `gittools.favorite` and `gittools.unfavorite` marks), `readMyBranches(git, root)` → `{ ok, code, out, err, email, mine }` (`mine`: branches holding a commit by `user.email`), `checkout`, `checkoutRevision`, `checkBranchName`, `createBranch`, `fetchAll`, `deleteBranch` (refuses a branch checked out in another worktree before recording, `branches.checkedOutElsewhere`; records the branch first and deletes nothing when that fails; a branch it removed comes back as `deleted: { name, hash, upstream }`, `upstream` `{ remote, merge }` or null, read before `branch -D`), `restoreBranch(git, root, { name, hash, upstream })`, `readDeletedBranches(git, root)` → `{ ok, err, branches: [{ name, hash, subject, time, upstream, restorable, reason, msg? }] }` (newest first, at most 50), `restoreBranches(git, root, branches)` → `{ ok, code, out, err, msg?, restored: [{ name, hash }], skipped: [{ name, hash, reason, msg? }], untracked: [{ name, hash, err }] }` (`untracked`: restored branches whose upstream config failed, with git's words) |
 | `git-log-filter.js` | `DATE_PRESETS` (`{ label, key, since }`: `label` is the saved English name, `key` the words), `datePreset(label)`, `dateText(t, { dateLabel, since, until })`, `isDate`, `filterArgs` (`users: [{ name } \| { text }]` besides `user`), `isHash`, `readMe`, `userOf`, `readAuthors(git, root)` → `{ ok, err, authors: [{ name, emails }] }`, `matchAuthors(authors, query)`, `readBranchNames` |
 | `i18n.js` | `LANGS` (`["en", "ko"]`), `pickLang(tags)`, `readAppleLanguages(stdout)`, `readLocaleEnv(stdout)`, `systemLang(platform, read)` (→ `"ko" \| "en"`, or null when it isn't known; `platform` `"macos"`, `"linux"` or `"windows"`, where an empty answer is not known), `TABLES`, `translator(lang, tables?)` → `t(key, args)` (`t.lang`), `sentence(t, msg, text)`, `formatTime(seconds, lang, now?)`, `formatDateTime(seconds, lang)` |

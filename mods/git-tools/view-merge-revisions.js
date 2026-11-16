@@ -15,7 +15,8 @@
 // which runs them under the repository's lock. After a file is resolved the dialog goes on
 // to the next conflicted file, and closes when none is left. Closed with × or Esc after
 // the result changed, it asks the panel to keep the result in the working file, still in
-// conflict (leave), and opening the file again goes on from there.
+// conflict (leave), asking first when that file changed on disk since it was read; opening
+// the file again goes on from there.
 
 import { div } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState } from "gpui-base";
@@ -26,7 +27,7 @@ import { readVersions, dropStaged, localPlacer, remotePlacer } from "./git-confl
 import { columns, editedSince } from "./conflicts-model.js";
 import { writerOn, readerOn } from "./view-conflicts.js";
 import { decide, applyNonConflicting, resolveSimple, resultText, edit } from "./merge-chunks.js";
-import { paneTitles, openFile, layoutRows, chunkButtons, toolbar, countWords, seekConflict, nextFile, leftToDecide, saveQuestion, stageSave } from "./merge-revisions-model.js";
+import { paneTitles, openFile, layoutRows, chunkButtons, toolbar, countWords, seekConflict, nextFile, leftToDecide, saveQuestion, leaveQuestion, stageSave } from "./merge-revisions-model.js";
 import { tip, dialogFrame, button, iconButton, close, askOwner, writeBlock, scrollText, sentence, notice, WindowedList } from "./ui.js";
 
 // Where a local space's result is staged for the panel: the app's own git-tools folder
@@ -279,16 +280,24 @@ export default class MergeRevisionsView {
   // × and Esc. A result changed since the file was opened is kept: the owner writes it to
   // the working file, which stays in conflict with its staging as it was
   // ("conflicts-keep"), and opening the file again goes on from it
-  // (merge-revisions-model.js openFile). Unchanged, nothing is written. When keeping
-  // failed (its words show), the next press closes without it.
-  leave(cx) {
+  // (merge-revisions-model.js openFile). Unchanged, nothing is written. A working file
+  // changed on disk since it was read asks first (leaveQuestion), unless in `passed`;
+  // cancelled, the dialog stays. When keeping failed (its words show), the next press
+  // closes without it.
+  leave(cx, passed = []) {
     if (this.waiting || this.checking) return;
     const text = this.file?.state && !this.keepFailed ? resultText(this.settled()) : null;
     if (text === null || text === this.startText) { this.shut(); return; }
-    if (this.editor) { this.editor.release(); this.editor = null; }
-    this.waiting = true; this.error = null;
+    this.confirm = null; this.checking = true; this.error = null;
     cx.notify();
     cx.spawn(async (cx) => {
+      const now = await this.disk();
+      this.checking = false;
+      const kind = leaveQuestion({ opened: this.opened, now, passed });
+      if (kind) { this.confirm = { kind, then: "leave", passed }; cx.notify(); return; }
+      if (this.editor) { this.editor.release(); this.editor = null; }
+      this.waiting = true;
+      cx.notify();
       const staged = await stageSave(exec, this.on, { path: this.path, text, dir: `${appHome()}/${STAGE_DIR}` });
       if (!staged.ok) { this.waiting = false; this.keepFailed = true; this.error = sentence(this.t, staged.msg, staged.err); cx.notify(); return; }
       this.ask("conflicts-keep", staged.args, cx, () => this.shut(), (r) => {
@@ -409,7 +418,7 @@ export default class MergeRevisionsView {
     } else if (q.kind === "overwrite") {
       [id, title, text] = ["mr-changed", this.t("conflicts.overwriteTitle"), this.t("conflicts.mrChangedOnDiskBody", { path: this.path ?? "" })];
       [cancel, ok] = [this.t("dialogs.cancel"), this.t("conflicts.mrOverwrite")];
-      yes = (cx) => this.save(q.then, cx, [...q.passed, "overwrite"]);
+      yes = (cx) => (q.then === "leave" ? this.leave(cx, [...q.passed, "overwrite"]) : this.save(q.then, cx, [...q.passed, "overwrite"]));
     } else {
       const column = this.word(q.column === "yours" ? this.titles.left : this.titles.right);
       [id, title, text] = ["mr-overwrite", this.t("conflicts.overwriteTitle"), this.t("conflicts.overwriteBody", { path: this.path ?? "", column })];

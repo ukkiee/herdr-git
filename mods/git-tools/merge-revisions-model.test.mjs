@@ -5,7 +5,7 @@ import { execFile, execFileSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
-import { paneTitles, openFile, layoutRows, chunkButtons, toolbar, countWords, seekConflict, nextFile, leftToDecide, saveQuestion, stageSave, saveRequest, keepRequest } from "./merge-revisions-model.js";
+import { paneTitles, openFile, layoutRows, chunkButtons, toolbar, countWords, seekConflict, nextFile, leftToDecide, saveQuestion, leaveQuestion, stageSave, saveRequest, keepRequest } from "./merge-revisions-model.js";
 import { localPlacer, remotePlacer, readVersions } from "./git-conflict.js";
 import { columns } from "./conflicts-model.js";
 import { decide, resultText, edit } from "./merge-chunks.js";
@@ -152,6 +152,16 @@ const versions = (base, ours, theirs, extra = {}) => ({ ok: true, path: "src/alp
   assert.equal(saveQuestion(done, { opened: disk, now: disk }), null);
   assert.equal(saveQuestion(done, { opened: null, now: null }), null);
   assert.equal(saveQuestion(done, { opened: disk, now: null }), "overwrite");
+
+  // × and Esc keep a changed result without asking about what is left to decide, but a
+  // working file changed on disk since the dialog read it (a line end too, or gone) asks
+  // before the result is written over it; answered yes, it isn't asked again.
+  assert.equal(leaveQuestion({ opened: disk, now: disk }), null);
+  assert.equal(leaveQuestion({ opened: disk, now: "mine\n" }), "overwrite");
+  assert.equal(leaveQuestion({ opened: disk, now: disk.replace(/\n/g, "\r\n") }), "overwrite");
+  assert.equal(leaveQuestion({ opened: disk, now: null }), "overwrite");
+  assert.equal(leaveQuestion({ opened: disk, now: "mine\n", passed: ["overwrite"] }), null);
+  assert.equal(leaveQuestion({ opened: null, now: null }), null);
 
   // A simple conflict (the sides change different lines) turns the wand on.
   const simple = openFile(versions("a\nb\nc\n", "A\nb\nc\n", "a\nb\nC\n"), cols).state;

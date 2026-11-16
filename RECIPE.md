@@ -630,9 +630,11 @@ dialog's own (`openDialog` in its file).
   Apply Changes (default). Arrows and chunk buttons are characters, not icons. Its
   questions (`Unprocessed Changes`, `Overwrite Changes`, and the one when the file changed
   on disk since the dialog read it, with Overwrite) are 460px cards over it. × and Esc
-  close it without asking: a result changed since the file was opened is written to the
-  working file first (still in conflict, its staging unchanged; `conflicts-keep`), and
-  an unchanged one writes nothing. Opening the file again goes on from the working file
+  close it without asking about what is left to decide: a result changed since the file
+  was opened is written to the working file first (still in conflict, its staging
+  unchanged; `conflicts-keep`), and an unchanged one writes nothing. When the working file
+  changed on disk since the dialog read it, the same Overwrite question comes first:
+  Overwrite keeps the result and closes, Cancel leaves the dialog open. Opening the file again goes on from the working file
   when it has no conflict marks (`<<<<<<<` / `>>>>>>>` lines); with git's marks the
   result starts from the three versions as before. When keeping fails, git's words show
   and the next × or Esc closes without keeping.

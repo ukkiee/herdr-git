@@ -172,6 +172,14 @@ export function saveQuestion(state, { opened = null, now = null, passed = [] } =
   return null;
 }
 
+// leaveQuestion({ opened, now, passed }) → "overwrite" | null: what × or Esc asks before
+// keeping a changed result in the working file, null to keep it at once. What is left to
+// decide is never asked (the file stays in conflict); a working file changed on disk since
+// the dialog read it is, as for saveQuestion, so closing doesn't write over it unasked.
+export function leaveQuestion({ opened = null, now = null, passed = [] } = {}) {
+  return !passed.includes("overwrite") && (opened ?? null) !== (now ?? null) ? "overwrite" : null;
+}
+
 // seekConflict(state, from, dir) → the index of the next open conflict after chunk `from`
 // (dir 1) or before it (dir -1), or -1. from -1 with dir 1 finds the first.
 export function seekConflict(state, from, dir) {

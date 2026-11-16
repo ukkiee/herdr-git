@@ -2459,7 +2459,8 @@ in English.
   needs 2.24). With an older git on a space's machine, the Date filter fails with git's
   error and branch and push actions fail too.
 - **For the git operations**, also: `merge`, `rebase` (and `rebase -i` with
-  `GIT_SEQUENCE_EDITOR` writing git-tools' todo list), `cherry-pick` (also `--no-commit`
+  `GIT_SEQUENCE_EDITOR` writing git-tools' todo list and, beside it, the file its `exec`
+  lines load their messages and paths from), `cherry-pick` (also `--no-commit`
   on a scratch index `<git dir>/git-tools-changes-index`), `revert`, `pull`, `stash`
   (`push`, `list`, `apply`, `pop`, `drop`, `clear`, `branch`), `reset` (`--soft`,
   `--mixed`, `--hard`, `--keep`), `tag`, `branch -m`, `branch --set-upstream-to`,
@@ -2500,7 +2501,10 @@ in English.
   `refs/git-tools/deleted-branches`. Each Rollback leaves the
   emptied file `<git dir>/git-tools-rollback-index-<copy>` (65 bytes in a SHA-1
   repository, 89 in a SHA-256 one) in the git folder, one for each Commit panel copy that
-  rolled back or restored there. Restore
+  rolled back or restored there. A history edit writes `rebase-merge/gittools-vars` in
+  the git folder while its rebase runs or is stopped (the new messages and the picked
+  paths, as shell assignments); git removes it with that folder when the rebase ends.
+  Restore
   writes working-tree files and the index entries of the paths it restored. git config
   is written only by a deleted branch's Restore, putting back that branch's
   `branch.<name>.remote` and `.merge`. The Files panel writes nothing.
@@ -3750,12 +3754,15 @@ commit `main` lacks)
      a commit up and Start Rebasing: the order changes and nothing is left in progress.
      Squash's ▾ opens its Fixup menu right under the ▾, inside the dialog.
 202. In that dialog Squash, Fixup, Drop and Reword (double-click the subject) a commit
-     each and start: the history shows exactly that. Closing with changes asks `Cancel
+     each and start: the history shows exactly that. A Squash or Fixup right after a
+     dropped commit melds into the commit kept before the drop. Pick on a reworded row
+     shows the commit's own message again. Closing with changes asks `Cancel
      Rebase` first; Esc on that question closes only the question. Esc in a reword's box
      leaves the reword (asking first when its text changed) and the dialog stays.
 203. Mark a commit Stop to Edit and start: the notification `Rebase Stopped for Editing`
      says to continue or abort from the VCS widget or the Commit panel; Continue Rebase
-     there finishes.
+     there finishes. A commit reworded after that stop has its new message once the
+     rebase is continued.
 204. Drop every commit and start: `Git Rebase` asks first; the branch then sits on the
      picked commit's parent.
 

@@ -599,6 +599,14 @@ Rollback은 Rollback dialog의 버튼으로만 실행되고, 쓰기 전에 버�
   `git rebase -i`에 넣는다. 메시지와 경로는 `exec` 줄이 변수로 받는다. 이유와 대안은
   [ADR 0004](adr/0004-rewrite-through-one-rebase-plan.md)에 있다. HEAD 하나의 메시지 편집은
   `commit --amend --only -m`, 커밋 실행 취소는 `reset --soft`라 다시 쌓지 않는다.
+- **변수는 rebase의 상태 폴더에 둔다.** 할 일 목록을 쓰는 순서 편집기가 변수들을 셸 대입문으로
+  `rebase-merge/gittools-vars`에도 쓰고, 변수를 읽는 `exec` 줄은 그 파일을 먼저 불러온다. rebase를
+  시작한 git의 환경에만 두면, 편집 중단이나 충돌로 멈춘 뒤의 Continue는 그 환경 없이 뜬 다른
+  git이라 변수가 비어 메시지 없는 커밋으로 실패한다. 파일은 rebase가 끝나거나 중단되면 git이 폴더와
+  함께 지운다.
+- **삭제는 합치기 묶음을 끊지 않는다.** 남긴 커밋과 그 뒤 스쿼시·픽스업 사이에 삭제한 커밋이 있어도
+  뒤의 것은 앞의 남긴 커밋에 합쳐진다. 대화식 리베이스 창에서 행을 선택·편집 중단·삭제로 바꾸면 그
+  행에 써 둔 새 메시지는 버린다(새 메시지는 수정 동작에만 실린다).
 - **편집 판정은 순수 모듈이다**(`rebase-plan.js`의 `editCheck`, 사실은 `git-rewrite.js`의
   `readEditFacts`가 읽는다). 메뉴를 열 때 읽어 꺼진 항목에 사유를 보인다. 꺼지는 경우: merge 커밋,
   현재 브랜치 밖, 진행 중 동작, 보호 브랜치에 푸시됨(현재 브랜치의 추적 원격 브랜치가 Protected

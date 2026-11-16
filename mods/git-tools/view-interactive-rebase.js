@@ -60,7 +60,8 @@ export function stepsOf(rows, messages) {
     if (MELDS.has(steps[i].action) || steps[i].action === "drop") continue;
     let j = i + 1;
     const squashes = [];
-    for (; j < steps.length && MELDS.has(steps[j].action); j++) if (steps[j].action === "squash") squashes.push(j);
+    // A dropped commit doesn't end the group (rebase-plan.js todoList).
+    for (; j < steps.length && (MELDS.has(steps[j].action) || steps[j].action === "drop"); j++) if (steps[j].action === "squash") squashes.push(j);
     if (squashes.length) {
       const parts = [steps[i].message ?? messages[steps[i].hash] ?? "", ...squashes.map((k) => messages[steps[k].hash] ?? "")];
       steps[squashes[0]] = { ...steps[squashes[0]], message: parts.join("\n\n") };
@@ -229,7 +230,8 @@ export default class InteractiveRebaseView {
     const off = this.can();
     if (name === "up" && !off.up) this.change(moved(this.rows, this.selected, -1));
     else if (name === "down" && !off.down) this.change(moved(this.rows, this.selected, 1));
-    else if (["pick", "edit", "drop"].includes(name) && !off[name]) this.change(this.rows.map((r) => (this.selected.has(r.hash) ? { ...r, action: name, message: name === "drop" ? null : r.message } : { ...r })));
+    // The row's own message goes with its Reword: only a reword is replayed with one.
+    else if (["pick", "edit", "drop"].includes(name) && !off[name]) this.change(this.rows.map((r) => (this.selected.has(r.hash) ? { ...r, action: name, message: null } : { ...r })));
     else if ((name === "squash" || name === "fixup") && !off.meld) this.change(melded(this.rows, this.selected, name));
     else if (name === "reword" && !off.reword) this.beginReword(this.picked()[0]);
     else if (name === "undo" && !off.undo) this.undo();

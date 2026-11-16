@@ -445,6 +445,31 @@ const step = (hash, action, message) => ({ hash, action, ...(message == null ? {
   assert.equal(run(repo, ["show", "HEAD~1:three.txt"]), "three, edited\n");
 }
 
+// A stop before a reworded commit: the Continue after it is another git, started without
+// what the first one was handed, and the new message still lands.
+{
+  const { repo, hashes } = fourCommits("interactive-edit-reword");
+  const r = await interactiveRebase(git, repo, { commit: hashes[2], steps: [step(hashes[2], "edit"), step(hashes[3], "reword", TRICKY)] });
+  assert.equal(r.outcome, "stopped", r.err);
+  const c = await continueOperation(git, repo);
+  assert.equal(c.ok, true, c.err);
+  assert.equal(c.outcome, "done", c.err);
+  assert.equal(inProgress(repo), false);
+  assert.deepEqual(history(repo).map((x) => x.message), ["one", "two", "three", TRICKY]);
+}
+
+// A dropped commit between a commit and the one melded into it: the meld goes into the
+// commit kept before the drop.
+{
+  const { repo, hashes } = fourCommits("interactive-drop-between");
+  const r = await interactiveRebase(git, repo, { commit: hashes[1], steps: [step(hashes[1], "pick"), step(hashes[2], "drop"), step(hashes[3], "fixup")] });
+  assert.equal(r.ok, true, r.err);
+  assert.equal(r.outcome, "done");
+  const h = history(repo);
+  assert.deepEqual(h.map((c) => c.message), ["one", "two"]);
+  assert.deepEqual(h[1].files, ["four.txt", "one.txt", "two.txt"]);
+}
+
 // Every commit dropped: the branch goes back to the commit before the one picked.
 {
   const { repo, hashes } = fourCommits("interactive-noop");

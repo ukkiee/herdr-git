@@ -956,6 +956,10 @@ another machine runs every git command on that machine. A panel opened with
 - Lists the commits on HEAD that no branch of the target remote has (as of the last
   fetch or push), newest first, at most 1,000. Click a commit to see only its files;
   click the branch line to see all. Keys: ↑ ↓, Esc closes.
+- The files are read as soon as the first list is in, even when a change reported meanwhile
+  reads the list again (as one does right after Commit and Push…). A list read again reads
+  the files again only when its commits differ. Files whose read failed or never answered
+  are read again with the next list, or on a click of the selection shown.
 - Target: the branch's upstream; without one, `origin` and the same name, and the push
   sets the upstream.
 - **Push** pushes exactly what the dialog shows, or nothing. The Commit panel that
@@ -1164,7 +1168,8 @@ The rules and their reasons are in `docs/design.md` (section 4); what a person s
   was read before stays. A machine that can't be reached shows the same way; the next
   poll tries again. Every error strip has `View in Console`, which opens or picks the Git
   console tab.
-- In the Commit panel, the Log panel and the VCS widget, a git command whose answer hasn't come 5 s past its
+- In the Commit panel, the Log panel, the VCS widget and the Push dialog, a git command
+  whose answer hasn't come 5 s past its
   timeout (35 s for a read) is given up on, so the screen doesn't stay on `Loading…` for
   good: a read is asked once more, then it fails with `git did not answer in 35 s.` like
   any git error. A command that may write is not run again, as it may have done its work.

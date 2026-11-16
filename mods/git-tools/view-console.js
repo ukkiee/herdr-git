@@ -8,7 +8,7 @@
 
 import { div } from "gpui-kit";
 import { theme, settings, spaces, panes, run } from "herdr";
-import { panelFrame, toolbar, spacer, button, notice, WindowedList, MOD } from "./ui.js";
+import { panelFrame, toolbar, spacer, button, notice, WindowedList, MOD, CONSOLE_END } from "./ui.js";
 import { readConsole, CONSOLE_EVENT } from "./app-files.js";
 import { consoleRows } from "./git-console.js";
 import { en, ko } from "./messages-console.js";
@@ -51,7 +51,8 @@ export default class Console {
     cx.spawn(async (cx) => {
       const r = await readConsole();
       this.loading = false;
-      const follow = this.atEnd();
+      const follow = this.atEnd() || this.toEndNext;
+      this.toEndNext = false;
       if (r.ok) { this.rows = consoleRows(r.entries); this.error = null; }
       else this.error = r.err;
       this.loaded = true;
@@ -64,6 +65,8 @@ export default class Console {
   event(e, cx) {
     // A "changed" without a root stands for events that went unseen: one may be ours.
     if (e.type === CONSOLE_EVENT || (e.type === "changed" && !e.root)) this.load(cx);
+    // View in Console (ui.js errorStrip) brought this tab forward: the end, freshly read.
+    if (e.type === CONSOLE_END) { this.toEndNext = true; this.load(cx); }
   }
 
   toEnd(cx) {

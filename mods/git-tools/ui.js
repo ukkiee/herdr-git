@@ -663,12 +663,16 @@ export function scrollText(id, text, t, { maxHeight, color } = {}) {
 // Shows the shown space's Git console tab, or opens one: the strip's link. The same tab
 // view-console.js openConsole finds (a tab named Console | 콘솔 whose only pane is ours);
 // written here because view-console.js imports this file.
+// A console tab that was scrolled up would keep showing older lines: the strip sends the
+// console screens CONSOLE_END, and they read the log again and show its end, where the
+// failed command is.
 const CONSOLE_NAMES = new Set([consoleEn["console.title"], consoleKo["console.title"]]);
+export const CONSOLE_END = "console-end";
 function showConsole() {
   const space = spaces().find((s) => s.active);
   const ours = new Set(panes().filter((p) => p.mod === MOD).map((p) => p.tab));
   const found = space?.tabs?.find((tab) => tab.panes === 1 && ours.has(tab.id) && CONSOLE_NAMES.has(tab.name));
-  if (found) run("tab.select", { id: found.id });
+  if (found) { run("tab.select", { id: found.id }); broadcast({ type: CONSOLE_END }); }
   else run("tab.new", { name: words()("console.title"), mod: MOD, props: { view: "console" } });
 }
 

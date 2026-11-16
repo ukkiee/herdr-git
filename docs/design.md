@@ -127,7 +127,8 @@ git 모듈과 순수 계산 모듈은 `herdr`를 import하지 않는다. 그래�
   - `git-tools.bus`: 사본 사이의 알림. 최근 사건 8개와 번호만 둔다(`bus.js`). 사건은 이름과 짧은
     인자뿐이다: `changed`, 창의 요청과 답, `console`(콘솔 기록이 늘었다), `log-options`(그래프·표시
     옵션을 바꿨다), `rewrite-target`(픽스업·스쿼시 대상 커밋, 메시지는 받는 쪽이 읽는다),
-    `commit-focus`(Commit panel을 열었다, 그 space를 보이는 창의 패널이 목록에 포커스를 준다). 큰 글은
+    `commit-focus`(Commit panel을 열었다, 그 space를 보이는 창의 패널이 목록에 포커스를 준다),
+    `console-end`(실패 띠의 "콘솔에서 보기"가 콘솔 탭을 골랐다, 콘솔 화면이 기록을 다시 읽고 끝을 보인다). 큰 글은
     싣지 않는다. Merge Revisions dialog가 저장할 결과 글은 그 머신의 임시 파일
     `git-tools-result.XXXXXXXX`(이 컴퓨터는 앱 홈의 `git-tools` 폴더, 원격은 `$TMPDIR`나 `/tmp`,
     권한 0600)에 쓰고 요청에는 경로만 담는다. 패널은 저장한 뒤 그 파일을 지운다.

@@ -1164,7 +1164,8 @@ The rules and their reasons are in `docs/design.md` (section 4); what a person s
 - git's words go in the error strip of the panel or dialog where it happened, and what
   was read before stays. A machine that can't be reached shows the same way; the next
   poll tries again. Every error strip has `View in Console`, which opens or picks the Git
-  console tab.
+  console tab; a console tab it picks reads the log again and shows its end, where the
+  failed command is, even if it was scrolled up (it posts `{ type: "console-end" }`).
 
 ### One git write at a time
 
@@ -3716,7 +3717,8 @@ commit `main` lacks)
      repository, command and output, a failure with `Exit code N`; a new commit's commands
      follow at once.
 236. Make any git-tools action fail: its error strip has View in Console, which opens or
-     picks the Console tab.
+     picks the Console tab, scrolled to its end: the failed command and its exit code show
+     even if the tab had been scrolled up.
 
 **Button and menu icons**
 

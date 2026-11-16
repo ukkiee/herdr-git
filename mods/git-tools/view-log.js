@@ -15,6 +15,7 @@ import { div } from "gpui-kit";
 import { v_flex } from "gpui-base";
 import { exec, theme, watchFolder } from "herdr";
 import { makeGit, repoRoot } from "./git.js";
+import { readTurns, STUCK } from "./read-turns.js";
 import { readRefsState, readGitDir, refsChanged, resolveCommit } from "./git-log.js";
 import { fetchAll, restoreBranch } from "./git-branch.js";
 import { remoteFailure } from "./git-remote.js";
@@ -64,6 +65,7 @@ const LIST_MIN = 360, SPLIT = 5;
 // buttons take besides it.
 const FILTERS_MIN = 420, TOOLBAR_REST = 100;
 const SHORT = 7; // a hash as Commit details and the Branch tree's HEAD row show it
+const FIRST_LOOK = 6000; // ms after the panel starts: what is still unread then is read again once
 
 const stored = (column) => {
   try { const n = Number(localStorage.getItem(column.key)); return n >= column.min ? n : column.width; }
@@ -220,6 +222,9 @@ export default class LogView {
     this.listWidth = null;
     this.refs = null; // the refs' state the list was last read at
     this.lost = false; // finding the repository failed (not "not a repository"): the poll asks again
+    this.finding = readTurns(); // the searches for the shown folder's repository (refresh)
+    this.polls = readTurns(); // the poll's look at the refs
+    this.reloadAt = 0; // when the branches and the list were last asked for (reload)
     this.jumpTurn = 0; // one per hash jump; a search, a filter or a pick makes older ones void
     // The graph and display options (log-options.js): the defaults until the settings
     // file is read, app-wide, saved on every change.
@@ -235,9 +240,18 @@ export default class LogView {
     this.widget.init(this, { who: "ui.logPanel" });
     this.loadOptions(cx);
     this.refresh(cx);
+    // A Log tab just opened has been seen to get no answer to its first reads: once, a
+    // little later, what is still unread is read again.
+    cx.timer.after(FIRST_LOOK, (cx) => this.firstLook(cx));
     // The watch below covers this computer; this covers other machines and a watch that
     // could not start. Cheap: one for-each-ref, and only while the panel shows.
     cx.timer.every(10000, (cx) => this.poll(cx));
+  }
+
+  firstLook(cx) {
+    if (!this.shown() || this.readBlocked()) return;
+    if (!this.read) this.refresh(cx);
+    else if (this.repo && (!this.list.read || !this.branches.read)) this.reload(cx);
   }
 
   where() { return this.fixed ?? location(); }
@@ -403,6 +417,7 @@ export default class LogView {
   }
 
   reload(cx) {
+    this.reloadAt = Date.now();
     this.branches.reload(cx);
     this.list.reload(cx);
     this.details.retry(cx);
@@ -539,21 +554,25 @@ export default class LogView {
 
   // Finds the repository of the folder shown and reads everything again. This is the
   // Refresh button; changes in the repository come through poll(). Never from render.
+  // It never waits for a search still going: one whose answer never comes would keep the
+  // panel on "Loading…" for every space it shows (read-turns.js).
   refresh(cx) {
-    if (this.resolving) return;
     const { folder, on } = this.where(), context = this.contextKey();
     if (context !== this.context) {
       this.context = context; this.error = null; this.writeError = null; this.notRepo = false; this.read = false;
       this.lost = false; this.lostMark = null; this.jumpTurn++;
+      this.finding.drop();
       this.setRepo(null, cx);
     }
     if (!folder) return;
-    this.resolving = true;
+    const turn = this.finding.start();
+    let used = false;
     cx.spawn(async (cx) => {
       try {
-        const git = makeGit(exec, on);
+        const git = makeGit(exec, on, { wait: this.wait });
         const top = await repoRoot(git, folder);
-        if (this.contextKey() !== context) return;
+        used = this.contextKey() === context && this.finding.use(turn);
+        if (!used) return;
         this.folder = folder;
         if (!top.ok && !top.notRepo) {
           // git or the machine couldn't be reached: what was read stays, with git's words
@@ -569,7 +588,8 @@ export default class LogView {
         this.reload(cx);
         this.note(cx);
       } finally {
-        this.resolving = false; this.read = true;
+        const newest = this.finding.end(turn);
+        if (newest || used) this.read = true;
         cx.notify();
       }
     });
@@ -623,20 +643,23 @@ export default class LogView {
 
   // Reads the list again only if a ref or HEAD moved since it was last read, or the last
   // read of the list or the branches failed, so a quiet repository costs one small git
-  // call and nothing is redrawn. A repository that couldn't be found is looked for again;
-  // a details read or a next batch of the list that failed is read again.
+  // call and nothing is redrawn. A repository that couldn't be found, or whose search
+  // never answered, is looked for again; a details read or a next batch of the list that
+  // failed is read again, and so are branches or a list whose first read never answered.
   poll(cx) {
     if (this.drawsWidget() && this.shown()) this.widget.refresh(cx);
-    const repo = this.repo;
-    if (this.readBlocked() || !this.shown()) { this.stale = Boolean(repo) || this.lost; return; }
-    if (this.lost) { this.stale = false; this.refresh(cx); return; }
+    const repo = this.repo, lost = this.lost || this.finding.stuck();
+    if (this.readBlocked() || !this.shown()) { this.stale = Boolean(repo) || lost; return; }
+    // Not beside a search still going: on a slow machine the checks would pile them up.
+    if (lost) { this.stale = false; if (!this.finding.busy()) this.refresh(cx); return; }
     if (!repo) { this.stale = false; return; }
-    if (this.polling) { this.again = true; return; }
-    this.polling = true; this.stale = false;
+    if (this.polls.busy()) { this.again = true; return; }
+    const turn = this.polls.start();
+    this.stale = false;
     cx.spawn(async (cx) => {
       const r = await readRefsState(repo.git, repo.root);
-      this.polling = false;
-      if (repo !== this.repo) return;
+      const used = this.polls.use(turn), last = this.polls.end(turn);
+      if (repo !== this.repo || !used) return;
       if (!r.ok) {
         // git or the machine can't be reached: say so, try again on the next poll. Set even
         // when the strip has these words already (from a failed Restore, say), so its mark
@@ -646,12 +669,16 @@ export default class LogView {
         // Only the strip this read put up: the same words may be another action's since.
         if (this.pollMark != null && this.errorMark === this.pollMark) { this.error = null; cx.notify(); }
         this.pollMark = null;
-        if (r.state !== this.refs || this.list.failed || this.branches.failed) { this.refs = r.state; this.reload(cx); }
+        if (r.state !== this.refs || this.list.failed || this.branches.failed || this.unread()) { this.refs = r.state; this.reload(cx); }
         else { this.details.retry(cx); this.list.retry(cx); }
       }
-      if (this.again) { this.again = false; this.poll(cx); }
+      if (last && this.again) { this.again = false; this.poll(cx); }
     });
   }
+
+  // The Branch tree or the Commit list still has nothing of this repository to show,
+  // though the read that should fill it began STUCK ago: its answer never came.
+  unread() { return (!this.list.read || !this.branches.read) && Date.now() - this.reloadAt >= STUCK; }
 
   // `git-tools.<name>`: refresh, log-fetch, log-restore-branch (the Restore notice's
   // button), focus (Herdr sends it when a popup over the panel closes), and the parts'
@@ -696,7 +723,7 @@ export default class LogView {
     if (e.type === DETAILS_EVENT) { this.details.loadOptions(cx); return; }
     if (e.type !== "changed" || (e.root && e.root !== this.repo?.root)) return;
     if (this.repo) this.poll(cx);
-    else this.refresh(cx);
+    else if (!this.finding.busy()) this.refresh(cx);
   }
 
   // ---- drawing
@@ -740,7 +767,7 @@ export default class LogView {
   }
 
   body(cx, t) {
-    const c = this.columns(), loading = this.list.loading || this.resolving, writing = this.writeBlock();
+    const c = this.columns(), loading = this.list.loading || this.finding.busy(), writing = this.writeBlock();
     this.listWidth = c.list;
     // A plain flex row: its children stretch to the panel's height.
     return div().id("log-columns").flex().flex_1().min_h(0).w_full()
@@ -775,18 +802,19 @@ export default class LogView {
     return logButton(it.id, t, { title: this.itemTitle(it), disabled: it.disabled, busy, onClick: (_e, cx) => this.run(it.id, null, cx) });
   }
 
-  // Another folder to follow, or changes that arrived while the panel was hidden: taken
-  // up in a timer, one at a time.
+  // Another folder to follow, changes that arrived while the panel was hidden, or a search
+  // for the repository whose answer never came: taken up in a timer, one at a time.
   catchUp(cx) {
     if (this.catching) return;
     // A poll skipped while a write ran is taken up once the lock is released (the release
     // redraws every copy), even if the writer's "changed" never comes.
-    const moved = this.contextKey() !== this.context, waiting = this.stale && this.shown() && !this.readBlocked();
+    const moved = this.contextKey() !== this.context || (this.finding.stuck() && this.shown());
+    const waiting = this.stale && this.shown() && !this.readBlocked();
     if (!moved && !waiting) return;
     this.catching = true;
     cx.timer.after(0, (cx) => {
       this.catching = false;
-      if (this.contextKey() !== this.context) this.refresh(cx);
+      if (this.contextKey() !== this.context || this.finding.stuck()) this.refresh(cx);
       else if (this.stale && this.shown()) this.poll(cx);
     });
   }
@@ -802,7 +830,7 @@ export default class LogView {
           .child(div().px(6).font_semibold().child("Git"))
           .child(div().text_size(12).text_color(t.muted).child(this.t("log.title")))
           .child(spacer())
-          .child(iconButton("log-refresh", "refresh", t, { title: this.t("log.refresh"), busy: Boolean(this.resolving) && this.read, onClick: (_e, cx) => this.refresh(cx) }))
+          .child(iconButton("log-refresh", "refresh", t, { title: this.t("log.refresh"), busy: this.finding.busy() && this.read, onClick: (_e, cx) => this.refresh(cx) }))
           .when(!this.fixed, (el) => el.child(iconButton("log-hide", "x", t, { title: this.t("log.hide"), onClick: () => toggleLogPanel() }))))
         .child(div().flex_1().min_h(0).child(this.notRepo ? notice(notRepository(this.folder, this.t), t) : !this.read ? notice(this.t("ui.loading"), t, { busy: true }) : notice("", t)));
     const gone = this.deleted && sameRepo(this.deleted.repo, this.repo) ? this.deleted : null;

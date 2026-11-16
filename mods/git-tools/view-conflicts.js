@@ -17,6 +17,7 @@ import { div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { exec, theme, readTextFile, writeTextFile } from "herdr";
 import { makeGit } from "./git.js";
+import { readTurns } from "./read-turns.js";
 import { readOperation } from "./git-operation.js";
 import { readVersions, remoteWriter } from "./git-conflict.js";
 import { heading, columns, sortFiles, controls, pick, editedSince, editedAmong, stoppedOnConflicts } from "./conflicts-model.js";
@@ -27,6 +28,10 @@ const SIZE = { width: 760, height: 460 };
 // How often the dialog reads the repository again while open, for what a terminal or an
 // editor did: the panels' "changed" covers git-tools' own writes at once.
 const POLL = 2000;
+// How long a read may go unanswered before the poll reads again beside it. Short, as the
+// dialog often opens the moment the operation stops and a first read whose answer is lost
+// would leave it empty; an answer still lands when it comes (read-turns.js).
+const UNANSWERED = 6000;
 // Width of each side's column.
 const COLUMN = 190;
 const QUESTION_WIDTH = 460;
@@ -80,7 +85,7 @@ export default class ConflictsView {
     this.owner = p.owner ?? null; // the panel copy that runs the writes
     this.who = typeof p.who === "string" ? p.who : "ui.commitPanel";
     this.stash = typeof p.stash === "string" ? p.stash : null;
-    this.git = makeGit(exec, this.on);
+    this.git = makeGit(exec, this.on, { wait: this.wait });
     this.op = null; // readOperation's last answer
     this.branch = null; // the branch HEAD is on
     this.seen = []; // every path in conflict since the dialog opened
@@ -96,30 +101,28 @@ export default class ConflictsView {
     this.running = null; // "simple" while Resolve All Simple Conflicts runs
     this.simpleFrom = null; // unresolved files before it ran, until the next read
     this.simpleKept = 0; // files it left because they were edited by hand
-    this.reading = false;
-    this.turn = 0;
+    this.reads = readTurns({ stuck: UNANSWERED });
     this.handle = cx.focus_handle();
     this.handle.focus();
     this.list = new WindowedList("conflicts-files", { rowHeight: ROW + 4 });
     this.load(cx);
-    cx.timer.every(POLL, (cx) => { if (!this.waiting && !this.reading) this.load(cx); });
+    cx.timer.every(POLL, (cx) => { if (!this.waiting && !this.reads.busy()) this.load(cx); });
   }
 
   repo() { return { root: this.root, on: this.on }; }
 
-  // Reads the operation and the branch again. A newer read wins over an older one still
-  // on its way.
+  // Reads the operation and the branch again. An answer older than one shown is dropped.
   load(cx) {
     if (!this.root) return;
-    const turn = ++this.turn;
-    this.reading = true;
+    const turn = this.reads.start();
     cx.spawn(async (cx) => {
       const [op, head] = await Promise.all([
         readOperation(this.git, this.root),
         this.git.read(this.root, ["symbolic-ref", "--short", "-q", "HEAD"]),
       ]);
-      if (turn !== this.turn) return;
-      this.reading = false;
+      const used = this.reads.use(turn);
+      this.reads.end(turn);
+      if (!used) return;
       if (!op.ok) { this.error = sentence(this.t, op.msg, op.err); cx.notify(); return; }
       this.op = op;
       this.branch = head.ok ? head.out.trim() || null : null;

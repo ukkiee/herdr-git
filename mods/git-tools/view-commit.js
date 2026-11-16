@@ -25,6 +25,7 @@ import { div } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { exec, theme, watchFolder } from "herdr";
 import { makeGit, repoRoot } from "./git.js";
+import { readTurns } from "./read-turns.js";
 import { readStatus } from "./git-status.js";
 import { readOperation } from "./git-operation.js";
 import { readLastCommit } from "./git-show.js";
@@ -103,6 +104,7 @@ export default class CommitView {
     this.note = null;
     // context key → what the panel showed there when it left (see remember), newest last.
     this.seen = new Map();
+    this.reads = readTurns(); // the reads of the folder shown (refresh)
     this.list = new WindowedList("commit-files");
     this.handle = cx.focus_handle();
     this.form = new CommitForm();
@@ -208,12 +210,15 @@ export default class CommitView {
   // ---- reading
 
   refresh(cx) {
-    // A change that lands while a read is running is read once that one is done.
-    if (this.loading) { this.again = true; return; }
     const { folder, on } = this.where(), context = this.contextKey();
+    // A change that lands while this folder is read is read once that read is done.
+    // Another folder doesn't wait for it, nor does anything once it is stuck: a read whose
+    // answer never comes would keep the panel on "Loading…" for good (read-turns.js).
+    if (context === this.context && this.reads.busy()) { this.again = true; return; }
     // Another folder is taken up before asking whether reads wait: a write on the
     // repository left behind must not keep that repository on screen.
     if (context !== this.context) {
+      this.reads.drop(); this.again = false;
       this.remember();
       this.context = context; this.repo = null; this.watching = null; this.lost = false;
       // A write's failure belongs to the repository it ran on, like a read's.
@@ -228,18 +233,21 @@ export default class CommitView {
     if (this.readBlocked()) { this.waiting = true; return; }
     this.waiting = false;
     if (!folder) return;
-    this.loading = true; this.again = false;
-    let held = false;
+    const turn = this.reads.start();
+    this.again = false;
+    let held = false, used = false;
     cx.spawn(async (cx) => {
       try {
         let repo = this.repo;
         // The root is asked for once per folder, and again after a failed read (the
         // folder may have stopped being a repository).
         if (!repo || this.lost) {
-          const git = makeGit(exec, on);
+          const git = makeGit(exec, on, { wait: this.wait });
           const top = await repoRoot(git, folder);
           if (this.contextKey() !== context) return;
           if (!top.ok) {
+            used = this.reads.use(turn);
+            if (!used) return;
             this.repo = null; this.watching = null;
             this.notRepo = top.notRepo; this.folder = folder;
             this.error = top.notRepo ? null : sentence(this.t, top.msg, top.err);
@@ -266,6 +274,8 @@ export default class CommitView {
           last = await readLastCommit(repo.git, repo.root, { known: this.last?.hash ?? null });
           if (this.contextKey() !== context) return;
         }
+        used = this.reads.use(turn);
+        if (!used) return;
         this.repo = repo; this.notRepo = false;
         this.lost = !status.ok;
         if (!status.ok || !status.hasHead || !amend) this.last = null;
@@ -284,9 +294,10 @@ export default class CommitView {
         this.watch(cx);
         this.stashTab.refresh(cx);
       } finally {
-        this.loading = false;
-        if (!held) this.read = true;
-        if (this.again) this.refresh(cx);
+        // Read once an answer shows, or the newest read is over; what waited for that runs.
+        const newest = this.reads.end(turn);
+        if ((newest || used) && !held) this.read = true;
+        if (newest && this.again) this.refresh(cx);
         cx.notify();
       }
     });
@@ -671,7 +682,7 @@ export default class CommitView {
     return panelFrame("commit-panel", t)
       .when(this.stashTab.any(), (el) => el.child(this.stashTab.header(t)))
       .child(toolbar(t)
-        .child(iconButton("commit-refresh", "refresh", t, { title: this.t("commit.refresh"), busy: Boolean(this.loading && this.read), onClick: redraw((cx) => this.refresh(cx)) }))
+        .child(iconButton("commit-refresh", "refresh", t, { title: this.t("commit.refresh"), busy: this.reads.busy() && this.read, onClick: redraw((cx) => this.refresh(cx)) }))
         .child(iconButton("commit-rollback", "rollback", t, { title: this.repo && this.writeBlock() || this.t("commit.rollback"), disabled: !this.canRollback(), onClick: redraw(() => this.rollback()) }))
         .child(iconButton("commit-restore", "restore", t, { title: this.t("restore.button"), disabled: !this.repo, onClick: () => this.restore() }))
         .child(iconButton("commit-diff", "diff", t, { title: this.t("commit.showDiff"), disabled: r?.kind !== "file", onClick: redraw(() => this.showDiff()) }))

@@ -622,7 +622,9 @@ dialog's own (`openDialog` in its file).
 - **Space tabs**, one per kind (opening the kind again replaces it): `Compare: <a> and
   <b>`, `Changes Between <ref> and Current Working Tree`, `Changes Between <rev> and Local
   Version`, `Changes Between <a> and <b>`, `<folder> at <rev>`, `History up to <rev>`,
-  `Update Info`, `Console`.
+  `Update Info`, `Console`. The `History up to <rev>` and `Update Info` tabs read again
+  from the top on Refresh even while a read is going, and a first read still unanswered
+  after 6 s is made again once.
 
 ## How it behaves
 
@@ -683,7 +685,9 @@ another machine runs every git command on that machine. A panel opened with
   Refresh, when the focused folder changes, and when another screen reports a change to
   this repository. A read asked for during a read, or while any screen writes to this
   repository, runs once that ends (when the write lets go of the repository, without
-  waiting for its report). A failed read keeps the list and shows git's words.
+  waiting for its report). A read of another folder doesn't wait for the read going, and
+  no read waits for one that started 80 s ago and hasn't ended. A failed read keeps the
+  list and shows git's words.
 - **Moving to another repository** (the focused pane's folder changes) shows that
   repository at once, also while this panel's own write still runs on the one before:
   the write goes on there, and the write error strip of the repository before goes away.
@@ -813,11 +817,16 @@ another machine runs every git command on that machine. A panel opened with
   every 10 s (one `for-each-ref`). While the panel is hidden it doesn't check; it catches
   up when it shows again. After a commit, checkout, branch, delete, fetch or push it reads
   again without Refresh. While any screen writes to the repository it doesn't check; it
-  catches up once the write lets go.
+  catches up once the write lets go. Refresh and a move to another folder look for the
+  repository again at once, also while a search is still going (on any space: the
+  panel shows every space it follows).
 - **Failed reads**: when finding the repository or reading the branches, commits or
   Commit details fails, what was shown stays, git's words show in the error strip, and
   the next 10 s check reads again without Refresh (Refresh does too); the strip goes once
-  a read works.
+  a read works. A search for the repository that hasn't ended 80 s after it started is
+  made again, and so is the read of a Branch tree or Commit list still showing `Loading…`
+  80 s after it was asked for. Once, 6 s after the panel (or a Log tab) starts, what is
+  still unread is read again.
 - **Moving to another repository** shows it at once, with a commit selected or while
   this panel's own write still runs on the one before (that write goes on there).
 - **Column widths**: drag the handles. The Commit list never goes below 360px. Widths
@@ -957,6 +966,11 @@ another machine runs every git command on that machine. A panel opened with
 - Lists the commits on HEAD that no branch of the target remote has (as of the last
   fetch or push), newest first, at most 1,000. Click a commit to see only its files;
   click the branch line to see all. Keys: ↑ ↓, Esc closes.
+- The files are read as soon as the first list is in, even when a change reported meanwhile
+  reads the list again (as one does right after Commit and Push…). A list read again reads
+  the files again only when its commits differ. Files whose read failed or never answered
+  are read again with the next list, or on a click of the selection shown. Once, 6 s after
+  the dialog opens, the list or the files still unread are read again.
 - Target: the branch's upstream; without one, `origin` and the same name, and the push
   sets the upstream.
 - **Push** pushes exactly what the dialog shows, or nothing. The Commit panel that
@@ -1142,8 +1156,10 @@ The rules and their reasons are in `docs/design.md` (section 4); what a person s
   runs and the edited message is not used.
 - **Reading.** The Commit panel reads the operation in progress on every refresh; the
   VCS widget when it starts, when its folder changes, on a write to its repository and
-  every 10 s while shown; the Conflicts dialog every 2 s; the Stash tab on writes in any
-  worktree of the repository and every 10 s.
+  every 10 s while shown; the Conflicts dialog every 2 s, and beside a read that hasn't
+  answered in 6 s (so one that opens as the operation stops fills in even if its first
+  read gets no answer; an answer older than one shown is dropped); the Stash tab on writes
+  in any worktree of the repository and every 10 s.
 - **Remembered.** Update Project's method (the dialog opens every time), the Pull dialog's branch
   per repository, Drop Commits' Don't ask again, the graph and view options, Commit
   details' View Options and the Branch tree's settings are app-wide (`git-tools/settings.json`); favorites are in the
@@ -1165,6 +1181,11 @@ The rules and their reasons are in `docs/design.md` (section 4); what a person s
   was read before stays. A machine that can't be reached shows the same way; the next
   poll tries again. Every error strip has `View in Console`, which opens or picks the Git
   console tab.
+- In the Commit panel, the Log panel, the VCS widget, the Push and Conflicts dialogs and
+  the Update Info and History tabs, a git command whose answer hasn't come 5 s past its
+  timeout (35 s for a read) is given up on, so the screen doesn't stay on `Loading…` for
+  good: a read is asked once more, then it fails with `git did not answer in 35 s.` like
+  any git error. A command that may write is not run again, as it may have done its work.
 
 ### One git write at a time
 
@@ -1579,7 +1600,8 @@ the git ones run against real temporary repositories):
 
 | file | exports |
 |---|---|
-| `git.js` | `READ`, `makeGit(exec, on)` → `git(cwd, args, { timeout, env })` → `{ ok, code, out, err }` and `git.read`, `PARALLEL` (4: the git commands one runner keeps going at once; the rest wait their turn, and one Herdr refuses for too many execs at once is tried again after one of the runner's own ends, five runs at most), `repoRoot(git, folder)`, `chunks(paths, cost?)` (a path list split to fit one command each), `recordWith(fn)` (the recorder for runners made without one) |
+| `git.js` | `READ`, `makeGit(exec, on, { record, wait })` → `git(cwd, args, { timeout, env })` → `{ ok, code, out, err }` and `git.read` (with the screen's clock `wait`, a command whose answer hasn't come 5 s past its timeout is given up on: a read is asked once more, then it is `git did not answer in N s.`), `PARALLEL` (4: the git commands one runner keeps going at once; the rest wait their turn, and one Herdr refuses for too many execs at once is tried again after one of the runner's own ends, five runs at most), `repoRoot(git, folder)`, `chunks(paths, cost?)` (a path list split to fit one command each), `recordWith(fn)` (the recorder for runners made without one) |
+| `read-turns.js` | `readTurns({ stuck, now })` → `{ start, busy, stuck, use, end, drop }` (a screen's repeated read: going only for `stuck` ms after it starts, a newer one may always start, an answer is dropped only when a newer one was used), `STUCK` (80 s) |
 | `one-at-a-time.js` | `oneAtATime(run)` → `ask(arg)` (at most one `run` going; a newer ask replaces a waiting one, which resolves undefined without running: Commit details' branch walks while arrowing through the log) |
 | `git-status.js` | `readStatus` |
 | `git-commit.js` | `commit`, `lastMessage`, `headIsPushed` |

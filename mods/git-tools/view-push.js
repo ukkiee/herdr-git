@@ -31,6 +31,7 @@ import { div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { exec, theme } from "herdr";
 import { makeGit } from "./git.js";
+import { readTurns } from "./read-turns.js";
 import { PROTECTED, readPushPlan, readPushFiles, push } from "./git-push.js";
 import { remoteFailure } from "./git-remote.js";
 import { formatTime } from "./i18n.js";
@@ -91,6 +92,7 @@ export function servePush(panel, e, cx) {
 
 // { one, other } in English: `n` picks.
 const countOf = (t, key, n) => t(key, { n });
+const FIRST_LOOK = 6000; // ms after the dialog opens: the plan or files still unread then are read again once
 // The app runtime's toLocaleString doesn't group digits.
 const grouped = (n) => String(n).replace(/\B(?=(\d{3})+$)/g, ",");
 const stop = (_e, cx) => cx.stop_propagation();
@@ -101,6 +103,9 @@ const planOf = (plan) => (plan ? {
   ok: Boolean(plan.ok), err: plan.err ?? "", ...(plan.msg ? { msg: plan.msg } : {}), branch: plan.branch ?? null,
   remote: plan.remote ?? null, target: plan.target ?? null, top: plan.commits?.[0]?.hash ?? null,
 } : null);
+
+// What the files on the right are of: the plan's ends, its commits and the one selected.
+const filesKey = (plan, selected) => JSON.stringify(plan ? [plan.ok, plan.upTo ?? null, plan.branch, plan.remote, plan.target, plan.commits.map((c) => c.hash), selected] : null);
 
 // null when the two agree, else a few words on what moved: { text (English), msg }.
 function planMoved(shown, now) {
@@ -131,15 +136,16 @@ export default class PushView {
     this.on = p.on ?? null;
     this.owner = p.owner ?? null; // the Commit panel copy that runs the push
     this.source = sourceOf(p); // { upTo, branch }: what is pushed, when not the current branch's tip
-    this.git = makeGit(exec, this.on);
+    this.git = makeGit(exec, this.on, { wait: this.wait });
     this.plan = null; // readPushPlan's answer; null until the first one
-    this.loading = false;
+    this.reads = readTurns(); // the plan's reads
     this.scripted = false; // the repository opted in to script commands (see the top)
     this.selected = null; // a commit's hash, or null: everything being pushed
     this.files = null; // null while they are read
     this.fileRows = [];
     this.collapsed = new Set();
-    this.turn = 0; // a newer file read makes an older one's answer void
+    this.fileReads = readTurns(); // the files' reads
+    this.filesOf = null; // filesKey of the files shown or being read
     this.pushing = null; // "push" | "force" while git push runs
     this.error = null; // git's output from the push that failed
     this.commitList = new WindowedList("push-commits");
@@ -147,28 +153,56 @@ export default class PushView {
     this.handle = cx.focus_handle();
     this.handle.focus();
     this.load(cx);
+    cx.timer.after(FIRST_LOOK, (cx) => { this.firstLook(cx); cx.notify(); });
   }
 
   // ---- reading
 
   // A load asked for while one runs (a "changed" that arrived mid-read) runs once that
-  // one ends: the answer in flight may predate the change.
+  // one ends: the answer in flight may predate the change. One that never ends holds the
+  // next back only for read-turns.js STUCK.
+  // The files are read as soon as a plan is in, also when another load waits: a dialog
+  // that has just opened often gets a "changed" at once (the commit before it, or events
+  // it missed), and its files would wait for a second plan read that may be slow. They
+  // are read again only for another plan or selection, or when their read failed or
+  // never answered.
   load(cx) {
     if (!this.root) return;
-    if (this.loading) { this.again = true; return; }
-    this.loading = true; this.again = false;
+    if (this.reads.busy()) { this.again = true; return; }
+    this.readPlan(cx);
+  }
+
+  // A dialog just opened has been seen to get no answer to its first reads: once, a little
+  // later, the plan or the files still unread are read again beside the first try.
+  firstLook(cx) {
+    if (!this.root || this.pushing) return;
+    if (!this.plan) this.readPlan(cx);
+    else if (this.files === null) this.loadFiles(cx);
+  }
+
+  // One read of the plan, whatever read is going.
+  readPlan(cx) {
+    const turn = this.reads.start();
+    this.again = false;
     cx.spawn(async (cx) => {
       try {
         const [plan, opted] = await Promise.all([readPushPlan(this.git, this.root, this.source), scriptedRepo(this.git, this.root)]);
-        this.takePlan(plan);
-        this.scripted = opted;
+        if (this.reads.use(turn)) {
+          this.takePlan(plan); this.scripted = opted;
+          if (this.filesStale()) this.loadFiles(cx);
+        }
       } finally {
-        this.loading = false;
+        if (this.reads.end(turn) && this.again) this.load(cx);
+        cx.notify();
       }
-      if (this.again) this.load(cx);
-      else this.loadFiles(cx);
-      cx.notify();
     });
+  }
+
+  // The files shown are not of the plan and selection shown, or their read failed or is
+  // stuck.
+  filesStale() {
+    if (this.filesOf !== filesKey(this.plan, this.selected) || this.filesError) return true;
+    return this.files === null && !this.fileReads.busy();
   }
 
   takePlan(plan) {
@@ -179,14 +213,18 @@ export default class PushView {
   }
 
   loadFiles(cx) {
-    const plan = this.plan, turn = ++this.turn;
-    if (!plan?.ok || !plan.commits.length) { this.files = []; this.fileRows = []; return; }
+    const plan = this.plan, key = filesKey(plan, this.selected);
+    this.filesOf = key; this.filesError = null;
+    if (!plan?.ok || !plan.commits.length) { this.fileReads.drop(); this.files = []; this.fileRows = []; return; }
     const commit = this.selected ? plan.commits.find((c) => c.hash === this.selected) : null;
+    const turn = this.fileReads.start();
     this.files = null;
     cx.spawn(async (cx) => {
       const r = await readPushFiles(this.git, this.root, commit ? { from: commit.parent, to: commit.hash }
         : { to: plan.upTo ?? (this.source.branch ? `refs/heads/${this.source.branch}` : "HEAD"), branch: this.source.branch });
-      if (turn !== this.turn) return;
+      const used = key === this.filesOf && this.fileReads.use(turn);
+      this.fileReads.end(turn);
+      if (!used) return;
       this.files = r.ok ? r.files : [];
       this.filesError = r.ok ? null : { err: r.err, msg: r.msg };
       this.collapsed = new Set();
@@ -199,8 +237,9 @@ export default class PushView {
     this.fileRows = buildRows(this.files ?? [], { grouped: true, compact: true, collapsed: this.collapsed });
   }
 
+  // Picking what is picked already reads its files again only when they failed or never came.
   select(hash, cx) {
-    if (hash === this.selected) return;
+    if (hash === this.selected && !this.filesStale()) return;
     this.selected = hash;
     const at = hash ? this.plan.commits.findIndex((c) => c.hash === hash) : -1;
     if (at >= 0) this.commitList.reveal(at, this.plan.commits.length);

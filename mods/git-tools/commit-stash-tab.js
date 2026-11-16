@@ -18,6 +18,7 @@
 import { div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { listStashes, stashFiles } from "./git-stash.js";
+import { readTurns } from "./read-turns.js";
 import { buildRows, folderKeys } from "./tree.js";
 import { formatDateTime } from "./i18n.js";
 import { tip, uiGlyph, ICON, fileGlyph, folderGlyph, darkLook, panelFrame, toolbar, spacer, iconButton, button, row, notice, errorStrip, WindowedList, openMenu, broadcast, sentence, progressBar, writeName } from "./ui.js";
@@ -45,6 +46,7 @@ export default class StashTab {
     this.collapsed = new Set();
     this.stashList = new WindowedList("stash-list");
     this.fileList = new WindowedList("stash-files");
+    this.reads = readTurns();
   }
 
   // ---- what the panel asks
@@ -61,21 +63,23 @@ export default class StashTab {
     if (!sameRepo(repo, this.repo)) {
       this.repo = repo; this.stashes = []; this.selected = null; this.files = new Map(); this.rows = []; this.fileAt = -1;
       this.stashList.top = 0; this.fileList.top = 0;
+      this.reads.drop(); this.again = false;
     }
     if (!repo) return;
-    if (this.loading) { this.again = true; return; }
-    this.loading = true; this.again = false;
+    // One read at a time, but never behind one whose answer never came (read-turns.js).
+    if (this.reads.busy()) { this.again = true; return; }
+    const turn = this.reads.start();
+    this.again = false;
     cx.spawn(async (cx) => {
       try {
         const r = await listStashes(repo.git, repo.root);
-        if (!sameRepo(repo, this.repo) || !r.ok) return;
+        if (!sameRepo(repo, this.repo) || !r.ok || !this.reads.use(turn)) return;
         this.stashes = r.stashes;
         if (!this.stashes.some((s) => s.hash === this.selected)) this.selected = this.stashes[0]?.hash ?? null;
         for (const hash of this.files.keys()) if (!this.stashes.some((s) => s.hash === hash)) this.files.delete(hash);
         this.readFiles(cx);
       } finally {
-        this.loading = false;
-        if (this.again) this.refresh(cx);
+        if (this.reads.end(turn) && this.again) this.refresh(cx);
         cx.notify();
       }
     });
@@ -309,7 +313,7 @@ export default class StashTab {
     return panelFrame("commit-panel", t)
       .child(this.header(t))
       .child(toolbar(t)
-        .child(iconButton("stash-refresh", "refresh", t, { title: tr("stash.refresh"), busy: Boolean(this.loading), onClick: redraw((cx) => { this.refresh(cx); this.host.refresh(cx); }) }))
+        .child(iconButton("stash-refresh", "refresh", t, { title: tr("stash.refresh"), busy: this.reads.busy(), onClick: redraw((cx) => { this.refresh(cx); this.host.refresh(cx); }) }))
         .child(iconButton("stash-diff", "diff", t, { title: tr("stash.showDiff"), disabled: !this.diffFile(), onClick: redraw(() => this.showDiff()) }))
         .child(iconButton("stash-view-options", "eye", t, { title: tr("commit.viewOptions"), active: this.grouped, onClick: (_e, cx) => this.viewOptions(cx) }))
         .child(iconButton("stash-expand", "expand-all", t, { title: tr("commit.expandAll"), disabled: !this.rows.length, onClick: redraw(() => this.expandAll()) }))

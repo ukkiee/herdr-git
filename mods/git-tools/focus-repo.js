@@ -55,18 +55,22 @@ export function rememberTab(record, added, { root, on } = {}, panes = []) {
 // The screens only ever opened as a tab of their own that have no repository.
 const TAB_ONLY = new Set(["console", "icon-sheet"]);
 
+// The repository a tab's screen stands for: props.root, or the folder a Commit panel or
+// Log tab was opened on (props.folder), which the panels follow like any folder.
+const tabRoot = (p) => str(p?.root) ?? str(p?.folder);
+
 // isTabScreen(props) → whether a copy with these props is a tab's screen: no dialog or
-// menu (props.overlay), and either of a repository (a root) or a tab-only screen. Layout
-// blocks (the panels) have neither.
+// menu (props.overlay), and either of a repository (a root or a chosen folder) or a
+// tab-only screen. Layout blocks (the panels) have none of these.
 export function isTabScreen(p) {
-  return Boolean(p && !p.overlay && (str(p.root) || TAB_ONLY.has(p.view)));
+  return Boolean(p && !p.overlay && (tabRoot(p) || TAB_ONLY.has(p.view)));
 }
 
 // registerTab(record, { props, focused, panes }) → { pane, record } to store for a copy
 // that is a tab's screen, or null when there is nothing to store.
-//   props: the copy's props(); its repository is props.root and props.on. A dialog or a
-//   menu (props.overlay) and a screen without a root (a layout block, the console) are
-//   no tab of a repository.
+//   props: the copy's props(); its repository is props.root (or props.folder) and
+//   props.on. A dialog or a menu (props.overlay) and a screen without either (a layout
+//   block, the console) are no tab of a repository.
 //   The copy's pane: props.pane when Herdr gives one, and that replaces whatever is
 //   recorded for it. Without it, a guess: the focused pane, when it is the only pane of
 //   its tab, this mod's, and nothing is recorded for it (a tab just opened has the focus).
@@ -74,7 +78,7 @@ export function isTabScreen(p) {
 //   which is why the tabs with no repository record themselves too.
 export function registerTab(record, { props: p, focused, panes = [] } = {}) {
   if (!isTabScreen(p)) return null;
-  const repo = entryOf(str(p.root) ? p.root : null, p.on);
+  const repo = entryOf(tabRoot(p), p.on);
   const tabs = record && typeof record === "object" ? record : {};
   const pane = str(p.pane) ?? guessPane(tabs, focused, panes);
   if (!pane) return null;

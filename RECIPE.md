@@ -626,7 +626,10 @@ Progress bar.
 
 Both panels follow the focused pane's folder, else the space's folder. A space on
 another machine runs every git command on that machine. A panel opened with
-`props.folder` (and `props.on`) stays on that folder instead.
+`props.folder` (and `props.on`) stays on that folder instead. While a tab git-tools
+opened has the focus (a Diff, Compare, History or Update Info tab, or a Commit panel or
+Log tab opened with `props.folder`), the side panels follow that tab's repository (and
+machine); back on a terminal, they follow its folder again.
 
 ### Language
 
@@ -1328,7 +1331,8 @@ unseen until an error shows, as the card is only as tall as what it holds. The
 conflict dialogs' questions are a 460px card over the dialog on a dark veil, as tall as
 what it holds.
 
-For a git-tools tab (a screen with `props.root` and no `props.overlay`), `main.js`
+For a git-tools tab (a screen with `props.root` or `props.folder` and no
+`props.overlay`), `main.js`
 records the tab's pane with its repository (`claimTab` in `init`, again from `render`
 while it isn't recorded, `releaseTab` in `close`).
 

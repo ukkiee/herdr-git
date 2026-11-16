@@ -138,7 +138,8 @@ git 모듈과 순수 계산 모듈은 `herdr`를 import하지 않는다. 그래�
   - `git-tools.tabs`: git-tools가 연 탭의 창과 그 저장소, `{<pane>: {root, on}}`. 그 탭에 포커스가
     있으면 Log panel, Commit panel, VCS widget이 그 저장소를 따른다(아래 "패널이 따르는 저장소").
 - **패널이 따르는 저장소**: 패널은 포커스된 창의 폴더를 따른다. 포커스가 git-tools가 연 탭(Diff tab,
-  비교 탭, 기록, 저장소 보기, Update Info tab)에 있으면 그 탭을 연 저장소를 따르고, 터미널로
+  비교 탭, 기록, 저장소 보기, Update Info tab, `props.folder`로 연 Commit panel·Log 탭)에 있으면 그 탭의
+  저장소를 따르고, 터미널로
   돌아가면 다시 터미널의 폴더를 따른다(`focus-repo.js`의 `whereFocused`). 탭은 space 폴더와 다른
   저장소에서 열렸을 수 있고, space 폴더로 옮겨 가면 이어 누른 메뉴가 엉뚱한 저장소에 쓰기
   때문이다.

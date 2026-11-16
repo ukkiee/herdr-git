@@ -82,6 +82,19 @@ const tab = (pane) => ({ pane, terminal: null, mod: "git-tools", tab: `tab-${pan
   assert.equal(isTabScreen({ view: "update-info", root: "/r", on: null }), true);
 }
 
+// A Commit panel or Log tab opened on a chosen folder (props.folder, props.on) is a tab
+// of that repository too: while it has the focus the side panels follow its folder, not
+// the space's. A dialog opened from one is not a tab.
+{
+  const panes = [term("p1", "/a"), tab("p5")];
+  assert.equal(isTabScreen({ view: "commit", folder: "/work/hooks" }), true);
+  assert.equal(isTabScreen({ view: "log", folder: "/work/hooks", on: "box" }), true);
+  assert.equal(isTabScreen({ view: "rollback", folder: "/work/hooks", overlay: "o1" }), false);
+  const got = registerTab({}, { props: { view: "commit", folder: "/work/hooks", on: "box" }, focused: { pane: "p5" }, panes });
+  assert.deepEqual(got, { pane: "p5", record: { p5: { root: "/work/hooks", on: "box" } } });
+  assert.deepEqual(whereFocused({ space, focused: { pane: "p5" }, panes, tabs: got.record }), { folder: "/work/hooks", on: "box", space: "s1" });
+}
+
 // A tab with no repository (the Git console, the icon sheet) records itself as having
 // none, so a tab opened next never takes its pane for its own; the panels follow the
 // folder there as before.

@@ -4,7 +4,7 @@
 // and the repository root, and returns a result instead of throwing. No `herdr` import:
 // node tests it (git-heads.test.mjs).
 
-import { readBranches } from "./git-branch.js";
+import { readBranches, trackedBranch } from "./git-branch.js";
 import { operationName } from "./git-operation.js";
 
 // The Recent group of the popup holds this many branches at most.
@@ -21,8 +21,9 @@ const EMPTY = { head: { branch: null, hash: null, detached: false }, current: nu
 // readHeads(git, root) → { ok, code, out, err, head, current, local, remote, tags, recent }
 //   head: { branch, hash, detached }: branch null on a detached HEAD, hash null before the
 //     first commit (branch is then the one that commit will make).
-//   current: { name, upstream, ahead, behind } for the branch HEAD is on, or null when
-//     HEAD is detached. upstream: the remote branch it tracks ("origin/main") or null.
+//   current: { name, upstream, gone, ahead, behind } for the branch HEAD is on, or null when
+//     HEAD is detached. upstream: the remote branch it tracks ("origin/main") or null;
+//     gone: that remote branch no longer exists (readBranches' gone).
 //     behind: its commits not here yet (to pull); ahead: commits here not on it (to push).
 //     Both 0 without an upstream or when the upstream is gone.
 //   local, remote: as git-branch.js readBranches has them.
@@ -47,7 +48,7 @@ export async function readHeads(git, root) {
   const head = { ...branches.head, detached: !branches.head.branch };
   const mine = branches.local.find((b) => b.name === head.branch);
   const current = head.branch
-    ? { name: head.branch, upstream: mine?.upstream ?? null, ahead: mine?.ahead ?? 0, behind: mine?.behind ?? 0 }
+    ? { name: head.branch, upstream: mine?.upstream ?? null, gone: mine?.gone ?? false, ahead: mine?.ahead ?? 0, behind: mine?.behind ?? 0 }
     : null;
   const exists = new Set(branches.local.map((b) => b.name));
   const recent = [];
@@ -70,8 +71,8 @@ export async function readHeads(git, root) {
 
 // ---- what the widget and the popup show (pure)
 
-// The hash a detached HEAD shows as, as the reference product writes commits.
-const SHORT = 8;
+// The hash a detached HEAD shows as: as long as the Branch tree's HEAD row shows it.
+const SHORT = 7;
 const ABORT = { merge: "ops.abortMerge", rebase: "ops.abortRebase", "cherry-pick": "ops.abortCherryPick", revert: "ops.abortRevert" };
 // ≫ once no conflict is left: what goes on from there.
 const GO_ON = { merge: "vcs.commitMerge", rebase: "vcs.continueRebase", "cherry-pick": "vcs.continueCherryPick", revert: "vcs.continueRevert" };
@@ -119,13 +120,35 @@ function ongoingItems(op) {
 //   { kind: "rule" }                         a line between sections
 //   { kind: "group", id, label, open, count } Recent, Local, Remote, Tags
 //   { kind: "folder", label }                a remote, under Remote
-//   { kind: "branch", scope, name, label, current, upstream, ahead, behind }
+//   { kind: "branch", scope, name, label, current, upstream, gone, ahead, behind }
 //     scope: "recent" | "local" | "remote" | "tag"; name: the full short name
-//     ("origin/main"), label: as the tree shows it ("main" under origin).
+//     ("origin/main"), label: as the tree shows it ("main" under origin). upstream: null
+//     when it tracks nothing or what it tracked is gone (gone: true).
 // query: the search box's text; it keeps the actions and branches whose name holds it
 // (any case), drops the groups left empty and opens the rest. folded: the group ids
 // folded. handled(id): whether the screen does that action; one it doesn't is left out.
 // t: the translator the labels are worded with.
+// popupStep(rows, at, by, { query }) → the row ↓ (by 1) or ↑ (by -1) moves the keyboard
+// to from row `at` (-1: none yet), round the ends. Lines and remote folders are skipped;
+// while searching (query) the group heads too, since a search keeps every group open and
+// a head does nothing then. `at` again when no row takes the keyboard.
+export function popupStep(rows, at, by, { query = "" } = {}) {
+  const n = rows.length, searching = Boolean(String(query).trim());
+  const from = at < 0 && by < 0 ? n : at;
+  for (let step = 1; step <= n; step++) {
+    const i = (((from + by * step) % n) + n) % n, kind = rows[i].kind;
+    if (kind !== "rule" && kind !== "folder" && !(searching && kind === "group")) return i;
+  }
+  return at;
+}
+
+// popupTarget(row) → the branch a popupRows branch row's menu is about, as log-menus.js
+// branchContext takes it: a Recent row is the local branch, and gone rides along so the
+// menu knows a current branch can't update from what it tracked.
+export function popupTarget(r) {
+  return { name: r.name, scope: r.scope === "recent" ? "local" : r.scope, current: r.current, upstream: r.upstream, gone: r.gone };
+}
+
 export function popupRows({ heads, op, query = "", folded = new Set(), handled = () => true }, t) {
   const words = String(query).trim().toLowerCase();
   const hit = (text) => !words || text.toLowerCase().includes(words);
@@ -137,10 +160,17 @@ export function popupRows({ heads, op, query = "", folded = new Set(), handled =
   const local = new Map((heads?.local ?? []).map((b) => [b.name, b]));
   const branch = (scope, name, label = name) => {
     const b = scope === "recent" || scope === "local" ? local.get(name) : null;
-    return { kind: "branch", scope, name, label, current: Boolean(b?.current), upstream: b?.upstream ?? null, ahead: b?.ahead ?? 0, behind: b?.behind ?? 0 };
+    return { kind: "branch", scope, name, label, current: Boolean(b?.current), upstream: trackedBranch(b), gone: Boolean(b?.gone), ahead: b?.ahead ?? 0, behind: b?.behind ?? 0 };
   };
   const trees = [];
   for (const [id, key] of GROUPS) {
+    // Folded (never while searching): the count alone, nothing it hides is made into a
+    // row. A repository can have tens of thousands of tags.
+    if (!words && folded.has(id)) {
+      const count = (id === "recent" ? heads?.recent : heads?.[id])?.length ?? 0;
+      if (count) trees.push({ kind: "group", id, label: t(key), open: false, count });
+      continue;
+    }
     let rows;
     if (id === "remote") {
       rows = [];
@@ -157,8 +187,8 @@ export function popupRows({ heads, op, query = "", folded = new Set(), handled =
     }
     const count = rows.filter((r) => r.kind === "branch").length;
     if (!count) continue;
-    const open = Boolean(words) || !folded.has(id);
-    trees.push({ kind: "group", id, label: t(key), open, count }, ...(open ? rows : []));
+    trees.push({ kind: "group", id, label: t(key), open: true, count });
+    for (const r of rows) trees.push(r);
   }
   const sections = [actions(TOP), actions(ongoingItems(op)), actions(NEW), trees].filter((s) => s.length);
   return sections.flatMap((s, i) => (i ? [{ kind: "rule" }, ...s] : s));

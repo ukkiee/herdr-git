@@ -193,7 +193,7 @@ export default class CreatePatchView {
     this.handle = cx.focus_handle();
     this.handle.focus();
     cx.spawn(async (cx) => {
-      const r = this.root ? await readStatus(makeGit(exec, this.on), this.root) : { ok: false, err: "" };
+      const r = this.root ? await readStatus(makeGit(exec, this.on, { wait: this.wait }), this.root) : { ok: false, err: "" };
       if (r.ok) this.tree.set([...r.changes, ...r.unversioned], this.checked);
       else this.error = sentence(this.t, r.msg, r.err) || this.t("ui.gitFailed");
       this.read = true;

@@ -52,7 +52,7 @@ export default class StashView {
     this.who = typeof p.who === "string" ? p.who : "ui.commitPanel";
     this.confirm = p.confirm === "drop" || p.confirm === "clear" ? p.confirm : null;
     this.stash = p.stash ?? { hash: "", ref: "", message: "" };
-    this.git = makeGit(exec, this.on);
+    this.git = makeGit(exec, this.on, { wait: this.wait });
     this.keepIndex = false;
     this.untracked = false;
     this.branch = undefined; // undefined: not read yet; null: a detached HEAD

@@ -104,6 +104,21 @@ const TRICKY = "it's \"quoted\"\n\n#12 costs $HOME `x` \\ end";
   assert.deepEqual(status(repo), ["A  staged.txt"]);
 }
 
+// A message whose second line follows the first with no blank line between (git takes both
+// as the subject) is read whole and, edited on its first line, keeps that shape: no line
+// is added between them, on the last commit and on an older one.
+{
+  const { repo, hashes } = fourCommits("reword-no-blank");
+  sh(repo, "git commit -q --amend --cleanup=verbatim -m 'subject 271\n# kept line'");
+  const last = head(repo);
+  assert.equal((await readMessages(git, repo, [last])).messages[last], "subject 271\n# kept line");
+  assert.equal((await editMessage(git, repo, { commit: last, message: "subject 271 e266\n# kept line" })).ok, true);
+  assert.equal(history(repo)[3].message, "subject 271 e266\n# kept line");
+  const r = await editMessage(git, repo, { commit: hashes[1], message: "two\nsecond line" });
+  assert.equal(r.ok, true, r.err);
+  assert.deepEqual(history(repo).map((c) => c.message), ["one", "two\nsecond line", "three", "subject 271 e266\n# kept line"]);
+}
+
 // A repository set to strip comment lines from messages (commit.cleanup=strip) still keeps
 // the "#" line the person typed: on the last commit, an older one, and a squash.
 {

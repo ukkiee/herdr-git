@@ -60,6 +60,17 @@ const git = makeGit(exec, null);
   const spy = makeGit((cmd, args, options) => { seen.push({ cmd, args, options }); return Promise.resolve({ code: 0, stdout: "", stderr: "" }); }, "vps");
   await spy("/repo", ["commit", "-m", "x"], { timeout: 600000 });
   assert.deepEqual(seen[0].options, { cwd: "/repo", on: "vps", timeout: 600000 });
+  // A command that may write and names no time limit still waits up to exec's cap of
+  // 10 min: a hook (reference-transaction, post-checkout) may run past exec's 30 s
+  // default, and git stopped halfway may leave a ref half written or a lock behind.
+  for (const args of [["checkout", "-b", "x", "--"], ["branch", "-D", "--", "x"], ["tag", "v1"], ["update-ref", "refs/x", "HEAD"]]) {
+    seen.length = 0;
+    await spy("/repo", args);
+    assert.equal(seen[0].options.timeout, 600000, args.join(" "));
+  }
+  seen.length = 0;
+  await spy("/repo", ["reset", "-q"], { timeout: 120000 });
+  assert.equal(seen[0].options.timeout, 120000, "a write's own limit stands");
 }
 
 // Environment variables reach git (herdr's exec has no env option).
@@ -268,6 +279,121 @@ for (const value of [undefined, null, 0, "", false]) {
   await Promise.all(others);
   assert.equal(targetRuns, 5);
   assert.deepEqual([r.ok, r.code], [false, -1]);
+}
+
+// A clock the test rings by hand, as a screen hands one to its runners (main.js): wait(ms)
+// settles when the test rings it. `asked` lists the ms of each wait begun.
+const handClock = () => {
+  const alarms = [];
+  const wait = (ms) => new Promise((ring) => alarms.push({ ms, ring }));
+  return { wait, asked: () => alarms.map((a) => a.ms), ring: () => alarms.shift().ring(), pending: () => alarms.length };
+};
+// An exec whose answer never comes (herdr's has been seen to lose one: no process, no
+// answer, no rejection), except for commands whose last argument is "works".
+const losing = () => {
+  const calls = [];
+  const exec = (cmd, args) => {
+    calls.push(args.at(-1));
+    return args.at(-1) === "works" ? Promise.resolve({ code: 0, stdout: "fine", stderr: "" }) : new Promise(() => {});
+  };
+  return { exec, calls };
+};
+const settle = () => new Promise((go) => setImmediate(go));
+
+// A read whose answer never comes: past exec's own timeout (30 s unless given) and 5 s more
+// the runner stops waiting, asks once more (a read changes nothing), and then answers with a
+// failure instead of waiting forever.
+{
+  const clock = handClock(), x = losing();
+  const git = makeGit(x.exec, "far", { wait: clock.wait });
+  let r = null;
+  git.read(repo, ["status"]).then((v) => { r = v; });
+  await settle();
+  assert.deepEqual(clock.asked(), [35000]);
+  clock.ring();
+  await settle();
+  assert.equal(x.calls.length, 2, "asked once more");
+  assert.equal(r, null);
+  clock.ring();
+  await settle();
+  assert.deepEqual([r.ok, r.code], [false, -1]);
+  assert.match(r.err, /did not answer/);
+  assert.equal(x.calls.length, 2, "and no more");
+}
+
+// The limit follows the command's own timeout.
+{
+  const clock = handClock(), x = losing();
+  makeGit(x.exec, null, { wait: clock.wait }).read(repo, ["log"], { timeout: 5000 });
+  await settle();
+  assert.deepEqual(clock.asked(), [10000]);
+}
+
+// A write that names no timeout runs up to WRITE_TIMEOUT, so the runner waits that long
+// (and 5 s more) before it gives up: a slow hook is not cut off at a read's 35 s.
+{
+  const clock = handClock(), x = losing();
+  makeGit(x.exec, null, { wait: clock.wait })(repo, ["checkout", "-b", "slow"]);
+  await settle();
+  assert.deepEqual(clock.asked(), [605000]);
+}
+
+// A command that may write is not run again: it may have done its work, only its answer
+// went missing. The Git console still gets its line.
+{
+  const clock = handClock(), x = losing(), calls = [];
+  const git = makeGit(x.exec, null, { wait: clock.wait, record: (c) => calls.push(c) });
+  const made = git(repo, ["commit", "-m", "x"]);
+  await settle();
+  clock.ring();
+  const r = await made;
+  assert.deepEqual([r.ok, r.code, x.calls.length], [false, -1, 1]);
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].stderr, /did not answer/);
+}
+
+// Answers lost on every place in line don't hold the line: once given up on, each gives its
+// place to the next call, which runs and answers.
+{
+  const clock = handClock(), x = losing();
+  const git = makeGit(x.exec, null, { wait: clock.wait });
+  const lost = Array.from({ length: PARALLEL }, (_, i) => git(repo, ["x", `lost${i}`]));
+  const next = git.read(repo, ["works"]);
+  await settle();
+  assert.equal(x.calls.length, PARALLEL, "the next one waits its turn");
+  for (let i = 0; i < PARALLEL; i++) clock.ring();
+  const out = await Promise.all(lost);
+  assert.ok(out.every((r) => !r.ok && /did not answer/.test(r.err)));
+  const r = await next;
+  assert.deepEqual([r.ok, r.out], [true, "fine"]);
+}
+
+// An answer that comes in time is the answer, and the clock's later ring changes nothing.
+{
+  const clock = handClock(), x = losing();
+  const r = await makeGit(x.exec, null, { wait: clock.wait }).read(repo, ["works"]);
+  assert.deepEqual([r.ok, r.out], [true, "fine"]);
+  clock.ring();
+  await settle();
+}
+
+// A clock that can't be used (the copy that gave it closed: its context throws) counts as
+// none: the runner waits for exec as without a clock.
+for (const wait of [() => { throw new Error("stale context"); }, () => Promise.reject(new Error("closed"))]) {
+  const x = losing();
+  const r = await makeGit(x.exec, null, { wait }).read(repo, ["works"]);
+  assert.deepEqual([r.ok, r.out], [true, "fine"]);
+}
+
+// repoRoot on a machine whose answer never comes: a failure that is not "not a repository",
+// so the screen shows git's words and asks again later.
+{
+  const clock = handClock(), x = losing();
+  const found = repoRoot(makeGit(x.exec, "far", { wait: clock.wait }), "/somewhere");
+  await settle(); clock.ring(); await settle(); clock.ring();
+  const r = await found;
+  assert.deepEqual([r.ok, r.notRepo], [false, false]);
+  assert.match(r.err, /did not answer/);
 }
 
 console.log("ok");

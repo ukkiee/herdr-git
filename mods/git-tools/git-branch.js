@@ -25,9 +25,11 @@ const REF_FORMAT = ["%(refname)", "%(objectname)", "%(symref)", "%(upstream:shor
 // readBranches(git, root) → { ok, err, head, local, remote }
 //   head: { branch, hash }: branch is null on a detached HEAD, hash is null in a
 //     repository without commits (branch is then the one the first commit will make).
-//   local: [{ name, hash, current, upstream, ahead, behind }], by name. upstream is the
-//     remote branch it tracks ("origin/main") or null; ahead and behind count commits
-//     against it and are 0 without one, or when it is gone from the remote.
+//   local: [{ name, hash, current, upstream, gone, ahead, behind }], by name. upstream is
+//     the remote branch it tracks ("origin/main") or null; gone: that remote branch is set
+//     but no longer there (deleted on the remote and pruned here), so there is nothing to
+//     update from. ahead and behind count commits against it and are 0 without one, or
+//     when it is gone.
 //   remote: [{ name, hash }] with name like "origin/feature/login", by name. A remote's
 //     HEAD pointer (origin/HEAD) is not a branch and is left out.
 export async function readBranches(git, root) {
@@ -47,12 +49,18 @@ export async function readBranches(git, root) {
       const name = ref.slice(HEADS.length);
       local.push({
         name, hash, current: name === head.branch, upstream: upstream || null,
+        gone: Boolean(upstream) && track === "gone",
         ahead: Number(/ahead (\d+)/.exec(track)?.[1] ?? 0), behind: Number(/behind (\d+)/.exec(track)?.[1] ?? 0),
       });
     } else if (ref.startsWith(REMOTES) && !symref) remote.push({ name: ref.slice(REMOTES.length), hash });
   }
   return { ok: true, err: "", head, local, remote };
 }
+
+// trackedBranch(b) → the remote branch a local branch (readBranches' local) shows as
+// tracked and updates from, or null. A gone one shows as none: there is nothing there to
+// update from or to open.
+export const trackedBranch = (b) => (b?.gone ? null : b?.upstream ?? null);
 
 // checkout(git, root, name, { remote })
 //   A local branch: switch to it. remote: true → `name` is a remote branch
@@ -218,16 +226,14 @@ export async function setFavorite(git, root, ref, on) {
   return { ok: true, code: 0, out: "", err: "", ...after };
 }
 
-// readTags(git, root) → { ok, code, out, err, tags }: tags [{ name, hash }] by name, hash
-// the commit the tag points at (an annotated tag's own object is looked through).
+// readTags(git, root) → { ok, code, out, err, tags }: tags, the tag names by name. Names
+// only, one split of git's output: a repository can have tens of thousands of tags, and
+// an object per tag costs QuickJS a tenth of a second there.
 export async function readTags(git, root) {
-  const r = await git.read(root, ["for-each-ref", "--format=%(refname)%00%(objectname)%00%(*objectname)", "--sort=refname", "refs/tags/"]);
+  const r = await git.read(root, ["for-each-ref", "--format=%(refname:lstrip=2)", "--sort=refname", "refs/tags/"]);
   if (!r.ok) return { ...r, tags: [] };
-  const tags = [];
-  for (const line of r.out.split("\n")) {
-    const [ref, hash, peeled] = line.split("\0");
-    if (ref) tags.push({ name: ref.slice("refs/tags/".length), hash: peeled || hash });
-  }
+  const tags = r.out.split("\n");
+  if (tags[tags.length - 1] === "") tags.pop();
   return { ok: true, code: 0, out: "", err: "", tags };
 }
 

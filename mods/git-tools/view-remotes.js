@@ -43,7 +43,7 @@ export default class RemotesView {
   load(cx) {
     const seq = ++this.seq;
     cx.spawn(async (cx) => {
-      const git = makeGit(exec, this.on);
+      const git = makeGit(exec, this.on, { wait: this.wait });
       const names = this.root ? await readRemotes(git, this.root) : { ok: false, err: "" };
       let remotes = [], error = null;
       if (names.ok) {

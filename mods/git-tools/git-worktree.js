@@ -42,6 +42,13 @@ export async function worktreeSources(git, root) {
   return { ok: true, code: 0, out: "", err: "", branches: [...local.sort(byName), ...remote.sort(byName)], current: head.ok ? head.out.trim() || null : null };
 }
 
+// sourceTaken(source, { newBranch }) → whether the New Worktree dialog warns that the
+// source branch is checked out in a worktree: only when the source itself would be
+// checked out. With a new branch the source is only where that branch starts.
+export function sourceTaken(source, { newBranch = false } = {}) {
+  return Boolean(source?.checkedOut) && !newBranch;
+}
+
 // worktreePath(root, branch) → the folder beside the repository named after it and the
 // branch: "/work/app" and "feature/login" → "/work/app-feature-login".
 export function worktreePath(root, branch) {
@@ -77,12 +84,13 @@ export async function createWorktree(git, root, { source, newBranch, path } = {}
   return { ...(await git(root, args, { timeout: ADD_TIMEOUT })), path: where };
 }
 
-// checkoutRef(git, root, text) → git's result: HEAD detached at the commit a tag, branch
-// or hash names; a name nothing has is refused and HEAD stays.
-export async function checkoutRef(git, root, text) {
+// checkoutRef(git, root, text, { run }) → git's result: HEAD detached at the commit a tag,
+// branch or hash names; a name nothing has is refused and HEAD stays. run(hash): what
+// checks the commit out (default checkoutRevision), for a screen that offers Smart.
+export async function checkoutRef(git, root, text, { run = (hash) => checkoutRevision(git, root, hash) } = {}) {
   const ref = String(text ?? "").trim();
   if (!ref) return refused("Enter a reference name or a commit hash.", { key: "worktree.enterRef", args: {} });
   const found = ref.startsWith("-") ? { ok: false } : await git.read(root, ["rev-parse", "--verify", "--quiet", "--end-of-options", `${ref}^{commit}`]);
   if (!found.ok || !found.out.trim()) return refused(`Nothing is called '${ref}'.`, { key: "worktree.unknownRef", args: { ref } });
-  return checkoutRevision(git, root, found.out.trim());
+  return run(found.out.trim());
 }

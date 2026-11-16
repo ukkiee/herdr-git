@@ -31,14 +31,14 @@ const NAME_COMMAND = "branch-new-name:";
 export function serveBranch(panel, e, cx) {
   const a = e.args ?? {}, name = typeof a.name === "string" ? a.name : "";
   if (e.action === "branch-create") {
-    serveRequest(panel, e, { key: "dialogs.branch.creating" }, (repo) => createBranch(makeGit(exec, repo.on), repo.root,
+    serveRequest(panel, e, { key: "dialogs.branch.creating" }, (repo) => createBranch(makeGit(exec, repo.on, { wait: panel.wait }), repo.root,
       { name, from: typeof a.from === "string" ? a.from : null, checkout: a.checkout !== false }), cx);
   } else if (e.action === "branch-delete") {
     // The panel shows the Restore notice for it, as for a delete without the question.
     // Its label is the Branch tree's own: the tree's delete button spins while the lock
     // holds exactly that text.
     serveRequest(panel, e, { key: "log.deleting" }, async (repo) => {
-      const r = await deleteBranch(makeGit(exec, repo.on), repo.root, name, { confirmed: true });
+      const r = await deleteBranch(makeGit(exec, repo.on, { wait: panel.wait }), repo.root, name, { confirmed: true });
       if (r.ok) panel.noteDeleted(repo, r.deleted);
       return r;
     }, cx);
@@ -79,7 +79,7 @@ export default class BranchNewView {
     this.root = p.root ?? null;
     this.on = p.on ?? null;
     this.owner = p.owner ?? null; // the Log panel copy that runs Create and Delete
-    this.git = makeGit(exec, this.on);
+    this.git = makeGit(exec, this.on, { wait: this.wait });
     this.deleting = p.mode === "delete";
     this.waiting = false; // asked the owner, no answer yet
     this.error = null; // git's words when Create or Delete failed

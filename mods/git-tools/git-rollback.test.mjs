@@ -5,7 +5,7 @@ import { existsSync, lstatSync, mkdtempSync, mkdirSync, readdirSync, readFileSyn
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
 import { makeGit } from "./git.js";
-import { rollback as rollbackOnly, wordRollback } from "./git-rollback.js";
+import { rollback as rollbackOnly, wordRollback, rollbackNotice } from "./git-rollback.js";
 import { translator } from "./i18n.js";
 
 // Every rollback below is also checked for its words (i18n.js): each skipped path's
@@ -1074,6 +1074,39 @@ for (const meddle of Object.keys(MEDDLES)) {
   assert.deepEqual(changes(repo, r.snapshot), ["A a"]);
   assert.equal(text(repo, "a"), "new\n");
 }
+
+// The Commit panel's notice (Rolled back N files, with Restore…) shows only when a file
+// was rolled back. Every file skipped to keep what is on disk now: there is nothing to
+// tell and nothing to restore, also when the skip came after the snapshot was recorded
+// (a folder deleted and a file under another spelling of its name in its place, which
+// only a disk that folds the names finds in the way).
+{
+  const repo = init("notice");
+  sh(repo, "echo head > f && echo head > g && git add -A && git commit -q -m first");
+  sh(repo, "git rm -q f && echo mine > f"); // deleted in the index, a new file in its place
+  const files = [{ path: "f", status: "deleted" }];
+  const all = await rollback(git, repo, { files });
+  assert.deepEqual(all.skipped.map((skip) => skip.path), ["f"]);
+  assert.equal(text(repo, "f"), "mine\n");
+  assert.equal(rollbackNotice(files, all), null);
+
+  writeFileSync(`${repo}/g`, "work\n");
+  const both = [{ path: "f", status: "deleted" }, { path: "g", status: "modified" }];
+  const some = await rollback(git, repo, { files: both });
+  assert.equal(text(repo, "g"), "head\n");
+  assert.ok(some.snapshot);
+  assert.deepEqual(rollbackNotice(both, some), { snapshot: some.snapshot, n: 1 });
+}
+if (sameFile("Σ", "ς")) {
+  const repo = init("notice-recorded");
+  sh(repo, "mkdir Σ && echo head > Σ/x && git add -A && git commit -q -m first && rm -r Σ && git add -u && echo mine > ς");
+  const files = [{ path: "Σ/x", status: "deleted" }];
+  const r = await rollback(git, repo, { files });
+  assert.ok(r.snapshot, "recorded before the skip");
+  assert.deepEqual(r.skipped.map((skip) => skip.path), ["Σ/x"]);
+  assert.equal(text(repo, "ς"), "mine\n");
+  assert.equal(rollbackNotice(files, r), null);
+} else console.log("skipped: the disk under the temporary folder tells Σ and ς apart");
 
 // Every key a skipped path or a worded result came with is one of the module's, and the
 // kinds every disk reaches did come back above.

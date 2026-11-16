@@ -19,7 +19,8 @@
 // Delete Branch (view-branch-new.js serveBranch) and Push (view-push.js servePush).
 //
 // The widget reads (readHeads, readOperation) when it starts, when the folder it follows
-// changes, on "changed" for its repository, and every POLL while shown. Its writes
+// changes, on "changed" for its repository, when its git folder changes (this computer
+// only), and every POLL while shown. Its writes
 // (Abort, Continue, Skip, Checkout, Delete) run as the host copy's own work under the
 // repository's lock; their failures and stops show as notifications.
 
@@ -27,12 +28,14 @@ import { div } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { exec, theme, notify, run } from "herdr";
 import { makeGit, repoRoot } from "./git.js";
+import { readTurns } from "./read-turns.js";
 import { readHeads, widgetFace } from "./git-heads.js";
+import { readGitDir, stateChanged } from "./git-log.js";
 import { readOperation, continueOperation, abortOperation, skipOperation, operationName } from "./git-operation.js";
 import { checkout, deleteBranch } from "./git-branch.js";
 import { pressSpot, widgetBlockWidth } from "./ui-size.js";
 import { openConflicts, openConflictsIfStopped } from "./view-conflicts.js";
-import { location, uiGlyph, iconButton, darkLook, broadcast, openCommitPanel, openMenu, takeWrite, releaseWrite, writeBlock, readBlocked, sentence } from "./ui.js";
+import { location, watchSettled, uiGlyph, iconButton, darkLook, broadcast, openCommitPanel, openMenu, takeWrite, releaseWrite, writeBlock, readBlocked, sentence } from "./ui.js";
 import { openPush, servePush } from "./view-push.js";
 import { openBranchNew, openBranchDelete, serveBranch } from "./view-branch-new.js";
 import { serveAction } from "./serve-actions.js";
@@ -55,7 +58,8 @@ export class VcsWidget {
     this.heads = null; // readHeads' result
     this.op = null; // readOperation's result, null when not read
     this.context = null;
-    this.loading = false;
+    this.reads = readTurns();
+    this.watching = null; // the repository its git folder watch belongs to (watch)
   }
 
   contextKey() { const { folder, on } = this.host.where(); return JSON.stringify([folder, on]); }
@@ -63,34 +67,50 @@ export class VcsWidget {
   // ---- reading
 
   refresh(cx) {
-    if (this.loading) { this.again = true; return; }
     const { folder, on } = this.host.where(), context = this.contextKey();
-    if (context !== this.context) { this.context = context; this.repo = null; this.heads = null; this.op = null; }
+    // A change that lands while this folder is read is read once that read ends. Another
+    // folder doesn't wait, nor does anything once the read in flight is stuck (read-turns.js).
+    if (context === this.context && this.reads.busy()) { this.again = true; return; }
+    if (context !== this.context) { this.context = context; this.repo = null; this.heads = null; this.op = null; this.reads.drop(); this.again = false; }
     if (!folder) return;
     // A write running there would be seen half done: read once it ends (catchUp).
     if (this.repo && readBlocked(this.host, this.repo)) { this.waiting = true; return; }
     this.waiting = false;
-    this.loading = true;
+    const turn = this.reads.start();
     cx.spawn(async (cx) => {
       try {
         let repo = this.repo;
         if (!repo) {
-          const git = makeGit(exec, on);
+          const git = makeGit(exec, on, { wait: this.host.wait });
           const top = await repoRoot(git, folder);
           if (context !== this.context) return;
-          if (!top.ok) { this.heads = null; this.op = null; return; }
+          if (!top.ok) { if (this.reads.use(turn)) { this.heads = null; this.op = null; } return; }
           repo = { git, root: top.root, on };
         }
         const [heads, op] = await Promise.all([readHeads(repo.git, repo.root), readOperation(repo.git, repo.root)]);
-        if (context !== this.context) return;
+        if (context !== this.context || !this.reads.use(turn)) return;
         this.repo = repo;
         this.heads = heads;
         this.op = op.ok ? op : null;
+        this.watch(repo, cx);
       } finally {
-        this.loading = false;
-        if (this.again) { this.again = false; cx.timer.after(0, (cx) => this.refresh(cx)); }
+        if (this.reads.end(turn) && this.again) { this.again = false; cx.timer.after(0, (cx) => this.refresh(cx)); }
         cx.notify();
       }
+    });
+  }
+
+  // On this computer: read again when a terminal's git moves a ref or HEAD, starts or
+  // ends an operation, or resolves a conflict. One loop per repository followed: another
+  // folder ends it the next time it wakes. The reads write nothing there (git.js READ).
+  watch(repo, cx) {
+    if (repo.on || this.watching === repo) return;
+    this.watching = repo;
+    cx.spawn(async (cx) => {
+      const where = await readGitDir(repo.git, repo.root);
+      const live = () => this.watching === repo && this.repo === repo;
+      if (!where.ok || !live()) return;
+      watchSettled(where.dir, { live, wakes: (paths) => stateChanged(where.dir, paths), wake: (cx) => this.refresh(cx) }, cx);
     });
   }
 
@@ -293,8 +313,9 @@ export default class VcsWidgetBlock {
 
   // The block is the window's top right corner, so its popup keeps inside the block's right
   // edge and a branch's menu opens on the popup's left. origin: the widget's top left,
-  // which sits PAD in from the block's left edge.
-  popupRight(origin) { return this.width ? origin.x - PAD + this.width : undefined; }
+  // which sits PAD in from the block's left edge. The block's width is the one fit() gave it:
+  // a size watch on the strip would make it a press target and stop the window drag.
+  popupRight(origin) { return this.fitted ? origin.x - PAD + this.fitted : undefined; }
   popupSide() { return "left"; }
 
   setBusy(work, cx, repo = this.repo) {
@@ -306,7 +327,8 @@ export default class VcsWidgetBlock {
   }
 
   // A dialog's write that failed (ui.js serveRequest): the block has no room for a strip.
-  writeFailed(text) { if (text) notify({ title: text, level: "error" }); }
+  // A notification's title is cut to one line, so git's words go in its body.
+  writeFailed(text) { if (text) notify({ title: this.t("ui.gitFailed"), body: text, level: "error" }); }
 
   event(e, cx) { this.widget.event(e, cx); }
 
@@ -321,8 +343,9 @@ export default class VcsWidgetBlock {
     // its left, right after the tab bar's Changes button. The block is resized to the
     // widget's own width (measured on the wrapper, which doesn't shrink with the block), so
     // no empty space is left by the Git button; a long name is cut at WIDGET_MAX.
-    return h_flex().id("vcs-widget-strip").size_full().min_w(0).px(PAD).items_center().overflow_hidden().bg(t.chrome).border_b(1).border_color(t.border)
-      .on_size_change((size, cx) => { if (size.width !== this.width) { this.width = size.width; cx.notify(); } })
+    // Like the tab bar's own root the strip has no id: a press on its padding is the block's
+    // window_drag (layout.mjs) and moves the window. Only the widget stops the press.
+    return h_flex().size_full().min_w(0).px(PAD).items_center().overflow_hidden().bg(t.chrome).border_b(1).border_color(t.border)
       .child(h_flex().id("vcs-widget-fit").flex_none().max_w(WIDGET_MAX).min_w(0).items_center()
         .on_size_change((size) => this.fit(size.width))
         .child(this.widget.render(cx, { background: t.chrome })));

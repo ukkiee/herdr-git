@@ -20,6 +20,7 @@
 - 팝업 오버레이의 너비는 열 때 준 값이고 내용을 따라 늘지 않는다. 라벨 길이에 맞춰 열 때 너비를 정한다. [관측]
 - `openOverlay`의 `frame: "none"`으로 연 dialog는 Herdr 테두리 없이 mod가 그린 카드만 보인다. 바깥이 투명하고 창을 어둡게 하는 효과가 그대로인지, 내용 높이 카드 안의 `size_full()`이 내용만큼으로 풀리는지는 [미확인].
 - `run("layout.resize", { id, px })`로 mod가 자기 레이아웃 블록의 너비를 바꾼다. 블록 안에서 `on_size_change`가 잘 오는지, 탭 줄이 자연스럽게 줄어드는지는 [미확인].
+- `window_drag` 블록에서 `on_size_change`를 단 요소를 누르면 창이 끌리지 않았다. 그 요소의 `id`만 빼서는 그대로였고, `on_size_change`를 빼자 끌렸다. 그래서 VCS widget 띠의 바탕에는 크기 감시를 달지 않고, 블록 너비는 `layout.resize`로 준 값을 쓴다. [실험]
 - 툴팁을 숨기는 호출이 없다. 요소에 `.tooltip()`을 달지 않고 다시 그리면 빠진다. 떠 있던 툴팁이 그 자리에서 바로 사라지는지는 [미확인].
 - 파일을 고르는 API가 없고 폴더를 고르는 `pickFolder`만 있다. [문서]
 - 텍스트 칸의 `submit` 사건은 키 수식을 싣는다(`secondary`: Cmd/Ctrl). 그래서 칸 안의 ⌘↩는 칸의 `submit`으로 받는다. 창 루트의 `on_key_down`에는 편집기에 포커스가 있을 때 오지 않는다. [문서] 실제로 오는지는 [미확인].
@@ -49,6 +50,11 @@
 
 - `exec(command, args?, { cwd?, on?, timeout? })`: stdin·스트리밍·env 옵션이 없다. 출력 8 MiB, timeout 기본 30초·최대 10분. `on`으로 원격 머신에서 실행. [문서] 따라서 자격 증명·GPG 프롬프트를 받을 수 없고, 환경 변수는 `env VAR=… git …`로 넘긴다.
 - **동시에 도는 `exec`에는 한도가 있다.** 넘으면 아무것도 실행하지 않고 곧바로 `'herdr.exec': 16 execs are running already`로 거절한다. 문구는 herdr-core(`hc`)의 exec 처리에서 나온다. 앱을 다시 켠 직후 원격 space를 보는 창에서 패널들이 한꺼번에 읽을 때 한 번 보였고, 다음 새로고침에는 사라졌다. [관찰] 한도가 머신마다인지, 앱 연결마다인지, mod마다인지는 가르지 않았다.
+- **`exec`의 답이 오지 않을 때가 있다.** 화면이 git 호출 하나의 답을 timeout(30초)을 훨씬 넘겨 몇 분씩 기다렸는데,
+  그동안 그 명령의 프로세스는 이 컴퓨터에도 대상 머신에도 없었다. 다른 머신의 space를 새로 만든 직후 처음 열 때,
+  그리고 창·탭이 열리자마자 한 첫 읽기에서 보였고 늘 재현되지는 않는다. [관찰] 약속이 풀리지 않은 것인지, 그
+  약속을 기다리던 작업이 버려진 것인지는 가르지 않았다. 그래서 git-tools는 사본의 시계로 기다림에 상한을 두고
+  (`cx.sleep`), "읽는 중" 표시가 다음 읽기를 영원히 막지 않게 한다(design.md).
 - `readTextFile`(1 MiB, 원격 가능), `writeTextFile`(로컬 전용). [문서]
 - `watchFolder(dir)`: 로컬 전용. macOS에서는 `.git` 아래 변경도 온다. 읽기 명령이 인덱스를 건드리면 새로고침이 다음 새로고침을 부르므로 `--no-optional-locks -c core.fsmonitor=false -c diff.autoRefreshIndex=false`를 붙인다. [코드: 내장 `changes`]
 - 타이머: `cx.timer.every` / `cx.timer.after`. `setTimeout` 없음. [문서]
@@ -58,6 +64,7 @@
 - `notify`는 알림을 눌렀을 때 실행할 `action`을 하나만 받는다. "계속 · 중단"처럼 둘 가운데 고르게 할 수 없다. [문서]
 - mod가 메뉴 막대에 항목을 넣는 API는 찾지 못했다. [미확인]
 - 전역 키가 mod보다 먼저 받는다. Log panel에 포커스가 있어도 F2는 Herdr의 탭 이름 바꾸기(`tab.rename`)로 가고, mod의 `on_key_down`에 오지 않았다. [실험]
+- **오버레이 위의 Esc는 Herdr의 `overlay.close` 동작이다.** 문서는 "Esc closes the top dialog or popup"까지만 말한다. [문서] 앱 실행 파일의 기본 키 바인딩 문자열에 `escape`, `overlay.close`, `Overlay`(바인딩 문맥으로 보인다)가 나란히 있다. [관측: 실행 파일 문자열] 내장 설정 화면(`frame/settings`)은 글꼴 목록이 열린 동안 `on_action("overlay.close", …)`에서 `stop_propagation()`해 목록만 닫고, 내장 `win98` 메뉴는 Esc가 "앱의 것이라 우리 키 처리기보다 먼저 오버레이를 닫는다"고 적고 더 안쪽 문맥의 자체 바인딩(`cx.bind_keys` + `key_context` + `on_action`)으로 먼저 받는다. [코드] 키 바인딩의 동작이 `on_key_down`보다 먼저 가므로 키 처리기의 `stop_propagation`으로는 막지 못한다. [짐작: GPUI의 키 처리 순서] 팝업 안의 메뉴에서 ←는 mod의 처리기에 왔는데 Esc는 팝업째 닫혔고, 창 위에 그린 카드에서 Enter는 왔는데 Esc는 창째 닫혔다. [관찰] 반면 커밋 리베이스 창의 바탕에서는 Esc가 `on_key_down`에 와서 질문을 띄웠다는 관찰도 있다. [관찰] 어떤 때 동작이 먼저 오지 않는지, git-tools의 `on_action("overlay.close")`(`ui.js` `takeEscape`)로 창이 실제로 남는지는 [미확인].
 - mod 명령 키(`keys.json`의 `<mod>.<command>`)는 보이는 사본 모두에 간다. 하나만 반응하게 하려면 사본들이 같은 규칙으로 스스로 고른다. [문서/코드]
 - `writeTextFile(path, text, expected)`는 파일이 아직 `expected`와 같을 때만 쓴다(`null`은 새 파일). 그사이 다른 사본이 쓴 파일을 덮지 않으려면 거절 뒤 다시 읽어 합친다. [문서]
 - **시스템 언어를 알려 주는 API는 없다.** `herdr.d.ts`에 언어·로캘 항목이 없고 [문서], mod 안에서 `Intl`은 정의돼 있지 않으며 `navigator`가 없고 `process.env.LANG`은 비어 있다. `toLocaleDateString()`은 로캘 없이 `02/05/1971` 꼴을 낸다. 대신 `exec`로 읽을 수 있다: macOS에서 `defaults read -g AppleLanguages`가 `("ko-KR")`를, `sh -c 'echo $LANG'`이 `ko_KR.UTF-8`을 돌려줬다. [실험: 설치된 사본에 임시 코드를 넣어 실행] `herdr-app check`는 `exec`를 실제로 실행하지 않는다(같은 코드가 check에서는 아무것도 남기지 않았다). [실험]
@@ -65,6 +72,10 @@
 ## 렌더와 도구
 
 - `render`는 `cx.notify()`와 Herdr 라이브 데이터 변화마다 다시 돌고, 다시 그리기는 창 전체다. 파싱·정렬·그래프 계산은 캐시한다. [문서]
+- **`render` 한 번은 50 ms 남짓에서 끊긴다.** 시간만 보내는 `render`를 `herdr-app check`로 돌리면 45 ms는 통과하고 55 ms는 `interrupted`로 실패했다. 창에서는 끊긴 사본이 마지막으로 그린 화면 위에 "This view could not be re-rendered; showing the last version that worked / interrupted" 띠가 뜬다(Herdr 기본 `tabs` mod도 탭 81개에서 같은 띠를 냈다). `init`은 500 ms를 통과하고 2,000 ms에서 끊겼다. [실험: herdr-app 0.1.15, macOS]
+- **mod는 QuickJS로 돈다(JIT 없음).** 같은 컴퓨터에서 단순 반복 200만 번이 111 ms, 작은 객체 3만 개(템플릿 문자열 포함) 만들기가 89 ms였다. node보다 수십 배 느리므로 node로 잰 시간으로 한도를 가늠하지 않는다. [실험]
+- `herdr-app check`는 `init` 뒤 첫 `render` 전에 비동기 이어짐(`await` 뒤, `cx.timer.after(0)`)을 돌리지 않는다. 그래서 task와 timer 한 번의 한도는 재지 못했다. 다만 태그 3만 개를 객체로 나누는 일(QuickJS 105–144 ms)이 `await` 뒤에서 끝까지 돈 것으로 보아 `render`보다 넉넉하다. [실험/짐작]
+- `herdr-app check`는 실행 중인 앱에 검사를 맡기는 것으로 보인다(무거운 mod를 검사해도 CLI 자신의 CPU 시간은 0.02초였다). 그래서 잰 시간에는 그때 앱이 얼마나 바쁜지가 섞인다. [관측]
 - import는 `gpui-kit`, `gpui-base`, `herdr`, 같은 폴더의 `./x.js`뿐이다. 폴더 밖 import는 심볼릭 링크 포함 거부된다. [문서/코드]
 - **다시 불러오기는 메모리를 돌려주지 않는다.** mod 폴더의 파일을 저장해 사본들이 다시 불려 올 때마다 Herdr 프로세스의 메모리가 늘고 줄지 않는다. git-tools의 사본 셋이 떠 있을 때 한 번에 약 5 MB였다. 앱을 켠 뒤 45번쯤, 늘어난 양이 약 256 MB일 때 git-tools의 다시 불러오기가 `Null"null"`로 실패했고 다른 mod의 화면에도 `out of memory` 띠가 떴다. 그 뒤로는 앱을 다시 시작해야 풀린다. `herdr-app check`는 10번을 돌려도 늘지 않았다. [실험: herdr-app 0.1.15, macOS]
 - `herdr-app check <mod 폴더>`: 한 번 로드해 초기 묘사를 검사한다. 레이아웃 계산, 지연 행, 이후 async 상태는 보지 않는다. [문서]

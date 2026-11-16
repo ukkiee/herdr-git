@@ -78,7 +78,7 @@ export function remoteWrite(host, repo, who, work, run, cx, { title = "remote.fa
   }
   cx.spawn(async (cx) => {
     let r;
-    try { r = await run(makeGit(exec, at.on), at.root); } catch (error) { r = { ok: false, err: String(error?.message ?? error), outcome: "failed" }; }
+    try { r = await run(makeGit(exec, at.on, { wait: host.wait }), at.root); } catch (error) { r = { ok: false, err: String(error?.message ?? error), outcome: "failed" }; }
     host.setBusy(null, cx);
     if (r.ok || r.changed || r.results) broadcast({ type: "changed", root: at.root });
     tellRemote(r, { ...at, panel: host, who, title });
@@ -201,7 +201,7 @@ export default class UpdateProjectView {
   askReset(cx) {
     if (this.waiting || !this.root) return;
     cx.spawn(async (cx) => {
-      const tr = await readTracking(makeGit(exec, this.on), this.root);
+      const tr = await readTracking(makeGit(exec, this.on, { wait: this.wait }), this.root);
       if (!tr.ok) this.error = tr.err || this.t("ui.gitFailed");
       else if (!tr.branch) this.error = this.t("remote.detached");
       else if (!tr.upstream) this.error = this.t("remote.noTracked", { name: tr.branch });

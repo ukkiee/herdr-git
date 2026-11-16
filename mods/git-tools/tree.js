@@ -6,11 +6,17 @@
 // (branches, a commit's files) just doesn't call them.
 
 // Case-insensitive first so "README.md" sits among the r's; the raw compare after it
-// keeps the order the same on every run.
-function byName(a, b) {
-  const la = a.toLowerCase(), lb = b.toLowerCase();
-  if (la !== lb) return la < lb ? -1 : 1;
-  return a < b ? -1 : a > b ? 1 : 0;
+// keeps the order the same on every run. Each name is lowered once before sorting, and
+// positions are sorted rather than wrapped items: lowering inside the comparison makes two
+// new strings per comparison, and every object made costs QuickJS microseconds, which a
+// thousand remote branches add up.
+function nameOrder(names) {
+  const lows = names.map((n) => n.toLowerCase());
+  return (a, b) => (lows[a] !== lows[b] ? (lows[a] < lows[b] ? -1 : 1) : names[a] < names[b] ? -1 : names[a] > names[b] ? 1 : 0);
+}
+function sortByName(list, nameOf) {
+  const byName = nameOrder(list.map(nameOf));
+  return list.map((_, i) => i).sort(byName).map((i) => list[i]);
 }
 
 // "src/app/a.ts" → { dirs: ["src", "app"], name: "a.ts" }. A path ending in "/" (git
@@ -44,9 +50,9 @@ function fileRow(item, depth, name, dir) {
 //   depth starts at 0; a caller that nests the rows under a group row adds its own.
 export function buildRows(items, { grouped = false, collapsed = new Set(), compact = false } = {}) {
   if (!grouped) {
-    return items
-      .map((item) => { const { dirs, name } = split(item.path); return fileRow(item, 0, name, dirs.join("/")); })
-      .sort((a, b) => byName(a.name, b.name) || byName(a.dir, b.dir));
+    const rows = items.map((item) => { const { dirs, name } = split(item.path); return fileRow(item, 0, name, dirs.join("/")); });
+    const byName = nameOrder(rows.map((r) => r.name)), byDir = nameOrder(rows.map((r) => r.dir));
+    return rows.map((_, i) => i).sort((a, b) => byName(a, b) || byDir(a, b)).map((i) => rows[i]);
   }
   const root = { name: "", path: "", folders: new Map(), files: [] };
   for (const item of items) {
@@ -63,7 +69,7 @@ export function buildRows(items, { grouped = false, collapsed = new Set(), compa
   // Returns the paths under `node` and appends its rows when `shown`.
   const walk = (node, depth, shown) => {
     const paths = [];
-    for (const first of [...node.folders.values()].sort((a, b) => byName(a.name, b.name))) {
+    for (const first of sortByName([...node.folders.values()], (f) => f.name)) {
       let folder = first, name = first.name;
       while (compact && !folder.files.length && folder.folders.size === 1) {
         folder = folder.folders.values().next().value;
@@ -76,7 +82,7 @@ export function buildRows(items, { grouped = false, collapsed = new Set(), compa
       row.count = row.paths.length;
       for (const path of row.paths) paths.push(path);
     }
-    for (const file of node.files.sort((a, b) => byName(a.name, b.name))) {
+    for (const file of sortByName(node.files, (f) => f.name)) {
       if (shown) rows.push(fileRow(file.item, depth, file.name, node.path));
       paths.push(file.item.path);
     }

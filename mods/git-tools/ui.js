@@ -6,7 +6,7 @@
 
 import { div, svg, image, PathBuilder } from "gpui-kit";
 import { h_flex, v_flex, Textarea, Scrollbar } from "gpui-base";
-import { spaces, panes, focused, layout, openOverlay, closeOverlay, run, shared, setShared, exec, settings, theme, window as hostWindow } from "herdr";
+import { spaces, panes, focused, layout, openOverlay, closeOverlay, run, shared, setShared, exec, settings, theme, watchFolder, window as hostWindow } from "herdr";
 import { makeCopy, post } from "./bus.js";
 import { makeLocks, BEAT, sameRepo, repoName } from "./lock.js";
 import { LANGS, translator, systemLang, sentence } from "./i18n.js";
@@ -99,6 +99,36 @@ export { sentence };
 // the repository it was opened on (focus-repo.js).
 export function location() {
   return whereFocused({ space: spaces().find((s) => s.active), focused: focused(), panes: panes(), tabs: shared(TABS) ?? {} });
+}
+
+// ---- watching a folder (this computer only)
+
+// A git command in a terminal (a merge, a checkout) writes a burst of files, and a watch
+// wakes at the first. What lands before the next watchFolder call listens can go unseen,
+// so a wake is read at once and once more this long after.
+const SETTLE = 1000;
+
+// watchSettled(dir, { live, wakes, wake, failed }, cx): calls wake(cx) after each change
+// under `dir` for which wakes(paths) holds (default: any), then once more SETTLE ms later,
+// for as long as live() holds. failed() runs when the folder can't be watched (too large
+// on Linux, gone): the caller's timer still reads.
+export function watchSettled(dir, { live, wakes = () => true, wake, failed = () => {} }, cx) {
+  cx.spawn(async (cx) => {
+    let settling = false;
+    try {
+      while (live()) {
+        const paths = await watchFolder(dir);
+        if (!live()) return;
+        if (!wakes(paths)) continue;
+        wake(cx);
+        if (settling) continue;
+        settling = true;
+        cx.timer.after(SETTLE, (cx) => { settling = false; if (live()) wake(cx); });
+      }
+    } catch {
+      if (live()) failed();
+    }
+  });
 }
 
 // ---- the main-git layout's nodes
@@ -300,7 +330,7 @@ export const ASK_WITHIN = 3000;
 export const UNKNOWN = { ok: false, unknown: true, err: "" };
 // An answer travels in the shared value, which is saved with the person's state.
 const CLIP = 4000;
-const clip = (text) => { const s = String(text ?? ""); return s.length > CLIP ? `${s.slice(0, CLIP)}…` : s; };
+export const clip = (text) => { const s = String(text ?? ""); return s.length > CLIP ? `${s.slice(0, CLIP)}…` : s; };
 
 // askOwner(screen, action, args, who, cx, done)
 //   From a dialog (screen.owner, screen.bus). done(r, cx) gets the panel's answer
@@ -402,7 +432,8 @@ const TABS = "git-tools.tabs";
 // claimTab(props): a tab's screen records its own pane with its repository. Returns the
 // pane recorded, or null (not a tab's screen, or its pane not known yet).
 export function claimTab(p) {
-  const got = registerTab(shared(TABS), { props: p, focused: focused(), panes: panes() });
+  const tabs = spaces().flatMap((s) => s.tabs ?? []).map((tab) => ({ id: tab.id, name: tab.name }));
+  const got = registerTab(shared(TABS), { props: p, focused: focused(), panes: panes(), tabs });
   if (got) setShared(TABS, got.record);
   return got?.pane ?? null;
 }
@@ -419,8 +450,11 @@ export function tabRecorded(pane) {
   return Boolean(pane && record && typeof record === "object" && record[pane]);
 }
 
+// The tab's name goes in its props (tabName): the screen finds its own pane by it when
+// several tabs open at once (focus-repo.js registerTab).
 export function newTab(name, props) {
   const before = panes();
+  if (typeof name === "string" && name) props = { ...props, tabName: name };
   run("tab.new", { name, mod: MOD, props });
   const after = panes();
   const record = rememberTab(shared(TABS), newPanes(before, after), { root: props.root, on: props.on ?? null }, after);
@@ -489,10 +523,23 @@ function menuShown(key, open) {
   if (shared(MENUS) !== openMenus.size) setShared(MENUS, openMenus.size);
 }
 
-// tip(el, text) → el with the tooltip `text`, unless a menu is open or text is empty.
+// tip(el, text, id) → el with the tooltip `text`, unless a menu is open or text is empty.
 // Screens attach every tooltip with it (ui-ids.test.mjs); the menu screens draw their own.
-export function tip(el, text) {
-  return text && !openMenus.size ? el.tooltip(text) : el;
+// Herdr builds a tooltip once, when the pointer comes to rest, and keeps it while the
+// element stays the same one: a text that changes under a resting pointer (Commit turning
+// back from Amend Commit, Push naming another branch) would stay as it was. Pass the
+// element's own `id` where the text can change: the element is then named after its text
+// too, so a new text is a new element, and its tooltip is built again.
+export function tip(el, text, id) {
+  if (!text || openMenus.size) return el;
+  return (id ? el.id(`${id}~${textKey(text)}`) : el).tooltip(text);
+}
+
+// A short name for a text (FNV-1a), to tell one tooltip text from another in an id.
+function textKey(text) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 0x01000193);
+  return (h >>> 0).toString(36);
 }
 
 // ---- small parts
@@ -563,7 +610,7 @@ export function iconButton(id, name, t, { title, disabled = false, active = fals
     .when(active, (el) => el.bg(t.selected))
     .when(disabled, (el) => el.opacity(0.5))
     .child(busy ? svg(icon("spinner")).size(15).spin(900) : uiGlyph(name, { dark: darkLook(t.background), disabled, size: Math.min(ICON, size - 2) }));
-  el = tip(el, title);
+  el = tip(el, title, id);
   if (disabled) return el;
   return el.cursor_pointer().hover((s) => s.bg(t.hover).text_color(t.foreground))
     .on_mouse_down("left", stop)
@@ -592,7 +639,7 @@ export function button(id, label, t, { kind = "plain", disabled = false, busy = 
     .text_color(disabled ? t.dim : primary ? t.solid_foreground : t.foreground)
     .when(busy, (el) => el.child(svg(icon("spinner")).size(12).spin(900)))
     .child(label);
-  el = tip(el, title);
+  el = tip(el, title, id);
   if (disabled || busy) return el;
   return el.cursor_pointer().hover((s) => s.opacity(0.88))
     .on_mouse_down("left", stop)
@@ -609,7 +656,7 @@ export function progressBar(id, t, { label, title, state }) {
   const width = state?.width ?? 240, piece = Math.max(40, Math.round(width * 0.3));
   return v_flex().id(id).flex_none().w_full().min_w(0).px(10).pt(6).pb(8).gap(5).border_t(1).border_color(t.border)
     .when(Boolean(label), (el) => el.child(div().id(`${id}-label`).w_full().min_w(0).truncate().text_size(12).text_color(t.foreground)
-      .map((el) => tip(el, title)).child(label ?? "")))
+      .map((el) => tip(el, title, `${id}-label`)).child(label ?? "")))
     .child(div().id(`${id}-track`).relative().w_full().h(4).rounded(2).bg(t.border).overflow_hidden()
       .on_size_change((size, cx) => {
         if (!state || size.width === state.width) return;
@@ -646,12 +693,16 @@ export function scrollText(id, text, t, { maxHeight, color } = {}) {
 // Shows the shown space's Git console tab, or opens one: the strip's link. The same tab
 // view-console.js openConsole finds (a tab named Console | 콘솔 whose only pane is ours);
 // written here because view-console.js imports this file.
+// A console tab that was scrolled up would keep showing older lines: the strip sends the
+// console screens CONSOLE_END, and they read the log again and show its end, where the
+// failed command is.
 const CONSOLE_NAMES = new Set([consoleEn["console.title"], consoleKo["console.title"]]);
+export const CONSOLE_END = "console-end";
 function showConsole() {
   const space = spaces().find((s) => s.active);
   const ours = new Set(panes().filter((p) => p.mod === MOD).map((p) => p.tab));
   const found = space?.tabs?.find((tab) => tab.panes === 1 && ours.has(tab.id) && CONSOLE_NAMES.has(tab.name));
-  if (found) run("tab.select", { id: found.id });
+  if (found) { run("tab.select", { id: found.id }); broadcast({ type: CONSOLE_END }); }
   else run("tab.new", { name: words()("console.title"), mod: MOD, props: { view: "console" } });
 }
 
@@ -710,6 +761,16 @@ export function dialogFrame(id, title, t, { body, footer = [], note, onClose, wi
 }
 
 export const close = (overlay) => { if (overlay) closeOverlay(overlay); };
+
+// takeEscape(el, onEscape) → el, taking Herdr's Esc for an inner menu or card. Herdr's Esc
+// is its `overlay.close` action, bound to escape over an overlay: it comes before any
+// on_key_down and closes the whole dialog or popup. An element on the keyboard's path that
+// answers the action keeps the overlay open, as Herdr's own Settings does while its font
+// list is open. Put it on the element that holds the keyboard, only while the inner part
+// is open; onEscape(cx) closes that part.
+export function takeEscape(el, onEscape) {
+  return el.on_action("overlay.close", (_e, cx) => { cx.stop_propagation(); onEscape(cx); cx.notify(); });
+}
 
 // A framed multi-line text box around a TextareaState (make the state once, in init:
 // TextareaState.new({ placeholder, rows })). The height comes from `rows` or .h().

@@ -6,7 +6,7 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } fro
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
 import { makeGit } from "./git.js";
-import { blockedBy, checkoutBranch, smartRun, settleSmartStash, readSmartMark, forceCheckout } from "./git-smart.js";
+import { blockedBy, checkoutBranch, checkoutRevisionOf, smartRun, settleSmartStash, readSmartMark, forceCheckout } from "./git-smart.js";
 import { listSnapshots } from "./git-snapshot.js";
 import { editMessage, dropCommits, squashCommits, interactiveRebase, extractChanges, dropChanges } from "./git-rewrite.js";
 
@@ -391,6 +391,78 @@ const resolve = (repo, last) => { edit(repo, "a.txt", 4, last); sh(repo, "git ad
   assert.equal(list.snapshots[0].hash, r.snapshot);
   assert.equal(list.snapshots[0].action, "Checkout");
   assert.deepEqual(list.snapshots[0].files.map((f) => f.path), ["a.txt", "b.txt", "n.txt"]);
+}
+
+// A revision checkout ({ type: "checkout", revision }: HEAD detached at a commit) takes
+// the same three ways as a branch's: refused with the files in the way and nothing moved,
+// Smart (the changes back on the detached HEAD), and forced (recorded first).
+{
+  const repo = init("revision");
+  const side = sh(repo, "git rev-parse side").trim();
+  edit(repo, "a.txt", 0, "mine-a1");
+  edit(repo, "b.txt", 0, "mine-b1");
+  const before = status(repo), at = head(repo);
+  assert.deepEqual((await blockedBy(git, repo, { type: "checkout", revision: side })).paths, ["a.txt"]);
+  const r = await checkoutRevisionOf(git, repo, { revision: side });
+  assert.equal(r.ok, false);
+  assert.deepEqual([r.outcome, r.blocked], ["refused", ["a.txt"]]);
+  assert.deepEqual([status(repo), head(repo)], [before, at]);
+  const smart = await smartRun(git, repo, { request: { type: "checkout", revision: side } });
+  assert.equal(smart.outcome, "done", smart.err);
+  assert.deepEqual([head(repo), branch(repo)], [side, ""]);
+  assert.deepEqual(status(repo), before);
+  assert.match(text(repo, "a.txt"), /^mine-a1\n.*side-a5\n$/s);
+  // Nothing in the way: it just checks out; no such commit: "failed".
+  const clean = init("revision-clean");
+  const cleanSide = sh(clean, "git rev-parse side").trim();
+  assert.equal((await checkoutRevisionOf(git, clean, { revision: cleanSide })).outcome, "done");
+  assert.equal(head(clean), cleanSide);
+  assert.equal((await checkoutRevisionOf(git, clean, { revision: "0123456789abcdef0123456789abcdef01234567" })).outcome, "failed");
+  // Forced: every tracked change recorded, then thrown away for the commit.
+  const forced = init("revision-force");
+  const forcedSide = sh(forced, "git rev-parse side").trim();
+  edit(forced, "a.txt", 0, "mine-a1");
+  const f = await forceCheckout(git, forced, { revision: forcedSide, copy: "0123456789abcdef" });
+  assert.equal(f.ok, true, f.err);
+  assert.deepEqual([head(forced), branch(forced), status(forced)], [forcedSide, "", []]);
+  assert.deepEqual((await listSnapshots(git, forced)).snapshots[0].files.map((x) => x.path), ["a.txt"]);
+}
+
+// An untracked file where the target has one (or a folder, or the other way round) would
+// be written over by the forced checkout, and a snapshot records only tracked files: the
+// checkout is refused with those paths, for a branch and a revision alike, and nothing is
+// recorded or moved. Untracked files the target doesn't have don't stop it.
+{
+  const repo = init("force-untracked");
+  sh(repo, "git checkout -q -b nest main && mkdir n && echo x > n/x.txt && echo t > t && git add -A && git commit -q -m nest && git checkout -q main");
+  const side = sh(repo, "git rev-parse side").trim();
+  edit(repo, "a.txt", 0, "mine-a1");
+  write(repo, "s.txt", "only here\n");
+  write(repo, "u.txt", "u\n");
+  const before = status(repo), at = head(repo);
+  const checks = [
+    [{ name: "side" }, ["s.txt"]],
+    [{ revision: side }, ["s.txt"]],
+  ];
+  for (const [to, paths] of checks) {
+    const r = await forceCheckout(git, repo, { ...to, copy: "0123456789abcdef" });
+    assert.equal(r.ok, false);
+    assert.deepEqual([r.untracked, r.snapshot, r.changed], [paths, null, false]);
+    assert.equal(r.msg?.key, "smart.untrackedInWay");
+    assert.deepEqual([status(repo), head(repo), branch(repo)], [before, at, "main"]);
+    assert.equal(text(repo, "s.txt"), "only here\n");
+    assert.deepEqual((await listSnapshots(git, repo)).snapshots, []);
+  }
+  // A file where the target has a folder, and files inside a folder where it has a file.
+  sh(repo, "rm s.txt && echo mine > n && mkdir t && echo mine > t/y.txt");
+  const nest = await forceCheckout(git, repo, { name: "nest", copy: "0123456789abcdef" });
+  assert.deepEqual([nest.ok, nest.untracked], [false, ["n", "t/y.txt"]]);
+  assert.equal(text(repo, "t/y.txt"), "mine\n");
+  // Out of the way, it checks out and the untracked file it doesn't have stays.
+  sh(repo, "rm -r n t");
+  const r = await forceCheckout(git, repo, { name: "side", copy: "0123456789abcdef" });
+  assert.equal(r.ok, true, r.err);
+  assert.deepEqual([branch(repo), status(repo)], ["side", ["?? u.txt"]]);
 }
 
 console.log("ok");

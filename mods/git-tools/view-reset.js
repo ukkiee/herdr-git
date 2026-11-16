@@ -60,7 +60,7 @@ export default class ResetView {
     this.on = p.on ?? null;
     this.owner = p.owner ?? null;
     this.commit = p.commit ?? { hash: "", author: "", subject: "" };
-    this.git = makeGit(exec, this.on);
+    this.git = makeGit(exec, this.on, { wait: this.wait });
     this.mode = "mixed";
     this.branch = undefined; // undefined: not read yet; null: a detached HEAD
     this.waiting = false;

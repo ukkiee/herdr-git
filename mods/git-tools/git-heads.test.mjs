@@ -7,8 +7,10 @@ import { mkdtempSync, writeFileSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
 import { makeGit } from "./git.js";
-import { readHeads, widgetFace, popupRows } from "./git-heads.js";
+import { readHeads, widgetFace, popupRows, popupStep } from "./git-heads.js";
 import { translator } from "./i18n.js";
+import { menuItems, branchContext } from "./log-menus.js";
+import { trackedBranch } from "./git-branch.js";
 
 // The person's own git settings stay out of every repository here.
 process.env.GIT_CONFIG_GLOBAL = "/dev/null";
@@ -54,7 +56,7 @@ commit(repo, "c.txt", "l1");
 {
   const r = await readHeads(git, repo);
   assert.equal(r.ok, true, r.err);
-  assert.deepEqual(r.current, { name: "main", upstream: "origin/main", ahead: 1, behind: 2 });
+  assert.deepEqual(r.current, { name: "main", upstream: "origin/main", gone: false, ahead: 1, behind: 2 });
   assert.deepEqual(r.head, { branch: "main", hash: raw(repo, ["rev-parse", "HEAD"]), detached: false });
   assert.deepEqual(r.remote.map((b) => b.name), ["origin/main"]);
 }
@@ -63,7 +65,36 @@ commit(repo, "c.txt", "l1");
 {
   raw(repo, ["checkout", "-q", "-b", "topic"]);
   const r = await readHeads(git, repo);
-  assert.deepEqual(r.current, { name: "topic", upstream: null, ahead: 0, behind: 0 });
+  assert.deepEqual(r.current, { name: "topic", upstream: null, gone: false, ahead: 0, behind: 0 });
+}
+
+// A branch whose remote branch was deleted and pruned: it still names it, gone.
+{
+  raw(repo, ["push", "-q", "-u", "origin", "topic"]);
+  raw(origin, ["branch", "-q", "-D", "topic"]);
+  raw(repo, ["fetch", "-q", "--prune"]);
+  const r = await readHeads(git, repo);
+  assert.deepEqual(r.current, { name: "topic", upstream: "origin/topic", gone: true, ahead: 0, behind: 0 });
+  assert.deepEqual(r.local.find((b) => b.name === "topic").gone, true);
+  // Its menus have nothing to update from, current or not: the VCS widget popup's rows
+  // (popupRows) and the Branch tree's (readBranches' branch, as its target hands it), each
+  // through branchContext. A current branch that never tracked one keeps Update on.
+  const update = (menu, b, head) => menuItems(menu, () => true, branchContext(b, { head })).find((it) => it.id === "branch.update")?.disabled;
+  const popupRow = (heads, name) => popupRows({ heads, op: { ok: true, kind: null, conflicts: [] }, query: "", folded: new Set(), handled: () => true }, translator("en"))
+    .find((row) => row.kind === "branch" && row.scope === "local" && row.name === name);
+  const treeRow = (heads, name) => { const b = heads.local.find((x) => x.name === name); return { name, scope: "local", current: b.current, upstream: trackedBranch(b), gone: b.gone }; };
+  for (const row of [popupRow(r, "topic"), treeRow(r, "topic")]) {
+    assert.deepEqual([row.current, row.upstream], [true, null]);
+    assert.equal(update("currentBranch", row, r.head), true, "current, gone: Update off");
+  }
+  raw(repo, ["checkout", "-q", "main"]);
+  const away = await readHeads(git, repo);
+  for (const row of [popupRow(away, "topic"), treeRow(away, "topic")]) assert.equal(update("localBranch", row, away.head), true, "not current, gone: Update off");
+  raw(repo, ["checkout", "-q", "-b", "untracked"]);
+  const none = await readHeads(git, repo);
+  for (const row of [popupRow(none, "untracked"), treeRow(none, "untracked")]) assert.equal(update("currentBranch", row, none.head), false, "current, never tracked: Update on");
+  raw(repo, ["checkout", "-q", "topic"]);
+  raw(repo, ["branch", "-q", "-D", "untracked"]);
 }
 
 // A detached HEAD: no current branch, the commit HEAD is on.
@@ -99,7 +130,7 @@ commit(repo, "c.txt", "l1");
   assert.equal(f.ok, true, f.err);
   assert.deepEqual(f.recent, []);
   assert.deepEqual(f.head, { branch: "main", hash: null, detached: false });
-  assert.deepEqual(f.current, { name: "main", upstream: null, ahead: 0, behind: 0 });
+  assert.deepEqual(f.current, { name: "main", upstream: null, gone: false, ahead: 0, behind: 0 });
 }
 
 // Tags, by name.
@@ -146,8 +177,8 @@ const en = translator("en"), ko = translator("ko");
 
 // A branch: its name and the commits to pull and push.
 assert.deepEqual(widgetFace(heads(), op()), { kind: "branch", name: "main", ahead: 2, behind: 1 });
-// A detached HEAD: the commit, short.
-assert.deepEqual(widgetFace(heads({ head: { branch: null, hash: "0acda529aa11", detached: true }, current: null }), op({ branch: null })), { kind: "detached", name: "0acda529" });
+// A detached HEAD: the commit, as short as the Branch tree's HEAD row shows it.
+assert.deepEqual(widgetFace(heads({ head: { branch: null, hash: "0acda529aa11", detached: true }, current: null }), op({ branch: null })), { kind: "detached", name: "0acda52" });
 // Not a repository (or not read): nothing.
 assert.equal(widgetFace({ ok: false }, null), null);
 // A merge in conflict: ≫ opens the Conflicts dialog, ■ aborts; resolved, ≫ commits it.
@@ -199,6 +230,17 @@ const shape = (rows, tr = en) => rows.map((r) => r.kind === "rule" ? "|"
   ]);
 }
 
+// A branch whose remote branch is gone shows as one that tracks nothing: no name on its
+// right, so its menu has no tracked branch and nothing to update from.
+{
+  const gone = heads({ local: [{ name: "done", upstream: "origin/done", gone: true, ahead: 0, behind: 0, current: false }], recent: ["done"] });
+  const rows = popupRows({ heads: gone, op: op(), query: "", folded: new Set(), handled: all }, en);
+  assert.deepEqual(rows.filter((r) => r.name === "done").map((r) => [r.scope, r.upstream]), [["recent", null], ["local", null]]);
+  const menu = menuItems("localBranch", () => true, { name: "done", current: "main", upstream: rows.find((r) => r.name === "done").upstream ?? "" });
+  const items = new Map(menu.map((it) => [it.id, it.disabled]));
+  assert.deepEqual([items.get("branch.checkoutAndUpdate"), items.get("branch.update"), items.has("branch.trackedBranch")], [true, true, false]);
+}
+
 // Remote branches sit under their remote's folder; tags by name.
 {
   const rows = popupRows({ heads: heads(), op: op(), query: "", folded: new Set(["recent", "local"]), handled: all }, en);
@@ -237,6 +279,38 @@ const shape = (rows, tr = en) => rows.map((r) => r.kind === "rule" ? "|"
   assert.deepEqual(shape(popupRows({ heads: heads(), op: op(), query: "push", folded: new Set(), handled: all }, en)), ["Push…"]);
   assert.deepEqual(shape(popupRows({ heads: heads(), op: op(), query: "브랜치", folded: new Set(), handled: all }, ko), ko), ["새 브랜치…"]);
   assert.deepEqual(popupRows({ heads: heads(), op: op(), query: "nothing-like-this", folded: new Set(), handled: all }, en), []);
+}
+
+// A folded group is its count alone: none of what it hides is read or made into a row,
+// so a repository with tens of thousands of tags opens the popup as fast as any.
+{
+  const reads = { n: 0 };
+  const names = Array.from({ length: 30000 }, (_, i) => `v${i}`);
+  const tags = new Proxy(names, { get: (list, key) => { if (typeof key === "string" && /^\d+$/.test(key)) reads.n++; return Reflect.get(list, key); } });
+  const remote = Array.from({ length: 1500 }, (_, i) => ({ name: `origin/b${i}` }));
+  const rows = popupRows({ heads: heads({ tags, remote }), op: op(), query: "", folded: new Set(["remote", "tags"]), handled: all }, en);
+  assert.deepEqual(rows.filter((r) => r.kind === "group" && r.id !== "recent" && r.id !== "local").map((r) => [r.label, r.open, r.count]), [["Remote", false, 1500], ["Tags", false, 30000]]);
+  assert.equal(rows.some((r) => r.kind === "branch" && (r.scope === "tag" || r.scope === "remote")), false);
+  assert.equal(reads.n, 0);
+  // Open, they are rows as before.
+  const open = popupRows({ heads: heads({ tags: names.slice(0, 3), remote: remote.slice(0, 2) }), op: op(), query: "", folded: new Set(["recent", "local"]), handled: all }, en);
+  assert.deepEqual(shape(open).slice(-8), ["[Remote]", "origin/", "remote:origin/b0", "remote:origin/b1", "[Tags]", "tag:v0", "tag:v1", "tag:v2"]);
+}
+
+// ↓ and ↑ in the popup skip lines and remote folders. While searching, the groups stay
+// open whatever is pressed, so their heads are skipped too: ↓ after typing lands on the
+// first branch. Without a search a head folds and unfolds, and the keys stop on it.
+{
+  const query = "TOP";
+  const rows = popupRows({ heads: heads(), op: op(), query, folded: new Set(), handled: all }, en);
+  const label = (i) => shape([rows[i]])[0];
+  assert.equal(label(popupStep(rows, -1, 1, { query })), "recent:topic");
+  assert.equal(label(popupStep(rows, popupStep(rows, -1, 1, { query }), 1, { query })), "local:topic");
+  assert.equal(label(popupStep(rows, -1, -1, { query })), "remote:origin/topic");
+  const plain = popupRows({ heads: heads(), op: op(), query: "", folded: new Set(["recent", "local", "remote", "tags"]), handled: all }, en);
+  assert.equal(shape([plain[popupStep(plain, -1, 1, { query: "" })]])[0], shape(plain)[0]);
+  assert.equal(shape([plain[popupStep(plain, -1, -1, { query: "" })]])[0], "[Tags]");
+  assert.equal(popupStep([], -1, 1, { query: "" }), -1);
 }
 
 console.log("git-heads: ok");

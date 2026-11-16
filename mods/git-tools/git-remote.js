@@ -90,9 +90,13 @@ export function cannotReach(r, how) {
 // remoteFailure(t, r, how) → r when it went well; else r worded for a screen in t's
 // language: failureText's words in err (the credential hint first when cannotReach) and no
 // msg, so every screen shows the same and none adds the hint again.
+// A pushing git leaves what its pre-push hook prints on stdout, while `err` is stderr
+// (git.js): the hook's words, often the only reason given, go first, as git printed them.
 export function remoteFailure(t, r, how) {
   if (r?.ok) return r;
-  const err = failureText(t, { ...r, fetchFailed: Boolean(r?.fetchFailed) || cannotReach(r, how) });
+  const out = how === "push" && r?.code > 0 ? str(r.out).trim() : "";
+  const said = out && out !== str(r.err).trim() ? `${out}\n${str(r.err)}` : r?.err;
+  const err = failureText(t, { ...r, err: said, fetchFailed: Boolean(r?.fetchFailed) || cannotReach(r, how) });
   return { ...r, err, msg: undefined, fetchFailed: undefined };
 }
 
@@ -220,18 +224,21 @@ async function settled(git, root, before, run, request, from) {
 //   pull as Smart runs it again) when local changes refused it.
 //   branch: the remote's branch name ("main"); options: PULL_OPTIONS (others dropped).
 //   The remote is fetched first on its own, so a failed fetch is told apart from a merge
-//   step that failed (fetchFailed). Without an option, git does as the person's settings
-//   say (pull.rebase, pull.ff).
+//   step that failed (fetchFailed). Without --rebase or --no-rebase, a repository set to
+//   rebase on pull (pull.rebase, branch.<name>.rebase) rebases; any other merges
+//   (--no-rebase): git, told nothing, refuses branches that diverged and asks how to
+//   reconcile them. pull.ff still applies.
 export async function pull(git, root, { remote, branch, options = [] } = {}) {
   const opts = (Array.isArray(options) ? options : []).filter((o) => ACCEPTED.has(o));
   const rebase = opts.includes("--rebase") || (!opts.includes("--no-rebase") && await pullsByRebase(git, root));
+  const how = rebase || opts.includes("--no-rebase") ? [] : ["--no-rebase"];
   const request = { type: "pull", remote: str(remote), branch: str(branch), options: opts, rebase, target: `${str(remote)}/${str(branch)}` };
   if (!request.remote || !request.branch) return refuse("Choose a remote and a branch to pull.", { key: "remote.pickBranch" });
   const before = await readOperation(git, root);
   if (!before.ok) return failedWith(before);
   const fetched = await fetchRemote(git, root, request.remote);
   if (!fetched.ok) return failedWith(fetched, { fetchFailed: true, changed: true });
-  const run = await git(root, ["pull", NO_AUTOSTASH, ...opts, "--end-of-options", request.remote, `refs/heads/${request.branch}`], STEP);
+  const run = await git(root, ["pull", NO_AUTOSTASH, ...how, ...opts, "--end-of-options", request.remote, `refs/heads/${request.branch}`], STEP);
   return settled(git, root, before, run, request, before.head);
 }
 

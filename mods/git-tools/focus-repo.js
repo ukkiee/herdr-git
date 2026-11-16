@@ -55,28 +55,35 @@ export function rememberTab(record, added, { root, on } = {}, panes = []) {
 // The screens only ever opened as a tab of their own that have no repository.
 const TAB_ONLY = new Set(["console", "icon-sheet"]);
 
+// The repository a tab's screen stands for: props.root, or the folder a Commit panel or
+// Log tab was opened on (props.folder), which the panels follow like any folder.
+const tabRoot = (p) => str(p?.root) ?? str(p?.folder);
+
 // isTabScreen(props) → whether a copy with these props is a tab's screen: no dialog or
-// menu (props.overlay), and either of a repository (a root) or a tab-only screen. Layout
-// blocks (the panels) have neither.
+// menu (props.overlay), and either of a repository (a root or a chosen folder) or a
+// tab-only screen. Layout blocks (the panels) have none of these.
 export function isTabScreen(p) {
-  return Boolean(p && !p.overlay && (str(p.root) || TAB_ONLY.has(p.view)));
+  return Boolean(p && !p.overlay && (tabRoot(p) || TAB_ONLY.has(p.view)));
 }
 
 // registerTab(record, { props, focused, panes }) → { pane, record } to store for a copy
 // that is a tab's screen, or null when there is nothing to store.
-//   props: the copy's props(); its repository is props.root and props.on. A dialog or a
-//   menu (props.overlay) and a screen without a root (a layout block, the console) are
-//   no tab of a repository.
+//   props: the copy's props(); its repository is props.root (or props.folder) and
+//   props.on. A dialog or a menu (props.overlay) and a screen without either (a layout
+//   block, the console) are no tab of a repository.
 //   The copy's pane: props.pane when Herdr gives one, and that replaces whatever is
 //   recorded for it. Without it, a guess: the focused pane, when it is the only pane of
 //   its tab, this mod's, and nothing is recorded for it (a tab just opened has the focus).
 //   Never a recorded pane: right after tab.new the focus may still be on the tab before,
 //   which is why the tabs with no repository record themselves too.
-export function registerTab(record, { props: p, focused, panes = [] } = {}) {
+//   A screen newTab opened knows its tab's name (props.tabName), and the guess is then
+//   among the panes of tabs of that name: tabs opened one after another all record
+//   themselves while the focus sits on the last one. tabList: the tabs, [{ id, name }].
+export function registerTab(record, { props: p, focused, panes = [], tabs: tabList = [] } = {}) {
   if (!isTabScreen(p)) return null;
-  const repo = entryOf(str(p.root) ? p.root : null, p.on);
+  const repo = entryOf(tabRoot(p), p.on);
   const tabs = record && typeof record === "object" ? record : {};
-  const pane = str(p.pane) ?? guessPane(tabs, focused, panes);
+  const pane = str(p.pane) ?? (str(p.tabName) ? paneNamed(tabs, focused, panes, tabList, p.tabName) : guessPane(tabs, focused, panes));
   if (!pane) return null;
   const had = tabs[pane];
   if (had && had.root === repo.root && (had.on ?? null) === repo.on) return null;
@@ -90,8 +97,19 @@ export function forgetTab(record, pane) {
   return rest;
 }
 
+// This mod's unrecorded panes that are alone in their tab.
+const unrecordedAlone = (tabs, panes) => panes.filter((p) => p.mod === MOD && !tabs[p.pane] && panes.filter((q) => q.tab === p.tab).length === 1);
+
 function guessPane(tabs, focused, panes) {
-  const f = focused?.pane ? panes.find((p) => p.pane === focused.pane) : null;
-  if (!f || f.mod !== MOD || tabs[f.pane]) return null;
-  return panes.filter((p) => p.tab === f.tab).length === 1 ? f.pane : null;
+  const f = focused?.pane ? unrecordedAlone(tabs, panes).find((p) => p.pane === focused.pane) : null;
+  return f ? f.pane : null;
+}
+
+// The one unrecorded pane alone in a tab called `name`; with several, the focused one of
+// them. A pane of another tab is never taken, even when it has the focus.
+function paneNamed(tabs, focused, panes, tabList, name) {
+  const ids = new Set(tabList.filter((tab) => tab?.name === name).map((tab) => tab.id));
+  const hits = unrecordedAlone(tabs, panes).filter((p) => ids.has(p.tab));
+  if (hits.length === 1) return hits[0].pane;
+  return hits.find((p) => p.pane === focused?.pane)?.pane ?? null;
 }

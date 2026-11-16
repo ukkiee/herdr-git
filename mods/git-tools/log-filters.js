@@ -517,14 +517,19 @@ export default class LogFilters {
       .child(Input.new(state).flex_1().min_w(0).h_full().text_size(12).text_color(t.foreground));
   }
 
-  item(id, label, t, { hint, checked = false, disabled = false, active = false, onClick } = {}) {
+  // more: a short count after the hint ("+1") that the hint's cut never hides.
+  // tip: the row's tooltip, for a hint that may be cut.
+  item(id, label, t, { hint, more = "", tip = "", checked = false, disabled = false, active = false, onClick } = {}) {
     return h_flex().id(id).h(ITEM).flex_none().w_full().min_w(0).px(8).gap(8).items_center().rounded(5)
       .text_color(disabled ? t.dim : t.foreground)
       .when(active, (el) => el.bg(t.hover))
       .when(!disabled, (el) => el.cursor_pointer().hover((s) => s.bg(t.hover)).on_click((_e, cx) => { cx.stop_propagation(); onClick(cx); }))
+      .map((el) => tipOn(el, tip))
       .child(div().size(ICON).flex_none().when(checked, (el) => el.child(uiGlyph("check"))))
       .child(div().flex_1().min_w(0).truncate().child(label))
-      .when(Boolean(hint), (el) => el.child(div().flex_none().max_w(110).truncate().text_size(11).text_color(t.dim).child(hint ?? "")));
+      .when(Boolean(hint), (el) => el.child(h_flex().flex_none().max_w(110).min_w(0).gap(3).text_size(11).text_color(t.dim)
+        .child(div().flex_initial().min_w(0).truncate().child(hint ?? ""))
+        .when(Boolean(more), (el) => el.child(div().flex_none().child(more)))));
   }
 
   popup(t) {
@@ -570,7 +575,10 @@ export default class LogFilters {
     }
     if (it.kind === "text") return this.item(`log-filter-user-${i}`, it.entry.text, t, { ...common, hint: tr("filters.typed") });
     const emails = it.author.emails;
-    return this.item(`log-filter-user-${i}`, it.author.name, t, { ...common, hint: emails.length > 1 ? `${emails[0]} +${emails.length - 1}` : emails[0] ?? "" });
+    return this.item(`log-filter-user-${i}`, it.author.name, t, {
+      ...common, hint: emails[0] ?? "", more: emails.length > 1 ? `+${emails.length - 1}` : "",
+      tip: emails.length ? [it.author.name, ...emails].join("\n") : "",
+    });
   }
 
   userPopup(t) {

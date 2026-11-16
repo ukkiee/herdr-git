@@ -126,7 +126,7 @@ function rowModel(commit, graph, options) {
     lane: graph.lane, color: graph.color,
     width: PAD * 2 + graph.cols * LANE,
     labels: labelRefs(commit.refs, labelLook(options)),
-    merge: commit.parents.length > 1,
+    merge: commit.merge ?? commit.parents.length > 1, // collapseLinear's merge, as parents may fold into one
     head: commit.refs.some((r) => r.kind === "head"),
     minute: -1, time: "",
     fitRoom: -1, fit: null, // fitLabels' answer for the room it was worked out for
@@ -513,14 +513,24 @@ export default class LogList {
     return m.time;
   }
 
+  // The Columns the display options ask for, as many as the width allows (a narrow list
+  // drops author and hash, then the date).
+  columns(width) {
+    const shown = this.host.options.columns, wide = width >= 520 ? 2 : width >= 380 ? 1 : 0;
+    return { author: shown.author && wide > 1, date: shown.date && wide > 0, hash: shown.hash && wide > 1 };
+  }
+
   // The graph part's window for the rows in view: as wide as the widest of them needs,
-  // at most half the list. A few dozen rows, not the whole list.
+  // at most half the list, and no more than the columns leave. A few dozen rows, not the
+  // whole list.
   graphView(width) {
     const n = this.rows.length, top = Math.max(0, Math.min(this.list.top, this.list.limit(n)));
     const end = Math.min(n, top + this.list.fit + 1);
     let widest = 0;
     for (let i = top; i < end; i++) widest = Math.max(widest, this.rows[i].width);
-    return graphWindow({ widest, listWidth: width, left: this.left });
+    const cols = this.columns(width);
+    const others = ROW_PAD + GAP + (cols.author ? AUTHOR + GAP : 0) + (cols.date ? TIME + GAP : 0) + (cols.hash ? HASH + GAP : 0);
+    return graphWindow({ widest, listWidth: width, others, left: this.left });
   }
 
   // A sideways wheel (a touchpad, or Shift with a plain wheel) moves the graph part of
@@ -574,6 +584,9 @@ export default class LogList {
     const room = Math.max(0, Math.min(labelSpace.most, labelSpace.left - graphWidth));
     if (m.fitRoom !== room) { m.fit = fitLabels(m.labels, room, LABEL_LOOK); m.fitRoom = room; }
     const { shown, rest } = m.fit;
+    // Nothing fits: no box at all, since even an empty one adds the row's gap and moves
+    // the author and time off the other rows' line.
+    if (!shown.length && !rest) return null;
     // Left-aligned in a box no wider than the room: should the estimate fall short, the
     // last label's end is cut, never the first label's start.
     return h_flex().flex_none().max_w(room).gap(LABEL_LOOK.gap).overflow_hidden()
@@ -640,12 +653,8 @@ export default class LogList {
       this.later = true;
       cx.timer.after(0, (cx) => { this.later = false; this.loadMore(cx); });
     }
-    const palette = lanePalette(t), width = host.listWidth ?? 9999, wide = width >= 520 ? 2 : width >= 380 ? 1 : 0;
-    const v = this.graphView(width);
-    // The Columns the display options ask for, as many as the width allows (a narrow list
-    // drops author and hash, then the date).
-    const shown = host.options.columns;
-    const cols = { author: shown.author && wide > 1, date: shown.date && wide > 0, hash: shown.hash && wide > 1 };
+    const palette = lanePalette(t), width = host.listWidth ?? 9999;
+    const v = this.graphView(width), cols = this.columns(width);
     const labelSpace = {
       most: Math.floor((width - ROW_PAD) * 0.45),
       left: width - ROW_PAD - GAP * 2 - SUBJECT_MIN - (cols.author ? AUTHOR + GAP : 0) - (cols.date ? TIME + GAP : 0) - (cols.hash ? HASH + GAP : 0),
@@ -666,6 +675,6 @@ export default class LogList {
         cx.stop_propagation();
       })
       .child(this.list.render(n, (i) => this.commitRow(i, t, palette, cols, v, labelSpace, look), t))
-      .when(v.max > 0, (el) => el.child(this.scrollStrip(v, t)));
+      .when(v.max > 0 && v.room > 0, (el) => el.child(this.scrollStrip(v, t)));
   }
 }

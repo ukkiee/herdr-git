@@ -72,9 +72,9 @@ const m3 = commit(repo, "b.txt", "m3");
   assert.equal(r.ok, true, r.err);
   assert.deepEqual(r.head, { branch: "main", hash: m3 });
   assert.deepEqual(r.local, [
-    { name: "feature/login", hash: fLocal, current: false, upstream: "origin/feature/login", ahead: 1, behind: 1 },
-    { name: "main", hash: m3, current: true, upstream: "origin/main", ahead: 1, behind: 0 },
-    { name: "topic/two", hash: t1, current: false, upstream: null, ahead: 0, behind: 0 },
+    { name: "feature/login", hash: fLocal, current: false, upstream: "origin/feature/login", gone: false, ahead: 1, behind: 1 },
+    { name: "main", hash: m3, current: true, upstream: "origin/main", gone: false, ahead: 1, behind: 0 },
+    { name: "topic/two", hash: t1, current: false, upstream: null, gone: false, ahead: 0, behind: 0 },
   ]);
   // origin/HEAD is a pointer, not a branch.
   assert.deepEqual(r.remote, [
@@ -82,6 +82,33 @@ const m3 = commit(repo, "b.txt", "m3");
     { name: "origin/main", hash: m2 },
     { name: "origin/release/1.0", hash: r1 },
   ]);
+}
+
+// A branch whose remote branch was deleted and pruned: git still has it set to track
+// that name, and says the name is gone. It keeps the name, gone: true, nothing to pull
+// or push.
+{
+  const far = `${tmp}/gone-origin.git`, near = `${tmp}/gone-repo`;
+  raw(tmp, ["init", "-q", "--bare", "-b", "main", far]);
+  raw(tmp, ["clone", "-q", far, near]);
+  commit(near, "a.txt", "g1");
+  raw(near, ["push", "-q", "-u", "origin", "main"]);
+  for (const b of ["done/merged", "still/there"]) {
+    raw(near, ["checkout", "-q", "-b", b]);
+    commit(near, `${b.replace("/", "-")}.txt`, b);
+    raw(near, ["push", "-q", "-u", "origin", b]);
+  }
+  raw(near, ["checkout", "-q", "main"]);
+  raw(far, ["branch", "-q", "-D", "done/merged"]);
+  raw(near, ["fetch", "-q", "--prune"]);
+  const r = await readBranches(git, near);
+  assert.equal(r.ok, true, r.err);
+  assert.deepEqual(r.local.map((b) => [b.name, b.upstream, b.gone, b.ahead, b.behind]), [
+    ["done/merged", "origin/done/merged", true, 0, 0],
+    ["main", "origin/main", false, 0, 0],
+    ["still/there", "origin/still/there", false, 0, 0],
+  ]);
+  assert.deepEqual(r.remote.map((b) => b.name), ["origin/main", "origin/still/there"]);
 }
 
 // A folder that isn't a repository: an error, and empty lists.
@@ -1155,13 +1182,13 @@ const favorites = (cwd, key) => (ask(cwd, ["config", "--local", "--get-all", key
   raw(dir, ["checkout", "-q", "main"]);
   raw(dir, ["branch", "-q", "-D", "pushed"]);
 
-  // The Tags group: by name, each at its commit, an annotated tag looked through.
-  const mineAt = raw(dir, ["rev-parse", "mine"]);
+  // The Tags group: the names by name, annotated or not, "/" kept.
   raw(dir, ["tag", "v2", "main"]);
   raw(dir, ["tag", "-a", "-m", "one", "v1.0", "mine"]);
+  raw(dir, ["tag", "deploy/web", "main"]);
   const tagged = await readTags(git, dir);
   assert.equal(tagged.ok, true, tagged.err);
-  assert.deepEqual(tagged.tags, [{ name: "v1.0", hash: mineAt }, { name: "v2", hash: raw(dir, ["rev-parse", "main"]) }]);
+  assert.deepEqual(tagged.tags, ["deploy/web", "v1.0", "v2"]);
 
   const r = await readMyBranches(git, dir);
   assert.equal(r.ok, true, r.err);

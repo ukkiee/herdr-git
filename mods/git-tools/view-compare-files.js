@@ -66,9 +66,9 @@ export function openVersionsCompare(t, { root, on = null, from, to }) {
 
 // One file from revision `from` to revision `to` (null: the working file); reverse: the
 // other way round. oldPath: its name in `from` when renamed since. A new tab each time,
-// as Show Diff opens one.
-export function openFileDiff({ root, on = null, path, from, to = null, oldPath = null, reverse = false }) {
-  openTab("compare-diff", { root, on, path, from, commit: to, oldPath, reverse }, path.split("/").pop());
+// as Show Diff opens one. name: the tab's name (default: the file's).
+export function openFileDiff({ root, on = null, path, from, to = null, oldPath = null, reverse = false, name }) {
+  openTab("compare-diff", { root, on, path, from, commit: to, oldPath, reverse }, name ?? path.split("/").pop());
 }
 
 // rev: a commit (Open Repository Version) or null (the file on disk: Edit Source).
@@ -129,8 +129,13 @@ export function changesToParents(host, m, cx) {
   cx.spawn(async (cx) => {
     const p = await fileParents(repo.git, repo.root, { commit });
     if (!p.ok) host.failedOn(repo, p.err, cx);
-    for (const d of parentDiffs({ commit, parents: p.parents, path: m.path, from: m.item.from ?? null })) {
-      openFileDiff({ root: repo.root, on: repo.on, path: d.path, from: d.from, to: d.to, oldPath: d.oldPath });
+    // A merge commit's tabs open at once, one per parent, each named after its parent: the
+    // person tells them apart, and so does each tab's screen finding its own pane
+    // (focus-repo.js registerTab) while the focus is on the last one.
+    const diffs = parentDiffs({ commit, parents: p.parents, path: m.path, from: m.item.from ?? null });
+    for (const d of diffs) {
+      const name = diffs.length > 1 ? host.t("compare.revisionFileTab", { name: d.path.split("/").pop(), rev: short(d.from) }) : undefined;
+      openFileDiff({ root: repo.root, on: repo.on, path: d.path, from: d.from, to: d.to, oldPath: d.oldPath, name });
     }
     cx.notify();
   });
@@ -190,7 +195,7 @@ export default class CompareFiles {
     if (this.mode !== "versions") cx.timer.every(POLL, (cx) => { if (this.drawn) { this.drawn = false; this.load(cx); } });
   }
 
-  git() { return makeGit(exec, this.repo?.on ?? null); }
+  git() { return makeGit(exec, this.repo?.on ?? null, { wait: this.wait }); }
 
   load(cx) {
     if (!this.repo) { this.files = []; this.error = this.t("dialogs.diff.noFileTab"); return; }
@@ -369,7 +374,7 @@ export class FileDiff extends DiffView {
     this.loading = true; this.again = false;
     cx.spawn(async (cx) => {
       try {
-        const r = await readFileDiff(makeGit(exec, this.on), this.root, { from: this.from, to: this.commit, path: this.path, oldPath: this.oldPath, reverse: this.reverse });
+        const r = await readFileDiff(makeGit(exec, this.on, { wait: this.wait }), this.root, { from: this.from, to: this.commit, path: this.path, oldPath: this.oldPath, reverse: this.reverse });
         if (r.ok || !this.result?.ok) this.apply(r);
         this.error = r.ok || !r.err ? null : { err: r.err };
       } catch (error) {
@@ -406,7 +411,7 @@ export class FileView {
       try {
         let text;
         if (this.rev) {
-          const r = await readRevisionFile(makeGit(exec, this.on), this.root, { rev: this.rev, path: this.path });
+          const r = await readRevisionFile(makeGit(exec, this.on, { wait: this.wait }), this.root, { rev: this.rev, path: this.path });
           text = r.ok ? (r.binary ? "\0" : r.text) : null;
         } else text = await readTextFile(`${this.root}/${this.path}`, { on: this.on });
         if (text === null || text === undefined) this.note = "compare.unreadable";

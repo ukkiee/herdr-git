@@ -60,7 +60,7 @@ export function serveDeletedBranches(panel, e, cx) {
   const branches = requested(e.args?.branches);
   serveRequest(panel, e, { key: "branches.restoring" }, async (repo) => {
     if (!branches.length) return { ok: false, err: "No branches to restore.", msg: { key: "branches.noneChecked" } };
-    const r = await restoreBranches(makeGit(exec, repo.on), repo.root, branches);
+    const r = await restoreBranches(makeGit(exec, repo.on, { wait: panel.wait }), repo.root, branches);
     panel.restoredElsewhere(repo, r.restored);
     if (r.ok) return r;
     const list = r.skipped.map((s) => `${s.name}: ${sentence(panel.t, s.msg, s.reason)}`).join("\n");
@@ -77,7 +77,7 @@ export default class DeletedBranchesView {
     this.root = p.root ?? null; this.on = p.on ?? null;
     this.owner = p.owner ?? null; // the Log panel copy that runs the restore
     this.scripted = p.chosen === true; // script commands that write are obeyed
-    this.git = makeGit(exec, this.on);
+    this.git = makeGit(exec, this.on, { wait: this.wait });
     this.branches = null; // readDeletedBranches' list; null until the first answer
     this.listError = null;
     this.picked = new Set(); // key() of the checked rows

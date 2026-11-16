@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { fileIcon, folderIcon, makeIconTheme, darkColor } from "./icon-theme.js";
+import { fileIcon, fileIconPath, folderIcon, makeIconTheme, darkColor } from "./icon-theme.js";
 import { FILE_RULES, FOLDER_RULES, DARK_FILE_ICONS, CLOSED_ONLY_FOLDER_ICONS } from "./icon-theme-data.js";
 
 const F = (name) => `mods/git-tools/icons/theme/files/${name}.svg`;
@@ -76,6 +76,12 @@ const O = (name) => `mods/git-tools/icons/theme/foldersOpen/${name}.svg`;
   assert.equal(folderIcon("docs", { open: true }), O("docs"));
   // Plastic SCM's folder has no open variant in the source: the closed one stays.
   assert.equal(folderIcon(".plastic", { open: true }), D("plastic"));
+  // By the icon's own name, as the Icon sheet draws every icon: the dark-ink ones (11ty,
+  // agents) take their light twin on a dark background, an icon without one stays.
+  assert.equal(fileIconPath("11ty", { dark: true }), F("11ty_dark"));
+  assert.equal(fileIconPath("agents", { dark: true }), F("agents_dark"));
+  assert.equal(fileIconPath("agents", { dark: false }), F("agents"));
+  assert.equal(fileIconPath("typeScript", { dark: true }), F("typeScript"));
 }
 
 // Icon packs: AngularJS icons are off by default in the plugin, Angular 2+ and tests are on.

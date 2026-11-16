@@ -23,7 +23,7 @@ import { div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input, Popup } from "gpui-base";
 import { exec, theme, openOverlay, closeOverlay } from "herdr";
 import { makeGit, repoRoot } from "./git.js";
-import { readHeads, popupRows } from "./git-heads.js";
+import { readHeads, popupRows, popupStep, popupTarget } from "./git-heads.js";
 import { readFavorites } from "./git-branch.js";
 import { isFavorite, orderBranches, refOf } from "./branch-order.js";
 import { readOperation } from "./git-operation.js";
@@ -36,10 +36,9 @@ import { operateFromWidget } from "./view-merge.js";
 import { openNewWorktree } from "./view-worktree.js";
 import { checkoutRefFrom } from "./view-checkout-ref.js";
 import { compareWithCurrent, diffWithWorkingTree } from "./view-compare-branches.js";
-import { shortenMiddle } from "./git-log.js";
-import { menuItems } from "./log-menus.js";
+import { menuItems, branchContext } from "./log-menus.js";
 import { menuWidth, sideOf } from "./ui-size.js";
-import { MOD, openDialog, answerMenu, dialogFrame, button, uiGlyph, iconButton, darkLook, notice, writeBlock, menuMetrics, WindowedList } from "./ui.js";
+import { MOD, openDialog, answerMenu, dialogFrame, button, uiGlyph, iconButton, darkLook, notice, writeBlock, menuMetrics, WindowedList, takeEscape } from "./ui.js";
 
 export const POPUP_ACTIONS = {
   "vcs.commit": (w) => w.openCommit(),
@@ -98,10 +97,7 @@ export function deleteBlockOf(b, tr) {
 export function branchMenuRows(b, { head, writing = null, tr }) {
   const which = branchMenu(b);
   if (!which) return [];
-  const ctx = {
-    name: shortenMiddle(b.name, 30), current: head?.branch ?? (head?.hash ? head.hash.slice(0, 7) : "HEAD"),
-    upstream: b.upstream ?? "", writing, deleteBlock: deleteBlockOf(b, tr),
-  };
+  const ctx = branchContext(b, { head, writing, deleteBlock: deleteBlockOf(b, tr) });
   return menuItems(which, popupHandles, ctx).map((it) => ({
     label: tr(it.key, it.args), value: it.id, rule: it.rule, disabled: it.disabled, hint: it.hint ?? undefined,
     title: it.why ? (it.why.text ?? tr(it.why.key, it.why.args)) || undefined : undefined,
@@ -154,7 +150,7 @@ export default class VcsPopup {
     this.mode = p.mode === "abort" ? "abort" : "popup";
     this.kind = p.kind;
     if (this.mode === "abort") return;
-    this.repo = p.root ? { git: makeGit(exec, p.on ?? null), root: p.root, on: p.on ?? null } : null;
+    this.repo = p.root ? { git: makeGit(exec, p.on ?? null, { wait: this.wait }), root: p.root, on: p.on ?? null } : null;
     this.heads = null;
     this.prefs = { favorite: [], unfavorite: [] };
     this.op = null;
@@ -166,6 +162,10 @@ export default class VcsPopup {
     // The open branch menu: { row (its index in rows()), target, items, at }, or null.
     this.sub = null;
     this.list = new WindowedList("vcs-popup-rows", { rowHeight: ROW_H });
+    // The popup's own keyboard place, held while a branch's menu is open: a press on a row
+    // takes the keyboard from the search box, and the menu's keys need a handler on the
+    // keyboard's path. Esc is Herdr's, and closes the whole popup unless taken (takeEscape).
+    this.handle = cx.focus_handle();
     this.makeInput("");
     this.input.focus();
     this.reload(cx);
@@ -174,7 +174,7 @@ export default class VcsPopup {
   makeInput(value) {
     this.inputLang = this.lang;
     this.input = InputState.new({ placeholder: this.t("vcs.search"), value });
-    this.input.on("change", (_e, cx) => { this.at = -1; this.sub = null; this.list.top = 0; cx.notify(); });
+    this.input.on("change", (_e, cx) => { this.at = -1; this.sub = null; this.list.top = 0; this.rows(); cx.notify(); });
   }
 
   reload(cx) {
@@ -199,12 +199,20 @@ export default class VcsPopup {
       } : null;
       this.op = op?.ok ? op : null;
       this.err = heads.ok ? null : heads.err;
+      this.rows();
       cx.notify();
     });
   }
 
+  // Worked out once per answer, search text, fold and language, not in every render: an
+  // open Tags group in a big repository is tens of thousands of rows, more than a render
+  // has time for. What changes them works them out at once (it isn't render).
   rows() {
-    return popupRows({ heads: this.heads, op: this.op, query: this.input.value(), folded: this.folded, handled: popupHandles }, this.t);
+    const query = this.input.value(), m = this.made;
+    if (m && m.heads === this.heads && m.op === this.op && m.query === query && m.folded === this.foldTurn && m.t === this.t) return m.rows;
+    const rows = popupRows({ heads: this.heads, op: this.op, query, folded: this.folded, handled: popupHandles }, this.t);
+    this.made = { heads: this.heads, op: this.op, query, folded: this.foldTurn, t: this.t, rows };
+    return rows;
   }
 
   // Back to the widget, which runs it; the popup closes.
@@ -222,14 +230,24 @@ export default class VcsPopup {
     if (r.kind === "group") {
       this.sub = null;
       if (this.folded.has(r.id)) this.folded.delete(r.id); else this.folded.add(r.id);
+      this.foldTurn = (this.foldTurn ?? 0) + 1;
+      this.rows();
       cx.notify();
     } else if (r.kind === "action") this.answer({ id: r.id, ...(r.run ? { run: r.run } : {}) });
     else if (r.kind === "branch") {
       // A second press on the same row closes its menu.
       if (this.sub?.row === i && this.sub.rowName === r.name) this.sub = null;
-      else this.openSub(i, { name: r.name, scope: r.scope === "recent" ? "local" : r.scope, current: r.current, upstream: r.upstream });
+      else this.openSub(i, popupTarget(r));
+      this.keysTo();
       cx.notify();
     }
+  }
+
+  // The keyboard: the popup's own while a branch's menu is open (its keys and Esc are
+  // the menu's), the search box otherwise.
+  keysTo() {
+    if (this.sub) this.handle.focus();
+    else this.input.focus();
   }
 
   // The menu of branch `target` beside row i, the row of branch `rowName` (the tracked
@@ -280,11 +298,10 @@ export default class VcsPopup {
 
   move(by, rows) {
     this.sub = null;
-    const n = rows.length;
-    for (let step = 1; step <= n; step++) {
-      const i = (((this.at + by * step) % n) + n) % n;
-      if (rows[i].kind !== "rule" && rows[i].kind !== "folder") { this.at = i; this.list.reveal(i, n); return; }
-    }
+    const i = popupStep(rows, this.at, by, { query: this.input.value() });
+    if (i < 0) return;
+    this.at = i;
+    this.list.reveal(i, rows.length);
   }
 
   rowFor(r, i, t) {
@@ -360,14 +377,18 @@ export default class VcsPopup {
       : this.err ? notice(this.err, t)
         : !n ? notice(this.t("vcs.nothing"), t)
           : this.list.render(n, (i) => this.rowFor(rows[i], i, t), t);
+    const shutSub = () => { this.sub = null; this.keysTo(); };
     return v_flex().id("vcs-popup").w_full().h(HEIGHT).p(PAD).bg(t.popover).text_size(12.8)
+      .track_focus(this.handle)
+      // Esc closes an open branch menu and leaves the popup open.
+      .when(Boolean(this.sub), (el) => takeEscape(el, shutSub))
       .on_key_down((e, cx) => {
         // While a branch's menu is open the keys move in it; ← or Esc closes it.
         if (this.sub) {
           if (e.key === "down") this.moveSub(1);
           else if (e.key === "up") this.moveSub(-1);
           else if (e.key === "enter") this.pickSub(this.sub.at);
-          else if (e.key === "left" || e.key === "escape") this.sub = null;
+          else if (e.key === "left" || e.key === "escape") shutSub();
           else return;
           cx.stop_propagation();
           cx.notify();

@@ -20,7 +20,7 @@
 import { div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { theme, notify } from "herdr";
-import { checkoutBranch, smartRun, forceCheckout, readSmartMark, settleSmartStash } from "./git-smart.js";
+import { checkoutBranch, checkoutRevisionOf, smartRun, forceCheckout, readSmartMark, settleSmartStash } from "./git-smart.js";
 import { failureText } from "./git-remote.js";
 import { buildRows, folderKeys } from "./tree.js";
 import { pickNotes, commitsOf, noteText } from "./pick-notes.js";
@@ -83,6 +83,15 @@ export async function smartCheckout(repo, { name, remote = false }, { owner = nu
   return r;
 }
 
+// smartCheckoutRevision(repo, revision, { owner, lang, who }) → as smartCheckout, for a
+// detached HEAD at a commit (revision: its full hash).
+export async function smartCheckoutRevision(repo, revision, { owner = null, lang, who } = {}) {
+  const request = { type: "checkout", revision };
+  const r = await checkoutRevisionOf(repo.git, repo.root, request);
+  if (offerSmart(r, { root: repo.root, on: repo.on ?? null, owner, lang, who, request })) return { ok: false, quiet: true };
+  return r;
+}
+
 // tellUnstaged(r, t): a Smart result whose changes came back without their staging
 // (git-smart.js `unstaged`) says so; the person would otherwise find their staged
 // changes unstaged with no word why.
@@ -124,7 +133,7 @@ export async function runSmartRequest(git, root, args, panel) {
   if (args.mode === "force") {
     if (request.type !== "checkout") return bad;
     const copy = typeof panel?.copy === "string" ? panel.copy : copyId(COPY_KEY);
-    return forceCheckout(git, root, { name: str(request.name), remote: request.remote === true, copy });
+    return forceCheckout(git, root, { name: str(request.name), remote: request.remote === true, revision: str(request.revision), copy });
   }
   const r = await smartRun(git, root, { request });
   tell(r, { root, on, panel, who, type: request.type, request });

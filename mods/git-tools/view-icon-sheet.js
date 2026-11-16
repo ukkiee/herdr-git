@@ -22,7 +22,7 @@ import { div, image } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { theme } from "herdr";
 import { tip, panelFrame, toolbar, spacer, button, darkLook, WindowedList } from "./ui.js";
-import { makeIconTheme, THEME_ROOT, DEFAULT_FILE_ICON, DEFAULT_FOLDER_ICON } from "./icon-theme.js";
+import { makeIconTheme, fileIconPath, THEME_ROOT, DEFAULT_FILE_ICON, DEFAULT_FOLDER_ICON } from "./icon-theme.js";
 import { FILE_RULES, FOLDER_RULES, DARK_FILE_ICONS, CLOSED_ONLY_FOLDER_ICONS } from "./icon-theme-data.js";
 
 const CELL = 170;
@@ -40,7 +40,8 @@ const closedOnly = new Set(CLOSED_ONLY_FOLDER_ICONS);
 // Each section: a heading and its cells. A cell draws one or two icons (base and dark
 // variant) under one name.
 const SECTIONS = [
-  { id: "files", title: "File icons", cells: fileIcons.map((n) => ({ name: n, icons: [`${THEME_ROOT}/files/${n}.svg`] })) },
+  // Drawn as the panels draw them on the sheet's background: the _dark variant on a dark one.
+  { id: "files", title: "File icons", byLook: true, cells: fileIcons.map((n) => ({ name: n, icons: [fileIconPath(n)], dark: [fileIconPath(n, { dark: true })] })) },
   { id: "dark", title: "File icons with a dark variant (base on light, _dark on dark)", pair: true,
     cells: unique(DARK_FILE_ICONS).map((n) => ({ name: n, icons: [`${THEME_ROOT}/files/${n}.svg`, `${THEME_ROOT}/files/${n}_dark.svg`] })) },
   { id: "folders", title: "Folder icons, closed", cells: folderIcons.map((n) => ({ name: n, icons: [`${THEME_ROOT}/folders/${n}.svg`] })) },
@@ -148,35 +149,36 @@ export default class IconSheet {
     return { bg: t.background, fg: t.foreground };
   }
 
-  renderRow(i, t, c) {
+  renderRow(i, t, c, dark) {
     const r = this.rows[i];
     if (r.kind === "head") {
       return h_flex().h(ROW_H).w_full().flex_none().items_end().pb(4).px(10).font_semibold().text_color(c.fg).child(r.text);
     }
     return h_flex().h(ROW_H).w_full().flex_none().items_center().px(10).children(r.cells.map((cell, k) => {
       const id = `icon-sheet-${r.section.id}-${r.from + k}`;
+      const shown = r.section.byLook && dark ? cell.dark : cell.icons;
       const icons = r.section.pair
-        ? [div().p(2).rounded(3).bg(PAPER.bg).child(img(cell.icons[0], 14)), div().p(2).rounded(3).bg(INK.bg).child(img(cell.icons[1], 14))]
-        : [img(cell.icons[0], 14), img(cell.icons[0], 24)];
-      return h_flex().id(id).w(CELL).flex_none().gap(6).items_center().map((el) => tip(el, cell.icons.join("\n")))
+        ? [div().p(2).rounded(3).bg(PAPER.bg).child(img(shown[0], 14)), div().p(2).rounded(3).bg(INK.bg).child(img(shown[1], 14))]
+        : [img(shown[0], 14), img(shown[0], 24)];
+      return h_flex().id(id).w(CELL).flex_none().gap(6).items_center().map((el) => tip(el, shown.join("\n")))
         .children(icons)
         .child(div().flex_1().min_w(0).truncate().text_size(12).text_color(c.fg).child(cell.name));
     }));
   }
 
   render() {
-    const t = theme(), c = this.colors(t);
-    const lookLabel = this.look === "herdr" ? `Herdr (${darkLook(c.bg) ? "dark" : "light"})` : this.look === "light" ? "Light" : "Dark";
+    const t = theme(), c = this.colors(t), dark = darkLook(c.bg);
+    const lookLabel = this.look === "herdr" ? `Herdr (${dark ? "dark" : "light"})` : this.look === "light" ? "Light" : "Dark";
     return panelFrame("icon-sheet", t)
       .child(toolbar(t)
         .child(div().px(4).font_semibold().child("Icon sheet"))
-        .child(div().id("icon-sheet-timing").min_w(0).truncate().text_size(12).text_color(t.muted).map((el) => tip(el, this.timing)).child(this.timing))
+        .child(div().id("icon-sheet-timing").min_w(0).truncate().text_size(12).text_color(t.muted).map((el) => tip(el, this.timing, "icon-sheet-timing")).child(this.timing))
         .child(spacer())
         .child(button("icon-sheet-look", `Background: ${lookLabel}`, t, {
           onClick: (_e, cx) => { this.look = LOOKS[(LOOKS.indexOf(this.look) + 1) % LOOKS.length]; cx.notify(); },
         })))
       .child(v_flex().id("icon-sheet-body").flex_1().min_h(0).w_full().bg(c.bg)
         .on_size_change((size, cx) => { if (this.layout(Math.max(1, Math.floor((size.width - 20) / CELL)))) cx.notify(); })
-        .child(this.list.render(this.rows.length, (i) => this.renderRow(i, t, c), t)));
+        .child(this.list.render(this.rows.length, (i) => this.renderRow(i, t, c, dark), t)));
   }
 }

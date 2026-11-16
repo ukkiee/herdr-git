@@ -76,15 +76,28 @@ export default class CompareBranches {
     this.load(cx);
   }
 
-  git() { return makeGit(exec, this.repo?.on ?? null); }
+  git() { return makeGit(exec, this.repo?.on ?? null, { wait: this.wait }); }
 
-  filterInputs(side) {
-    const make = (placeholder) => {
-      const state = InputState.new({ placeholder });
+  // The placeholders are fixed when an input is made: spoke() makes new ones holding what
+  // was typed when the tab's language changes.
+  filterInputs(side, was = null) {
+    const make = (placeholder, value) => {
+      const state = InputState.new({ placeholder, value: value ?? "" });
       state.on("submit", (_e, cx) => this.applyFilter(side, cx));
       return state;
     };
-    return { user: make(this.t("filters.user")), since: make(this.t("log.date")), path: make(this.t("log.path")) };
+    return {
+      user: make(this.t("filters.user"), was?.user.value()),
+      since: make(this.t("log.date"), was?.since.value()),
+      path: make(this.t("log.path"), was?.path.value()),
+    };
+  }
+
+  // The language changed (main.js, outside render). The old inputs aren't released: a
+  // handler of them may still be on its way.
+  spoke(cx) {
+    this.inputs = { a: this.filterInputs("a", this.inputs.a), b: this.filterInputs("b", this.inputs.b) };
+    cx.notify();
   }
 
   applyFilter(side, cx) {

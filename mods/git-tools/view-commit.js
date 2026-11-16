@@ -23,13 +23,15 @@
 
 import { div } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { exec, theme, watchFolder } from "herdr";
+import { exec, theme } from "herdr";
 import { makeGit, repoRoot } from "./git.js";
+import { readTurns } from "./read-turns.js";
 import { readStatus } from "./git-status.js";
+import { readGitDir, stateChanged } from "./git-log.js";
 import { readOperation } from "./git-operation.js";
 import { readLastCommit } from "./git-show.js";
 import { buildRows, checkState, toggleIncluded, keepIncluded, folderKeys, parentIndex } from "./tree.js";
-import { tip, location, uiGlyph, ICON, fileGlyph, folderGlyph, darkLook, panelFrame, toolbar, spacer, iconButton, checkbox, row, notice, notRepository, errorStrip, noteBar, WindowedList, logPanelShown, toggleLogPanel, gitButtonPlaced, openMenu, openDialog, takeWrite, releaseWrite, writeBlock, writeName, readBlocked, sentence, copyId, progressBar, activeSpaceId } from "./ui.js";
+import { tip, location, watchSettled, uiGlyph, ICON, fileGlyph, folderGlyph, darkLook, panelFrame, toolbar, spacer, iconButton, checkbox, row, notice, notRepository, errorStrip, noteBar, WindowedList, logPanelShown, toggleLogPanel, gitButtonPlaced, openMenu, openDialog, takeWrite, releaseWrite, writeBlock, writeName, readBlocked, sentence, copyId, progressBar, activeSpaceId } from "./ui.js";
 import { sameRepo } from "./lock.js";
 import CommitForm from "./commit-form.js";
 import { openRollback, serveRollback } from "./view-rollback.js";
@@ -103,6 +105,7 @@ export default class CommitView {
     this.note = null;
     // context key → what the panel showed there when it left (see remember), newest last.
     this.seen = new Map();
+    this.reads = readTurns(); // the reads of the folder shown (refresh)
     this.list = new WindowedList("commit-files");
     this.handle = cx.focus_handle();
     this.form = new CommitForm();
@@ -208,12 +211,15 @@ export default class CommitView {
   // ---- reading
 
   refresh(cx) {
-    // A change that lands while a read is running is read once that one is done.
-    if (this.loading) { this.again = true; return; }
     const { folder, on } = this.where(), context = this.contextKey();
+    // A change that lands while this folder is read is read once that read is done.
+    // Another folder doesn't wait for it, nor does anything once it is stuck: a read whose
+    // answer never comes would keep the panel on "Loading…" for good (read-turns.js).
+    if (context === this.context && this.reads.busy()) { this.again = true; return; }
     // Another folder is taken up before asking whether reads wait: a write on the
     // repository left behind must not keep that repository on screen.
     if (context !== this.context) {
+      this.reads.drop(); this.again = false;
       this.remember();
       this.context = context; this.repo = null; this.watching = null; this.lost = false;
       // A write's failure belongs to the repository it ran on, like a read's.
@@ -228,18 +234,21 @@ export default class CommitView {
     if (this.readBlocked()) { this.waiting = true; return; }
     this.waiting = false;
     if (!folder) return;
-    this.loading = true; this.again = false;
-    let held = false;
+    const turn = this.reads.start();
+    this.again = false;
+    let held = false, used = false;
     cx.spawn(async (cx) => {
       try {
         let repo = this.repo;
         // The root is asked for once per folder, and again after a failed read (the
         // folder may have stopped being a repository).
         if (!repo || this.lost) {
-          const git = makeGit(exec, on);
+          const git = makeGit(exec, on, { wait: this.wait });
           const top = await repoRoot(git, folder);
           if (this.contextKey() !== context) return;
           if (!top.ok) {
+            used = this.reads.use(turn);
+            if (!used) return;
             this.repo = null; this.watching = null;
             this.notRepo = top.notRepo; this.folder = folder;
             this.error = top.notRepo ? null : sentence(this.t, top.msg, top.err);
@@ -266,6 +275,8 @@ export default class CommitView {
           last = await readLastCommit(repo.git, repo.root, { known: this.last?.hash ?? null });
           if (this.contextKey() !== context) return;
         }
+        used = this.reads.use(turn);
+        if (!used) return;
         this.repo = repo; this.notRepo = false;
         this.lost = !status.ok;
         if (!status.ok || !status.hasHead || !amend) this.last = null;
@@ -284,9 +295,10 @@ export default class CommitView {
         this.watch(cx);
         this.stashTab.refresh(cx);
       } finally {
-        this.loading = false;
-        if (!held) this.read = true;
-        if (this.again) this.refresh(cx);
+        // Read once an answer shows, or the newest read is over; what waited for that runs.
+        const newest = this.reads.end(turn);
+        if ((newest || used) && !held) this.read = true;
+        if (newest && this.again) this.refresh(cx);
         cx.notify();
       }
     });
@@ -336,21 +348,20 @@ export default class CommitView {
 
   // Only this computer's folders can be watched. Reads don't write under .git (git.js
   // READ), so a refresh never wakes its own watch. One loop per root: a newer watch, or
-  // leaving the repository, ends the older loop the next time it wakes.
+  // leaving the repository, ends the older loop the next time it wakes. The repository's
+  // git folder is watched too: a linked worktree's state (its HEAD, index, MERGE_HEAD)
+  // is not inside its root.
   watch(cx) {
     const repo = this.repo;
     if (!repo || repo.on || this.watching?.root === repo.root) return;
     const mine = this.watching = { root: repo.root };
+    const live = () => this.watching === mine;
+    const failed = () => { this.watching = null; };
+    watchSettled(mine.root, { live, wake: (cx) => this.refresh(cx), failed }, cx);
     cx.spawn(async (cx) => {
-      try {
-        while (this.watching === mine) {
-          await watchFolder(mine.root);
-          if (this.watching === mine) this.refresh(cx);
-        }
-      } catch {
-        // The folder can't be watched (too large on Linux, gone): the timer still reads.
-        if (this.watching === mine) this.watching = null;
-      }
+      const where = await readGitDir(repo.git, repo.root, { own: true });
+      if (!where.ok || !live() || where.dir.startsWith(`${mine.root}/`)) return;
+      watchSettled(where.dir, { live, wakes: (paths) => stateChanged(where.dir, paths), wake: (cx) => this.refresh(cx) }, cx);
     });
   }
 
@@ -557,6 +568,8 @@ export default class CommitView {
     // cmd-k or another way of opening this panel in this window (ui.js openCommitPanel).
     if (e.type === "commit-focus" && e.space === activeSpaceId()) this.handle.focus();
     if (e.type === "changed" && (!e.root || e.root === this.repo?.root)) this.refresh(cx);
+    // A push another copy ran for a Push dialog failed (view-push.js): its words go here too.
+    if (e.type === "push-failed" && e.from !== this.bus.id && sameRepo({ root: e.root, on: e.on ?? null }, this.repo)) this.writeFailed(e.text, cx);
     // Fixup… or Squash Into… picked in the Log panel on this repository (view-extract.js).
     if (e.type === "rewrite-target" && sameRepo({ root: e.root, on: e.on ?? null }, this.repo)) this.form.aim(e, cx);
     // Another write on the noticed repository, whichever copy ran it, ends the notice; the
@@ -613,7 +626,7 @@ export default class CommitView {
       const last = this.last;
       // A commit made with an empty message has no subject: its short hash stands in.
       // A subject can be long, so it is the one cut and the file count stays whole.
-      return tip(el, last?.hash ?? "")
+      return tip(el, last?.hash ?? "", `commit-row-${r.id}`)
         .child(div().flex_initial().min_w(0).truncate().font_semibold().child(last?.subject || (last?.hash ?? "").slice(0, 8)))
         .child(div().flex_none().text_size(12).text_color(t.dim).child(count));
     }
@@ -671,7 +684,7 @@ export default class CommitView {
     return panelFrame("commit-panel", t)
       .when(this.stashTab.any(), (el) => el.child(this.stashTab.header(t)))
       .child(toolbar(t)
-        .child(iconButton("commit-refresh", "refresh", t, { title: this.t("commit.refresh"), busy: Boolean(this.loading && this.read), onClick: redraw((cx) => this.refresh(cx)) }))
+        .child(iconButton("commit-refresh", "refresh", t, { title: this.t("commit.refresh"), busy: this.reads.busy() && this.read, onClick: redraw((cx) => this.refresh(cx)) }))
         .child(iconButton("commit-rollback", "rollback", t, { title: this.repo && this.writeBlock() || this.t("commit.rollback"), disabled: !this.canRollback(), onClick: redraw(() => this.rollback()) }))
         .child(iconButton("commit-restore", "restore", t, { title: this.t("restore.button"), disabled: !this.repo, onClick: () => this.restore() }))
         .child(iconButton("commit-diff", "diff", t, { title: this.t("commit.showDiff"), disabled: r?.kind !== "file", onClick: redraw(() => this.showDiff()) }))
@@ -683,6 +696,12 @@ export default class CommitView {
         .when(shown !== null && !gitButtonPlaced(), (el) => el.child(iconButton("commit-log", "panel-bottom", t, { title: this.t("commit.gitLog"), active: shown === true, onClick: () => toggleLogPanel() }))))
       .child(div().id("commit-list").flex_1().min_h(0).track_focus(this.handle)
         .on_key_down((e, cx) => {
+          // Tab goes on to the message box, so the keyboard alone gets from picking files
+          // to cmd-enter (Shift-Tab there comes back: commit-form.js).
+          if (e.keystroke === "tab") {
+            if (this.repo && this.form.focusMessage()) { cx.stop_propagation(); cx.notify(); }
+            return;
+          }
           const name = { up: "up", down: "down", left: "left", right: "right", space: "space", enter: "enter" }[e.keystroke];
           if (!name) return;
           this.act(name);

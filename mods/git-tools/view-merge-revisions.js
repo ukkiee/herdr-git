@@ -13,7 +13,10 @@
 // The dialog reads but never writes: saving the result, and Accept Left or Right, are
 // asked of the panel copy that opened the Conflicts dialog (props.owner, serve-actions.js),
 // which runs them under the repository's lock. After a file is resolved the dialog goes on
-// to the next conflicted file, and closes when none is left.
+// to the next conflicted file, and closes when none is left. Closed with × or Esc after
+// the result changed, it asks the panel to keep the result in the working file, still in
+// conflict (leave), asking first when that file changed on disk since it was read; opening
+// the file again goes on from there.
 
 import { div } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState } from "gpui-base";
@@ -24,8 +27,8 @@ import { readVersions, dropStaged, localPlacer, remotePlacer } from "./git-confl
 import { columns, editedSince } from "./conflicts-model.js";
 import { writerOn, readerOn } from "./view-conflicts.js";
 import { decide, applyNonConflicting, resolveSimple, resultText, edit } from "./merge-chunks.js";
-import { paneTitles, openFile, layoutRows, chunkButtons, toolbar, countWords, seekConflict, nextFile, leftToDecide, saveQuestion, stageSave } from "./merge-revisions-model.js";
-import { tip, dialogFrame, button, iconButton, close, askOwner, writeBlock, scrollText, sentence, notice, WindowedList } from "./ui.js";
+import { paneTitles, openFile, layoutRows, chunkButtons, toolbar, countWords, seekConflict, nextFile, leftToDecide, saveQuestion, leaveQuestion, stageSave } from "./merge-revisions-model.js";
+import { tip, dialogFrame, button, iconButton, close, askOwner, writeBlock, scrollText, sentence, notice, WindowedList, takeEscape } from "./ui.js";
 
 // Where a local space's result is staged for the panel: the app's own git-tools folder
 // (app-files.js).
@@ -75,7 +78,7 @@ export default class MergeRevisionsView {
     this.who = typeof p.who === "string" ? p.who : "ui.commitPanel";
     this.stash = typeof p.stash === "string" ? p.stash : null;
     this.path = typeof p.path === "string" ? p.path : null;
-    this.git = makeGit(exec, this.on);
+    this.git = makeGit(exec, this.on, { wait: this.wait });
     this.op = null;
     this.cols = columns(null, {});
     this.titles = paneTitles(null, {});
@@ -122,6 +125,8 @@ export default class MergeRevisionsView {
       this.cols = columns(op, { branch, stash: this.stash });
       this.titles = paneTitles(op, { branch, stash: this.stash });
       this.file = openFile(v, this.cols);
+      this.startText = this.file.state ? resultText(this.file.state) : null;
+      this.keepFailed = false;
       this.current = -1;
       this.list.top = 0;
       if (this.file.state) this.lay();
@@ -220,7 +225,7 @@ export default class MergeRevisionsView {
       const now = await this.disk();
       this.checking = false;
       const kind = saveQuestion(state, { opened: this.opened, now, passed });
-      if (kind) { this.confirm = { kind, then, passed }; cx.notify(); return; }
+      if (kind) { this.confirm = { kind, then, passed }; this.handle.focus(); cx.notify(); return; }
       if (this.editor) { this.editor.release(); this.editor = null; }
       const text = resultText(state);
       this.waiting = true;
@@ -250,7 +255,7 @@ export default class MergeRevisionsView {
     cx.spawn(async (cx) => {
       const v = await readVersions(this.git, this.root, this.path, { read: readerOn(this.on) });
       this.checking = false;
-      if (v.ok && editedSince(v)) { this.confirm = { kind: "accept", column }; cx.notify(); return; }
+      if (v.ok && editedSince(v)) { this.confirm = { kind: "accept", column }; this.handle.focus(); cx.notify(); return; }
       take(cx);
     });
   }
@@ -270,6 +275,36 @@ export default class MergeRevisionsView {
   shut() {
     if (this.editor) { this.editor.release(); this.editor = null; }
     close(this.overlay);
+  }
+
+  // × and Esc. A result changed since the file was opened is kept: the owner writes it to
+  // the working file, which stays in conflict with its staging as it was
+  // ("conflicts-keep"), and opening the file again goes on from it
+  // (merge-revisions-model.js openFile). Unchanged, nothing is written. A working file
+  // changed on disk since it was read asks first (leaveQuestion), unless in `passed`;
+  // cancelled, the dialog stays. When keeping failed (its words show), the next press
+  // closes without it.
+  leave(cx, passed = []) {
+    if (this.waiting || this.checking) return;
+    const text = this.file?.state && !this.keepFailed ? resultText(this.settled()) : null;
+    if (text === null || text === this.startText) { this.shut(); return; }
+    this.confirm = null; this.checking = true; this.error = null;
+    cx.notify();
+    cx.spawn(async (cx) => {
+      const now = await this.disk();
+      this.checking = false;
+      const kind = leaveQuestion({ opened: this.opened, now, passed });
+      if (kind) { this.confirm = { kind, then: "leave", passed }; this.handle.focus(); cx.notify(); return; }
+      if (this.editor) { this.editor.release(); this.editor = null; }
+      this.waiting = true;
+      cx.notify();
+      const staged = await stageSave(exec, this.on, { path: this.path, text, dir: `${appHome()}/${STAGE_DIR}` });
+      if (!staged.ok) { this.waiting = false; this.keepFailed = true; this.error = sentence(this.t, staged.msg, staged.err); cx.notify(); return; }
+      this.ask("conflicts-keep", staged.args, cx, () => this.shut(), (r) => {
+        this.keepFailed = true;
+        if (r.unheard) dropStaged(exec, this.on, staged.args.file);
+      });
+    });
   }
 
   close() { if (this.editor) { this.editor.release(); this.editor = null; } }
@@ -326,7 +361,7 @@ export default class MergeRevisionsView {
     const bar = toolbar(this.file.state);
     const on = this.free() && !this.editor;
     const glyphButton = (id, text, title, enabled, onClick) => div().id(id).h(24).px(6).flex_none().flex().items_center().justify_center().rounded(5)
-      .text_color(enabled ? t.muted : t.dim).map((el) => tip(el, title))
+      .text_color(enabled ? t.muted : t.dim).map((el) => tip(el, title, id))
       .when(enabled, (el) => el.cursor_pointer().hover((s) => s.bg(t.hover).text_color(t.foreground))
         .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
         .on_click((_e, cx) => { cx.stop_propagation(); onClick(); cx.notify(); }))
@@ -383,7 +418,7 @@ export default class MergeRevisionsView {
     } else if (q.kind === "overwrite") {
       [id, title, text] = ["mr-changed", this.t("conflicts.overwriteTitle"), this.t("conflicts.mrChangedOnDiskBody", { path: this.path ?? "" })];
       [cancel, ok] = [this.t("dialogs.cancel"), this.t("conflicts.mrOverwrite")];
-      yes = (cx) => this.save(q.then, cx, [...q.passed, "overwrite"]);
+      yes = (cx) => (q.then === "leave" ? this.leave(cx, [...q.passed, "overwrite"]) : this.save(q.then, cx, [...q.passed, "overwrite"]));
     } else {
       const column = this.word(q.column === "yours" ? this.titles.left : this.titles.right);
       [id, title, text] = ["mr-overwrite", this.t("conflicts.overwriteTitle"), this.t("conflicts.overwriteBody", { path: this.path ?? "", column })];
@@ -400,12 +435,14 @@ export default class MergeRevisionsView {
           button(`${id}-yes`, ok, t, { kind: "primary", onClick: (_e, cx) => yes(cx) }),
         ],
       }));
-    return div().relative().size_full()
+    const shell = div().relative().size_full()
       .child(behind)
       .child(div().id("mr-question").absolute().inset_0().flex().items_center().justify_center().bg(tint(t.canvas, "99"))
         .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
         .on_mouse_down("right", (_e, cx) => cx.stop_propagation())
-        .child(card))
+        .child(card));
+    // Esc closes only the card.
+    return takeEscape(shell, () => { this.confirm = null; })
       .track_focus(this.handle).on_key_down((e, cx) => {
         if (e.key === "escape") this.confirm = null;
         else if (e.key === "enter") yes(cx);
@@ -419,10 +456,13 @@ export default class MergeRevisionsView {
     const t = theme();
     const main = this.renderMain(t);
     if (this.confirm) return this.renderConfirm(t, main);
-    return main.track_focus(this.handle).on_key_down((e, cx) => {
+    // Herdr's Esc is its overlay.close action, which reaches us before on_key_down does:
+    // taken here, Esc goes through leave() (keeping a changed result) like × does.
+    const body = this.editor ? main : takeEscape(main, (cx) => this.leave(cx));
+    return body.track_focus(this.handle).on_key_down((e, cx) => {
       // Keys typed in the editor stay the editor's.
       if (this.editor) return;
-      if (e.key === "escape") this.shut();
+      if (e.key === "escape") this.leave(cx);
       else return;
       cx.stop_propagation();
     });
@@ -444,7 +484,7 @@ export default class MergeRevisionsView {
     const loaded = Boolean(this.file) && !busy;
     return dialogFrame("merge-revisions", this.path ?? "", t, {
       body: frame,
-      onClose: () => this.shut(),
+      onClose: (_e, cx) => this.leave(cx),
       footer: [
         button("mr-accept-left", this.t("conflicts.mrAcceptLeft"), t, { disabled: !loaded, onClick: (_e, cx) => this.acceptAll("yours", cx) }),
         button("mr-accept-right", this.t("conflicts.mrAcceptRight"), t, { disabled: !loaded, onClick: (_e, cx) => this.acceptAll("theirs", cx) }),

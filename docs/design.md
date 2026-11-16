@@ -27,8 +27,8 @@
   메뉴(Show Diff, 경로 복사, Finder에서 보기)가 있다. 읽기는 `files-data.js`, 판단은
   `files-tree.js`가 한다.
 - **Log panel** (`view-log.js`): 작업 영역 아래 블록 `git-log`. 세 열은 각자의 파일이 그린다.
-  - **Branch tree** (`log-branches.js`): HEAD, Local, Remote, Tags. 현재 → Favorite branch →
-    이름순으로 놓고, 세로 툴바와 우클릭 메뉴가 브랜치 동작을 연다.
+  - **Branch tree** (`log-branches.js`): HEAD, Local, Remote, Tags. 각 단계마다 현재 → Favorite
+    branch → 폴더 → 나머지 이름순으로 놓고, 세로 툴바와 우클릭 메뉴가 브랜치 동작을 연다.
   - **Commit list** (`log-list.js`, 위의 검색과 필터는 `log-filters.js`, 그래프·표시 옵션은
     `log-options.js`): 그래프, 제목, Ref label, 작성자, 시각. Shift·Cmd 클릭으로 여러 커밋을 고른다.
   - **Commit details** (`log-details.js`): 고른 커밋(여럿이면 합친 변경)의 파일 트리, 전체 메시지,
@@ -76,13 +76,13 @@
 
 | 묶음 | 파일 | 책임 |
 |---|---|---|
-| 길잡이 | `main.js` | 사본을 만들고 화면에 버스·잠금·언어를 넘긴 뒤 `props.view`로 화면을 고른다(`VIEWS` 표) |
+| 길잡이 | `main.js` | 사본을 만들고 화면에 버스·잠금·언어·시계를 넘긴 뒤 `props.view`로 화면을 고른다(`VIEWS` 표) |
 | 공용 부품 | `ui.js` | 저장소 찾기, 행·버튼·체크박스, 보이는 행만 그리는 `WindowedList`, 창과 메뉴 열기, 툴팁(`tip`), Progress bar, `uiGlyph`·`iconButton`, 쓰기 잠금과 창 요청의 화면 쪽, git-tools 탭의 저장소 기록, 실패 띠의 "콘솔에서 보기" |
 | 화면 쪽 등록과 파일 | `serve-actions.js`, `app-files.js`, `space-tabs.js`, `log-pick.js`, `log-rewrite.js` | 창이 패널에 요청하는 쓰기의 표(`SERVE_ACTIONS`), 앱 홈 `git-tools` 폴더의 기록·설정 파일, 종류마다 하나인 space 탭, Log panel 쪽의 Cherry-Pick·Revert와 히스토리 편집 처리 |
 | 화면 | `view-*.js`, `commit-form.js`, `commit-stash-tab.js`, `log-branches.js`, `log-list.js`, `log-details.js`, `log-filters.js` | 그리기와 사람의 입력 |
 | git | `git.js`, `git-status.js`, `git-commit.js`, `git-rollback.js`, `git-snapshot.js`, `git-diff.js`, `git-push.js`, `git-log.js`, `git-log-filter.js`, `git-branch.js`, `git-show.js`(`readLastCommit` 포함), `files-data.js` | git과 폴더 읽기 명령을 부르고 결과를 해석한다 |
 | git 동작 | `git-operation.js`, `git-conflict.js`, `git-smart.js`, `git-stash.js`, `git-reset.js`, `git-rewrite.js`, `git-changes.js`, `git-remote.js`, `git-refs.js`, `git-compare.js`, `git-revision.js`, `git-worktree.js`, `git-heads.js`, `git-patch.js` | Operation in progress 읽기와 merge·rebase·cherry-pick·revert의 실행·판정, 충돌 파일 쓰기, Smart operation, stash, reset과 하드 전 기록, 히스토리 다시 쓰기, 파일 단위 되돌리기·체리픽, pull·업데이트, 태그·이름 변경·원격, 비교·패치·가져오기, 리비전의 파일과 하위 커밋, 새 워크트리, VCS widget이 보일 브랜치, 로컬 변경의 패치와 패치 적용 |
-| 순수 계산 | `graph.js`, `tree.js`, `bus.js`, `lock.js`, `i18n.js`, `icon-theme.js`, `files-tree.js`, `editor-language.js`, `merge-chunks.js`, `conflicts-model.js`, `merge-revisions-model.js`, `rebase-plan.js`, `log-menus.js`, `log-select.js`, `log-options.js`, `branch-order.js`, `vcs-ops.js`, `git-console.js`, `ui-icons.js`, `pick-notes.js`, `ui-size.js`, `focus-repo.js` | 그래프 배치, 경로 트리와 3상태 체크, 버스와 잠금 값, 언어와 문장, 아이콘 고르기, Files panel의 줄·표시·찾기 순위·키, 미리보기의 구문 색, 병합 덩어리, 두 충돌 창이 보일 것과 켜질 것, 리베이스 계획과 편집 판정, Log panel의 메뉴·툴바 표, 여러 커밋 고르기, 그래프·표시 옵션 값, 브랜치 순서와 즐겨찾기, VCS Operations popup의 항목, 콘솔 기록의 꼴과 자격 증명 가림, UI icon 대응, Cherry-Pick·Revert 결과의 알림, 메뉴 너비·팝업 자리·창이 자리를 채우는지·위젯 블록 폭, 패널이 따를 저장소와 탭 기록 |
+| 순수 계산 | `graph.js`, `tree.js`, `bus.js`, `lock.js`, `read-turns.js`, `i18n.js`, `icon-theme.js`, `files-tree.js`, `editor-language.js`, `merge-chunks.js`, `conflicts-model.js`, `merge-revisions-model.js`, `rebase-plan.js`, `log-menus.js`, `log-select.js`, `log-options.js`, `branch-order.js`, `vcs-ops.js`, `git-console.js`, `ui-icons.js`, `pick-notes.js`, `ui-size.js`, `focus-repo.js` | 그래프 배치, 경로 트리와 3상태 체크, 버스와 잠금 값, 되풀이하는 읽기의 차례, 언어와 문장, 아이콘 고르기, Files panel의 줄·표시·찾기 순위·키, 미리보기의 구문 색, 병합 덩어리, 두 충돌 창이 보일 것과 켜질 것, 리베이스 계획과 편집 판정, Log panel의 메뉴·툴바 표, 여러 커밋 고르기, 그래프·표시 옵션 값, 브랜치 순서와 즐겨찾기, VCS Operations popup의 항목, 콘솔 기록의 꼴과 자격 증명 가림, UI icon 대응, Cherry-Pick·Revert 결과의 알림, 메뉴 너비·팝업 자리·창이 자리를 채우는지·위젯 블록 폭, 패널이 따를 저장소와 탭 기록 |
 | 데이터 | `messages-*.js`, `icon-theme-data.js`, `icons/theme/`, `icons/ui/`(그 밖의 `icons/` 파일 포함) | 문구 표, 생성한 아이콘 규칙, 아이콘 파일 |
 
 저장소 루트에는 레이아웃 변환 `layout.mjs`, 설치 `install.sh`, 키 `keys.json`, 아이콘 생성기
@@ -99,9 +99,24 @@ git 모듈과 순수 계산 모듈은 `herdr`를 import하지 않는다. 그래�
   `exec`를 묶어 넘는 것을 곧바로 거절하는데([플랫폼](herdr-mod-platform.md)), 화면은 여러 읽기를 함께
   열고 앱이 켜질 때는 모든 화면이 한꺼번에 읽기 때문이다. 그래도 그 한도로 거절되면 아무것도 돌지 않은
   것이므로, 같은 실행기의 다른 실행이 끝난 뒤 다시 시도한다(모두 다섯 번까지). 기다릴 자기 실행이 없으면
-  거절이 결과다. mod에는 `setTimeout`이 없고 `cx`를 들고 있을 수 없어 시간으로 기다리지 않는다.
+  거절이 결과다. 거절 뒤의 재시도는 시간으로 기다리지 않는다.
   줄과 대기는 실행기 안에만 있다. 모듈 수준에 두면 한 사본이 다른 사본의 약속을 풀어, 그 일이 다른 사본 안에서
   돌다가 그 사본이 닫힐 때 버려진다.
+- **답하지 않는 git 호출은 실패로 끝난다.** Herdr의 `exec`는 timeout(주지 않으면 30초)에 거절하지만, 답이
+  아예 사라진 것으로 보이는 때가 있다: 도는 프로세스는 없는데 화면이 그 답을 몇 분씩 기다렸다
+  ([플랫폼](herdr-mod-platform.md)). 그러면 그 답을 기다리는 화면이 "로드 중"에 멈추고 실행기 자리
+  하나를 영원히 쥔다. 그래서 `main.js`가 사본마다 시계 `wait(ms)`(`init`이 받은 async context의 `sleep`)를 화면에
+  넘기고, 화면은 그것을 `makeGit(exec, on, { wait })`에 준다. 시계를 받은 실행기는 명령의 timeout보다 5초 더
+  기다려도 답이 없으면 자리를 비우고 `git did not answer in N s.` 실패로 답한다. 읽기는 아무것도 바꾸지 않으므로
+  그 전에 한 번 더 묻는다. 쓸 수 있는 명령은 이미 일을 했을 수 있어 다시 돌리지 않는다. 사본이 닫혀 시계가 던지면
+  시계가 없는 것처럼 답을 기다린다. 시계는 사본의 것이라 한 사본의 기다림이 다른 사본 안에서 풀리지 않는다.
+- **"읽는 중"은 다음 읽기를 영원히 막지 않는다**(`read-turns.js`). 화면이 되풀이하는 읽기(패널의 저장소 찾기,
+  창의 계획, 탭의 커밋)는 차례 번호로 센다. 새로고침과 다른 저장소·폴더로 옮기기는 앞 읽기가 끝나기를 기다리지
+  않고 새로 읽는다. 주기 읽기와 "바뀜"이 앞 읽기를 기다릴 때도, 시작한 지 `STUCK`(80초, 시계를 받은 실행기가
+  읽기 하나에 쓰는 가장 긴 시간보다 길다)이 지난 읽기는 더 기다리지 않는다. 답은 더 새 답이 이미 보였을 때만
+  버린다. 답을 잃은 읽기는 시계가 포기할 때까지 실행기 자리를 쥐고, 그 뒤에 줄 선 읽기는 git이 다시 답해도
+  제 차례를 기다린다. 그래서 짧은 기준으로 자주 다시 읽는 화면(Conflicts dialog: 2초마다, 6초)은 동시에 도는
+  읽기를 `most`(2)개로 묶고, 그사이의 주기 읽기와 "바뀜"은 기다리는 읽기 하나로 합쳐 하나가 끝나면 돌린다.
 - 한 칸 옮길 때마다 묻는 느린 읽기는 한 번에 하나만 돌린다(`one-at-a-time.js`). Commit details의 포함 브랜치
   조회(모든 ref를 훑는다)가 그렇다. 커밋 목록을 화살표로 내려가며 지나간 커밋의 조회가 실행기 자리를 다 차지하면,
   지금 커밋의 파일 읽기가 그 뒤에서 기다린다. 밀린 조회는 가장 새것만 돈다.
@@ -127,7 +142,8 @@ git 모듈과 순수 계산 모듈은 `herdr`를 import하지 않는다. 그래�
   - `git-tools.bus`: 사본 사이의 알림. 최근 사건 8개와 번호만 둔다(`bus.js`). 사건은 이름과 짧은
     인자뿐이다: `changed`, 창의 요청과 답, `console`(콘솔 기록이 늘었다), `log-options`(그래프·표시
     옵션을 바꿨다), `rewrite-target`(픽스업·스쿼시 대상 커밋, 메시지는 받는 쪽이 읽는다),
-    `commit-focus`(Commit panel을 열었다, 그 space를 보이는 창의 패널이 목록에 포커스를 준다). 큰 글은
+    `commit-focus`(Commit panel을 열었다, 그 space를 보이는 창의 패널이 목록에 포커스를 준다),
+    `console-end`(실패 띠의 "콘솔에서 보기"가 콘솔 탭을 골랐다, 콘솔 화면이 기록을 다시 읽고 끝을 보인다). 큰 글은
     싣지 않는다. Merge Revisions dialog가 저장할 결과 글은 그 머신의 임시 파일
     `git-tools-result.XXXXXXXX`(이 컴퓨터는 앱 홈의 `git-tools` 폴더, 원격은 `$TMPDIR`나 `/tmp`,
     권한 0600)에 쓰고 요청에는 경로만 담는다. 패널은 저장한 뒤 그 파일을 지운다.
@@ -138,14 +154,19 @@ git 모듈과 순수 계산 모듈은 `herdr`를 import하지 않는다. 그래�
   - `git-tools.tabs`: git-tools가 연 탭의 창과 그 저장소, `{<pane>: {root, on}}`. 그 탭에 포커스가
     있으면 Log panel, Commit panel, VCS widget이 그 저장소를 따른다(아래 "패널이 따르는 저장소").
 - **패널이 따르는 저장소**: 패널은 포커스된 창의 폴더를 따른다. 포커스가 git-tools가 연 탭(Diff tab,
-  비교 탭, 기록, 저장소 보기, Update Info tab)에 있으면 그 탭을 연 저장소를 따르고, 터미널로
+  비교 탭, 기록, 저장소 보기, Update Info tab, `props.folder`로 연 Commit panel·Log 탭)에 있으면 그 탭의
+  저장소를 따르고, 터미널로
   돌아가면 다시 터미널의 폴더를 따른다(`focus-repo.js`의 `whereFocused`). 탭은 space 폴더와 다른
   저장소에서 열렸을 수 있고, space 폴더로 옮겨 가면 이어 누른 메뉴가 엉뚱한 저장소에 쓰기
   때문이다.
   - 기록은 탭 화면이 스스로 한다: 열 때(`init`), 기록이 없으면 다시 그릴 때마다, 닫을 때 지운다
     (`main.js`가 모든 화면에서 `claimTab`·`releaseTab`을 부른다). 창 id는 Herdr의 `props().pane`이
-    있으면 그것이고, 없으면 "포커스된, 그 탭에 하나뿐인, 아직 기록 없는 git-tools 창"이다. 탭을 여는
-    쪽도 `tab.new` 앞뒤의 `panes()`를 견주어 먼저 기록해 본다.
+    있으면 그것이고, 없으면 "포커스된, 그 탭에 하나뿐인, 아직 기록 없는 git-tools 창"이다. `newTab`으로
+    연 탭은 props에 자기 탭 이름(`tabName`)을 갖고, 그 이름의 탭에 하나뿐인 기록 없는 창을 찾는다(여럿이면
+    그중 포커스된 것). 탭을 연달아 열면 포커스가 마지막 탭에 있어, 포커스만 보면 앞 탭 화면이 뒤 탭의
+    창을 제 것으로 기록하고 제 창은 끝내 기록되지 않기 때문이다. 같은 이름의 탭이 함께 열리지 않게
+    병합 커밋의 "상위 항목 변경"은 탭 이름에 부모 해시를 붙인다. 탭을 여는 쪽도 `tab.new` 앞뒤의
+    `panes()`를 견주어 먼저 기록해 본다.
   - 대화상자·메뉴(overlay)와 root가 없는 화면(Git console, 레이아웃 블록)은 기록하지 않는다. 콘솔
     탭에 포커스가 있으면 패널은 space 폴더를 따른다. 닫힌 창의 기록은 다음 기록 때 함께 지운다.
 - **앱 홈의 파일**: 앱 전체의 값은 앱 홈의 `git-tools` 폴더에 둔다(`app-files.js`).
@@ -167,8 +188,8 @@ git 모듈과 순수 계산 모듈은 `herdr`를 import하지 않는다. 그래�
   버려진다. 그래서 사건은 공유 값에 쓰고, 각 사본이 자기 `render`에서 새 번호를 보고 자기
   타이머에서 받는다. 8개보다 많이 놓친 사본은 모두 다시 읽으라는 사건을 받는다.
 - **창의 쓰기**: 창은 git 쓰기를 직접 하지 않는다. 창을 연 패널 사본(`props.owner`)에 요청하고,
-  그 패널이 잠금을 잡고 실행한다. Herdr는 Esc로 창을 닫는 것을 막지 못하게 하고, 닫힌 사본의
-  다음 `await` 뒤는 실행되지 않는다. 패널이 실행하면 창이 닫혀도 쓰기, 다시 읽기, 실패 표시가
+  그 패널이 잠금을 잡고 실행한다. 창은 쓰는 중에도 Esc로 닫히고(창 자체에서는 Herdr의 Esc를 받지
+  않는다, 5절 "Esc는 Herdr의 동작이다"), 닫힌 사본의 다음 `await` 뒤는 실행되지 않는다. 패널이 실행하면 창이 닫혀도 쓰기, 다시 읽기, 실패 표시가
   끝까지 간다. 3초 남짓 안에 패널이 요청을 받았다고 답하지 않으면 창은 요청을 버리고 아무것도
   시작하지 않았다고 알린다. Push, Rollback, Restore, New Branch, Delete Branch, Deleted Branches는
   각 패널의 `serve`가, 그 밖의 요청(충돌 수락·저장·되돌리기, stash, reset, 3-way Restore, Smart,
@@ -399,12 +420,13 @@ Rollback은 Rollback dialog의 버튼으로만 실행되고, 쓰기 전에 버�
   않고 같은 실패로 돌리며, 알림은 안내를 맨 앞에 한 번만 둔다. 시간 한도는 fetch가 5분,
   merge·rebase 단계와 푸시처럼 훅을 돌릴 수 있는 단계가 10분이다.
 - **사용자의 git 설정은 그대로 둔다.** `pull.rebase`, `rebase.updateRefs`, `commit.gpgSign`, 훅은 git이
-  따르는 대로 따른다. 옵션 없이 갈라진 브랜치를 풀하면 git이 "어떻게 합칠지 지정하라"고 실패하는
-  것도 그대로 보인다. 예외 둘: merge, rebase, pull, 프로젝트 업데이트는 `--no-autostash`로 돌아서
+  따르는 대로 따른다. 옵션 없는 pull의 방식은 아래처럼 정해 넘긴다. 그 밖의 예외 둘: merge, rebase, pull, 프로젝트 업데이트는 `--no-autostash`로 돌아서
   사용자의 `merge.autoStash`·`rebase.autoStash`가 따로 stash하지 않는다(로컬 변경은 거절로 드러나
   Smart operation이 맡는다). 커밋 메시지의 정리는 위 "커밋"의 `--cleanup=whitespace`다.
 - **옵션 없는 pull의 방식**은 `branch.<브랜치>.rebase`, 없으면 `pull.rebase`로 정한다(false가 아닌
-  값은 리베이스). 로컬 변경 거절의 판정과 Smart 제안이 이 방식을 따른다.
+  값은 리베이스). 둘 다 없으면 `--no-rebase`로 병합한다. git은 방식을 듣지 못하면 갈라진 브랜치를
+  "어떻게 합칠지 지정하라"며 거절하는데, Pull 창에서 고르는 다른 원격 브랜치는 거의 늘 갈라져 있다.
+  `pull.ff`는 그대로 따른다. 로컬 변경 거절의 판정과 Smart 제안이 이 방식을 따른다.
 - **보이는 자리.** 진행 중 상태는 VCS widget("⚠ main 병합 중", 초록 ≫, 빨간 ■), Commit panel의 진행
   중 줄과 "충돌 병합" 노드, Log panel HEAD 줄의 "⚠ 분리된 HEAD"(rebase 중)에 같은 이름으로 보인다.
   이름은 현재 브랜치이고, 병합 대상은 `MERGE_MSG` 첫 줄의 이름(로컬 브랜치 우선)이다. ■은 확인
@@ -429,9 +451,17 @@ Rollback은 Rollback dialog의 버튼으로만 실행되고, 쓰기 전에 버�
   건너뛰고, 창 아래에 "직접 수정한 파일 N개는 그대로 두었습니다"를 보인다. 한 번에 여러 파일을
   쓰는 동작이라 파일마다 묻지 않고 사람의 글을 지키는 쪽을 고른다.
 - **Merge Revisions dialog의 덮어쓰기 확인.** 왼쪽·오른쪽 수락은 git이 남긴 뒤 고친 파일이면 확인을
-  거친다. 변경 내용 적용과 저장 후 닫기는 창이 읽은 뒤 디스크의 작업 파일이 바뀌었으면(줄 끝만 바뀐
-  것 포함) 확인을 거친다. 창은 열린 동안 다시 읽지 않으므로, 그사이 터미널이나 편집기에서 고친
-  내용을 말없이 덮지 않으려는 것이다. 1 MiB보다 큰 파일은 읽은 1 MiB만 견준다.
+  거친다. 변경 내용 적용, 저장 후 닫기, 그리고 ×·Esc로 닫으며 결과를 남기기는 창이 읽은 뒤 디스크의
+  작업 파일이 바뀌었으면(줄 끝만 바뀐 것 포함) 확인을 거친다. 창은 열린 동안 다시 읽지 않으므로,
+  그사이 터미널이나 편집기에서 고친 내용을 말없이 덮지 않으려는 것이다. 1 MiB보다 큰 파일은 읽은
+  1 MiB만 견준다.
+- **Merge Revisions dialog를 ×·Esc로 닫으면 결과를 작업 파일에 남긴다.** 남은 결정은 묻지 않는다. 결과가
+  열 때와 다르면 패널이 그 글을 작업 파일에 쓰되 충돌은 미해결로, staging은 그대로 둔다(`conflicts-keep`).
+  창이 읽은 뒤 디스크의 작업 파일이 바뀌었으면 저장과 같은 "덮어쓰기" 확인을 먼저 보이고, 덮어쓰기를
+  고르면 남기고 닫으며, 취소하면 창을 그대로 둔다.
+  다시 열 때 작업 파일에 충돌 표시(`<<<<<<<`·`>>>>>>>` 줄)가 없으면 그것을 결과로 삼아 이어 가고,
+  있으면 세 버전에서 처음처럼 계산한다. 결과 편집이 곧 작업 파일 편집인 흐름과 같게, 닫아도 한 일이
+  사라지지 않게 하려는 것이다. 바꾸지 않았으면 아무것도 쓰지 않는다.
 - **확인은 창 위의 작은 카드다.** 두 충돌 창의 확인(덮어쓰기, 처리되지 않은 변경 사항)은 뒤의 창을
   그대로 그린 채 어두운 막 위에 460px 너비, 내용 높이의 카드로 그린다. 두 번째 창으로 열면 큰 창과
   같은 크기로 열리기 때문이다.
@@ -479,6 +509,11 @@ Rollback은 Rollback dialog의 버튼으로만 실행되고, 쓰기 전에 버�
 - **강제 체크아웃은 먼저 추적 변경 전부를 기록한다**(동작 이름 `Checkout`). `checkout --force`는 막지
   않는 파일과 스테이징한 새 파일까지 지우므로, 막는 파일만 기록하면 그 변경을 잃는다. 기록하지
   못하면 체크아웃하지 않는다.
+- **목표 트리와 겹치는 추적하지 않는 파일이 있으면 강제 체크아웃을 거절한다.** 목표에 파일이 있고
+  인덱스에는 없는 경로(그 경로의 폴더 자리, 그 경로 아래 포함)에 추적하지 않는 파일이 있으면
+  `checkout --force`가 말없이 덮는데, 기록은 추적 파일만 담아 되살릴 수 없다. 그래서 그 경로들을
+  보이고 아무것도 기록하거나 옮기지 않는다. 무시된 파일은 세지 않는다. git이 보통 체크아웃에서도 덮는
+  파일이기 때문이다.
 
 ### Stash
 
@@ -551,6 +586,11 @@ Rollback은 Rollback dialog의 버튼으로만 실행되고, 쓰기 전에 버�
 - 기록의 첫 부모가 지금 HEAD와 다르면 Restore는 기록 전체를 `stash apply --index <기록>`으로 한 번에
   3-way 적용한다. 그런 기록은 Restore dialog에서 경로를 고를 수 없다. 꼴과 이유는
   [ADR 0002](adr/0002-rollback-snapshots-in-a-private-ref.md)에 있다.
+- 그때의 HEAD에 있었고 지금 HEAD에는 없는 파일을 기록이 바꿨으면, 3-way로는 "삭제/수정" 충돌이 된다.
+  그런 파일은 사본의 임시 인덱스로 그 변경을 뺀 기록을 만들어 적용하고, 기록의 작업 트리 내용을
+  따로 쓴다(그때 staged였으면 그때의 인덱스대로 stage, 아니면 추적하지 않는 파일). git은
+  `stash apply --index`가 충돌하면 인덱스를 되돌리지 않으므로, 충돌을 남긴 뒤 고치지 않고 처음부터
+  빼고 적용한다. 그 자리에 이미 무언가 있으면 아무것도 적용하지 않는다.
 
 ### 히스토리 다시 쓰기
 
@@ -655,7 +695,8 @@ Rollback은 Rollback dialog의 버튼으로만 실행되고, 쓰기 전에 버�
 
 ### Branch tree의 순서와 즐겨찾기
 
-- 순서는 현재 → Favorite branch → 이름순이고 원격도 같다(`branch-order.js`). VCS widget 팝업의 로컬·원격
+- 순서는 현재 → Favorite branch → 이름순이고 원격도 같다(`branch-order.js`). 폴더로 묶은 Branch tree는
+  단계(묶음, 폴더, 원격)마다 현재 → Favorite branch → 폴더(이름순) → 나머지 이름순이다(`orderTreeRows`). VCS widget 팝업의 로컬·원격
   묶음만 Favorite branch → 현재 → 이름순이다. 팝업은 읽기만 하는 설계라 팝업의 별은 보이기만 한다.
 - main·master는 처음부터 Favorite branch다. 사용자가 풀면 `gittools.unfavorite`에 남는다.
 - 내 브랜치 표시는 `user.email`의 커밋을 하나라도 담은 브랜치만 보인다(`for-each-ref --contains`).
@@ -689,7 +730,11 @@ Rollback은 Rollback dialog의 버튼으로만 실행되고, 쓰기 전에 버�
 
 ### VCS widget과 VCS Operations popup
 
-- 위젯은 시작할 때, 따라가는 폴더가 바뀔 때, 그 저장소의 `changed`, 보이는 동안 10초마다 읽는다
+- 위젯은 시작할 때, 따라가는 폴더가 바뀔 때, 그 저장소의 `changed`, git 폴더에서 ref·HEAD·진행 중
+  동작의 상태 파일·index가 바뀔 때(이 컴퓨터만, `git-log.js`의 `stateChanged`), 보이는 동안 10초마다 읽는다.
+  터미널의 `git merge`·`checkout`은 파일을 여럿 쓰는데 감시는 첫 파일에 깨어나고, 다음 감시를 걸기 전에
+  쓰인 나머지는 놓칠 수 있다. 그래서 감시로 깬 화면(Commit panel, Log panel, 위젯)은 곧바로 읽고 1초 뒤에
+  한 번 더 읽는다(`ui.js`의 `watchSettled`)
   (`git-heads.js`의 `widgetFace`가 무엇을 보일지 정한다). 최근 브랜치는 HEAD reflog의
   `checkout: moving from X to Y`에서 최대 5개, 지금 있는 로컬 브랜치만이다. 팝업은 380×520 고정이고
   거르면 항목만 준다.
@@ -902,6 +947,16 @@ Herdr는 mod를 QuickJS로 돌린다. JIT가 없고, 한 호출이 너무 오래
   그 안에서 `cx.notify()`는 예외를 던지고 `cx.spawn`은 첫 부분을 그 자리에서 돈다. 그래서 읽기
   시작, 저장소 이동 처리, 입력 상자를 다시 만드는 일은 `cx.timer.after`로 미룬다. 파싱, 트리,
   그래프, 라벨 맞추기는 데이터가 올 때 한 번 계산해 둔다.
+- **`render` 한 번의 시간 한도.** Herdr는 50 ms 남짓 걸린 `render`를 끊고 마지막으로 그린 화면 위에
+  "This view could not be re-rendered … interrupted" 띠를 보인다([플랫폼](herdr-mod-platform.md)).
+  QuickJS에서는 작은 객체 3만 개를 만드는 데만 그만큼 걸린다. 그래서 `render`가 하는 일은 저장소
+  크기와 상관없이 보이는 행 수만큼이어야 한다. Branch tree의 행은 읽기, 거르기, 접기, 즐겨찾기,
+  설정이 바뀔 때 만들고(`branch-order.js`의 `treeRows`), 태그 행은 그려질 때만 하나씩 만든다.
+  `readTags`는 이름만 읽어 git의 출력을 한 번 나눈다. VCS widget 팝업은 행을 답, 찾기 글자, 접기,
+  언어가 바뀔 때만 다시 만들고, 접힌 묶음은 개수만 센다. ref 32,056개(태그 30,300, 원격 브랜치
+  1,557) 저장소에서 잰 값(QuickJS): 태그까지 모든 행을 객체로 만들면 155–183 ms, 태그 행을 빼면
+  25–44 ms, 보이는 행 30개를 꺼내는 데는 1 ms 아래. 태그를 이름과 해시의 객체로 읽으면 105 ms,
+  이름만 나누면 2–4 ms.
 - **목록.** 가상 리스트는 행 안에 핸들러를 달 수 없어서, 체크박스·펼침·선택이 있는 목록은
   `WindowedList`가 보이는 행만 직접 그리고 휠과 스크롤 막대를 처리한다. 줄 높이가 그려 봐야
   아는 커밋 메시지만 `gpui-kit`의 `list`를 쓴다.
@@ -916,6 +971,18 @@ Herdr는 mod를 QuickJS로 돌린다. JIT가 없고, 한 호출이 너무 오래
   두 버튼을 달지 못하고, 어디서 잇는지를 문장으로 알린다.
 - **전역 키가 먼저 받는다.** Herdr 전역 키(F2의 탭 이름 바꾸기 등)는 mod의 `on_key_down`보다 먼저
   가져간다. 그래서 Branch tree의 이름 변경은 메뉴로만 한다.
+- **Esc는 Herdr의 동작이다.** 오버레이 위의 Esc는 Herdr의 `overlay.close` 동작이고, `on_key_down`보다
+  먼저 와서 맨 위의 창이나 팝업을 통째로 닫는다. 키 처리기의 `stop_propagation`으로는 막지 못하고,
+  키보드를 가진 요소(또는 그 바깥 요소)가 `on_action("overlay.close", …)`로 받아야 남는다. 그래서
+  창·팝업 안에 그린 안쪽 부분(VCS widget 팝업의 브랜치 메뉴, 충돌 창과 Merge Revisions dialog의 질문
+  카드, 커밋 리베이스 창의 질문과 메시지 고치기)이 열린 동안만 `ui.js`의 `takeEscape`로 그 동작을
+  받아 안쪽만 닫는다. 키보드가 그 요소 안에 있어야 동작이 거기를 지나므로, 화면 바탕(focus handle을
+  단 요소)에 달고, 마우스로 열 때도 키보드가 창 밖으로 가지 않게 한다. 창 자체의 Esc는 받지 않아
+  지금처럼 닫힌다. 다만 닫기에 할 일이 있는 두 창은 바탕에서도 받는다: Merge Revisions dialog는
+  편집 칸 밖의 Esc가 ×처럼 `leave()`(바뀐 결과를 남김)를 타고, 커밋 리베이스 창은 메시지를 고치는 중이
+  아니면 Esc가 `shut()`(계획을 바꿨으면 리베이스 취소를 물음)을 탄다. `openMenu`의 메뉴는 따로 뜬
+  팝업이라 Esc가 그 팝업만 닫는다.
+  `ui-ids.test.mjs`가 질문 카드(`-question` id)나 `Popup`을 그리는 화면이 `takeEscape`를 쓰는지 본다.
 - **메뉴 막대.** mod가 메뉴 막대에 항목을 넣는 API를 찾지 못했다. 그래서 git 메뉴는 VCS Operations
   popup이다. Herdr에는 메뉴 부품이 없고 mod가 그리는 팝업 메뉴(`view-menu.js`)는 하위 메뉴를 그리지
   않아서, 하위 메뉴는 두 번째 메뉴로 연다. VCS widget 팝업만 자기 안에 하위 메뉴를 그린다(4절).
@@ -934,6 +1001,10 @@ Herdr는 mod를 QuickJS로 돌린다. JIT가 없고, 한 호출이 너무 오래
   그 툴팁이 메뉴의 첫 항목을 가린다. 그래서 화면은 툴팁을 `ui.js`의 `tip()`으로만 달고
   (`ui-ids.test.mjs`가 직접 다는 자리를 막는다), 메뉴가 열려 있는 동안 `tip()`은 툴팁을 달지 않는다.
   공유 값 `git-tools.menus`가 바뀌면 모든 사본이 다시 그려져 툴팁이 빠지고, 메뉴가 닫히면 돌아온다.
+  Herdr는 툴팁을 포인터가 멈춘 때 한 번 만들고 요소가 같은 동안 그대로 둔다. 그래서 포인터가 머문 채
+  글이 바뀌면(Amend 커밋 뒤 버튼 이름, Push 창의 브랜치) 옛 글이 남는다. 글이 바뀔 수 있는 자리는
+  `tip(el, text, id)`에 요소의 id를 넘기고, `tip()`은 id 뒤에 글에서 만든 짧은 값을 붙인다. 글이
+  바뀌면 다른 요소가 되어 떠 있던 툴팁이 빠지고, 포인터가 다시 멈추면 새 글로 뜬다.
 - **명령.** `git-tools.<명령>`은 보이는 모든 사본에 한꺼번에 가고 어느 사본을 뜻하는지 말할 수
   없다. 그래서 저장소를 바꾸는 명령은 `props.folder`로 연 사본이나
   `git config --local gittools.scripted true`인 저장소에서만 듣는다. Rollback을 실행하는 명령은
@@ -979,7 +1050,7 @@ Herdr는 mod를 QuickJS로 돌린다. JIT가 없고, 한 호출이 너무 오래
   바꿀 때마다 사람이 다시 본다. 확인 절차는 RECIPE의 "Done when"에 있다.
 
 **전체 오프라인 검사:** `node tools/check.mjs`가 한 번에 돌린다. 루트의 `node layout.test.mjs`,
-`mods/git-tools`의 `*.test.mjs` 53개 각각, `node tools/gen-icon-theme.test.mjs`가 모두 `ok`를 찍고,
+`mods/git-tools`의 `*.test.mjs` 55개 각각, `node tools/gen-icon-theme.test.mjs`가 모두 `ok`를 찍고,
 `herdr-app check mods/git-tools`가 통과한다. 테스트는 node 내장 모듈(`node:assert/strict` 등)만 쓴다.
 
 **느린 엔진의 예산:** `icon-theme.test.mjs`가 JIT를 끈 node로 규칙을 꽂는 시간을 재서, 규칙을
@@ -992,6 +1063,10 @@ Herdr는 mod를 QuickJS로 돌린다. JIT가 없고, 한 호출이 너무 오래
 찍는다.
 
 ## 7. 알려진 한계
+
+- 답하지 않는 git 호출의 상한은 시계를 실행기에 건네는 곳에만 있다. 모든 화면과 Commit panel이 대신
+  돌리는 작업은 시계를 건네고, Files panel의 읽기(`files-data.js`, 화면 밖 모듈 함수)만 건네지 않아 그런
+  호출을 끝없이 기다린다. 답이 왜 사라지는지(약속이 안 풀리는지, 기다리던 작업이 버려지는지)는 가르지 않았다.
 
 - Restore는 그사이 다른 내용을 스테이징한 경로와 충돌 중이던 경로의 스테이징을 되살리지 않는다
   (파일은 되살리고 결과에 알린다). 스테이징을 담기 전의 기록과 커밋 없는 저장소의 기록은 파일만
@@ -1098,8 +1173,8 @@ Herdr는 mod를 QuickJS로 돌린다. JIT가 없고, 한 호출이 너무 오래
   알리지 않는다.
 - Git console은 쓰기 흐름 안에서 `READ` 없이 부르는 읽기도 기록한다. 쓰기 명령마다 기록 파일(최대
   512 KiB)을 다시 쓰고 창을 다시 그리므로, 명령이 많은 동작(Rollback 등)은 한 번에 십수 번 다시 그린다.
-- 커밋 리베이스 창은 Esc로 닫으면 닫기 확인 없이 닫힐 수 있다(Herdr가 창을 스스로 닫는다). 그 창의
-  F2(수정)도 Herdr 전역 키가 먼저 가져갈 수 있다(확인하지 않았다). 셀 더블클릭으로도 고친다.
+- 커밋 리베이스 창의 F2(수정)는 Herdr 전역 키가 먼저 가져갈 수 있다(확인하지 않았다). 셀 더블클릭으로도
+  고친다.
 - 히스토리 편집의 Smart dialog는 리베이스의 이름("Git 리베이스 문제", "스마트 리베이스")을 쓴다.
 - Windows와 Linux에서는 git 동작의 화면(VCS widget의 Log panel 자리, 원격 쓰기 길 포함)을 확인하지
   않았다.

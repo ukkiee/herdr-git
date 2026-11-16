@@ -54,7 +54,7 @@ export function serveRestore(panel, e, cx) {
   const list = (Array.isArray(paths) ? paths : []).filter((path) => typeof path === "string" && path);
   serveRequest(panel, e, { key: "restore.running" }, async (repo) => {
     if (!list.length) return { ok: false, err: "No files to restore.", msg: { key: "restore.noFiles" } };
-    const git = makeGit(exec, repo.on);
+    const git = makeGit(exec, repo.on, { wait: panel.wait });
     const timed = (cwd, args, options) => git(cwd, args, { timeout: TIMEOUT, ...options });
     timed.read = (cwd, args, options) => git.read(cwd, args, { timeout: TIMEOUT, ...options });
     const r = await restore(timed, repo.root, { snapshot, paths: list, copy: panel.copy });
@@ -67,7 +67,7 @@ const stop = (_e, cx) => cx.stop_propagation();
 // A restore that went through but left some paths, or their staging, as they were: shown
 // as its result line (each path and why), not as an error. The *Failed ones end with
 // git's words: the files are back, an index write failed.
-const PARTLY = new Set(["restore.notAll", "restore.stagingNotAll", "restore.notAllStaging", "restore.stagingNotAllFailed", "restore.notAllStagingFailed", "restore.appliedUnstaged", "restore.appliedConflicts"]);
+const PARTLY = new Set(["restore.notAll", "restore.stagingNotAll", "restore.notAllStaging", "restore.stagingNotAllFailed", "restore.notAllStagingFailed", "restore.appliedUnstaged", "restore.appliedConflicts", "restore.appliedRevived", "restore.appliedUnstagedRevived", "restore.appliedConflictsRevived", "restore.revivedNotWritten"]);
 
 // The write each snapshot was taken before, as its row names it (git-snapshot.js ACTIONS).
 const ACTION_NAMES = { Rollback: "restore.actionRollback", Reset: "restore.actionReset", Checkout: "restore.actionCheckout" };
@@ -84,7 +84,7 @@ export default class RestoreView {
     this.owner = p.owner ?? null; // the Commit panel copy that runs the restore
     this.wanted = typeof p.select === "string" ? p.select : null;
     this.scripted = p.chosen === true; // script commands that write are obeyed
-    this.git = makeGit(exec, this.on);
+    this.git = makeGit(exec, this.on, { wait: this.wait });
     this.snapshots = null; // listSnapshots' list; null until the first answer
     this.listError = null;
     this.at = -1; // the selected snapshot's index

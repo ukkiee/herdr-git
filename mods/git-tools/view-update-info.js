@@ -12,6 +12,7 @@ import { h_flex, v_flex } from "gpui-base";
 import { exec, theme } from "herdr";
 import { tip, ICON, fileGlyph, folderGlyph, darkLook, row, toolbar, spacer, iconButton, notice, errorStrip, WindowedList, panelFrame } from "./ui.js";
 import { makeGit } from "./git.js";
+import { readTurns, pageAt } from "./read-turns.js";
 import { readCommit } from "./git-show.js";
 import { readUpdate } from "./git-remote.js";
 import { buildRows } from "./tree.js";
@@ -25,6 +26,7 @@ const short = (hash) => String(hash ?? "").slice(0, SHORT);
 const ROW_H = 24;
 const INDENT = 14;
 const PAGE = 1000;
+const FIRST_LOOK = 6000; // ms: the first read still unanswered then is made again once
 const KIND = [en["remote.infoTab"], ko["remote.infoTab"]];
 
 // openUpdateInfo(t, { root, on, from, to }): t is the opener's (its language names the tab).
@@ -37,33 +39,41 @@ export default class UpdateInfoTab {
   init(p, cx) {
     this.repo = p.root ? { root: p.root, on: p.on ?? null } : null;
     this.from = p.from ?? null; this.to = p.to ?? null;
-    this.commits = null; this.more = false; this.files = 0; this.loading = false;
+    this.commits = null; this.more = false; this.files = 0;
+    this.reads = readTurns();
     this.error = null;
     this.picked = null; this.info = null; this.rows = []; this.cursor = null;
     this.turn = 0; this.page = 0;
     this.list = new WindowedList("update-info-commits", { rowHeight: ROW_H });
     this.fileList = new WindowedList("update-info-files");
     this.load(cx, false);
+    // A tab opened in place of the one before (space-tabs.js) has been seen to get no answer
+    // to its first read: once, a little later, it reads again beside it.
+    cx.timer.after(FIRST_LOOK, (cx) => { if (this.commits === null) this.load(cx, false); });
   }
 
-  git() { return makeGit(exec, this.repo?.on ?? null); }
+  git() { return makeGit(exec, this.repo?.on ?? null, { wait: this.wait }); }
 
-  // more: the next page after what is shown; else from the start.
+  // more: the next page after what is shown; else from the start. From the start (Refresh)
+  // always reads, also while a read is going: an answer that never comes must not keep
+  // the tab on "Loading…" (read-turns.js). The next page waits for the read going.
   load(cx, more) {
     if (!this.repo || !this.from || !this.to) { this.commits = []; this.error = this.t("ui.gitFailed"); return; }
-    if (this.loading) return;
-    this.loading = true;
+    if (more && this.reads.busy()) return;
+    const turn = this.reads.start();
     const page = more ? this.page : ++this.page, skip = more ? this.commits?.length ?? 0 : 0;
     cx.spawn(async (cx) => {
       try {
         const r = await readUpdate(this.git(), this.repo.root, { from: this.from, to: this.to, skip, max: PAGE });
-        if (page !== this.page) return;
-        if (r.ok) { this.commits = more ? [...(this.commits ?? []), ...r.commits] : r.commits; this.more = r.more; this.files = r.files; this.error = null; }
-        else { this.commits ??= []; this.error = r.err || this.t("ui.gitFailed"); }
+        if (page !== this.page || !this.reads.use(turn)) return;
+        if (!r.ok) { this.commits ??= []; this.error = r.err || this.t("ui.gitFailed"); return; }
+        // A next page placed already (asked twice) is left out.
+        const commits = more ? pageAt(this.commits, skip, r.commits) : r.commits;
+        if (commits) { this.commits = commits; this.more = r.more; this.files = r.files; this.error = null; }
       } catch (error) {
-        this.commits ??= []; this.error = String(error?.message ?? error);
+        if (page === this.page) { this.commits ??= []; this.error = String(error?.message ?? error); }
       } finally {
-        this.loading = false;
+        this.reads.end(turn);
         cx.notify();
       }
     });
@@ -94,7 +104,7 @@ export default class UpdateInfoTab {
     if (i === this.commits.length) {
       return row("update-info-more", t, { height: ROW_H }).px(10).justify_center().text_color(t.accent)
         .on_click((_e, cx) => { this.load(cx, true); cx.notify(); })
-        .child(this.loading ? this.t("ui.loading") : this.t("revision.more"));
+        .child(this.reads.busy() ? this.t("ui.loading") : this.t("revision.more"));
     }
     const c = this.commits[i];
     return row(`update-info-${i}`, t, { selected: this.picked === c.hash, height: ROW_H }).px(10).gap(8)
@@ -135,7 +145,7 @@ export default class UpdateInfoTab {
     const bar = toolbar(t)
       .child(div().pl(4).min_w(0).truncate().text_color(t.dim).child(summary))
       .child(spacer())
-      .child(iconButton("update-info-refresh", "refresh", t, { title: this.t("compare.refresh"), busy: Boolean(this.loading && commits), onClick: (_e, cx) => { this.load(cx, false); cx.notify(); } }));
+      .child(iconButton("update-info-refresh", "refresh", t, { title: this.t("compare.refresh"), busy: Boolean(this.reads.busy() && commits), onClick: (_e, cx) => { this.load(cx, false); cx.notify(); } }));
     const body = !commits ? notice(this.t("ui.loading"), t, { busy: true })
       : h_flex().flex_1().min_h(0).w_full()
         .child(div().flex_1().min_w(0).h_full().child(!n ? notice(this.t("remote.infoEmpty"), t)

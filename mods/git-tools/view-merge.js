@@ -167,7 +167,7 @@ export default class MergeView {
     this.on = p.on ?? null;
     this.owner = p.owner ?? null;
     this.who = typeof p.who === "string" ? p.who : "ui.commitPanel";
-    this.git = makeGit(exec, this.on);
+    this.git = makeGit(exec, this.on, { wait: this.wait });
     this.current = undefined; // undefined: not read yet; null: a detached HEAD
     this.names = [];
     this.picked = [];

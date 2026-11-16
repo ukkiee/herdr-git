@@ -104,7 +104,7 @@ const handledBy = (kind) => (id) => Object.prototype.hasOwnProperty.call(VCS_ACT
 async function newestStash(panel) {
   const r = panel.repo;
   if (!r?.root) return null;
-  const list = await listStashes(makeGit(exec, r.on ?? null), r.root);
+  const list = await listStashes(makeGit(exec, r.on ?? null, { wait: panel.wait }), r.root);
   return list.ok ? list.stashes[0] ?? null : null;
 }
 
@@ -116,7 +116,7 @@ function fetchFrom(panel, kind, cx) {
   if (!r) return;
   // serveRequest wants a request: this one's key is answered to nobody.
   const e = { key: `vcs-ops-fetch-${Date.now().toString(36)}`, args: { root: r.root, on: r.on ?? null } };
-  serveRequest(panel, e, { key: "log.fetching" }, async (repo) => remoteFailure(panel.t, await fetchAll(makeGit(exec, repo.on), repo.root), "fetch"), cx);
+  serveRequest(panel, e, { key: "log.fetching" }, async (repo) => remoteFailure(panel.t, await fetchAll(makeGit(exec, repo.on, { wait: panel.wait }), repo.root), "fetch"), cx);
 }
 
 // Popup size, px: title row, the group's caption, rows and separators.

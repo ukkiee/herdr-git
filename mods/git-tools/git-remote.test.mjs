@@ -13,6 +13,7 @@ import { push as pushBranch } from "./git-push.js";
 import { pushTag, fetchRemote } from "./git-refs.js";
 import { fetchAll } from "./git-branch.js";
 import { smartRun } from "./git-smart.js";
+import { pageAt } from "./read-turns.js";
 import { translator } from "./i18n.js";
 import { listSnapshots } from "./git-snapshot.js";
 
@@ -121,8 +122,7 @@ const commitMine = (mine, path, at, word) => { edit(mine, path, at, word); sh(mi
   assert.equal(info.files, 1);
 }
 {
-  // --squash leaves the change staged, uncommitted. (On diverged branches git first wants
-  // to be told how to reconcile them, as it does for a pull without options.)
+  // --squash leaves the change staged, uncommitted.
   const { mine, theirs } = setup();
   push(theirs, "a.txt", 0, "their-a1");
   const before = head(mine);
@@ -183,6 +183,21 @@ const commitMine = (mine, path, at, word) => { edit(mine, path, at, word); sh(mi
   assert.equal(rev(m2, "HEAD"), rev(t2, "main"));
   assert.deepEqual(status(m2), before);
   assert.equal(text(m2, "a.txt").split("\n")[0], "their-a1");
+}
+{
+  // Diverged, no option picked and no pull setting: it merges (git alone would refuse and
+  // ask how to reconcile them), the tracked branch and another branch of the remote alike.
+  const { mine, theirs } = setup();
+  push(theirs, "a.txt", 0, "their-a1");
+  commitMine(mine, "b.txt", 0, "my-b1");
+  const merged = await pull(git, mine, { remote: "origin", branch: "main", options: [] });
+  assert.equal(merged.outcome, "done", merged.err);
+  assert.equal(parents(mine, "HEAD"), 2);
+  assert.equal(rev(mine, "HEAD^2"), rev(theirs, "main"));
+  const other = await pull(git, mine, { remote: "origin", branch: "feature", options: [] });
+  assert.equal(other.outcome, "done", other.err);
+  assert.equal(rev(mine, "HEAD^2"), rev(mine, "origin/feature"));
+  assert.equal(branch(mine), "main");
 }
 {
   // A repository set to pull by rebasing (pull.rebase, or the branch's own rebase setting)
@@ -412,6 +427,15 @@ const commitMine = (mine, path, at, word) => { edit(mine, path, at, word); sh(mi
   assert.equal(hooked.code, 1, hooked.err);
   assert.match(hooked.err, /^hook says no\n/);
   assert.equal(remoteFailure(en, hooked, "push").err, hooked.err.trim());
+  // git leaves what a pre-push hook prints on stdout there: the words still come first,
+  // before git's own, for a branch and for a tag.
+  writeFileSync(`${mine}/.git/hooks/pre-push`, "#!/bin/sh\necho 'pre-push: refuses this push'\nexit 1\n");
+  const quiet = await pushBranch(git, mine, {});
+  assert.equal(quiet.code, 1, quiet.err);
+  assert.match(remoteFailure(en, quiet, "push").err, /^pre-push: refuses this push\n(.*\n)*error: failed to push some refs/);
+  assert.match(remoteFailure(ko, await pushTag(git, mine, { tag: "v1", remote: "origin" }), "push").err, /^pre-push: refuses this push\nerror: failed to push some refs/);
+  // With nothing on stderr, `err` already is stdout (git.js): said once.
+  assert.equal(remoteFailure(en, { ok: false, code: 1, out: "only on stdout\n", err: "only on stdout" }, "push").err, "only on stdout");
   sh(mine, "rm .git/hooks/pre-push");
 
   // A pre-receive hook on the remote that says no.
@@ -578,6 +602,17 @@ const commitMine = (mine, path, at, word) => { edit(mine, path, at, word); sh(mi
   const info = await readUpdate(git, mine, r.updated);
   assert.deepEqual(info.commits.map((c) => c.subject).filter((s) => !s.startsWith("Merge")), ["their-c1", "their-a1"]);
   assert.equal(info.files, 2);
+  // The Update Info tab reads a page at a time (here 1 commit). More pressed again while
+  // its read went unanswered asks for the same page twice: the older answer lands, then the
+  // newer; only the page that starts where the list ends is placed (read-turns.js pageAt),
+  // so no commit shows twice and the next page starts after the last one shown.
+  let shown = (await readUpdate(git, mine, { ...r.updated, skip: 0, max: 1 })).commits;
+  const [older, newer] = [await readUpdate(git, mine, { ...r.updated, skip: shown.length, max: 1 }), await readUpdate(git, mine, { ...r.updated, skip: shown.length, max: 1 })];
+  for (const answer of [older, newer]) shown = pageAt(shown, 1, answer.commits) ?? shown;
+  const last = await readUpdate(git, mine, { ...r.updated, skip: shown.length, max: 1 });
+  shown = pageAt(shown, shown.length, last.commits) ?? shown;
+  assert.deepEqual(shown.map((c) => c.hash), info.commits.map((c) => c.hash));
+  assert.equal(last.more, false);
   assert.equal((await updateProject(git, mine, { method: "merge" })).outcome, "empty", "nothing to update");
 }
 {

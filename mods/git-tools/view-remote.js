@@ -87,7 +87,7 @@ export default class RemoteView {
     if (this.adding) { this.read = true; this.nameInput.focus(); return; }
     this.urlInput.focus();
     cx.spawn(async (cx) => {
-      const r = this.root ? await readRemote(makeGit(exec, this.on), this.root, this.name) : { ok: false, err: "" };
+      const r = this.root ? await readRemote(makeGit(exec, this.on, { wait: this.wait }), this.root, this.name) : { ok: false, err: "" };
       this.read = true;
       if (r.ok) { this.url = r.url; this.urlInput.set_value(r.url); }
       else this.error = sentence(this.t, r.msg, r.err);

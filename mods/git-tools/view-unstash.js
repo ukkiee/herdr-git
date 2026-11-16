@@ -53,7 +53,7 @@ export default class UnstashView {
     this.on = p.on ?? null;
     this.owner = p.owner ?? null;
     this.stash = p.stash ?? { hash: "", ref: "", message: "" };
-    this.git = makeGit(exec, this.on);
+    this.git = makeGit(exec, this.on, { wait: this.wait });
     this.pop = false;
     this.index = false;
     this.branch = undefined; // undefined: not read yet; null: a detached HEAD

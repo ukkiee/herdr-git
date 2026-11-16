@@ -9,13 +9,13 @@
 
 import { exec } from "herdr";
 import { makeGit } from "./git.js";
-import { serveRequest } from "./ui.js";
+import { serveRequest, copyId } from "./ui.js";
 import { acceptRequest, unresolveRequest, resolveSimpleRequest } from "./conflicts-model.js";
 import { writerOn, readerOn } from "./view-conflicts.js";
 import { runReset } from "./view-reset.js";
 import { applySnapshot } from "./git-snapshot.js";
 import { createPatch } from "./git-revision.js";
-import { saveRequest } from "./merge-revisions-model.js";
+import { saveRequest, keepRequest } from "./merge-revisions-model.js";
 import { placerOn } from "./view-merge-revisions.js";
 import { runStashCreate, runStashDrop, runStashClear } from "./view-stash.js";
 import { runUnstash } from "./view-unstash.js";
@@ -41,11 +41,12 @@ export const SERVE_ACTIONS = {
   "conflicts-unresolve": { work: "conflicts.unresolving", run: (git, root, args) => unresolveRequest(git, root, args) },
   "conflicts-resolve-simple": { work: "conflicts.resolvingSimple", run: (git, root, args) => resolveSimpleRequest(git, root, args, writerOn(typeof args.on === "string" ? args.on : null), readerOn(typeof args.on === "string" ? args.on : null)) },
   "reset": { work: "reset.running", run: (git, root, args, panel) => runReset(git, root, args, panel) },
-  "restore-3way": { work: "restore.running", run: (git, root, args) => applySnapshot(git, root, { snapshot: typeof args.snapshot === "string" ? args.snapshot : "" }) },
+  "restore-3way": { work: "restore.running", run: (git, root, args, panel) => applySnapshot(git, root, { snapshot: typeof args.snapshot === "string" ? args.snapshot : "", copy: typeof panel?.copy === "string" ? panel.copy : copyId("commit.copy") }) },
   "patch-create": { work: "revision.creating", run: (git, root, args) => (text(args.file)
     ? createPatch(git, root, { commits: strings(args.commits), paths: strings(args.paths), reverse: args.reverse === true, base: text(args.base), file: args.file })
     : { ok: false, err: "No patch file.", msg: { key: "revision.needFile", args: {} } }) },
   "conflicts-save": { work: "conflicts.saving", run: (git, root, args) => saveRequest(git, root, args, placerOn(typeof args.on === "string" ? args.on : null)) },
+  "conflicts-keep": { work: "conflicts.saving", run: (git, root, args) => keepRequest(git, root, args, placerOn(typeof args.on === "string" ? args.on : null)) },
   "stash-create": { work: "stash.stashing", run: (git, root, args) => runStashCreate(git, root, args) },
   "stash-apply": { work: "stash.applying", run: (git, root, args, panel) => runUnstash(git, root, args, panel) },
   "stash-drop": { work: "stash.dropping", run: (git, root, args) => runStashDrop(git, root, args) },
@@ -86,6 +87,6 @@ export function serveAction(panel, e, cx) {
   const entry = Object.prototype.hasOwnProperty.call(SERVE_ACTIONS, e.action) ? SERVE_ACTIONS[e.action] : null;
   if (!entry) return false;
   const args = e.args ?? {};
-  serveRequest(panel, e, { key: entry.work }, (repo) => entry.run(makeGit(exec, repo.on), repo.root, args, panel), cx);
+  serveRequest(panel, e, { key: entry.work }, (repo) => entry.run(makeGit(exec, repo.on, { wait: panel.wait }), repo.root, args, panel), cx);
   return true;
 }

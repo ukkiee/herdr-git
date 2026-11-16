@@ -177,7 +177,8 @@ export function longEdges(rows, { long = 30, part = 1 } = {}) {
 
 // fitLabels(labels, room, { char, pad, gap, most }) → { shown, rest }
 //   The Ref labels (labelRefs) a row has `room` px for: whole labels from the first, at
-//   most `most`, and `rest` left out (drawn as "+N"). There is no text measuring in a
+//   most `most`, and `rest` left out (drawn as "+N"; 0 when even "+N" has no room, and
+//   then nothing is drawn). There is no text measuring in a
 //   mod, so a label is `pad` + `char` per character: `char` must not be less than the
 //   font's real average, or the last label overflows. A first label too long on its own
 //   loses its middle (shortenMiddle) rather than being cut at an edge.
@@ -197,18 +198,22 @@ export function fitLabels(labels, room, { char, pad, gap, most }) {
   if (!shown.length && labels.length) {
     const fit = Math.floor((room - count(labels.length - 1) - pad) / char);
     if (fit >= MIN_TEXT) shown.push({ ...labels[0], text: shortenMiddle(labels[0].text, fit) });
+    // Not even the count alone fits: nothing, rather than a "+" cut at the room's end.
+    else if (`+${labels.length}`.length * char > room) return { shown, rest: 0 };
   }
   return { shown, rest: labels.length - shown.length };
 }
 
 // ---- the graph part on screen
 
-// graphWindow({ widest, listWidth, left }) → { room, left, max }
+// graphWindow({ widest, listWidth, others, left }) → { room, left, max }
 //   widest: px the widest row's graph needs. listWidth: px the Commit list has.
-//   room: px the graph part gets, at most half the list. max: how far it scrolls
+//   others: px the row's other fixed parts take (padding, gaps, columns), 0 if unsaid.
+//   room: px the graph part gets, at most half the list and never more than the others
+//   leave, so a narrow list never pushes them out of the row. max: how far it scrolls
 //   sideways (0 when everything fits). left: the asked position, kept inside 0..max.
-export function graphWindow({ widest, listWidth, left }) {
-  const room = Math.max(0, Math.min(widest, Math.floor(listWidth / 2)));
+export function graphWindow({ widest, listWidth, others = 0, left }) {
+  const room = Math.max(0, Math.min(widest, Math.floor(listWidth / 2), listWidth - others));
   const max = Math.max(0, widest - room);
   return { room, left: Math.max(0, Math.min(left, max)), max };
 }

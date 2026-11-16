@@ -248,8 +248,10 @@ toolbar (`Git` semibold, `Log` 12px `muted`, Refresh, Hide) and the notice.
     `background` inside) around a 6px dot. Lane colors in order: `ansi4`, `ansi2`,
     `ansi3`, `ansi5`, `ansi6`, `ansi1`, `ansi12`, `ansi10`, `ansi13`, `ansi14`, then
     again. A lane keeps its color.
-  - The graph part is as wide as the widest row in view needs, and at most half the
-    list's width. When the rows in view need more, it scrolls sideways (see How it
+  - The graph part is as wide as the widest row in view needs, at most half the list's
+    width, and never more than the row's padding, gaps and shown columns (author, time,
+    hash) leave, so a narrow list shrinks the graph part and the subject before it
+    pushes the author and time out of line. When the rows in view need more, it scrolls sideways (see How it
     behaves) and a 3px strip sits at the bottom of the list under the graph part, 2px
     from its left: `border` with a `muted` thumb (at least 16px), 2px corners. The
     subject, labels, author and time never move sideways.
@@ -261,7 +263,9 @@ toolbar (`Git` semibold, `Log` 12px `muted`, Refresh, Hide) and the notice.
   - Which labels show: whole labels from the first, at most three, that fit in 45% of
     the row and leave the subject at least 40px (each label counted as 12px plus 6.5px
     per character); the rest become `+N` (11px `dim`). A first label too long on its
-    own loses its middle to fit. A label is never cut at its left edge.
+    own loses its middle to fit. A label is never cut at its left edge. When not even
+    `+N` fits (6.5px per character), the row shows no labels and leaves no gap for
+    them, so its author and time stay in line with the other rows.
   - Time: `Moments ago`, `N minutes ago` within the hour, `Today 2:30 PM`,
     `Yesterday 11:06 PM`, else `11/9/26, 9:05 AM` (local time).
 - **States**: `Loading…`, `No commits yet`, `No commits matching filters`.
@@ -1594,7 +1598,7 @@ the git ones run against real temporary repositories):
 | `icon-theme.js` | `THEME_ROOT` (`"mods/git-tools/icons/theme"`), `DEFAULT_FILE_ICON` (`"file"`), `DEFAULT_FOLDER_ICON` (`"folder"`), `DEFAULT_DISABLED_PACKS` (`["ANGULAR"]`), `DEFAULT_EXCLUDE` (`["Zeit Now Ignore"]`), `makeIconTheme({ fileRules, folderRules, disabledPacks, exclude, root })` → `{ fileIcon, folderIcon, warm, stats }`, and the shared `fileIcon(path, { dark })`, `folderIcon(name, { open })` → the icon's path, `warmIcons()` (compiles the shared rules; `main.js` init) |
 | `icon-theme-data.js` | generated: `SOURCE`, `FILE_RULES`, `FOLDER_RULES` (`{ name, pattern, priority, icon, pack? }`, in source order), `DARK_FILE_ICONS`, `CLOSED_ONLY_FOLDER_ICONS`, `SKIPPED_RULES` |
 | `git-show.js` | `readCommit`, `readLastCommit(git, root, { known })` → `{ ok, err, hash, subject, files, same }` (`hash` null without a commit; `same`: HEAD is still `known`, nothing else read), `readContaining` |
-| `graph.js` | `layoutGraph(commits, carry)`, `graphWindow({ widest, listWidth, left })` → `{ room, left, max }`, `indexSegments(segments)`, `segmentsIn(index, from, to)`, `fitLabels(labels, room, { char, pad, gap, most })` → `{ shown, rest }`, `reachableFrom(commits, start, { firstParent, through })` → Set (the hashes `start` reaches by the lines the graph draws), `collapseLinear(commits, { firstParent, through })` (the commits shown with linear branches folded: one parent, one child and no Ref label is left out), `longEdges(rows, { long, part })` → Map (with long edges off, where a line of `long` rows or more is cut and an arrow marks each cut) |
+| `graph.js` | `layoutGraph(commits, carry)`, `graphWindow({ widest, listWidth, others, left })` → `{ room, left, max }`, `indexSegments(segments)`, `segmentsIn(index, from, to)`, `fitLabels(labels, room, { char, pad, gap, most })` → `{ shown, rest }` (`rest` 0 when not even `+N` fits), `reachableFrom(commits, start, { firstParent, through })` → Set (the hashes `start` reaches by the lines the graph draws), `collapseLinear(commits, { firstParent, through })` (the commits shown with linear branches folded: one parent, one child and no Ref label is left out), `longEdges(rows, { long, part })` → Map (with long edges off, where a line of `long` rows or more is cut and an arrow marks each cut) |
 | `tree.js` | `buildRows(items, { grouped, collapsed, compact })`, `folderKeys`, `parentIndex`, `checkState`, `toggleIncluded`, `keepIncluded` |
 | `bus.js` | `KEEP`, `latest`, `era`, `append`, `take`, `post`, `makeCopy` |
 | `lock.js` | `BEAT`, `STALE`, `lockKey`, `sameRepo(a, b)` (same machine and root; false when either has no root), `repoName(root)` (the root's last folder name), `makeLocks` |
@@ -1614,8 +1618,8 @@ Each of these files' header says what it exports and why.
 
 `log-list.js` works out each row's graph once when its commits arrive (`indexSegments`
 of its lines, its width `5 + 5 + 14 × cols` px). On each render it takes the widest row in
-view for `graphWindow` (the graph part's room, at most half the list, and how far it may
-scroll), draws only the lines `segmentsIn` the visible range, and fits each row's labels
+view for `graphWindow` (the graph part's room, at most half the list and no more than the
+row's padding, gaps and columns leave, and how far it may scroll), draws only the lines `segmentsIn` the visible range, and fits each row's labels
 with `fitLabels` (kept until the room changes). Commit details draws the message with
 `gpui-kit`'s `list` (one item per line, only the items in view) and a
 `Scrollbar.vertical` over it.
@@ -3085,7 +3089,8 @@ Each line is one check: do what it says, see what follows.
     into view with their dots, lines stay joined from row to row, the strip's thumb
     moves, and the subject, labels, author and time stay where they are.
 46. Narrow the Log panel until a row's Ref labels don't fit: whole labels show, then
-    `+N`; no label is cut at its left edge.
+    `+N`; no label is cut at its left edge. Narrower still, `+N` is whole or gone, never
+    half; at every width the HEAD row's author and time line up with the other rows'.
 47. Select a commit whose message has 500 lines and scroll the message area: it reaches
     the 500th line, then the hash line and the containing branches.
 

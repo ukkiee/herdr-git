@@ -190,6 +190,10 @@ assert.deepEqual(layoutGraph([]), { rows: [], carry: { lanes: [], next: 0 } });
   assert.deepEqual(graphWindow({ widest: 80, listWidth: 600, left: 40 }), { room: 80, left: 0, max: 0 });
   // An odd width: whole pixels.
   assert.deepEqual(graphWindow({ widest: 430, listWidth: 601, left: 0 }), { room: 300, left: 0, max: 130 });
+  // The row's other parts (padding, gaps, author and time) take 400px of 600: the graph
+  // gets the 200 left, not half, so nothing is pushed out of the row; never below 0.
+  assert.deepEqual(graphWindow({ widest: 430, listWidth: 600, others: 400, left: 0 }), { room: 200, left: 0, max: 230 });
+  assert.deepEqual(graphWindow({ widest: 430, listWidth: 300, others: 400, left: 0 }), { room: 0, left: 0, max: 430 });
 }
 
 // A row's lines in a sideways window: only the ones that cross it, whichever way round
@@ -227,6 +231,10 @@ assert.deepEqual(layoutGraph([]), { rows: [], carry: { lanes: [], next: 0 } });
   assert.equal(fitLabels(labels, 150, look).shown[0].kind, "local", "a shortened label keeps its kind");
   // No room for even a short label: only the count.
   assert.deepEqual(texts(fitLabels(labels, 30, look)), { shown: [], rest: 3 });
+  // The count needs its own room ("+3" is 12px): with less, nothing shows, not a cut "+".
+  assert.deepEqual(texts(fitLabels(labels, 12, look)), { shown: [], rest: 3 });
+  assert.deepEqual(texts(fitLabels(labels, 11, look)), { shown: [], rest: 0 });
+  assert.deepEqual(texts(fitLabels(labels, 0, look)), { shown: [], rest: 0 });
   // At most `most` labels, whatever the room.
   const many = ["a", "b", "c", "d", "e"].map((text) => ({ text, kind: "local" }));
   assert.deepEqual(texts(fitLabels(many, 1000, look)), { shown: ["a", "b", "c"], rest: 2 });

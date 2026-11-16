@@ -49,7 +49,7 @@ export const ko = {
   "graph.columns": "열",
   "graph.highlight": "강조 표시",
   "graph.myCommits": "내 커밋",
-  "graph.mergeCommits": "커밋 병합",
+  "graph.mergeCommits": "병합 커밋",
   "graph.currentBranch": "현재 브랜치",
   "graph.notPicked": "Cherry-Pick된 커밋이 아님",
   "graph.columnAuthor": "작성자",

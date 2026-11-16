@@ -1,4 +1,4 @@
-// Turns Herdr's `main` layout into `main-git`: the Changes button opens the Commit panel,
+// Turns Herdr's `main` layout into the `git-tools` layout: the Changes button opens the Commit panel,
 // the Files button the Files panel, a Log panel sits under the work area, and a Git
 // button beside the Changes button shows and hides it, with the VCS widget left of it. See
 // docs/adr/0001-clone-main-layout.md.

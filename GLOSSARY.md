@@ -213,5 +213,5 @@ _Avoid_: 툴바 아이콘
 
 ### 배치
 
-**main-git**:
+**git-tools layout**:
 Herdr의 `main` 레이아웃을 복제해 Commit panel, Files panel, Log panel, Git button 자리를 넣은 레이아웃.

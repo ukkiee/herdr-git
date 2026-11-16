@@ -90,8 +90,8 @@ const ASK_AGAIN = [1000, 3000, 10000];
 
 // The screen table: props.view → the screen's class.
 export const VIEWS = {
-  "commit": Commit, // Commit panel: the `changes` block of the main-git layout
-  "log": Log, // Log panel: the `git-log` block of the main-git layout
+  "commit": Commit, // Commit panel: the `changes` block of the git-tools layout
+  "log": Log, // Log panel: the `git-log` block of the git-tools layout
   "log-button": LogButton, // Git button: the `git-log-button` block right of the tab bar
   "diff": Diff, // Diff tab: tab.new { mod, props }
   "push": Push, // Push dialog
@@ -101,7 +101,7 @@ export const VIEWS = {
   "menu": Menu, // popup menus (ui.js `openMenu`)
   "icon-sheet": IconSheet, // every Icon theme icon, for checking: tab.new { mod, props } only
   "deleted-branches": DeletedBranches, // Deleted Branches dialog
-  "files": Files, // Files panel: the `files` block of the main-git layout
+  "files": Files, // Files panel: the `files` block of the git-tools layout
   "console": Console, // Git console tab: tab.new { mod, props } (view-console.js openConsole)
   "compare-files": CompareFiles, // working tree, local and version compare tabs (space-tabs.js)
   "compare-diff": FileDiff, // one file between two revisions: tab.new { mod, props }

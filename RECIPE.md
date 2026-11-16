@@ -1,6 +1,6 @@
 # git-tools
 
-Git tools inside the Herdr desktop app, in a layout called `main-git`.
+Git tools inside the Herdr desktop app, in a layout called `git-tools`.
 The tab bar's Changes button opens a **Commit panel**: the changed files as a checkbox
 tree, a message box, Commit and Commit and Push…, and while Amend is on the files of the
 last commit. The Files button opens a **Files panel**: the focused folder as a tree with
@@ -718,7 +718,7 @@ machine); back on a terminal, they follow its folder again.
   items, ↑ ↓ and Enter pick, Esc closes.
 - In the Commit list, Shift-click picks a range, Cmd-click adds or takes off one,
   Cmd-Shift-click adds a range; ← goes to the child commit and → to the parent.
-- The keys work only while the `main-git` layout shows. F2 is Herdr's (renaming a tab)
+- The keys work only while the `git-tools` layout shows. F2 is Herdr's (renaming a tab)
   and doesn't rename a branch.
 
 ### Commit panel
@@ -1279,7 +1279,7 @@ The rules and their reasons are in `docs/design.md` (section 4); what a person s
 
 ## Built from
 
-### Layout: `layouts/main-git.json`
+### Layout: `layouts/git-tools.json`
 
 `install.sh` builds it from the person's current `layouts/main.json` with `layout.mjs`.
 `toMainGit(main, { button })` is pure and returns `{ ok: true, layout }` or
@@ -1304,7 +1304,7 @@ The rules and their reasons are in `docs/design.md` (section 4); what a person s
   where `window_drag` is the tab bar's own and is left out of both when the tab bar has
   none. The 240px is where the widget block starts: the widget then resizes it to its own
   width plus 2px each side (`layout.resize {id: "git-vcs-widget", px}` from
-  `view-vcs-widget.js`, only when it changes), and the layout file keeps 240. Installing over a `main-git` made before the widget adds it in place.
+  `view-vcs-widget.js`, only when it changes), and the layout file keeps 240. Installing over a `git-tools` layout made before the widget adds it in place.
   The tab bar's mod draws the Files and Changes buttons itself and takes no others,
   which is why the Git button is a block beside it. With `button: false` the tab bar is
   left as Herdr has it (and put back on a layout that has the row), so `work` =
@@ -1338,11 +1338,11 @@ In order, stopping with `Nothing was changed.` at any of the first four:
    name beside its place (`.<name>.<pid>.tmp`; Herdr doesn't reload for hidden files),
    then all are renamed into place. Files only the app home has stay. It prints
    `N files updated, M already the same.` Then runs `herdr-app check` on the folder.
-6. The first time only: `herdr-app do layout.clone '{"name":"main","as":"main-git"}'`
+6. The first time only: `herdr-app do layout.clone '{"name":"main","as":"git-tools"}'`
    (so the person's clicks and theme pick come along).
-7. Writes `layouts/main-git.json` with `layout.mjs`, runs
-   `herdr-app do layout.switch '{"name":"main-git"}'`, and stops if Herdr wrote
-   `layouts/main-git.error`.
+7. Writes `layouts/git-tools.json` with `layout.mjs`, runs
+   `herdr-app do layout.switch '{"name":"git-tools"}'`, and stops if Herdr wrote
+   `layouts/git-tools.error`.
 8. Adds the keys of `keys.json` to the app home's `keys.json` with `node`: a key already
    bound in the same section, `global` or `terminal` is left alone and reported. When it
    adds any, it writes `keys.json.<pid>.tmp` next to it and renames that over
@@ -1352,7 +1352,7 @@ In order, stopping with `Nothing was changed.` at any of the first four:
 
 ### Keys: `keys.json`
 
-Section `layout:main-git`: `cmd-k` → `mod.open:git-tools`, `cmd-shift-g` →
+Section `layout:git-tools`: `cmd-k` → `mod.open:git-tools`, `cmd-shift-g` →
 `layout.toggle:git-log`, `cmd-shift-v` → `git-tools.vcs-ops` (a mod command: every shown
 copy gets it, and `takesVcsOps` in `vcs-ops.js` lets one of them open the popup).
 
@@ -2536,7 +2536,7 @@ in English.
   folder, and the Files panel's folder.
 - **`install.sh`** runs `node`, `herdr-app status`, `herdr-app check`,
   `herdr-app do layout.clone` (first time) and `herdr-app do layout.switch`, and writes in
-  the app home: `mods/git-tools/` (only the files that differ), `layouts/main-git.json`,
+  the app home: `mods/git-tools/` (only the files that differ), `layouts/git-tools.json`,
   and `keys.json` (only added to). Each file is written whole to a temporary file next to
   it and renamed over it.
 
@@ -2867,16 +2867,16 @@ in English.
 
 **Setup**
 
-- `main-git` is a copy of Herdr's `main`: it doesn't follow Herdr updates. Run
-  `install.sh` again after one. Edits made by hand to `main-git.json` are lost then.
-- `main-git.json` keeps the `cloned_from` of the first install.
-- `layout.clone` copies clicks (an open side panel, sizes) into `main-git`.
-- The key section is `layout:main-git`, not `global`: in other layouts these node ids
+- The `git-tools` layout is a copy of Herdr's `main`: it doesn't follow Herdr updates. Run
+  `install.sh` again after one. Edits made by hand to `git-tools.json` are lost then.
+- `git-tools.json` keeps the `cloned_from` of the first install.
+- `layout.clone` copies clicks (an open side panel, sizes) into the `git-tools` layout.
+- The key section is `layout:git-tools`, not `global`: in other layouts these node ids
   don't exist. `cmd-shift-l` (Herdr's `layout.switch`) moves to the next layout; with
   more than two layouts, press it until `main` shows. Herdr's own Changes is unchanged
   there.
-- `install.sh` writes `layouts/main-git.json` and `keys.json` to a temporary file and
-  renames it over the old one. Herdr reads the renamed `main-git.json` as it reads an
+- `install.sh` writes `layouts/git-tools.json` and `keys.json` to a temporary file and
+  renames it over the old one. Herdr reads the renamed `git-tools.json` as it reads an
   edited one (the install switches to it right after).
 - `layouts/.state/<name>.json` disappears when nothing differs from the layout file; that
   is not an error.
@@ -3119,12 +3119,12 @@ Each line is one check: do what it says, see what follows.
 
 **Install**
 
-3. Run `./install.sh` with Herdr open: it ends with `Layout main-git is shown.`, the
-   window shows `main-git`, `layouts/main.json` is byte for byte as before, and the app
-   home's `keys.json` has `cmd-k` and `cmd-shift-g` under `layout:main-git` (or a line
+3. Run `./install.sh` with Herdr open: it ends with `Layout git-tools is shown.`, the
+   window shows the `git-tools` layout, `layouts/main.json` is byte for byte as before, and the app
+   home's `keys.json` has `cmd-k` and `cmd-shift-g` under `layout:git-tools` (or a line
    saying which key was already taken).
 4. Run `./install.sh` again: it prints `0 files updated, …`, and
-   `layouts/main-git.json` and `keys.json` are byte for byte as after the first run.
+   `layouts/git-tools.json` and `keys.json` are byte for byte as after the first run.
 5. Point `HERDR_APP_HOME` at a copy whose `layouts/main.json` lacks `panel-body`, run
    `./install.sh`: it names the missing node, prints `Nothing was changed.` and writes
    nothing.

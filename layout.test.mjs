@@ -1,4 +1,4 @@
-// node layout.test.mjs: the main → main-git transform, on layouts shaped like Herdr's
+// node layout.test.mjs: the main → git-tools transform, on layouts shaped like Herdr's
 // `main`, and how the install writes files the person already has.
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
@@ -122,7 +122,7 @@ const parentOf = (node, id) => {
   const input = main();
   delete find(input, "tabs").window_drag;
   assert.deepEqual(find(toMainGit(input).layout, WIDGET_ID), { id: WIDGET_ID, type: "block", size: { px: WIDGET_WIDTH }, content: { mod: MOD, props: { view: "vcs-widget" } } });
-  // A main-git made before the widget existed (the row holds the tab bar and the Git
+  // A git-tools layout made before the widget existed (the row holds the tab bar and the Git
   // button only) gets it on the next install, in its place.
   const older = toMainGit(main()).layout;
   const oldRow = find(older, TABS_ROW_ID);
@@ -221,17 +221,17 @@ const tmp = realpathSync(mkdtempSync(`${tmpdir()}/git-tools-layout-`));
 const halfFs = { ...fs, writeFileSync(path, data) { fs.writeFileSync(path, String(data).slice(0, 10)); throw Object.assign(new Error("no space left"), { code: "ENOSPC" }); } };
 const leftovers = (dir, name) => fs.readdirSync(dir).filter((entry) => entry !== name);
 
-// The main-git file is replaced whole or not at all: a failed write leaves the old file.
+// The git-tools layout file is replaced whole or not at all: a failed write leaves the old file.
 {
-  const dir = `${tmp}/layout`, file = `${dir}/main-git.json`;
+  const dir = `${tmp}/layout`, file = `${dir}/git-tools.json`;
   fs.mkdirSync(dir);
   fs.writeFileSync(file, "the old layout\n");
   assert.throws(() => writeWhole(halfFs, file, "the new layout, much longer\n"), /no space left/);
   assert.equal(fs.readFileSync(file, "utf8"), "the old layout\n");
-  assert.deepEqual(leftovers(dir, "main-git.json"), [], "no half-written file left behind");
+  assert.deepEqual(leftovers(dir, "git-tools.json"), [], "no half-written file left behind");
   writeWhole(fs, file, "the new layout\n");
   assert.equal(fs.readFileSync(file, "utf8"), "the new layout\n");
-  assert.deepEqual(leftovers(dir, "main-git.json"), []);
+  assert.deepEqual(leftovers(dir, "git-tools.json"), []);
 }
 
 // The mod folder is copied by content. Herdr reloads every copy of a mod each time a file
@@ -289,7 +289,7 @@ const leftovers = (dir, name) => fs.readdirSync(dir).filter((entry) => entry !==
   assert.equal(fs.readFileSync(file, "utf8"), before);
   assert.deepEqual(leftovers(dir, "keys.json"), []);
   run(fs);
-  assert.equal(JSON.parse(fs.readFileSync(file, "utf8"))["layout:main-git"]["cmd-k"], "mod.open:git-tools");
+  assert.equal(JSON.parse(fs.readFileSync(file, "utf8"))["layout:git-tools"]["cmd-k"], "mod.open:git-tools");
   assert.deepEqual(leftovers(dir, "keys.json"), []);
 }
 

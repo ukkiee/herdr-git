@@ -128,7 +128,7 @@ display language (not yet checked on a real Windows machine). A space on another
 changing the system language, restart Herdr. git's own messages are shown as git writes
 them.
 
-It all lives in a layout called `main-git`, a copy of Herdr's `main`. Herdr's own
+It all lives in a layout called `git-tools`, a copy of Herdr's `main`. Herdr's own
 layout and its Changes and Files panels are left as they are.
 
 ## Before you add it
@@ -178,7 +178,7 @@ layout and its Changes and Files panels are left as they are.
   that clone: `push --all` and clone don't carry them. Restoring a deleted branch also
   writes back its `branch.<name>.remote` and `.merge` config.
 - **Files in Herdr's app home** (`~/.config/herdr-app`, or `$HERDR_APP_HOME`):
-  `install.sh` writes `mods/git-tools/` and `layouts/main-git.json`, and adds three keys to
+  `install.sh` writes `mods/git-tools/` and `layouts/git-tools.json`, and adds three keys to
   `keys.json`. The mod keeps five small values in `shared.json`: `git-tools.bus` (how its
   screens tell each other the repository changed), `git-tools.lock` (which
   repository a git-tools write is running on), `git-tools.lang` (the system language
@@ -205,7 +205,7 @@ cd herdr-git && ./install.sh
 ```
 
 `install.sh` copies the mod (only the files that differ from what is installed), builds
-`main-git` from your current `main` layout, switches to it and adds the keys. If your `main` layout isn't shaped the way it expects, it says
+the `git-tools` layout from your current `main` layout, switches to it and adds the keys. If your `main` layout isn't shaped the way it expects, it says
 which part is missing and changes nothing.
 
 ### Keys
@@ -216,28 +216,28 @@ which part is missing and changes nothing.
 | `cmd-shift-g` | shows or hides the Log panel |
 | `cmd-shift-v` | opens the VCS Operations popup (while the Commit panel or the Log panel shows) |
 
-All three work only in the `main-git` layout. A key you already use for something else is
+All three work only in the `git-tools` layout. A key you already use for something else is
 left alone; `install.sh` says so, and you can bind the action to another key in
 `keys.json`.
 
 ### After a Herdr update
 
-`main-git` is a copy, so it doesn't pick up changes Herdr makes to `main`. **Run
+The `git-tools` layout is a copy, so it doesn't pick up changes Herdr makes to `main`. **Run
 `./install.sh` again after every Herdr update** (and after `git pull` here). It rebuilds
-`main-git` from your current `main`. Changes you made by hand to `main-git.json` are lost
+the layout from your current `main`. Changes you made by hand to `git-tools.json` are lost
 then.
 
 ### Back to `main`
 
 Press `cmd-shift-l` (Herdr's layout switch). It moves to the next layout, so with more
 than two layouts press it until `main` shows. Herdr's own Changes panel is there
-unchanged. Press it until `main-git` shows, or run `./install.sh`, to come back.
+unchanged. Press it until the `git-tools` layout shows, or run `./install.sh`, to come back.
 
 ### Remove it
 
 Switch to `main` first, then delete `mods/git-tools/`, `git-tools/` and
-`layouts/main-git.json` in the app home, and the `layout:main-git` section of
-`keys.json`. Herdr may also have left `layouts/.state/main-git.json` and the
+`layouts/git-tools.json` in the app home, and the `layout:git-tools` section of
+`keys.json`. Herdr may also have left `layouts/.state/git-tools.json` and the
 `git-tools.bus`, `git-tools.lock`, `git-tools.lang`, `git-tools.menus` and `git-tools.tabs`
 keys in `shared.json`; all are safe
 to delete. Rollback and deleted-branch records stay in each repository until git expires

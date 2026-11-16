@@ -131,7 +131,7 @@ export function watchSettled(dir, { live, wakes = () => true, wake, failed = () 
   });
 }
 
-// ---- the main-git layout's nodes
+// ---- the git-tools layout's nodes
 
 // Ids install.sh (layout.mjs) gives the layout. The Commit panel is the `changes` child
 // of the `panel-body` stack inside `panel`, as in Herdr's own main layout.
@@ -146,7 +146,7 @@ const findNode = (node, id) => {
   return null;
 };
 
-// null when the shown layout has no Log panel (not main-git).
+// null when the shown layout has no Log panel (not the git-tools layout).
 export function logPanelShown() {
   const node = findNode(layout(), LOG_NODE);
   return node ? !node.hidden : null;
@@ -154,7 +154,7 @@ export function logPanelShown() {
 
 export const toggleLogPanel = () => { run("layout.toggle", { id: LOG_NODE }); };
 
-// Whether the shown layout has the tab bar's Git button (main-git on macOS).
+// Whether the shown layout has the tab bar's Git button (the git-tools layout on macOS).
 export const gitButtonPlaced = () => findNode(layout(), "git-log-button") !== null;
 
 // The id of the space this copy's window shows, or null.

@@ -4,7 +4,7 @@
 // Clicking it opens the popup (view-vcs-popup.js). git-heads.js widgetFace decides
 // what it shows.
 //
-// Two places draw it. On macOS the main-git layout has a block of its own left of the
+// Two places draw it. On macOS the git-tools layout has a block of its own left of the
 // Git button (layout.mjs, props.view "vcs-widget"): the default export below. Elsewhere
 // the Log panel draws it at the left end of the Commit list's toolbar (view-log.js).
 // Both make a VcsWidget part with a host:
@@ -43,7 +43,7 @@ import { openVcsPopup, askAbort, branchMenuRows, deleteBlockOf, popupHandles, PO
 
 const POLL = 10000;
 const PAD = 2; // the block's padding each side of the widget
-// The layout block install.sh gives the widget (macOS main-git), sized to the widget.
+// The layout block install.sh gives the widget (the git-tools layout on macOS), sized to the widget.
 const BLOCK_ID = "git-vcs-widget";
 const WIDGET_MAX = 360; // px: a longer branch name is cut rather than widen the block further
 const stop = (_e, cx) => cx.stop_propagation();
@@ -296,7 +296,7 @@ export class VcsWidget {
   }
 }
 
-// The block left of the Git button (macOS main-git). It follows the focused pane like
+// The block left of the Git button (the git-tools layout on macOS). It follows the focused pane like
 // the panels, and serves the dialogs its widget opens.
 export default class VcsWidgetBlock {
   init(_p, cx) {

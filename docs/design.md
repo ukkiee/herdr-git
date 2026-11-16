@@ -7,7 +7,7 @@
 
 `git-tools`는 Herdr 데스크톱 앱 안에서 변경을 골라 커밋하고, 푸시하고, 브랜치와 커밋 기록을
 살펴보는 mod다. Stash, Merge, Rebase, Pull, Cherry-Pick, Revert Commit, Reset과 지난 커밋 고치기,
-충돌 해결, 비교 화면도 같은 mod가 한다. 의존성과 빌드 단계가 없는 JS 파일 묶음이고, `main-git`
+충돌 해결, 비교 화면도 같은 mod가 한다. 의존성과 빌드 단계가 없는 JS 파일 묶음이고, `git-tools`
 레이아웃 안에서 돈다. space가 다른 머신에 있으면 git 명령을 모두 그 머신에서 실행한다.
 
 ## 2. 화면 구성
@@ -213,7 +213,7 @@ git 모듈과 순수 계산 모듈은 `herdr`를 import하지 않는다. 그래�
 ### 설치와 레이아웃
 
 Herdr의 내장 `main` 레이아웃은 구조 변경을 받지 않는다. 그래서 `install.sh`가 `main`을 복제한
-`main-git`을 만들고 네 곳만 바꾼다([ADR 0001](adr/0001-clone-main-layout.md)).
+`git-tools` 레이아웃을 만들고 네 곳만 바꾼다([ADR 0001](adr/0001-clone-main-layout.md)).
 
 - `panel-body`의 `changes` 블록은 id를 그대로 두고 내용만 Commit panel로 바꾼다. 탭 바의
   Changes 버튼이 이 id를 열기 때문이다.
@@ -237,14 +237,14 @@ Herdr의 내장 `main` 레이아웃은 구조 변경을 받지 않는다. 그래
   짐작해서 고치지 않는 것은, Herdr 업데이트로 `main`의 구조가 바뀐 것을 알아채야 하기
   때문이다.
 - `install.sh`는 앞의 네 검사(node, `main.json`, 변환 가능, Herdr 실행 중) 가운데 하나라도
-  실패하면 `Nothing was changed.`로 멈춘다. `main-git.json`과 `keys.json`은 임시 파일에 다
+  실패하면 `Nothing was changed.`로 멈춘다. `git-tools.json`과 `keys.json`은 임시 파일에 다
   쓴 뒤 이름을 바꿔 덮는다. `keys.json`에는 비어 있는 키만 더한다.
 - **mod 폴더는 내용이 다른 파일만 쓴다**(`layout.mjs`의 `copyChanged`). Herdr는 mod 폴더의
   파일이 하나 저장될 때마다 모든 사본을 다시 불러오고, 이 mod는 파일이 2,500개가 넘는다.
   쓸 파일은 제자리 옆에 숨은 이름으로 다 쓴 뒤 차례로 이름을 바꿔 넣는다. Herdr는 숨은
   파일에는 다시 불러오지 않으므로 반쯤 쓰인 파일을 읽지 않는다. 앱 홈에만 있는 파일은
   그대로 둔다.
-- `main-git`은 복제본이라 Herdr의 `main` 변경을 따라가지 않는다. Herdr를 업데이트한 뒤에는
+- `git-tools` 레이아웃은 복제본이라 Herdr의 `main` 변경을 따라가지 않는다. Herdr를 업데이트한 뒤에는
   `install.sh`를 다시 돌린다.
 - `cmd-k`는 mod 명령이 아니다. 숨은 사본은 명령을 받지 못하고, 숨은 부모를 보이며 stack의 자식을
   고르는 앱 명령이 없다. 그래서 키가 1×1 팝업을 열고, 그 사본이 `layout.select`와 `layout.show`를

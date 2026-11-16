@@ -1,4 +1,4 @@
-// Git button: the block right of the tab bar in the main-git layout (layout.mjs). It
+// Git button: the block right of the tab bar in the git-tools layout (layout.mjs). It
 // shows and hides the Log panel, and is drawn like the tab bar's own Files and Changes
 // buttons so the three read as one row. The tab bar's mod draws those two itself and
 // takes no others, which is why this one is a block of its own.

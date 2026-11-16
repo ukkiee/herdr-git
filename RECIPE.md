@@ -542,7 +542,7 @@ dialog's own (`openDialog` in its file).
 - **VCS widget** (block `git-vcs-widget`, macOS, 240px at first and then as wide as the
   widget plus 2px each side, at the left of the block right after the Changes button;
   elsewhere the Commit list toolbar's left end): the branch icon, the branch name ▾, commits to pull (blue ↓) and
-  to push (green ↑); a detached HEAD shows its short hash; an operation in progress shows
+  to push (green ↑); a detached HEAD shows its 7-char hash, as the Branch tree does; an operation in progress shows
   `⚠ Merging main` and the like (`ops.merging`, `ops.rebasing`, `ops.cherryPicking`,
   `ops.reverting`, named after the current branch) with a green ≫ (resolve, or continue when no conflict is left) and a red
   ■ (abort, after a 420×150 question). The name is cut when the widget would pass 360px.
@@ -3679,7 +3679,7 @@ commit `main` lacks)
 **VCS widget and VCS Operations popup**
 
 230. The VCS widget reads `main` with ↓1 after a fetch that brings a commit, ↑1 after a
-     local commit, and a short hash on a detached HEAD.
+     local commit, and the 7-char hash on a detached HEAD, as the Branch tree's `HEAD (…)`.
 231. Click it: a 380×520 popup with `Search for branches and actions`, Update Project…,
      Commit…, Push…, New Branch…, New Worktree…, Checkout Tag or Revision…, then Recent,
      Local, Remote and Tags; typing narrows branches and actions together.

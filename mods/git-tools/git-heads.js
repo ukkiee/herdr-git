@@ -70,8 +70,8 @@ export async function readHeads(git, root) {
 
 // ---- what the widget and the popup show (pure)
 
-// The hash a detached HEAD shows as, as the reference product writes commits.
-const SHORT = 8;
+// The hash a detached HEAD shows as: as long as the Branch tree's HEAD row shows it.
+const SHORT = 7;
 const ABORT = { merge: "ops.abortMerge", rebase: "ops.abortRebase", "cherry-pick": "ops.abortCherryPick", revert: "ops.abortRevert" };
 // ≫ once no conflict is left: what goes on from there.
 const GO_ON = { merge: "vcs.commitMerge", rebase: "vcs.continueRebase", "cherry-pick": "vcs.continueCherryPick", revert: "vcs.continueRevert" };

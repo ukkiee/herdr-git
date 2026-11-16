@@ -146,8 +146,8 @@ const en = translator("en"), ko = translator("ko");
 
 // A branch: its name and the commits to pull and push.
 assert.deepEqual(widgetFace(heads(), op()), { kind: "branch", name: "main", ahead: 2, behind: 1 });
-// A detached HEAD: the commit, short.
-assert.deepEqual(widgetFace(heads({ head: { branch: null, hash: "0acda529aa11", detached: true }, current: null }), op({ branch: null })), { kind: "detached", name: "0acda529" });
+// A detached HEAD: the commit, as short as the Branch tree's HEAD row shows it.
+assert.deepEqual(widgetFace(heads({ head: { branch: null, hash: "0acda529aa11", detached: true }, current: null }), op({ branch: null })), { kind: "detached", name: "0acda52" });
 // Not a repository (or not read): nothing.
 assert.equal(widgetFace({ ok: false }, null), null);
 // A merge in conflict: ≫ opens the Conflicts dialog, ■ aborts; resolved, ≫ commits it.

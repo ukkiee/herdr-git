@@ -2435,7 +2435,8 @@ in English.
   and `ls-files -z --cached`, `--others --exclude-standard` and `--deleted`, with
   `config -z -f .gitmodules --get-regexp` and `ls-files -z --stage` on the paths it
   names (submodules); for the User popup
-  `log --use-mailmap --format=%aN%x00%aE`. Every read carries `--no-optional-locks -c core.fsmonitor=false -c diff.autoRefreshIndex=false`;
+  `log --use-mailmap --format=%aN%x00%aE`. Every read carries `--no-optional-locks -c core.fsmonitor=false -c diff.autoRefreshIndex=false -c log.showSignature=false`
+  (the last so a signed commit's verification lines never lead what `log` or `show` prints);
   the snapshot's commits and reflog and the step-aside commit carry
   `-c user.name=git-tools -c user.email=git-tools@localhost`,
   and Restore's one comparison with HEAD `-c diff.autoRefreshIndex=true`.

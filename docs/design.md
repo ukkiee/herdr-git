@@ -122,9 +122,11 @@ git 모듈과 순수 계산 모듈은 `herdr`를 import하지 않는다. 그래�
   지금 커밋의 파일 읽기가 그 뒤에서 기다린다. 밀린 조회는 가장 새것만 돈다.
 - 함수는 예외를 던지지 않고 `{ ok, code, out, err, … }` 꼴의 결과를 돌려준다. 실패하면 화면은
   그 글을 패널이나 창의 오류 띠에 보인다.
-- 읽기 명령에는 `READ`(`--no-optional-locks -c core.fsmonitor=false -c diff.autoRefreshIndex=false`)를
-  붙인다. Commit panel이 저장소 폴더를 감시하므로, 읽기가 `.git` 아래를 고치면 그 변경이 다음
-  읽기를 부르고 새로고침이 끝없이 돈다.
+- 읽기 명령에는 `READ`(`--no-optional-locks -c core.fsmonitor=false -c diff.autoRefreshIndex=false
+  -c log.showSignature=false`)를 붙인다. Commit panel이 저장소 폴더를 감시하므로, 읽기가 `.git` 아래를
+  고치면 그 변경이 다음 읽기를 부르고 새로고침이 끝없이 돈다. 마지막 설정은 서명 표시를 끈다:
+  사용자의 `log.showSignature`가 켜져 있으면 git이 서명된 커밋의 검증 줄을 `log`·`show`가 낼 글
+  앞에 붙여, 정해진 꼴로 읽는 출력이 깨진다.
 - 판단은 git 모듈과 순수 모듈에 둔다. 되살릴지, 누구를 걸지, 어떤 아이콘인지, 어느 언어인지를
   화면이 정하지 않는다. 화면에는 자동 테스트가 없기 때문이다.
 

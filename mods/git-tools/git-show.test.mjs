@@ -1,7 +1,7 @@
 // node git-show.test.mjs: readCommit and readContaining against throwaway repositories
 // (no app needed).
 import { execFile, execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, writeFileSync, realpathSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
 import { makeGit } from "./git.js";
@@ -308,6 +308,37 @@ const byPath = (files) => [...files].sort((a, b) => (a.path < b.path ? -1 : 1));
     { path: "a.txt", status: "added", from: null },
     { path: "b.txt", status: "added", from: null },
   ]);
+}
+
+// A signed commit in a repository set to show signatures (log.showSignature): git would put
+// its verification lines ahead of what a read asked for, and the hash would be one of them.
+{
+  const repo = init("signed");
+  const key = `${base}/signing-key`;
+  let keyed = true;
+  try { execFileSync("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-C", "ada@example.com", "-f", key], { stdio: "pipe" }); } catch { keyed = false; }
+  if (!keyed) console.log("skip: ssh-keygen is not here, so no signed commit to read");
+  else {
+    writeFileSync(`${base}/allowed-signers`, `ada@example.com ${readFileSync(`${key}.pub`, "utf8")}`);
+    sh(repo, `git config gpg.format ssh && git config user.signingkey '${key}' && git config gpg.ssh.allowedSignersFile '${base}/allowed-signers' && git config commit.gpgsign true`);
+    write(repo, "a.txt", "one\n");
+    sh(repo, "git add -A && git commit -q -m first");
+    write(repo, "a.txt", "two\n");
+    sh(repo, "git add -A && git commit -q -m 'signed change'");
+    sh(repo, "git config log.showSignature true");
+    assert.match(sh(repo, "git show -s --format=%H HEAD"), /signature/i, "this git shows the signature ahead of the format");
+
+    const r = await readCommit(git, repo, head(repo));
+    assert.equal(r.ok, true, r.err);
+    assert.equal(r.hash, head(repo));
+    assert.equal(r.message, "signed change");
+    assert.deepEqual(r.files, [{ path: "a.txt", status: "modified", from: null }]);
+
+    const last = await readLastCommit(git, repo);
+    assert.equal(last.ok, true, last.err);
+    assert.equal(last.hash, head(repo));
+    assert.equal(last.subject, "signed change");
+  }
 }
 
 console.log("ok");

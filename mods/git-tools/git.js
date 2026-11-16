@@ -3,7 +3,9 @@
 
 // Reads must write nothing under .git (no index refresh or lock, no fsmonitor cookie):
 // the Commit panel watches the folder, and a read that touched .git would start the next read.
-export const READ = ["--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "diff.autoRefreshIndex=false"];
+// log.showSignature off: with the person's setting on, git puts a signed commit's
+// verification lines ahead of what `log` or `show` was asked to print.
+export const READ = ["--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "diff.autoRefreshIndex=false", "-c", "log.showSignature=false"];
 
 // The recorder every runner without its own hands its writes to (main.js installs the Git
 // console's, app-files.js). One value for all copies, never a copy's state: every copy

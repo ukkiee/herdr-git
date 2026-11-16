@@ -615,7 +615,9 @@ dialog's own (`openDialog` in its file).
 - **Space tabs**, one per kind (opening the kind again replaces it): `Compare: <a> and
   <b>`, `Changes Between <ref> and Current Working Tree`, `Changes Between <rev> and Local
   Version`, `Changes Between <a> and <b>`, `<folder> at <rev>`, `History up to <rev>`,
-  `Update Info`, `Console`.
+  `Update Info`, `Console`. The `History up to <rev>` and `Update Info` tabs read again
+  from the top on Refresh even while a read is going, and a first read still unanswered
+  after 6 s is made again once.
 
 ## How it behaves
 
@@ -1145,8 +1147,10 @@ The rules and their reasons are in `docs/design.md` (section 4); what a person s
   runs and the edited message is not used.
 - **Reading.** The Commit panel reads the operation in progress on every refresh; the
   VCS widget when it starts, when its folder changes, on a write to its repository and
-  every 10 s while shown; the Conflicts dialog every 2 s; the Stash tab on writes in any
-  worktree of the repository and every 10 s.
+  every 10 s while shown; the Conflicts dialog every 2 s, and beside a read that hasn't
+  answered in 6 s (so one that opens as the operation stops fills in even if its first
+  read gets no answer; an answer older than one shown is dropped); the Stash tab on writes
+  in any worktree of the repository and every 10 s.
 - **Remembered.** Update Project's method (the dialog opens every time), the Pull dialog's branch
   per repository, Drop Commits' Don't ask again, the graph and view options, Commit
   details' View Options and the Branch tree's settings are app-wide (`git-tools/settings.json`); favorites are in the
@@ -1168,8 +1172,8 @@ The rules and their reasons are in `docs/design.md` (section 4); what a person s
   was read before stays. A machine that can't be reached shows the same way; the next
   poll tries again. Every error strip has `View in Console`, which opens or picks the Git
   console tab.
-- In the Commit panel, the Log panel, the VCS widget and the Push dialog, a git command
-  whose answer hasn't come 5 s past its
+- In the Commit panel, the Log panel, the VCS widget, the Push and Conflicts dialogs and
+  the Update Info and History tabs, a git command whose answer hasn't come 5 s past its
   timeout (35 s for a read) is given up on, so the screen doesn't stay on `Loading…` for
   good: a read is asked once more, then it fails with `git did not answer in 35 s.` like
   any git error. A command that may write is not run again, as it may have done its work.

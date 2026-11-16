@@ -3994,7 +3994,9 @@ and `b.txt` and a new file `c.txt`)
      ` into <branch>`.
 266. In Rebasing Commits, Reword a commit and press ⌘↩ in its new message box: the row
      reads Reword and the message changes. ⌘↩ inside Edit Commit Message, Squashed Commit
-     Message and Extract Selected Changes confirms them too.
+     Message and Extract Selected Changes confirms them too. In all four the message box
+     has the keyboard as soon as it shows: typing goes into it without a click. Rebasing
+     Commits itself takes its keys (↑ ↓, P, R, D) right after it opens from the menu.
 267. In Commit details, right-click a file the commit added → Show Changes to Parents: the
      whole file shows as added. On a merge commit's file: one tab per parent, each named
      `<file> (<parent's 8-char hash>)`; with either tab focused, the Branch tree, the

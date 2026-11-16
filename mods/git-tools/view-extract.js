@@ -21,7 +21,7 @@ import { v_flex, TextareaState } from "gpui-base";
 import { theme } from "herdr";
 import { extractChanges, dropChanges } from "./git-rewrite.js";
 import { openDialog, dialogFrame, button, close, writeBlock, scrollText, textBox, broadcast, openCommitPanel } from "./ui.js";
-import { forcePushNote, askRewrite } from "./view-reword.js";
+import { forcePushNote, askRewrite, focusMessage } from "./view-reword.js";
 import { prepare, runHere, serveRewrite, servedWhere } from "./log-rewrite.js";
 
 const SHORT = 8;
@@ -118,6 +118,7 @@ export default class ExtractView {
     this.error = null;
     this.handle = cx.focus_handle();
     this.handle.focus();
+    if (this.mode === "extract") focusMessage(this, cx);
   }
 
   writing() { return this.waiting || !this.root ? null : writeBlock(this, { root: this.root, on: this.on }); }
@@ -131,7 +132,7 @@ export default class ExtractView {
       close(this.overlay);
       return;
     }
-    if (this.mode === "extract" && this.initial) { this.initial = false; this.handle.focus(); cx.notify(); return; }
+    if (this.mode === "extract" && this.initial) { this.initial = false; this.handle.focus(); focusMessage(this, cx, true); cx.notify(); return; }
     if (this.writing()) return;
     if (this.mode === "drop") { askRewrite(this, "rewrite-drop-changes", { commit: this.commit, paths: this.paths }, cx); return; }
     const message = this.text.value();

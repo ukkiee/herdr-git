@@ -182,6 +182,9 @@ export default class InteractiveRebaseView {
     this.error = null;
     this.handle = cx.focus_handle();
     this.handle.focus();
+    // Again once the dialog is drawn: the panel that opened it takes the keyboard back when
+    // its menu closes, and the keys here would go nowhere until a click.
+    cx.timer.after(300, () => { if (!this.editing && !this.asking) this.handle.focus(); });
     this.readFiles(cx);
   }
 
@@ -233,7 +236,7 @@ export default class InteractiveRebaseView {
     // The row's own message goes with its Reword: only a reword is replayed with one.
     else if (["pick", "edit", "drop"].includes(name) && !off[name]) this.change(this.rows.map((r) => (this.selected.has(r.hash) ? { ...r, action: name, message: null } : { ...r })));
     else if ((name === "squash" || name === "fixup") && !off.meld) this.change(melded(this.rows, this.selected, name));
-    else if (name === "reword" && !off.reword) this.beginReword(this.picked()[0]);
+    else if (name === "reword" && !off.reword) this.beginReword(this.picked()[0], cx);
     else if (name === "undo" && !off.undo) this.undo();
     else if (name === "redo" && !off.redo) this.redo();
     else if (name === "reset" && !off.reset) this.reset();
@@ -244,7 +247,7 @@ export default class InteractiveRebaseView {
 
   // ---- rewording
 
-  beginReword(r) {
+  beginReword(r, cx) {
     if (!r || this.waiting) return;
     const text = r.message ?? this.messages[r.hash] ?? "";
     const state = TextareaState.new({ value: text, rows: 4 });
@@ -258,6 +261,8 @@ export default class InteractiveRebaseView {
     });
     this.editing = { hash: r.hash, was: text, state };
     this.selected = new Set([r.hash]); this.cursor = r.hash; this.anchor = r.hash;
+    // The box takes the keyboard once it is drawn: what is typed lands in it without a click.
+    cx.timer.after(150, () => { if (this.editing?.state === state) state.focus(); });
   }
 
   applyReword() {
@@ -436,7 +441,7 @@ export default class InteractiveRebaseView {
     return row(`ir-row-${r.hash}`, t, { selected: on })
       .on_click((e, cx) => {
         this.choose(r.hash, { shift: Boolean(e.modifiers?.shift), toggle: Boolean(e.modifiers?.platform || e.modifiers?.control) });
-        if (e.click_count === 2 && !this.waiting) this.beginReword(this.rows.find((x) => x.hash === r.hash));
+        if (e.click_count === 2 && !this.waiting) this.beginReword(this.rows.find((x) => x.hash === r.hash), cx);
         this.readFiles(cx);
         this.handle.focus();
         cx.notify();

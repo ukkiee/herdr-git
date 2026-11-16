@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import { makeGit } from "./git.js";
 import { readHeads, widgetFace, popupRows } from "./git-heads.js";
 import { translator } from "./i18n.js";
+import { menuItems } from "./log-menus.js";
 
 // The person's own git settings stay out of every repository here.
 process.env.GIT_CONFIG_GLOBAL = "/dev/null";
@@ -54,7 +55,7 @@ commit(repo, "c.txt", "l1");
 {
   const r = await readHeads(git, repo);
   assert.equal(r.ok, true, r.err);
-  assert.deepEqual(r.current, { name: "main", upstream: "origin/main", ahead: 1, behind: 2 });
+  assert.deepEqual(r.current, { name: "main", upstream: "origin/main", gone: false, ahead: 1, behind: 2 });
   assert.deepEqual(r.head, { branch: "main", hash: raw(repo, ["rev-parse", "HEAD"]), detached: false });
   assert.deepEqual(r.remote.map((b) => b.name), ["origin/main"]);
 }
@@ -63,7 +64,17 @@ commit(repo, "c.txt", "l1");
 {
   raw(repo, ["checkout", "-q", "-b", "topic"]);
   const r = await readHeads(git, repo);
-  assert.deepEqual(r.current, { name: "topic", upstream: null, ahead: 0, behind: 0 });
+  assert.deepEqual(r.current, { name: "topic", upstream: null, gone: false, ahead: 0, behind: 0 });
+}
+
+// A branch whose remote branch was deleted and pruned: it still names it, gone.
+{
+  raw(repo, ["push", "-q", "-u", "origin", "topic"]);
+  raw(origin, ["branch", "-q", "-D", "topic"]);
+  raw(repo, ["fetch", "-q", "--prune"]);
+  const r = await readHeads(git, repo);
+  assert.deepEqual(r.current, { name: "topic", upstream: "origin/topic", gone: true, ahead: 0, behind: 0 });
+  assert.deepEqual(r.local.find((b) => b.name === "topic").gone, true);
 }
 
 // A detached HEAD: no current branch, the commit HEAD is on.
@@ -99,7 +110,7 @@ commit(repo, "c.txt", "l1");
   assert.equal(f.ok, true, f.err);
   assert.deepEqual(f.recent, []);
   assert.deepEqual(f.head, { branch: "main", hash: null, detached: false });
-  assert.deepEqual(f.current, { name: "main", upstream: null, ahead: 0, behind: 0 });
+  assert.deepEqual(f.current, { name: "main", upstream: null, gone: false, ahead: 0, behind: 0 });
 }
 
 // Tags, by name.
@@ -146,8 +157,8 @@ const en = translator("en"), ko = translator("ko");
 
 // A branch: its name and the commits to pull and push.
 assert.deepEqual(widgetFace(heads(), op()), { kind: "branch", name: "main", ahead: 2, behind: 1 });
-// A detached HEAD: the commit, short.
-assert.deepEqual(widgetFace(heads({ head: { branch: null, hash: "0acda529aa11", detached: true }, current: null }), op({ branch: null })), { kind: "detached", name: "0acda529" });
+// A detached HEAD: the commit, as short as the Branch tree's HEAD row shows it.
+assert.deepEqual(widgetFace(heads({ head: { branch: null, hash: "0acda529aa11", detached: true }, current: null }), op({ branch: null })), { kind: "detached", name: "0acda52" });
 // Not a repository (or not read): nothing.
 assert.equal(widgetFace({ ok: false }, null), null);
 // A merge in conflict: ≫ opens the Conflicts dialog, ■ aborts; resolved, ≫ commits it.
@@ -197,6 +208,17 @@ const shape = (rows, tr = en) => rows.map((r) => r.kind === "rule" ? "|"
   assert.deepEqual(popupRows({ heads: heads(), op: op(), query: "", folded: new Set(), handled: all }, ko).filter((r) => r.kind !== "branch" && r.kind !== "folder").map((r) => r.kind === "rule" ? "|" : r.label), [
     "프로젝트 업데이트…", "커밋…", "푸시…", "|", "새 브랜치…", "새 워크트리…", "태그 또는 리비전 체크아웃…", "|", "최근", "로컬", "원격", "태그",
   ]);
+}
+
+// A branch whose remote branch is gone shows as one that tracks nothing: no name on its
+// right, so its menu has no tracked branch and nothing to update from.
+{
+  const gone = heads({ local: [{ name: "done", upstream: "origin/done", gone: true, ahead: 0, behind: 0, current: false }], recent: ["done"] });
+  const rows = popupRows({ heads: gone, op: op(), query: "", folded: new Set(), handled: all }, en);
+  assert.deepEqual(rows.filter((r) => r.name === "done").map((r) => [r.scope, r.upstream]), [["recent", null], ["local", null]]);
+  const menu = menuItems("localBranch", () => true, { name: "done", current: "main", upstream: rows.find((r) => r.name === "done").upstream ?? "" });
+  const items = new Map(menu.map((it) => [it.id, it.disabled]));
+  assert.deepEqual([items.get("branch.checkoutAndUpdate"), items.get("branch.update"), items.has("branch.trackedBranch")], [true, true, false]);
 }
 
 // Remote branches sit under their remote's folder; tags by name.

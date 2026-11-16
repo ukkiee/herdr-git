@@ -13,7 +13,9 @@ export default class LogButton {
   render() {
     const t = theme(), on = logPanelShown() === true;
     // The strip behind the button continues the tab bar: its color and the line under it.
-    return h_flex().id("git-log-strip").size_full().pr(10).items_center().justify_end().bg(t.chrome).border_b(1).border_color(t.border)
+    // Like the tab bar's own root it has no id and no handler: a press on it is the block's
+    // window_drag (layout.mjs) and moves the window. Only the button stops the press.
+    return h_flex().size_full().pr(10).items_center().justify_end().bg(t.chrome).border_b(1).border_color(t.border)
       .child(h_flex().id("git-log-button").h(26).px(8).gap(5).flex_none().items_center().rounded(6)
         .text_size(12).bg(on ? t.selected : t.chrome).text_color(on ? t.foreground : t.muted)
         .hover((s) => s.bg(t.hover))

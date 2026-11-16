@@ -115,12 +115,23 @@ const local = (...list) => list.map((name) => ({ name }));
   const rows = buildRows(items, { grouped: true });
   const prefs = { favorite: ["refs/heads/feature/b"], unfavorite: [] };
   const ordered = orderTreeRows(rows, { scope: "local", current: "topic", prefs });
-  // Folders keep their place (the tree's own order); the branches under each are reordered.
+  // At each level: the current branch, the favorites, the folders (by name, each with
+  // its own rows in the same order), then the other branches by name.
   assert.deepEqual(ordered.map((r) => (r.folder ? `${r.key}` : r.path)),
-    ["feature/", "feature/x/", "feature/x/y", "feature/b", "feature/a", "topic", "main", "aaa"]);
+    ["topic", "main", "feature/", "feature/b", "feature/x/", "feature/x/y", "feature/a", "aaa"]);
   // Nothing else on a row changes, and the rows handed in keep their order.
   assert.equal(ordered.length, rows.length);
   assert.deepEqual(rows.map((r) => r.path), ["feature", "feature/x", "feature/x/y", "feature/a", "feature/b", "aaa", "main", "topic"]);
+  // On dev: dev, main (★), the team folder, then feature and gone-topic.
+  const team = buildRows(local("main", "feature", "team/one", "team/two", "gone-topic", "dev").map((b) => ({ path: b.name, branch: b })), { grouped: true });
+  assert.deepEqual(orderTreeRows(team, { scope: "local", current: "dev", prefs: none }).map((r) => (r.folder ? r.key : r.path)),
+    ["dev", "main", "team/", "team/one", "team/two", "feature", "gone-topic"]);
+  // A folded folder keeps its place among the folders; a remote's folder orders its own.
+  const folded = buildRows(local("b", "z/1", "a/1").map((b) => ({ path: b.name, branch: b })), { grouped: true, collapsed: new Set(["a/"]) });
+  assert.deepEqual(orderTreeRows(folded, { scope: "local", current: null, prefs: none }).map((r) => (r.folder ? r.key : r.path)), ["a/", "z/", "z/1", "b"]);
+  const remote = buildRows(local("origin/topic", "origin/team/x", "origin/main").map((b) => ({ path: b.name, branch: b })), { grouped: true });
+  assert.deepEqual(orderTreeRows(remote, { scope: "remote", current: "dev", prefs: none }).map((r) => (r.folder ? r.key : r.path)),
+    ["origin/", "origin/main", "origin/team/", "origin/team/x", "origin/topic"]);
 }
 
 // ---- the Branch tree's settings (⋮): saved values, read back with defaults
@@ -168,22 +179,22 @@ const local = (...list) => list.map((name) => ({ name }));
   const all = (rows) => Array.from({ length: rows.length }, (_, i) => rows.row(i));
   const look = (rows) => all(rows).map((r) => `${"  ".repeat(r.depth)}${r.kind}:${r.label}${r.count !== undefined ? ` (${r.count})` : ""}`);
 
-  // HEAD, then Local and Remote with "/" making folders (folders first, then the current
-  // branch, the favorites, the rest by name), then the tags in the order read.
+  // HEAD, then Local and Remote with "/" making folders (at each level the current branch,
+  // the favorites, the folders, then the rest by name), then the tags in the order read.
   const rows = treeRows(data, { settings, prefs: none, t });
   assert.deepEqual(look(rows), [
     "head:HEAD (Current Branch)",
-    "group:Local (4)", "  folder:feature (2)", "    branch:a", "    branch:b", "  branch:topic", "  branch:main",
-    "group:Remote (3)", "  folder:origin (3)", "    folder:feature (1)", "      branch:a", "    branch:main", "    branch:zeta",
+    "group:Local (4)", "  branch:topic", "  branch:main", "  folder:feature (2)", "    branch:a", "    branch:b",
+    "group:Remote (3)", "  folder:origin (3)", "    branch:main", "    folder:feature (1)", "      branch:a", "    branch:zeta",
     "group:Tags (3)", "  tag:v1.0", "  tag:v2.0", "  tag:release/3",
   ]);
   // Keys as the screen uses them; a branch row carries its readBranches entry, a tag row its name.
   assert.deepEqual(all(rows).map((r) => r.key), [
-    "head", "local", "local:feature/", "local:feature/a", "local:feature/b", "local:topic", "local:main",
-    "remote", "remote:origin/", "remote:origin/feature/", "remote:origin/feature/a", "remote:origin/main", "remote:origin/zeta",
+    "head", "local", "local:topic", "local:main", "local:feature/", "local:feature/a", "local:feature/b",
+    "remote", "remote:origin/", "remote:origin/main", "remote:origin/feature/", "remote:origin/feature/a", "remote:origin/zeta",
     "tags", "tags:v1.0", "tags:v2.0", "tags:release/3",
   ]);
-  assert.equal(rows.row(5).branch, data.local[0]);
+  assert.equal(rows.row(2).branch, data.local[0]);
   assert.deepEqual(rows.row(16), { key: "tags:release/3", kind: "tag", scope: "tags", depth: 1, label: "release/3", branch: { name: "release/3" } });
   assert.equal(rows.row(17), undefined);
   // index: by key, tags included; parent: the row one sits under.
@@ -192,7 +203,7 @@ const local = (...list) => list.map((name) => ({ name }));
   assert.equal(rows.index("tags:nope"), -1);
   assert.equal(rows.index("local:nope"), -1);
   assert.equal(rows.parent(15), 13);
-  assert.equal(rows.parent(10), 9);
+  assert.equal(rows.parent(11), 10);
   assert.equal(rows.parent(1), -1);
 
   // Folded: a group or a folder hides what is under it and keeps its count.
@@ -205,8 +216,8 @@ const local = (...list) => list.map((name) => ({ name }));
   const typed = treeRows(data, { settings, prefs: none, t, words: "a", collapsed: new Set(["tags", "local"]) });
   assert.deepEqual(look(typed), [
     "head:HEAD (Current Branch)",
-    "group:Local (3)", "  folder:feature (2)", "    branch:a", "    branch:b", "  branch:main",
-    "group:Remote (3)", "  folder:origin (3)", "    folder:feature (1)", "      branch:a", "    branch:main", "    branch:zeta",
+    "group:Local (3)", "  branch:main", "  folder:feature (2)", "    branch:a", "    branch:b",
+    "group:Remote (3)", "  folder:origin (3)", "    branch:main", "    folder:feature (1)", "      branch:a", "    branch:zeta",
     "group:Tags (1)", "  tag:release/3",
   ]);
   assert.deepEqual(look(treeRows(data, { settings, prefs: none, t, words: "v2" })), ["group:Tags (1)", "  tag:v2.0"]);

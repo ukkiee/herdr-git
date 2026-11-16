@@ -104,11 +104,12 @@ export async function readRefsState(git, root) {
   return { ok: true, err: "", state: `${head.out.trim()}\n${refs.out}` };
 }
 
-// readGitDir(git, root) → { ok, err, dir }: the folder the repository keeps its refs in
-// (absolute). For a linked worktree that is the main checkout's .git, where branches
-// move. The Log panel watches it.
-export async function readGitDir(git, root) {
-  const r = await git.read(root, ["rev-parse", "--path-format=absolute", "--git-common-dir"]);
+// readGitDir(git, root, { own }) → { ok, err, dir }: the folder the repository keeps its
+// refs in (absolute). For a linked worktree that is the main checkout's .git, where
+// branches move. The Log panel and the VCS widget watch it. own: true asks for the
+// checkout's own git folder instead (a linked worktree's HEAD, index and MERGE_HEAD).
+export async function readGitDir(git, root, { own = false } = {}) {
+  const r = await git.read(root, ["rev-parse", "--path-format=absolute", own ? "--git-dir" : "--git-common-dir"]);
   const dir = r.out.trim();
   if (r.ok && dir.startsWith("/")) return { ok: true, err: "", dir };
   return { ok: false, err: r.err, dir: null };
@@ -119,6 +120,16 @@ export async function readGitDir(git, root) {
 // folder itself means "anything may have changed".
 export function refsChanged(dir, paths) {
   return paths.some((path) => path === dir || (!path.endsWith(".lock") && (/\/(HEAD|packed-refs|FETCH_HEAD|ORIG_HEAD)$/.test(path) || path.includes("/refs/"))));
+}
+
+// stateChanged(dir, paths) → whether a batch of changed paths under the git folder can
+// have changed what the VCS widget and the Commit panel show: a ref or HEAD, an
+// operation's state (MERGE_HEAD and the other *_HEAD files, rebase-merge/, rebase-apply/,
+// sequencer/) or the index (a conflict resolved). Objects, logs and lock files alone
+// don't. The folder itself means "anything may have changed".
+export function stateChanged(dir, paths) {
+  return refsChanged(dir, paths) || paths.some((path) => !path.endsWith(".lock") &&
+    (/\/([A-Z_]+_HEAD|index)$/.test(path) || /\/(rebase-merge|rebase-apply|sequencer)(\/|$)/.test(path)));
 }
 
 // resolveCommit(git, root, text) → { ok, err, hash }: the full hash of the commit a

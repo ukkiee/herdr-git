@@ -21,7 +21,7 @@ import { div, svg, list } from "gpui-kit";
 import { v_flex, Scrollbar } from "gpui-base";
 import { theme } from "herdr";
 import { readCommit, readContaining } from "./git-show.js";
-import { checkoutRevision } from "./git-branch.js";
+import { smartCheckoutRevision } from "./view-smart.js";
 import { readEditFacts } from "./git-rewrite.js";
 import { buildRows, folderKeys, parentIndex } from "./tree.js";
 import { combineChanges } from "./log-select.js";
@@ -80,16 +80,17 @@ export function copyRevision(commits, cx) {
   if (hashes.length) cx.write_to_clipboard(hashes.join(" "));
 }
 
-// Checkout Revision: a detached HEAD at the commit. git's refusal (changes in the way)
-// is shown as it is; nothing is forced. The text it put in the error strip is kept on
-// this panel's LogDetails (host.details), so a later success clears only its own.
+// Checkout Revision: a detached HEAD at the commit. Local changes in the way open the
+// Smart dialog (Force Checkout, Don't Checkout, Smart Checkout), as a branch's checkout
+// does; another refusal is shown as git's words. The text it put in the error strip is
+// kept on this panel's LogDetails (host.details), so a later success clears only its own.
 // It takes the repository's write lock (host.setBusy); while anyone holds it, it doesn't start.
 export function checkoutCommit(host, commit, cx) {
   const repo = host.repo, part = host.details;
   if (!repo || !commit?.hash || !host.setBusy({ key: "log.checkingOut" }, cx)) return;
   cx.spawn(async (cx) => {
     let r;
-    try { r = await checkoutRevision(repo.git, repo.root, commit.hash); } catch (error) { r = { ok: false, err: String(error?.message ?? error) }; }
+    try { r = await smartCheckoutRevision(repo, commit.hash, { owner: host.bus.id, lang: host.lang, who: "ui.logPanel" }); } catch (error) { r = { ok: false, err: String(error?.message ?? error) }; }
     // Released first: the panel skips reads while a write runs.
     host.setBusy(null, cx);
     if (r.ok) {
@@ -98,7 +99,7 @@ export function checkoutCommit(host, commit, cx) {
       part.checkoutError = null;
       // Every screen on the repository reads again, this panel included.
       broadcast({ type: "changed", root: repo.root });
-    } else {
+    } else if (!r.quiet) {
       part.checkoutError = host.failedOn(repo, r.err, cx);
     }
     cx.notify();

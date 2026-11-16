@@ -4,7 +4,7 @@
 // and the repository root, and returns a result instead of throwing. No `herdr` import:
 // node tests it (git-heads.test.mjs).
 
-import { readBranches } from "./git-branch.js";
+import { readBranches, trackedBranch } from "./git-branch.js";
 import { operationName } from "./git-operation.js";
 
 // The Recent group of the popup holds this many branches at most.
@@ -21,8 +21,9 @@ const EMPTY = { head: { branch: null, hash: null, detached: false }, current: nu
 // readHeads(git, root) → { ok, code, out, err, head, current, local, remote, tags, recent }
 //   head: { branch, hash, detached }: branch null on a detached HEAD, hash null before the
 //     first commit (branch is then the one that commit will make).
-//   current: { name, upstream, ahead, behind } for the branch HEAD is on, or null when
-//     HEAD is detached. upstream: the remote branch it tracks ("origin/main") or null.
+//   current: { name, upstream, gone, ahead, behind } for the branch HEAD is on, or null when
+//     HEAD is detached. upstream: the remote branch it tracks ("origin/main") or null;
+//     gone: that remote branch no longer exists (readBranches' gone).
 //     behind: its commits not here yet (to pull); ahead: commits here not on it (to push).
 //     Both 0 without an upstream or when the upstream is gone.
 //   local, remote: as git-branch.js readBranches has them.
@@ -47,7 +48,7 @@ export async function readHeads(git, root) {
   const head = { ...branches.head, detached: !branches.head.branch };
   const mine = branches.local.find((b) => b.name === head.branch);
   const current = head.branch
-    ? { name: head.branch, upstream: mine?.upstream ?? null, ahead: mine?.ahead ?? 0, behind: mine?.behind ?? 0 }
+    ? { name: head.branch, upstream: mine?.upstream ?? null, gone: mine?.gone ?? false, ahead: mine?.ahead ?? 0, behind: mine?.behind ?? 0 }
     : null;
   const exists = new Set(branches.local.map((b) => b.name));
   const recent = [];
@@ -70,8 +71,8 @@ export async function readHeads(git, root) {
 
 // ---- what the widget and the popup show (pure)
 
-// The hash a detached HEAD shows as, as the reference product writes commits.
-const SHORT = 8;
+// The hash a detached HEAD shows as: as long as the Branch tree's HEAD row shows it.
+const SHORT = 7;
 const ABORT = { merge: "ops.abortMerge", rebase: "ops.abortRebase", "cherry-pick": "ops.abortCherryPick", revert: "ops.abortRevert" };
 // ≫ once no conflict is left: what goes on from there.
 const GO_ON = { merge: "vcs.commitMerge", rebase: "vcs.continueRebase", "cherry-pick": "vcs.continueCherryPick", revert: "vcs.continueRevert" };
@@ -137,7 +138,7 @@ export function popupRows({ heads, op, query = "", folded = new Set(), handled =
   const local = new Map((heads?.local ?? []).map((b) => [b.name, b]));
   const branch = (scope, name, label = name) => {
     const b = scope === "recent" || scope === "local" ? local.get(name) : null;
-    return { kind: "branch", scope, name, label, current: Boolean(b?.current), upstream: b?.upstream ?? null, ahead: b?.ahead ?? 0, behind: b?.behind ?? 0 };
+    return { kind: "branch", scope, name, label, current: Boolean(b?.current), upstream: trackedBranch(b), ahead: b?.ahead ?? 0, behind: b?.behind ?? 0 };
   };
   const trees = [];
   for (const [id, key] of GROUPS) {

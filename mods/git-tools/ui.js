@@ -6,7 +6,7 @@
 
 import { div, svg, image, PathBuilder } from "gpui-kit";
 import { h_flex, v_flex, Textarea, Scrollbar } from "gpui-base";
-import { spaces, panes, focused, layout, openOverlay, closeOverlay, run, shared, setShared, exec, settings, theme, window as hostWindow } from "herdr";
+import { spaces, panes, focused, layout, openOverlay, closeOverlay, run, shared, setShared, exec, settings, theme, watchFolder, window as hostWindow } from "herdr";
 import { makeCopy, post } from "./bus.js";
 import { makeLocks, BEAT, sameRepo, repoName } from "./lock.js";
 import { LANGS, translator, systemLang, sentence } from "./i18n.js";
@@ -99,6 +99,36 @@ export { sentence };
 // the repository it was opened on (focus-repo.js).
 export function location() {
   return whereFocused({ space: spaces().find((s) => s.active), focused: focused(), panes: panes(), tabs: shared(TABS) ?? {} });
+}
+
+// ---- watching a folder (this computer only)
+
+// A git command in a terminal (a merge, a checkout) writes a burst of files, and a watch
+// wakes at the first. What lands before the next watchFolder call listens can go unseen,
+// so a wake is read at once and once more this long after.
+const SETTLE = 1000;
+
+// watchSettled(dir, { live, wakes, wake, failed }, cx): calls wake(cx) after each change
+// under `dir` for which wakes(paths) holds (default: any), then once more SETTLE ms later,
+// for as long as live() holds. failed() runs when the folder can't be watched (too large
+// on Linux, gone): the caller's timer still reads.
+export function watchSettled(dir, { live, wakes = () => true, wake, failed = () => {} }, cx) {
+  cx.spawn(async (cx) => {
+    let settling = false;
+    try {
+      while (live()) {
+        const paths = await watchFolder(dir);
+        if (!live()) return;
+        if (!wakes(paths)) continue;
+        wake(cx);
+        if (settling) continue;
+        settling = true;
+        cx.timer.after(SETTLE, (cx) => { settling = false; if (live()) wake(cx); });
+      }
+    } catch {
+      if (live()) failed();
+    }
+  });
 }
 
 // ---- the main-git layout's nodes

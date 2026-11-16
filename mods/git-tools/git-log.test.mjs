@@ -1,11 +1,11 @@
 // node git-log.test.mjs: reading commits for the Commit list, against throwaway
 // repositories (no app needed).
 import { execFile, execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, writeFileSync, realpathSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, realpathSync, readdirSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
 import { makeGit } from "./git.js";
-import { readLog, readNotPicked, readRefsState, readGitDir, refsChanged, resolveCommit, labelRefs, shortenMiddle, formatCommitTime } from "./git-log.js";
+import { readLog, readNotPicked, readRefsState, readGitDir, refsChanged, stateChanged, resolveCommit, labelRefs, shortenMiddle, formatCommitTime } from "./git-log.js";
 
 const tmp = realpathSync(mkdtempSync(`${tmpdir()}/git-tools-log-`));
 // Same shape as herdr's exec: resolves with { code, stdout, stderr }, rejects when it can't start.
@@ -249,6 +249,9 @@ const all = await readLog(git, repo);
   assert.deepEqual(await readGitDir(git, repo), { ok: true, err: "", dir: `${repo}/.git` });
   raw(repo, ["worktree", "add", "-q", `${tmp}/linked`, "topic"]);
   assert.deepEqual(await readGitDir(git, `${tmp}/linked`), { ok: true, err: "", dir: `${repo}/.git` });
+  // Its own git folder (HEAD, index, MERGE_HEAD) sits under the main checkout's.
+  assert.deepEqual(await readGitDir(git, `${tmp}/linked`, { own: true }), { ok: true, err: "", dir: `${repo}/.git/worktrees/linked` });
+  assert.deepEqual(await readGitDir(git, repo, { own: true }), { ok: true, err: "", dir: `${repo}/.git` });
   raw(repo, ["worktree", "remove", `${tmp}/linked`]);
   const none = await readGitDir(git, `${tmp}/plain`);
   assert.equal(none.ok, false);
@@ -262,6 +265,66 @@ const all = await readLog(git, repo);
   assert.equal(refsChanged(dir, [`${dir}/index`, `${dir}/objects/ab/cdef`, `${dir}/COMMIT_EDITMSG`]), false);
   assert.equal(refsChanged(dir, [`${dir}/refs/heads/main.lock`, `${dir}/HEAD.lock`, `${dir}/index.lock`]), false);
   assert.equal(refsChanged(dir, []), false);
+  // What the VCS widget and the Commit panel show moves with more than refs: an
+  // operation's state files and the index (a conflict resolved) too, never objects,
+  // locks or a commit message alone.
+  assert.equal(stateChanged(dir, [`${dir}/MERGE_HEAD`]), true);
+  assert.equal(stateChanged(dir, [`${dir}/index`]), true);
+  assert.equal(stateChanged(dir, [`${dir}/rebase-merge/done`]), true);
+  assert.equal(stateChanged(dir, [`${dir}/worktrees/linked/CHERRY_PICK_HEAD`]), true);
+  assert.equal(stateChanged(dir, [`${dir}/sequencer/todo`]), true);
+  assert.equal(stateChanged(dir, [`${dir}/refs/heads/main`]), true);
+  assert.equal(stateChanged(dir, [dir]), true);
+  assert.equal(stateChanged(dir, [`${dir}/objects/ab/cdef`, `${dir}/index.lock`, `${dir}/MERGE_HEAD.lock`, `${dir}/COMMIT_EDITMSG`]), false);
+  assert.equal(stateChanged(dir, []), false);
+}
+
+// What a terminal's git leaves changed under the git folder, as a watch reports it,
+// wakes the readers: a merge that stops on a conflict, a detached checkout, and a
+// branch reset with checkout -B. Files written, added or removed count.
+{
+  const dir = `${tmp}/watched`;
+  mkdirSync(dir);
+  const env = { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t", GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" };
+  const g = (args) => execFileSync("git", args, { cwd: dir, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env });
+  g(["init", "-q", "-b", "main"]);
+  writeFileSync(`${dir}/a.txt`, "base\n"); g(["add", "-A"]); g(["commit", "-q", "-m", "base"]);
+  g(["checkout", "-q", "-b", "feature"]);
+  writeFileSync(`${dir}/a.txt`, "feature\n"); g(["commit", "-q", "-am", "feature"]);
+  g(["checkout", "-q", "main"]);
+  writeFileSync(`${dir}/a.txt`, "main\n"); g(["commit", "-q", "-am", "main"]);
+  const gitDir = `${dir}/.git`;
+  // Every file under the git folder with its size and modification time.
+  const snapshot = () => {
+    const files = new Map();
+    const walk = (at) => {
+      for (const e of readdirSync(at, { withFileTypes: true })) {
+        const path = `${at}/${e.name}`;
+        if (e.isDirectory()) walk(path);
+        else { const s = statSync(path); files.set(path, `${s.size}:${s.mtimeMs}`); }
+      }
+    };
+    walk(gitDir);
+    return files;
+  };
+  const changedBy = (run) => {
+    const before = snapshot();
+    // A moment between, so a rewritten file's time differs.
+    execFileSync("sleep", ["0.05"]);
+    run();
+    const after = snapshot();
+    return [...new Set([...before.keys(), ...after.keys()])].filter((p) => before.get(p) !== after.get(p));
+  };
+  const merge = changedBy(() => { try { g(["merge", "feature"]); } catch { /* stops on the conflict */ } });
+  assert.ok(merge.includes(`${gitDir}/MERGE_HEAD`), merge.join("\n"));
+  assert.equal(stateChanged(gitDir, merge), true);
+  g(["merge", "--abort"]);
+  const detach = changedBy(() => g(["checkout", "-q", "--detach", "HEAD~1"]));
+  assert.equal(stateChanged(gitDir, detach), true);
+  assert.equal(refsChanged(gitDir, detach), true);
+  const reset = changedBy(() => g(["checkout", "-q", "-B", "main", "feature"]));
+  assert.equal(stateChanged(gitDir, reset), true);
+  assert.equal(refsChanged(gitDir, reset), true);
 }
 
 // A (short) hash to the commit it names.

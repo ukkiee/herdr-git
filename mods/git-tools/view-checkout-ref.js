@@ -10,6 +10,7 @@ import { v_flex, InputState, Input } from "gpui-base";
 import { theme, openOverlay, closeOverlay } from "herdr";
 import { MOD, answerMenu } from "./ui.js";
 import { checkoutRef } from "./git-worktree.js";
+import { smartCheckoutRevision } from "./view-smart.js";
 
 // askRef(bus, lang) → Promise<text | null>; await it inside cx.spawn.
 function askRef(bus, lang) {
@@ -28,7 +29,9 @@ export function checkoutRefFrom(widget, cx) {
   cx.spawn(async (cx) => {
     const text = String((await askRef(host.bus, host.lang)) ?? "").trim();
     if (!text || !widget.repo) return;
-    widget.write({ key: "log.checkingOut" }, (repo) => checkoutRef(repo.git, repo.root, text), cx);
+    // Local changes in the way open the Smart dialog, as a branch's checkout does.
+    const smart = (repo) => (hash) => smartCheckoutRevision(repo, hash, { owner: host.bus.id, lang: host.lang, who: widget.who });
+    widget.write({ key: "log.checkingOut" }, (repo) => checkoutRef(repo.git, repo.root, text, { run: smart(repo) }), cx);
     cx.notify();
   });
 }

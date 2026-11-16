@@ -86,28 +86,28 @@ export function orderBranches(list, { scope = "local", current = null, prefs, fa
 }
 
 // orderTreeRows(rows, { scope, current, prefs }) → a copy of tree.js buildRows' grouped
-// rows (items { path, branch }) with the branches under each folder in this order. The
-// folders keep the tree's own place and order. buildRows has each folder's branches by
-// name already (and one folder's are all one remote's), so only the current branch and
-// the favorites move up, each kind keeping its order.
+// rows (items { path, branch }) reordered at each level, the top and inside every folder:
+// the current branch, the favorites, the folders (in the tree's own order, by name), then
+// the other branches by name. A folder's own rows follow it, ordered the same way.
+// buildRows has each level by name already (and one folder's branches are all one
+// remote's), so the branches are only split by kind, each kind keeping its order.
 export function orderTreeRows(rows, how) {
-  const out = [];
-  let run = [];
-  const ranked = { scope: how.scope, current: how.current, prefs: how.prefs };
-  const flush = () => {
-    if (run.length > 1) {
-      const kinds = [[], [], []];
-      for (const r of run) kinds[rank(r.path, ranked)].push(r);
-      run = [...kinds[0], ...kinds[1], ...kinds[2]];
+  const at = { scope: how.scope, current: how.current, prefs: how.prefs };
+  let i = 0;
+  // The rows from i on that sit at `depth` or deeper, as one level in order.
+  const level = (depth) => {
+    const kinds = [[], [], []], folders = [];
+    while (i < rows.length && rows[i].depth >= depth) {
+      const r = rows[i++];
+      if (r.folder) {
+        folders.push(r);
+        for (const x of level(r.depth + 1)) folders.push(x);
+      } else kinds[rank(r.path, at)].push(r);
     }
-    for (const r of run) out.push(r);
-    run = [];
+    return kinds[0].concat(kinds[1], folders, kinds[2]);
   };
-  for (const r of rows) {
-    if (r.folder || (run.length && (run[0].depth !== r.depth || run[0].dir !== r.dir))) flush();
-    if (r.folder) out.push(r); else run.push(r);
-  }
-  flush();
+  const out = [];
+  while (i < rows.length) for (const r of level(rows[i].depth)) out.push(r);
   return out;
 }
 

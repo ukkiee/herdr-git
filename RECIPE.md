@@ -3163,8 +3163,9 @@ pre-push 20 s, reference-transaction 12 s, each made to fail when a check says s
     three checked and `Delete local copies of added files` on: under the Commit panel's
     form a row says `Rolled back 3 files.` with **Restore…** and an `x`, and
     `git log -g --oneline refs/git-tools/rollback` lists one `Rollback: 3 files`.
-69. Run `git log --oneline --all`: the snapshot shows as one commit; the Commit list,
-    the Branch tree and `git branch -a` don't show it.
+69. Run `git log --oneline --all`: the snapshot `Rollback: 3 files` and its staging
+    `Index of Rollback: 3 files` show as two commits; the Commit list,
+    the Branch tree and `git branch -a` don't show them.
 70. Press **Restore…**: the Restore dialog opens with the newest snapshot selected and
     `m`, `d`, `n` checked, in their status colors.
 71. Double-click `m` there: a Diff tab opens comparing `<parent> → <snapshot>` with the

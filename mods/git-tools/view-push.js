@@ -92,6 +92,7 @@ export function servePush(panel, e, cx) {
 
 // { one, other } in English: `n` picks.
 const countOf = (t, key, n) => t(key, { n });
+const FIRST_LOOK = 6000; // ms after the dialog opens: the plan or files still unread then are read again once
 // The app runtime's toLocaleString doesn't group digits.
 const grouped = (n) => String(n).replace(/\B(?=(\d{3})+$)/g, ",");
 const stop = (_e, cx) => cx.stop_propagation();
@@ -152,6 +153,7 @@ export default class PushView {
     this.handle = cx.focus_handle();
     this.handle.focus();
     this.load(cx);
+    cx.timer.after(FIRST_LOOK, (cx) => { this.firstLook(cx); cx.notify(); });
   }
 
   // ---- reading
@@ -167,17 +169,30 @@ export default class PushView {
   load(cx) {
     if (!this.root) return;
     if (this.reads.busy()) { this.again = true; return; }
+    this.readPlan(cx);
+  }
+
+  // A dialog just opened has been seen to get no answer to its first reads: once, a little
+  // later, the plan or the files still unread are read again beside the first try.
+  firstLook(cx) {
+    if (!this.root || this.pushing) return;
+    if (!this.plan) this.readPlan(cx);
+    else if (this.files === null) this.loadFiles(cx);
+  }
+
+  // One read of the plan, whatever read is going.
+  readPlan(cx) {
     const turn = this.reads.start();
     this.again = false;
     cx.spawn(async (cx) => {
       try {
         const [plan, opted] = await Promise.all([readPushPlan(this.git, this.root, this.source), scriptedRepo(this.git, this.root)]);
-        if (this.reads.use(turn)) { this.takePlan(plan); this.scripted = opted; }
-      } finally {
-        if (this.reads.end(turn)) {
-          if (this.plan && this.filesStale()) this.loadFiles(cx);
-          if (this.again) this.load(cx);
+        if (this.reads.use(turn)) {
+          this.takePlan(plan); this.scripted = opted;
+          if (this.filesStale()) this.loadFiles(cx);
         }
+      } finally {
+        if (this.reads.end(turn) && this.again) this.load(cx);
         cx.notify();
       }
     });

@@ -818,7 +818,8 @@ another machine runs every git command on that machine. A panel opened with
   the next 10 s check reads again without Refresh (Refresh does too); the strip goes once
   a read works. A search for the repository that hasn't ended 80 s after it started is
   made again, and so is the read of a Branch tree or Commit list still showing `Loading…`
-  80 s after it was asked for.
+  80 s after it was asked for. Once, 6 s after the panel (or a Log tab) starts, what is
+  still unread is read again.
 - **Moving to another repository** shows it at once, with a commit selected or while
   this panel's own write still runs on the one before (that write goes on there).
 - **Column widths**: drag the handles. The Commit list never goes below 360px. Widths
@@ -961,7 +962,8 @@ another machine runs every git command on that machine. A panel opened with
 - The files are read as soon as the first list is in, even when a change reported meanwhile
   reads the list again (as one does right after Commit and Push…). A list read again reads
   the files again only when its commits differ. Files whose read failed or never answered
-  are read again with the next list, or on a click of the selection shown.
+  are read again with the next list, or on a click of the selection shown. Once, 6 s after
+  the dialog opens, the list or the files still unread are read again.
 - Target: the branch's upstream; without one, `origin` and the same name, and the push
   sets the upstream.
 - **Push** pushes exactly what the dialog shows, or nothing. The Commit panel that

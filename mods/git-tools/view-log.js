@@ -65,6 +65,7 @@ const LIST_MIN = 360, SPLIT = 5;
 // buttons take besides it.
 const FILTERS_MIN = 420, TOOLBAR_REST = 100;
 const SHORT = 7; // a hash as Commit details and the Branch tree's HEAD row show it
+const FIRST_LOOK = 6000; // ms after the panel starts: what is still unread then is read again once
 
 const stored = (column) => {
   try { const n = Number(localStorage.getItem(column.key)); return n >= column.min ? n : column.width; }
@@ -239,9 +240,18 @@ export default class LogView {
     this.widget.init(this, { who: "ui.logPanel" });
     this.loadOptions(cx);
     this.refresh(cx);
+    // A Log tab just opened has been seen to get no answer to its first reads: once, a
+    // little later, what is still unread is read again.
+    cx.timer.after(FIRST_LOOK, (cx) => this.firstLook(cx));
     // The watch below covers this computer; this covers other machines and a watch that
     // could not start. Cheap: one for-each-ref, and only while the panel shows.
     cx.timer.every(10000, (cx) => this.poll(cx));
+  }
+
+  firstLook(cx) {
+    if (!this.shown() || this.readBlocked()) return;
+    if (!this.read) this.refresh(cx);
+    else if (this.repo && (!this.list.read || !this.branches.read)) this.reload(cx);
   }
 
   where() { return this.fixed ?? location(); }
@@ -556,11 +566,13 @@ export default class LogView {
     }
     if (!folder) return;
     const turn = this.finding.start();
+    let used = false;
     cx.spawn(async (cx) => {
       try {
         const git = makeGit(exec, on, { wait: this.wait });
         const top = await repoRoot(git, folder);
-        if (!this.finding.use(turn) || this.contextKey() !== context) return;
+        used = this.contextKey() === context && this.finding.use(turn);
+        if (!used) return;
         this.folder = folder;
         if (!top.ok && !top.notRepo) {
           // git or the machine couldn't be reached: what was read stays, with git's words
@@ -576,7 +588,8 @@ export default class LogView {
         this.reload(cx);
         this.note(cx);
       } finally {
-        if (this.finding.end(turn)) this.read = true;
+        const newest = this.finding.end(turn);
+        if (newest || used) this.read = true;
         cx.notify();
       }
     });

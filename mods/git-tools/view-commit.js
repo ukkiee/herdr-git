@@ -235,7 +235,7 @@ export default class CommitView {
     if (!folder) return;
     const turn = this.reads.start();
     this.again = false;
-    let held = false;
+    let held = false, used = false;
     cx.spawn(async (cx) => {
       try {
         let repo = this.repo;
@@ -246,7 +246,8 @@ export default class CommitView {
           const top = await repoRoot(git, folder);
           if (this.contextKey() !== context) return;
           if (!top.ok) {
-            if (!this.reads.use(turn)) return;
+            used = this.reads.use(turn);
+            if (!used) return;
             this.repo = null; this.watching = null;
             this.notRepo = top.notRepo; this.folder = folder;
             this.error = top.notRepo ? null : sentence(this.t, top.msg, top.err);
@@ -273,7 +274,8 @@ export default class CommitView {
           last = await readLastCommit(repo.git, repo.root, { known: this.last?.hash ?? null });
           if (this.contextKey() !== context) return;
         }
-        if (!this.reads.use(turn)) return;
+        used = this.reads.use(turn);
+        if (!used) return;
         this.repo = repo; this.notRepo = false;
         this.lost = !status.ok;
         if (!status.ok || !status.hasHead || !amend) this.last = null;
@@ -292,10 +294,10 @@ export default class CommitView {
         this.watch(cx);
         this.stashTab.refresh(cx);
       } finally {
-        if (this.reads.end(turn)) {
-          if (!held) this.read = true;
-          if (this.again) this.refresh(cx);
-        }
+        // Read once an answer shows, or the newest read is over; what waited for that runs.
+        const newest = this.reads.end(turn);
+        if ((newest || used) && !held) this.read = true;
+        if (newest && this.again) this.refresh(cx);
         cx.notify();
       }
     });

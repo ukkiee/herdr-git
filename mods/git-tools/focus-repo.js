@@ -76,11 +76,14 @@ export function isTabScreen(p) {
 //   its tab, this mod's, and nothing is recorded for it (a tab just opened has the focus).
 //   Never a recorded pane: right after tab.new the focus may still be on the tab before,
 //   which is why the tabs with no repository record themselves too.
-export function registerTab(record, { props: p, focused, panes = [] } = {}) {
+//   A screen newTab opened knows its tab's name (props.tabName), and the guess is then
+//   among the panes of tabs of that name: tabs opened one after another all record
+//   themselves while the focus sits on the last one. tabList: the tabs, [{ id, name }].
+export function registerTab(record, { props: p, focused, panes = [], tabs: tabList = [] } = {}) {
   if (!isTabScreen(p)) return null;
   const repo = entryOf(tabRoot(p), p.on);
   const tabs = record && typeof record === "object" ? record : {};
-  const pane = str(p.pane) ?? guessPane(tabs, focused, panes);
+  const pane = str(p.pane) ?? (str(p.tabName) ? paneNamed(tabs, focused, panes, tabList, p.tabName) : guessPane(tabs, focused, panes));
   if (!pane) return null;
   const had = tabs[pane];
   if (had && had.root === repo.root && (had.on ?? null) === repo.on) return null;
@@ -94,8 +97,19 @@ export function forgetTab(record, pane) {
   return rest;
 }
 
+// This mod's unrecorded panes that are alone in their tab.
+const unrecordedAlone = (tabs, panes) => panes.filter((p) => p.mod === MOD && !tabs[p.pane] && panes.filter((q) => q.tab === p.tab).length === 1);
+
 function guessPane(tabs, focused, panes) {
-  const f = focused?.pane ? panes.find((p) => p.pane === focused.pane) : null;
-  if (!f || f.mod !== MOD || tabs[f.pane]) return null;
-  return panes.filter((p) => p.tab === f.tab).length === 1 ? f.pane : null;
+  const f = focused?.pane ? unrecordedAlone(tabs, panes).find((p) => p.pane === focused.pane) : null;
+  return f ? f.pane : null;
+}
+
+// The one unrecorded pane alone in a tab called `name`; with several, the focused one of
+// them. A pane of another tab is never taken, even when it has the focus.
+function paneNamed(tabs, focused, panes, tabList, name) {
+  const ids = new Set(tabList.filter((tab) => tab?.name === name).map((tab) => tab.id));
+  const hits = unrecordedAlone(tabs, panes).filter((p) => ids.has(p.tab));
+  if (hits.length === 1) return hits[0].pane;
+  return hits.find((p) => p.pane === focused?.pane)?.pane ?? null;
 }

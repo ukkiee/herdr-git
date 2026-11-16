@@ -1548,8 +1548,12 @@ builds a new one at the next rest. `git-tools.tabs`:
 (`focus-repo.js`: `registerTab`, `forgetTab`, `whereFocused`); `location()` in `ui.js`
 follows a recorded pane's repository while it has the focus. A pane id is Herdr's
 `props().pane` when there is one, else the focused pane when it is the only git-tools
-pane of its tab and not recorded yet; `newTab` also notes the pane `tab.new` added
-(`panes()` before and after). Panes that closed drop out on the next write.
+pane of its tab and not recorded yet. A tab `newTab` opened carries its name in
+`props.tabName`, and its screen takes the one unrecorded lone git-tools pane of a tab of
+that name (with several, the focused one of them), never another tab's: tabs opened one
+after another (Show Changes to Parents) each record their own pane while the focus is on
+the last. `newTab` also notes the pane `tab.new` added (`panes()` before and after).
+Panes that closed drop out on the next write.
 
 **A dialog's write.** Push, Rollback, Restore, New Branch and Delete Branch never run a git write
 themselves. The dialog calls `askOwner`, which posts a `request` to `props.owner` and
@@ -3827,7 +3831,10 @@ and `b.txt` and a new file `c.txt`)
      reads Reword and the message changes. ⌘↩ inside Edit Commit Message, Squashed Commit
      Message and Extract Selected Changes confirms them too.
 267. In Commit details, right-click a file the commit added → Show Changes to Parents: the
-     whole file shows as added. On a merge commit's file: one tab per parent.
+     whole file shows as added. On a merge commit's file: one tab per parent, each named
+     `<file> (<parent's 8-char hash>)`; with either tab focused, the Branch tree, the
+     Commit panel and the VCS widget show that repository, and both tabs' panes are
+     under `git-tools.tabs`.
 268. In a space whose terminal has `cd`'d into another repository, Pull and look at the
      `Update Info` tab: the Branch tree, the Commit panel and the VCS widget show that
      repository while the tab has the focus; click the terminal: they follow it. The

@@ -402,7 +402,8 @@ const TABS = "git-tools.tabs";
 // claimTab(props): a tab's screen records its own pane with its repository. Returns the
 // pane recorded, or null (not a tab's screen, or its pane not known yet).
 export function claimTab(p) {
-  const got = registerTab(shared(TABS), { props: p, focused: focused(), panes: panes() });
+  const tabs = spaces().flatMap((s) => s.tabs ?? []).map((tab) => ({ id: tab.id, name: tab.name }));
+  const got = registerTab(shared(TABS), { props: p, focused: focused(), panes: panes(), tabs });
   if (got) setShared(TABS, got.record);
   return got?.pane ?? null;
 }
@@ -419,8 +420,11 @@ export function tabRecorded(pane) {
   return Boolean(pane && record && typeof record === "object" && record[pane]);
 }
 
+// The tab's name goes in its props (tabName): the screen finds its own pane by it when
+// several tabs open at once (focus-repo.js registerTab).
 export function newTab(name, props) {
   const before = panes();
+  if (typeof name === "string" && name) props = { ...props, tabName: name };
   run("tab.new", { name, mod: MOD, props });
   const after = panes();
   const record = rememberTab(shared(TABS), newPanes(before, after), { root: props.root, on: props.on ?? null }, after);

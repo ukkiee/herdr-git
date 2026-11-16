@@ -115,12 +115,23 @@ const local = (...list) => list.map((name) => ({ name }));
   const rows = buildRows(items, { grouped: true });
   const prefs = { favorite: ["refs/heads/feature/b"], unfavorite: [] };
   const ordered = orderTreeRows(rows, { scope: "local", current: "topic", prefs });
-  // Folders keep their place (the tree's own order); the branches under each are reordered.
+  // At each level: the current branch, the favorites, the folders (by name, each with
+  // its own rows in the same order), then the other branches by name.
   assert.deepEqual(ordered.map((r) => (r.folder ? `${r.key}` : r.path)),
-    ["feature/", "feature/x/", "feature/x/y", "feature/b", "feature/a", "topic", "main", "aaa"]);
+    ["topic", "main", "feature/", "feature/b", "feature/x/", "feature/x/y", "feature/a", "aaa"]);
   // Nothing else on a row changes, and the rows handed in keep their order.
   assert.equal(ordered.length, rows.length);
   assert.deepEqual(rows.map((r) => r.path), ["feature", "feature/x", "feature/x/y", "feature/a", "feature/b", "aaa", "main", "topic"]);
+  // On dev: dev, main (★), the team folder, then feature and gone-topic.
+  const team = buildRows(local("main", "feature", "team/one", "team/two", "gone-topic", "dev").map((b) => ({ path: b.name, branch: b })), { grouped: true });
+  assert.deepEqual(orderTreeRows(team, { scope: "local", current: "dev", prefs: none }).map((r) => (r.folder ? r.key : r.path)),
+    ["dev", "main", "team/", "team/one", "team/two", "feature", "gone-topic"]);
+  // A folded folder keeps its place among the folders; a remote's folder orders its own.
+  const folded = buildRows(local("b", "z/1", "a/1").map((b) => ({ path: b.name, branch: b })), { grouped: true, collapsed: new Set(["a/"]) });
+  assert.deepEqual(orderTreeRows(folded, { scope: "local", current: null, prefs: none }).map((r) => (r.folder ? r.key : r.path)), ["a/", "z/", "z/1", "b"]);
+  const remote = buildRows(local("origin/topic", "origin/team/x", "origin/main").map((b) => ({ path: b.name, branch: b })), { grouped: true });
+  assert.deepEqual(orderTreeRows(remote, { scope: "remote", current: "dev", prefs: none }).map((r) => (r.folder ? r.key : r.path)),
+    ["origin/", "origin/main", "origin/team/", "origin/team/x", "origin/topic"]);
 }
 
 // ---- the Branch tree's settings (⋮): saved values, read back with defaults

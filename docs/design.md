@@ -27,8 +27,8 @@
   메뉴(Show Diff, 경로 복사, Finder에서 보기)가 있다. 읽기는 `files-data.js`, 판단은
   `files-tree.js`가 한다.
 - **Log panel** (`view-log.js`): 작업 영역 아래 블록 `git-log`. 세 열은 각자의 파일이 그린다.
-  - **Branch tree** (`log-branches.js`): HEAD, Local, Remote, Tags. 현재 → Favorite branch →
-    이름순으로 놓고, 세로 툴바와 우클릭 메뉴가 브랜치 동작을 연다.
+  - **Branch tree** (`log-branches.js`): HEAD, Local, Remote, Tags. 각 단계마다 현재 → Favorite
+    branch → 폴더 → 나머지 이름순으로 놓고, 세로 툴바와 우클릭 메뉴가 브랜치 동작을 연다.
   - **Commit list** (`log-list.js`, 위의 검색과 필터는 `log-filters.js`, 그래프·표시 옵션은
     `log-options.js`): 그래프, 제목, Ref label, 작성자, 시각. Shift·Cmd 클릭으로 여러 커밋을 고른다.
   - **Commit details** (`log-details.js`): 고른 커밋(여럿이면 합친 변경)의 파일 트리, 전체 메시지,
@@ -655,7 +655,8 @@ Rollback은 Rollback dialog의 버튼으로만 실행되고, 쓰기 전에 버�
 
 ### Branch tree의 순서와 즐겨찾기
 
-- 순서는 현재 → Favorite branch → 이름순이고 원격도 같다(`branch-order.js`). VCS widget 팝업의 로컬·원격
+- 순서는 현재 → Favorite branch → 이름순이고 원격도 같다(`branch-order.js`). 폴더로 묶은 Branch tree는
+  단계(묶음, 폴더, 원격)마다 현재 → Favorite branch → 폴더(이름순) → 나머지 이름순이다(`orderTreeRows`). VCS widget 팝업의 로컬·원격
   묶음만 Favorite branch → 현재 → 이름순이다. 팝업은 읽기만 하는 설계라 팝업의 별은 보이기만 한다.
 - main·master는 처음부터 Favorite branch다. 사용자가 풀면 `gittools.unfavorite`에 남는다.
 - 내 브랜치 표시는 `user.email`의 커밋을 하나라도 담은 브랜치만 보인다(`for-each-ref --contains`).

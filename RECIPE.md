@@ -221,7 +221,8 @@ toolbar (`Git` semibold, `Log` 12px `muted`, Refresh, Hide) and the notice.
 - The tree: `HEAD (Current Branch)` (or `HEAD (<7-char hash>)` when detached), then
   **Local** and **Remote** groups (semibold, count at 11px `dim`). A `/` in a name makes
   folders (`folder` icon 13px, count shown while folded). Indent 6px plus 12px per
-  level. Branch rows: `branch-item` icon (13px) in `ansi3` for the current branch (whose
+  level. Each level (the group, every folder, every remote) reads the current branch,
+  the favorites (★), the folders by name, then the other branches by name. Branch rows: `branch-item` icon (13px) in `ansi3` for the current branch (whose
   name is semibold), `ansi2` for other local branches, `ansi5` for remote ones; then
   `↑N` (`ansi2`) and `↓N` (`ansi4`) at 11px against its upstream. Tooltip: the name, or
   `<name> → <upstream>`. A branch whose upstream is gone from the remote (deleted there
@@ -3673,8 +3674,10 @@ commit `main` lacks)
 
 **Branch tree and Commit list options**
 
-222. The Branch tree's Local group reads the current branch, then ★`main`, then the rest by
-     name; `origin/main` has ★ too.
+222. The Branch tree's Local group reads the current branch, then ★`main`, then the folders
+     (`team`), then the rest by name: on `dev`, `dev`, `main`, `team`, `feature`,
+     `gone-topic`; inside a folder, and inside each remote, the same order. `origin/main`
+     has ★ too.
 223. Hover a branch: an empty star shows; click it: the branch is a favorite, moves up, and
      `git config --get-all gittools.favorite` names it. The toolbar's Mark/Unmark As
      Favorite does the same.

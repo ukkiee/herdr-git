@@ -83,21 +83,25 @@ export function orderBranches(list, { scope = "local", current = null, prefs, fa
 }
 
 // orderTreeRows(rows, { scope, current, prefs }) → a copy of tree.js buildRows' grouped
-// rows (items { path, branch }) with the branches under each folder in this order. The
-// folders keep the tree's own place and order.
+// rows (items { path, branch }) reordered at each level, the top and inside every folder:
+// the current branch, the favorites, the folders (in the tree's own order, by name), then
+// the other branches by name. A folder's own rows follow it, ordered the same way.
 export function orderTreeRows(rows, how) {
-  const out = [];
-  let run = [];
-  const flush = () => {
-    if (run.length > 1) run = orderBranches(run.map((r) => ({ name: r.path, row: r })), { scope: how.scope, current: how.current, prefs: how.prefs }).map((x) => x.row);
-    out.push(...run);
-    run = [];
+  const at = { scope: how.scope, current: how.current, prefs: how.prefs };
+  let i = 0;
+  // The rows from i on that sit at `depth` or deeper, as one level in order.
+  const level = (depth) => {
+    const first = [], folders = [], rest = [];
+    while (i < rows.length && rows[i].depth >= depth) {
+      const r = rows[i++];
+      if (r.folder) folders.push(r, ...level(r.depth + 1));
+      else (rank(r.path, at) < 2 ? first : rest).push(r);
+    }
+    const order = (list) => orderBranches(list.map((r) => ({ name: r.path, row: r })), at).map((x) => x.row);
+    return [...order(first), ...folders, ...order(rest)];
   };
-  for (const r of rows) {
-    if (r.folder || (run.length && (run[0].depth !== r.depth || run[0].dir !== r.dir))) flush();
-    if (r.folder) out.push(r); else run.push(r);
-  }
-  flush();
+  const out = [];
+  while (i < rows.length) out.push(...level(rows[i].depth));
   return out;
 }
 

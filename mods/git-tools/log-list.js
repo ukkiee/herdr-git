@@ -126,7 +126,7 @@ function rowModel(commit, graph, options) {
     lane: graph.lane, color: graph.color,
     width: PAD * 2 + graph.cols * LANE,
     labels: labelRefs(commit.refs, labelLook(options)),
-    merge: commit.parents.length > 1,
+    merge: commit.merge ?? commit.parents.length > 1, // collapseLinear's merge, as parents may fold into one
     head: commit.refs.some((r) => r.kind === "head"),
     minute: -1, time: "",
     fitRoom: -1, fit: null, // fitLabels' answer for the room it was worked out for

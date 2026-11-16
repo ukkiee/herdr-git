@@ -299,6 +299,16 @@ assert.deepEqual(layoutGraph([]), { rows: [], carry: { lanes: [], next: 0 } });
   assert.deepEqual(collapseLinear(commits(["a", "b"], ["b", "c"], ["c"])).map((c) => c.hash), ["a", "c"]);
 }
 
+// A merge stays a merge when its lines fold into one: both sides fold away into the
+// fork, so the graph keeps one line, but merge: true says what git has. Only merges
+// carry it, with first parent too.
+{
+  const list = commits(["m", "a", "b"], ["a", "x"], ["b", "x"], ["x"]);
+  const folded = collapseLinear(list);
+  assert.deepEqual(folded.map((c) => [c.hash, c.parents, Boolean(c.merge)]), [["m", ["x"], true], ["x", [], false]]);
+  assert.equal(collapseLinear(list, { firstParent: true })[0].merge, true);
+}
+
 // The current branch: the commits HEAD reaches among those read, through the lines the
 // graph draws (first parent only with that option, across merges left out).
 {

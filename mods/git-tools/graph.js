@@ -94,6 +94,7 @@ function graphParents(commit, firstParent, lead) {
 // linear branches folded: a commit with one parent, one child among `commits` and no Ref
 // label is left out. Each commit kept gets parents: where its lines lead now, and
 // folded: { parent: how many commits its line to that parent passes over } when any.
+// A merge also gets merge: true, since its lines may fold into one parent.
 // Branch tips, forks, merges, labelled commits and roots stay. New objects: the commits
 // handed in are not changed. The graph options apply as in layoutGraph (whose
 // firstParent and through the answer has already taken in).
@@ -118,7 +119,9 @@ export function collapseLinear(commits, { firstParent = false, through = [] } = 
       parents.push(at);
       if (n) folded[at] = n;
     }
-    out.push(Object.keys(folded).length ? { ...c, parents, folded } : { ...c, parents });
+    const kept = Object.keys(folded).length ? { ...c, parents, folded } : { ...c, parents };
+    if (c.parents.length > 1) kept.merge = true;
+    out.push(kept);
   }
   return out;
 }

@@ -239,7 +239,8 @@ toolbar (`Git` semibold, `Log` 12px `muted`, Refresh, Hide) and the notice.
   repository)`. Its tooltip is the full sentence: the label for the panel's own write
   here, `Another git operation is running: Committing…`, or `Another git operation is
   running in another repository: Checking out…`.
-- **Rows**: the graph, the subject (`dim` for a merge commit), the Ref labels, the
+- **Rows**: the graph, the subject (`dim` for a merge commit, also when Collapse Linear
+  Branches folds its lines into one), the Ref labels, the
   author (120px, 12px `muted`) and the time (124px, 12px `muted`). Below 520px of list
   width the author goes; below 380px the time too.
   - Graph: lanes 14px apart from 5px in, as many lanes as the history has. Stroked

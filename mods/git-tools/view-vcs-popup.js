@@ -23,7 +23,7 @@ import { div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input, Popup } from "gpui-base";
 import { exec, theme, openOverlay, closeOverlay } from "herdr";
 import { makeGit, repoRoot } from "./git.js";
-import { readHeads, popupRows, popupStep } from "./git-heads.js";
+import { readHeads, popupRows, popupStep, popupTarget } from "./git-heads.js";
 import { readFavorites } from "./git-branch.js";
 import { isFavorite, orderBranches, refOf } from "./branch-order.js";
 import { readOperation } from "./git-operation.js";
@@ -237,7 +237,7 @@ export default class VcsPopup {
     else if (r.kind === "branch") {
       // A second press on the same row closes its menu.
       if (this.sub?.row === i && this.sub.rowName === r.name) this.sub = null;
-      else this.openSub(i, { name: r.name, scope: r.scope === "recent" ? "local" : r.scope, current: r.current, upstream: r.upstream });
+      else this.openSub(i, popupTarget(r));
       this.keysTo();
       cx.notify();
     }

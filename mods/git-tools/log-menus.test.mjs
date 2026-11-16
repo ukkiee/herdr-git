@@ -1,6 +1,7 @@
 // node log-menus.test.mjs: the Log panel's menus and toolbars from one model (no app, no git).
 import assert from "node:assert/strict";
 import { MENUS, menuItems, branchContext } from "./log-menus.js";
+import { popupRows, popupTarget } from "./git-heads.js";
 import { translator } from "./i18n.js";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -74,6 +75,21 @@ const all = (name, ctx = {}, t = ko) => look(menuItems(name, everything, ctx), t
   }
   assert.equal(updateOff("localBranch", { name: "done", scope: "local", upstream: null, gone: true }), true);
   assert.equal(updateOff("localBranch", { name: "done", scope: "local", upstream: "origin/done", gone: false }), false);
+  // The VCS widget popup opens a row's menu from popupTarget(row): a current branch whose
+  // tracked branch is gone has Update off there too, from its Recent row and its Local row.
+  const heads = {
+    head: { branch: "topic", hash: "a".repeat(40) },
+    local: [{ name: "topic", current: true, upstream: "origin/topic", gone: true, ahead: 0, behind: 0 }],
+    remote: [], recent: ["topic"], tags: [],
+  };
+  const rows = popupRows({ heads, op: null, query: "topic" }, ko).filter((r) => r.kind === "branch");
+  assert.equal(rows.length, 2);
+  for (const r of rows) {
+    const target = popupTarget(r);
+    assert.equal(target.scope, "local");
+    const update = menuItems("currentBranch", everything, branchContext(target, { head: heads.head })).find((it) => it.id === "branch.update");
+    assert.equal(update.disabled, true);
+  }
   // The HEAD row: the current branch's menu without its tracked branch.
   assert.deepEqual(all("headBranch", { name: "main", current: "main" }), [
     "'main'에서 새 브랜치…", "─", "작업 트리로 차이점 표시", "─", "'main'(으)로부터 새 워크트리…", "─",

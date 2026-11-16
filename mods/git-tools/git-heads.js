@@ -142,6 +142,13 @@ export function popupStep(rows, at, by, { query = "" } = {}) {
   return at;
 }
 
+// popupTarget(row) → the branch a popupRows branch row's menu is about, as log-menus.js
+// branchContext takes it: a Recent row is the local branch, and gone rides along so the
+// menu knows a current branch can't update from what it tracked.
+export function popupTarget(r) {
+  return { name: r.name, scope: r.scope === "recent" ? "local" : r.scope, current: r.current, upstream: r.upstream, gone: r.gone };
+}
+
 export function popupRows({ heads, op, query = "", folded = new Set(), handled = () => true }, t) {
   const words = String(query).trim().toLowerCase();
   const hit = (text) => !words || text.toLowerCase().includes(words);

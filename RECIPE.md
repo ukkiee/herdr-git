@@ -3789,7 +3789,8 @@ and `b.txt` and a new file `c.txt`)
      Commit panel and of the Log panel, with the operation's name and a sliding bar; with
      the Stash tab showing too; it goes away when the write ends.
 258. Right-click the long branch in the Branch tree, and open its menu in the widget popup:
-     every item reads to its end (`Rebase 'main' onto '<long name>'`).
+     every item reads to its end, and a branch name longer than 30 characters loses its
+     middle (`Rebase 'main' onto 'a-rather-long-b…for-the-widget'`).
 259. Open New Branch…, New Tag…, Git Reset and Update Project: each card is as tall as
      what it holds, with rounded corners, a line and a shadow, and no empty space under
      the buttons; the Conflicts, Push, Rollback and Restore dialogs fill their height as

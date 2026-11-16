@@ -21,8 +21,9 @@ const EMPTY = { head: { branch: null, hash: null, detached: false }, current: nu
 // readHeads(git, root) → { ok, code, out, err, head, current, local, remote, tags, recent }
 //   head: { branch, hash, detached }: branch null on a detached HEAD, hash null before the
 //     first commit (branch is then the one that commit will make).
-//   current: { name, upstream, ahead, behind } for the branch HEAD is on, or null when
-//     HEAD is detached. upstream: the remote branch it tracks ("origin/main") or null.
+//   current: { name, upstream, gone, ahead, behind } for the branch HEAD is on, or null when
+//     HEAD is detached. upstream: the remote branch it tracks ("origin/main") or null;
+//     gone: that remote branch no longer exists (readBranches' gone).
 //     behind: its commits not here yet (to pull); ahead: commits here not on it (to push).
 //     Both 0 without an upstream or when the upstream is gone.
 //   local, remote: as git-branch.js readBranches has them.
@@ -47,7 +48,7 @@ export async function readHeads(git, root) {
   const head = { ...branches.head, detached: !branches.head.branch };
   const mine = branches.local.find((b) => b.name === head.branch);
   const current = head.branch
-    ? { name: head.branch, upstream: mine?.upstream ?? null, ahead: mine?.ahead ?? 0, behind: mine?.behind ?? 0 }
+    ? { name: head.branch, upstream: mine?.upstream ?? null, gone: mine?.gone ?? false, ahead: mine?.ahead ?? 0, behind: mine?.behind ?? 0 }
     : null;
   const exists = new Set(branches.local.map((b) => b.name));
   const recent = [];

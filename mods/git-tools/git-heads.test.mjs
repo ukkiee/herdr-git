@@ -54,7 +54,7 @@ commit(repo, "c.txt", "l1");
 {
   const r = await readHeads(git, repo);
   assert.equal(r.ok, true, r.err);
-  assert.deepEqual(r.current, { name: "main", upstream: "origin/main", ahead: 1, behind: 2 });
+  assert.deepEqual(r.current, { name: "main", upstream: "origin/main", gone: false, ahead: 1, behind: 2 });
   assert.deepEqual(r.head, { branch: "main", hash: raw(repo, ["rev-parse", "HEAD"]), detached: false });
   assert.deepEqual(r.remote.map((b) => b.name), ["origin/main"]);
 }
@@ -63,7 +63,17 @@ commit(repo, "c.txt", "l1");
 {
   raw(repo, ["checkout", "-q", "-b", "topic"]);
   const r = await readHeads(git, repo);
-  assert.deepEqual(r.current, { name: "topic", upstream: null, ahead: 0, behind: 0 });
+  assert.deepEqual(r.current, { name: "topic", upstream: null, gone: false, ahead: 0, behind: 0 });
+}
+
+// A branch whose remote branch was deleted and pruned: it still names it, gone.
+{
+  raw(repo, ["push", "-q", "-u", "origin", "topic"]);
+  raw(origin, ["branch", "-q", "-D", "topic"]);
+  raw(repo, ["fetch", "-q", "--prune"]);
+  const r = await readHeads(git, repo);
+  assert.deepEqual(r.current, { name: "topic", upstream: "origin/topic", gone: true, ahead: 0, behind: 0 });
+  assert.deepEqual(r.local.find((b) => b.name === "topic").gone, true);
 }
 
 // A detached HEAD: no current branch, the commit HEAD is on.
@@ -99,7 +109,7 @@ commit(repo, "c.txt", "l1");
   assert.equal(f.ok, true, f.err);
   assert.deepEqual(f.recent, []);
   assert.deepEqual(f.head, { branch: "main", hash: null, detached: false });
-  assert.deepEqual(f.current, { name: "main", upstream: null, ahead: 0, behind: 0 });
+  assert.deepEqual(f.current, { name: "main", upstream: null, gone: false, ahead: 0, behind: 0 });
 }
 
 // Tags, by name.

@@ -25,9 +25,11 @@ const REF_FORMAT = ["%(refname)", "%(objectname)", "%(symref)", "%(upstream:shor
 // readBranches(git, root) → { ok, err, head, local, remote }
 //   head: { branch, hash }: branch is null on a detached HEAD, hash is null in a
 //     repository without commits (branch is then the one the first commit will make).
-//   local: [{ name, hash, current, upstream, ahead, behind }], by name. upstream is the
-//     remote branch it tracks ("origin/main") or null; ahead and behind count commits
-//     against it and are 0 without one, or when it is gone from the remote.
+//   local: [{ name, hash, current, upstream, gone, ahead, behind }], by name. upstream is
+//     the remote branch it tracks ("origin/main") or null; gone: that remote branch is set
+//     but no longer there (deleted on the remote and pruned here), so there is nothing to
+//     update from. ahead and behind count commits against it and are 0 without one, or
+//     when it is gone.
 //   remote: [{ name, hash }] with name like "origin/feature/login", by name. A remote's
 //     HEAD pointer (origin/HEAD) is not a branch and is left out.
 export async function readBranches(git, root) {
@@ -47,6 +49,7 @@ export async function readBranches(git, root) {
       const name = ref.slice(HEADS.length);
       local.push({
         name, hash, current: name === head.branch, upstream: upstream || null,
+        gone: Boolean(upstream) && track === "gone",
         ahead: Number(/ahead (\d+)/.exec(track)?.[1] ?? 0), behind: Number(/behind (\d+)/.exec(track)?.[1] ?? 0),
       });
     } else if (ref.startsWith(REMOTES) && !symref) remote.push({ name: ref.slice(REMOTES.length), hash });

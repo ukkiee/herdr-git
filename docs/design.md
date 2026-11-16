@@ -1028,7 +1028,7 @@ Herdr는 mod를 QuickJS로 돌린다. JIT가 없고, 한 호출이 너무 오래
   바꿀 때마다 사람이 다시 본다. 확인 절차는 RECIPE의 "Done when"에 있다.
 
 **전체 오프라인 검사:** `node tools/check.mjs`가 한 번에 돌린다. 루트의 `node layout.test.mjs`,
-`mods/git-tools`의 `*.test.mjs` 53개 각각, `node tools/gen-icon-theme.test.mjs`가 모두 `ok`를 찍고,
+`mods/git-tools`의 `*.test.mjs` 55개 각각, `node tools/gen-icon-theme.test.mjs`가 모두 `ok`를 찍고,
 `herdr-app check mods/git-tools`가 통과한다. 테스트는 node 내장 모듈(`node:assert/strict` 등)만 쓴다.
 
 **느린 엔진의 예산:** `icon-theme.test.mjs`가 JIT를 끈 node로 규칙을 꽂는 시간을 재서, 규칙을

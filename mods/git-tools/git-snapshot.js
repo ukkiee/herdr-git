@@ -449,19 +449,54 @@ export async function restore(git, root, { snapshot, paths = [], copy } = {}) {
 //   that sentence in err.
 //   Which way a refusal went is read from the index's conflicts, never from git's words:
 //   git exits 1 both when it refuses before writing and when it leaves conflicts.
-export async function applySnapshot(git, root, { snapshot } = {}) {
-  const out = (r, more) => ({ ok: r.ok, code: r.code, out: r.out ?? "", err: r.err ?? "", ...(r.msg ? { msg: r.msg } : {}), conflicts: [], staged: false, changed: false, ...more });
+//   A changed file HEAD doesn't have now (the reset went to a commit before it was added)
+//   would merge as deleted against modified. It is taken out of what git applies and
+//   written as the snapshot's working tree had it, staged as the snapshot's index had it
+//   when that was staged, else left untracked (revived: those paths; the msg keys get
+//   "Revived" and args.revived). Nothing is applied when something is on disk at such a
+//   path now (restore.revivedTaken). copy: the calling copy's id, for the scratch index
+//   (record); needed only when there are such files.
+export async function applySnapshot(git, root, { snapshot, copy } = {}) {
+  const out = (r, more) => ({ ok: r.ok, code: r.code, out: r.out ?? "", err: r.err ?? "", ...(r.msg ? { msg: r.msg } : {}), conflicts: [], staged: false, revived: [], changed: false, ...more });
   if (!HASH.test(String(snapshot ?? ""))) return out({ ok: false, code: -1, err: "No rollback to restore from.", msg: { key: "restore.noSnapshot" } });
   const made = await madeOn(git, root, snapshot);
   if (!made.ok) return out(made);
   const before = await unmerged(git, root);
   if (!before.ok) return out(before);
+  const gone = await notInHead(git, root, snapshot, made.parents);
+  if (!gone.ok) return out(gone);
+  let applied = snapshot;
+  if (gone.paths.length) {
+    if (!COPY.test(String(copy ?? ""))) return out(noCopy);
+    const there = await onDisk(git, root, gone.paths);
+    if (!there.ok) return out(there);
+    if (there.paths.length) {
+      const list = there.paths.join("\n");
+      return out({ ok: false, code: -1, err: `Nothing was restored: something is on disk now where a file HEAD doesn't have would come back:\n${list}`, msg: { key: "restore.revivedTaken", args: { list } } });
+    }
+    const trimmed = await withoutPaths(git, root, snapshot, made.parents, gone, copy);
+    if (!trimmed.ok) return out(trimmed);
+    applied = trimmed.hash;
+  }
+  // After git applied the rest: the files HEAD doesn't have, then the result's words.
+  // base: { key, en } of the result without them.
+  const finish = async (r, base, more) => {
+    const back = await revive(git, root, gone, copy);
+    if (!back.ok) return out({ ...back, ok: false }, { ...more, changed: true });
+    const all = base.msg.key === "restore.applied";
+    if (!gone.paths.length) return out({ ...r, ok: all, err: all ? "" : base.en, msg: base.msg }, { ...more, changed: true });
+    const revived = gone.paths.join("\n");
+    const msg = { key: `${base.msg.key}Revived`, args: { ...base.msg.args, n: base.msg.args?.n ?? gone.paths.length, revived } };
+    const en = `${base.en}${more.conflicts ? "\n" : " "}Not in HEAD now, so brought back as they were in the rollback:\n${revived}`;
+    // Said like a restore that left something, so the dialog shows which files came back so.
+    return out({ ...r, ok: false, err: en, msg }, { ...more, revived: gone.paths, changed: true });
+  };
   const tries = made.parents.length === 2 ? [true, false] : [false];
   let first = null;
   for (const index of tries) {
-    const r = await git(root, ["stash", "apply", "-q", ...(index ? ["--index"] : []), snapshot]);
-    if (r.ok && index) return out({ ...r, err: "", msg: { key: "restore.applied" } }, { staged: true, changed: true });
-    if (r.ok) return out({ ...r, ok: false, err: UNSTAGED, msg: { key: "restore.appliedUnstaged" } }, { changed: true });
+    const r = await git(root, ["stash", "apply", "-q", ...(index ? ["--index"] : []), applied]);
+    if (r.ok && index) return finish(r, { msg: { key: "restore.applied" }, en: "Restored all of it, with its staging." }, { staged: true });
+    if (r.ok) return finish(r, { msg: { key: "restore.appliedUnstaged" }, en: UNSTAGED }, {});
     first ??= r;
     // With conflicts already in the index git refuses at once: any failure is a refusal.
     const after = before.paths.length ? before : await unmerged(git, root);
@@ -469,14 +504,111 @@ export async function applySnapshot(git, root, { snapshot } = {}) {
     if (after.paths.length && !before.paths.length) {
       const msg = { key: "restore.appliedConflicts", args: { n: after.paths.length, list: after.paths.join("\n") } };
       const n = after.paths.length, files = n === 1 ? "1 file" : `${n} files`;
-      const err = `Restored all of it. Lines changed on both sides are left as conflicts in ${files}; resolve them:\n${msg.args.list}`;
-      return out({ ...r, ok: false, err, msg }, { conflicts: after.paths, changed: true });
+      const en = `Restored all of it. Lines changed on both sides are left as conflicts in ${files}; resolve them:\n${msg.args.list}`;
+      return finish(r, { msg, en }, { conflicts: after.paths });
     }
   }
   return out({ ...first, ok: false });
 }
 
 const UNSTAGED = "Restored all of it. Its staging doesn't fit the index HEAD has now, so it was left out.";
+
+// The files a snapshot changed (its working tree or its index against the HEAD it was made
+// on) that that HEAD had, HEAD has no longer, and the snapshot's working tree still has:
+// git would merge each as deleted against modified. → { ok, paths, then, tree, index }:
+// the paths, and their entries ("<mode> <object>") in that HEAD, the snapshot's tree and
+// its index (no key: not there). A file the snapshot left as it was stays deleted.
+async function notInHead(git, root, snapshot, parents) {
+  const none = { ok: true, paths: [], then: new Map(), tree: new Map(), index: new Map() };
+  const [then, staged] = parents;
+  if (!then) return none;
+  const changed = new Set();
+  for (const other of [snapshot, staged].filter(Boolean)) {
+    const r = await git.read(root, ["diff-tree", "-r", "-z", "--no-renames", "--name-only", then, other]);
+    if (!r.ok) return r;
+    for (const path of r.out.split("\0")) if (path) changed.add(path);
+  }
+  if (!changed.size) return none;
+  const all = [...changed];
+  const [was, now, tree, index] = await Promise.all([inTree(git, root, then, all), inTree(git, root, "HEAD", all), inTree(git, root, snapshot, all), staged ? inTree(git, root, staged, all) : { ok: true, entries: new Map() }]);
+  for (const r of [was, now, tree, index]) if (!r.ok) return r;
+  const paths = all.filter((path) => was.entries.has(path) && !now.entries.has(path) && tree.entries.has(path));
+  return { ok: true, paths, then: was.entries, tree: tree.entries, index: index.entries };
+}
+
+// Which of `paths` have something on disk at them or under them, tracked or not, ignored
+// or not: { ok, paths }.
+async function onDisk(git, root, paths) {
+  const asked = new Set(paths), found = new Set();
+  for (const chunk of chunks(paths)) {
+    // -c -o without --exclude-standard: tracked files and every other file, ignored too.
+    const r = await git.read(root, ["--literal-pathspecs", "ls-files", "-c", "-o", "-z", "--", ...chunk]);
+    if (!r.ok) return r;
+    for (const line of r.out.split("\0")) {
+      if (!line) continue;
+      const hit = asked.has(line) ? line : paths.find((path) => line.startsWith(`${path}/`));
+      if (hit) found.add(hit);
+    }
+  }
+  return { ok: true, paths: paths.filter((path) => found.has(path)) };
+}
+
+// A copy of `snapshot` whose working tree and index have gone.paths as the HEAD it was
+// made on had them, so git applies no change to them: { ok, hash }. Built in the scratch
+// index of `copy`, which is emptied after.
+async function withoutPaths(git, root, snapshot, parents, gone, copy) {
+  const dir = await git.read(root, ["rev-parse", "--absolute-git-dir"]);
+  if (!dir.ok) return dir;
+  const env = { GIT_INDEX_FILE: scratchIndex(dir.out.trim(), copy) };
+  const [then, staged] = parents;
+  const treeOf = async (commit) => {
+    const base = await git(root, ["read-tree", commit], { env });
+    if (!base.ok) return base;
+    for (const chunk of chunks(gone.paths, (path) => path.length * 3 + 120)) {
+      const r = await git(root, ["update-index", "--add", ...chunk.flatMap((path) => ["--cacheinfo", ...gone.then.get(path).split(" "), path])], { env });
+      if (!r.ok) return r;
+    }
+    return git(root, ["write-tree"], { env });
+  };
+  const build = async () => {
+    const parentsOut = ["-p", then];
+    if (staged) {
+      const index = await treeOf(staged);
+      if (!index.ok) return index;
+      const commit = await git(root, [...IDENTITY, "commit-tree", "--no-gpg-sign", index.out.trim(), "-p", then, "-m", `Index of a restore of ${snapshot}`]);
+      if (!commit.ok) return commit;
+      parentsOut.push("-p", commit.out.trim());
+    }
+    const tree = await treeOf(snapshot);
+    if (!tree.ok) return tree;
+    const commit = await git(root, [...IDENTITY, "commit-tree", "--no-gpg-sign", tree.out.trim(), ...parentsOut, "-m", `Restore of ${snapshot}`]);
+    if (!commit.ok) return commit;
+    return { ok: true, hash: commit.out.trim() };
+  };
+  const r = await build();
+  await git(root, ["read-tree", "--empty"], { env });
+  return r;
+}
+
+// Writes gone.paths as the snapshot's working tree had them, and stages those whose index
+// entry differed from the HEAD the snapshot was made on, as the index had it then; the
+// others stay untracked. → { ok } (with git's failure).
+async function revive(git, root, gone, copy) {
+  if (!gone.paths.length) return { ok: true };
+  const wrote = await writeAdded(git, root, gone.paths, gone.tree, copy);
+  if (!wrote.ok) return wrote;
+  if (wrote.taken.length) {
+    const list = wrote.taken.join("\n");
+    return { ok: false, code: -1, out: "", err: `Restored the rest. Not written, because something is on disk there now:\n${list}`, msg: { key: "restore.revivedNotWritten", args: { list } } };
+  }
+  const staged = gone.paths.filter((path) => gone.index.get(path) !== gone.then.get(path));
+  const add = staged.filter((path) => gone.index.has(path));
+  for (const chunk of chunks(add, (path) => path.length * 3 + 120)) {
+    const r = await git(root, ["update-index", "--add", ...chunk.flatMap((path) => ["--cacheinfo", ...gone.index.get(path).split(" "), path])]);
+    if (!r.ok) return r;
+  }
+  return { ok: true };
+}
 
 // The paths in a conflict in the index: { ok, paths } in git's order.
 async function unmerged(git, root) {

@@ -43,6 +43,11 @@ export const en = {
   "restore.applied": "Restored all of it, with its staging.",
   "restore.appliedUnstaged": "Restored all of it. Its staging doesn't fit the index HEAD has now, so it was left out.",
   "restore.appliedConflicts": { one: "Restored all of it. Lines changed on both sides are left as conflicts in 1 file; resolve them:\n{list}", other: "Restored all of it. Lines changed on both sides are left as conflicts in {n} files; resolve them:\n{list}" },
+  "restore.appliedRevived": "Restored all of it, with its staging. Not in HEAD now, so brought back as they were in the rollback:\n{revived}",
+  "restore.appliedUnstagedRevived": "Restored all of it. Its staging doesn't fit the index HEAD has now, so it was left out. Not in HEAD now, so brought back as they were in the rollback:\n{revived}",
+  "restore.appliedConflictsRevived": { one: "Restored all of it. Lines changed on both sides are left as conflicts in 1 file; resolve them:\n{list}\nNot in HEAD now, so brought back as they were in the rollback:\n{revived}", other: "Restored all of it. Lines changed on both sides are left as conflicts in {n} files; resolve them:\n{list}\nNot in HEAD now, so brought back as they were in the rollback:\n{revived}" },
+  "restore.revivedTaken": "Nothing was restored: something is on disk now where a file HEAD doesn't have would come back:\n{list}",
+  "restore.revivedNotWritten": "Restored the rest. Not written, because something is on disk there now:\n{list}",
 };
 
 export const ko = {
@@ -87,4 +92,9 @@ export const ko = {
   "restore.applied": "모두 복원했습니다. 스테이징도 복원했습니다.",
   "restore.appliedUnstaged": "모두 복원했습니다. 스테이징은 지금 HEAD의 인덱스에 맞지 않아 복원하지 않았습니다.",
   "restore.appliedConflicts": "모두 복원했습니다. 양쪽에서 바뀐 줄이 충돌로 남은 파일 {n}개를 해결하세요:\n{list}",
+  "restore.appliedRevived": "모두 복원했습니다. 스테이징도 복원했습니다. 지금 HEAD에 없는 파일은 롤백 때 모습 그대로 되살렸습니다:\n{revived}",
+  "restore.appliedUnstagedRevived": "모두 복원했습니다. 스테이징은 지금 HEAD의 인덱스에 맞지 않아 복원하지 않았습니다. 지금 HEAD에 없는 파일은 롤백 때 모습 그대로 되살렸습니다:\n{revived}",
+  "restore.appliedConflictsRevived": "모두 복원했습니다. 양쪽에서 바뀐 줄이 충돌로 남은 파일 {n}개를 해결하세요:\n{list}\n지금 HEAD에 없는 파일은 롤백 때 모습 그대로 되살렸습니다:\n{revived}",
+  "restore.revivedTaken": "아무것도 복원하지 않았습니다. 지금 HEAD에 없는 파일이 돌아올 자리에 이미 무언가 있습니다:\n{list}",
+  "restore.revivedNotWritten": "나머지는 복원했습니다. 이미 무언가 있어 쓰지 않은 파일:\n{list}",
 };

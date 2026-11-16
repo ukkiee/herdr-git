@@ -552,6 +552,11 @@ Rollback은 Rollback dialog의 버튼으로만 실행되고, 쓰기 전에 버�
 - 기록의 첫 부모가 지금 HEAD와 다르면 Restore는 기록 전체를 `stash apply --index <기록>`으로 한 번에
   3-way 적용한다. 그런 기록은 Restore dialog에서 경로를 고를 수 없다. 꼴과 이유는
   [ADR 0002](adr/0002-rollback-snapshots-in-a-private-ref.md)에 있다.
+- 그때의 HEAD에 있었고 지금 HEAD에는 없는 파일을 기록이 바꿨으면, 3-way로는 "삭제/수정" 충돌이 된다.
+  그런 파일은 사본의 임시 인덱스로 그 변경을 뺀 기록을 만들어 적용하고, 기록의 작업 트리 내용을
+  따로 쓴다(그때 staged였으면 그때의 인덱스대로 stage, 아니면 추적하지 않는 파일). git은
+  `stash apply --index`가 충돌하면 인덱스를 되돌리지 않으므로, 충돌을 남긴 뒤 고치지 않고 처음부터
+  빼고 적용한다. 그 자리에 이미 무언가 있으면 아무것도 적용하지 않는다.
 
 ### 히스토리 다시 쓰기
 

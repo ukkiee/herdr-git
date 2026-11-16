@@ -420,7 +420,13 @@ Modal, 760×480, title `Restore Rolled-Back Changes`.
 - A record made on another commit than HEAD now shows `Recorded on another commit:
   Restore applies all of it 3-way, and lines changed on both sides may be left as
   conflicts.`, its checkboxes are locked, and Restore applies the whole record; lines
-  left in conflict show in the Commit panel's Merge Conflicts node.
+  left in conflict show in the Commit panel's Merge Conflicts node. A changed file HEAD
+  doesn't have now (the commit the reset went to came before it) is not merged: it comes
+  back as the record's working tree had it, staged as it was when it was staged, else
+  untracked, and the result row ends `Not in HEAD now, so brought back as they were in
+  the rollback:` with those paths. When something is on disk where such a file would come
+  back, nothing is restored: `Nothing was restored: something is on disk now where a
+  file HEAD doesn't have would come back:` and the paths.
 - Right, line on its left: a 28px row with a checkbox for all the files and `N files`
   (`No files checked` when none is checked) at 12px `dim`, then the selected snapshot's
   files as a folder tree (compact folders, Icon theme icons, a fold arrow on folders,
@@ -1581,7 +1587,7 @@ the git ones run against real temporary repositories):
 | `git-status.js` | `readStatus` |
 | `git-commit.js` | `commit`, `lastMessage`, `headIsPushed` |
 | `git-rollback.js` | `rollback` (→ `{ ok, code, out, err, msg?, snapshot, skipped: [{ path, reason, msg }] }`; `snapshot`: the Rollback snapshot's hash or null), `wordRollback(t, r)` (`r.msg` with its list of reasons worded again in `t`'s language) |
-| `git-snapshot.js` | `SNAPSHOTS` (`"refs/git-tools/rollback"`), `LIST_LIMIT` (50), `ACTIONS` (`["Rollback", "Reset", "Checkout"]`: the write a snapshot was taken before, its message's first word), `record(git, root, paths, copy)` → `{ ok, code, out, err, snapshot }` (only Rollback calls it), `listSnapshots(git, root)` → `{ ok, code, err, snapshots: [{ hash, time, files: [{ path, status }] }] }` (newest first, `status` `modified` / `added` / `deleted`), `restore(git, root, { snapshot, paths, copy })` → `{ ok, code, out, err, msg?, restored: [path], skipped: [{ path, reason, msg }], stagingSkipped: [{ path, reason, msg }], changed }` (`stagingSkipped`: restored paths whose staging stayed as it is now; `changed`: anything on disk changed, also when git failed partway), `applySnapshot(git, root, { snapshot })` (a snapshot made on another HEAD put back whole and 3-way, the way `git stash apply --index` applies a stash; conflicts left for the Conflicts dialog), `reasonList(skipped, word?)`, `wordRestore(t, r)` (r.msg with the skipped reasons, the staging reasons and a worded cause in t's language) |
+| `git-snapshot.js` | `SNAPSHOTS` (`"refs/git-tools/rollback"`), `LIST_LIMIT` (50), `ACTIONS` (`["Rollback", "Reset", "Checkout"]`: the write a snapshot was taken before, its message's first word), `record(git, root, paths, copy)` → `{ ok, code, out, err, snapshot }` (only Rollback calls it), `listSnapshots(git, root)` → `{ ok, code, err, snapshots: [{ hash, time, files: [{ path, status }] }] }` (newest first, `status` `modified` / `added` / `deleted`), `restore(git, root, { snapshot, paths, copy })` → `{ ok, code, out, err, msg?, restored: [path], skipped: [{ path, reason, msg }], stagingSkipped: [{ path, reason, msg }], changed }` (`stagingSkipped`: restored paths whose staging stayed as it is now; `changed`: anything on disk changed, also when git failed partway), `applySnapshot(git, root, { snapshot, copy })` (a snapshot made on another HEAD put back whole and 3-way, the way `git stash apply --index` applies a stash; conflicts left for the Conflicts dialog; changed files HEAD no longer has are written as the snapshot had them instead, in `revived`), `reasonList(skipped, word?)`, `wordRestore(t, r)` (r.msg with the skipped reasons, the staging reasons and a worded cause in t's language) |
 | `git-diff.js` | `MAX_ROWS` (5000), `MAX_CHARS` (400000), `parseDiff`, `readDiff` (`oldPath`: a renamed file's path before its commit), `touchesDiff(changed, root, path)` (whether watched changes can change a working file's diff) |
 | `git-push.js` | `PROTECTED` (`["main", "master"]`), `readPushPlan`, `readPushFiles`, `push` |
 | `git-log.js` | `readLog`, `readRefsState`, `readGitDir`, `refsChanged`, `resolveCommit`, `shortenMiddle`, `labelRefs`, `formatCommitTime`, `readNotPicked(git, root, branch)` → `{ ok, err, notPicked: [hash] }` (the branch's commits whose change HEAD has no copy of, `git cherry`'s "+") |
@@ -3575,7 +3581,9 @@ commit `main` lacks)
      Hard's in the warning color; picking Hard turns the button into `Hard Reset`.
 190. With a staged and an unstaged change, Hard Reset to an older commit: Restore
      Rolled-Back Changes… lists `Reset` with the 3-way note and locked checkboxes; Restore
-     brings back both changes and the staging.
+     brings back both changes and the staging. A changed file the older commit doesn't
+     have comes back as it was (staged only if it was staged), with no conflict, and the
+     result names it under `Not in HEAD now, so brought back as they were in the rollback:`.
 191. Keep with a local change to a file that differs between the commits: git's words show
      and nothing changes.
 192. VCS Operations popup → Reset HEAD…: `Reset Head` with Git Root, Current Branch, Reset

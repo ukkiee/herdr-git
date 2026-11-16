@@ -9,7 +9,7 @@
 
 import { exec } from "herdr";
 import { makeGit } from "./git.js";
-import { serveRequest } from "./ui.js";
+import { serveRequest, copyId } from "./ui.js";
 import { acceptRequest, unresolveRequest, resolveSimpleRequest } from "./conflicts-model.js";
 import { writerOn, readerOn } from "./view-conflicts.js";
 import { runReset } from "./view-reset.js";
@@ -41,7 +41,7 @@ export const SERVE_ACTIONS = {
   "conflicts-unresolve": { work: "conflicts.unresolving", run: (git, root, args) => unresolveRequest(git, root, args) },
   "conflicts-resolve-simple": { work: "conflicts.resolvingSimple", run: (git, root, args) => resolveSimpleRequest(git, root, args, writerOn(typeof args.on === "string" ? args.on : null), readerOn(typeof args.on === "string" ? args.on : null)) },
   "reset": { work: "reset.running", run: (git, root, args, panel) => runReset(git, root, args, panel) },
-  "restore-3way": { work: "restore.running", run: (git, root, args) => applySnapshot(git, root, { snapshot: typeof args.snapshot === "string" ? args.snapshot : "" }) },
+  "restore-3way": { work: "restore.running", run: (git, root, args, panel) => applySnapshot(git, root, { snapshot: typeof args.snapshot === "string" ? args.snapshot : "", copy: typeof panel?.copy === "string" ? panel.copy : copyId("commit.copy") }) },
   "patch-create": { work: "revision.creating", run: (git, root, args) => (text(args.file)
     ? createPatch(git, root, { commits: strings(args.commits), paths: strings(args.paths), reverse: args.reverse === true, base: text(args.base), file: args.file })
     : { ok: false, err: "No patch file.", msg: { key: "revision.needFile", args: {} } }) },

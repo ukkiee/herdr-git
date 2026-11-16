@@ -818,6 +818,42 @@ const resetAway = async (name, local) => {
   assert.match(text(repo, "f.txt"), /^1\n<<<<<<< [^\n]*\n2\n=======\nTWO-mine\n>>>>>>> [^\n]*\n3\n/);
 }
 
+// Files HEAD doesn't have now (added after the commit the reset went to) come back as the
+// snapshot's working tree had them, never as a deleted/modified conflict: staged when they
+// were staged then (as staged then, the later edit unstaged), else left untracked. The
+// result says which files came back that way.
+{
+  const repo = init("three-way-revived");
+  sh(repo, "echo a0 > a.txt && git add -A && git commit -q -m c1");
+  const c1 = sh(repo, "git rev-parse HEAD").trim();
+  sh(repo, "echo s0 > s.txt && echo u0 > u.txt && git add -A && git commit -q -m c2");
+  sh(repo, "echo a1 > a.txt && git add a.txt && echo s1 > s.txt && git add s.txt && echo s2 > s.txt && echo u1 > u.txt");
+  const reset = await resetTo(git, repo, { commit: c1, mode: "hard", copy: COPY });
+  assert.equal(reset.ok, true, reset.err);
+  assert.deepEqual(status(repo), []);
+  // Such files need the copy's scratch index; without its id nothing is applied.
+  const bare = await applySnapshot(git, repo, { snapshot: reset.snapshot });
+  assert.deepEqual([bare.ok, bare.changed, bare.msg?.key], [false, false, "restore.noCopy"]);
+  // Something on disk where one would come back: nothing is applied.
+  sh(repo, "echo mine > u.txt");
+  const taken = await applySnapshot(git, repo, { snapshot: reset.snapshot, copy: COPY });
+  assert.deepEqual([taken.ok, taken.changed, taken.msg], [false, false, { key: "restore.revivedTaken", args: { list: "u.txt" } }]);
+  assert.deepEqual(status(repo), ["?? u.txt"]);
+  sh(repo, "rm u.txt");
+  const r = await applySnapshot(git, repo, { snapshot: reset.snapshot, copy: COPY });
+  assert.deepEqual(r.conflicts, []);
+  assert.equal(r.staged, true);
+  assert.equal(r.changed, true);
+  assert.deepEqual(r.msg, { key: "restore.appliedRevived", args: { n: 2, revived: "s.txt\nu.txt" } });
+  assert.equal(r.err, "Restored all of it, with its staging. Not in HEAD now, so brought back as they were in the rollback:\ns.txt\nu.txt");
+  // Said like a restore that left something, so the dialog shows the files.
+  assert.equal(r.ok, false);
+  assert.deepEqual(status(repo), ["?? u.txt", "AM s.txt", "M  a.txt"]);
+  assert.equal(sh(repo, "git show :s.txt"), "s1\n");
+  assert.deepEqual([text(repo, "s.txt"), text(repo, "u.txt")], ["s2\n", "u1\n"]);
+  assert.equal(sh(repo, "git ls-files -u"), "");
+}
+
 // Staging that can't go on the index HEAD has now (the staged change's surrounding lines
 // changed between the commits): the changes come back without their staging.
 {

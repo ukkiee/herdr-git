@@ -3793,7 +3793,8 @@ commit `main` lacks)
 213. Show Diff with Working Tree: a tab with `Difference between files in feature and
      current working tree on main:`, Swap branches, and files in blue (different), gray
      (only in feature) and green (a tracked file only the working tree has). Only files
-     git tracks are compared: an untracked file is not listed.
+     git tracks are compared: an untracked file is not listed. With the tab left open
+     over a checkout, the line names the branch checked out now.
 214. Right-click a commit → Compare with Local: `Changes Between <hash> and Local
      Version`. Pick two commits → Compare Versions: `Changes Between <a> and <b>`. Opening
      the same kind again replaces that tab; other kinds stay.

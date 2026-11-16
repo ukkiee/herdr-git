@@ -111,6 +111,14 @@ const worded = (r) => {
   const bad = await workingTreeFiles(git, repo, "no-such-branch");
   assert.equal(bad.ok, false);
   assert.deepEqual(bad.files, []);
+  // What the working tree is on comes with every read: a tab left open over a checkout
+  // names the branch it compares now. A tag of the branch's name doesn't change the name.
+  const at = sh(repo, "git rev-parse HEAD").trim();
+  assert.deepEqual(head.head, { branch: "main", hash: at });
+  sh(repo, "git tag topic && git switch -q topic 2>/dev/null");
+  assert.equal((await workingTreeFiles(git, repo, "main")).head.branch, "topic");
+  sh(repo, "git checkout -q --detach main");
+  assert.deepEqual((await workingTreeFiles(git, repo, "main")).head, { branch: null, hash: at });
 }
 
 // ---- Compare Versions: the files changed between two commits

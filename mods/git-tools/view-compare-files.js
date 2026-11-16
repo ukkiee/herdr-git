@@ -208,7 +208,13 @@ export default class CompareFiles {
     cx.spawn(async (cx) => {
       try {
         const r = this.mode === "versions" ? await versionFiles(this.git(), root, this.from, this.to) : await workingTreeFiles(this.git(), root, this.ref);
-        if (r.ok) { this.files = r.files; this.error = null; this.build(); }
+        if (r.ok) {
+          this.files = r.files; this.error = null;
+          // The head line names what the working tree is on now, not what it was on when
+          // the tab opened.
+          if (this.mode === "working" && r.head) this.current = r.head.branch ?? (r.head.hash ? short(r.head.hash) : this.current);
+          this.build();
+        }
         else { this.files ??= []; this.error = r.err || this.t("ui.gitFailed"); }
       } catch (error) {
         this.files ??= []; this.error = String(error?.message ?? error);

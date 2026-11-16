@@ -52,12 +52,14 @@ export async function branchCommits(git, root, { a, b, filterArgs = [] } = {}) {
 
 // ---- Show Diff with Working Tree, Compare with Local: the working tree against a revision
 
-// workingTreeFiles(git, root, ref) → { ok, code, out, err, files }
+// workingTreeFiles(git, root, ref) → { ok, code, out, err, files, head }
 //   The tracked files whose working-tree content differs from `ref` (a branch or a
 //   commit), uncommitted changes included. files: [{ path, state }], state:
 //     "changed"    in both, different (blue)
 //     "only-ref"   only `ref` has it (gray)
 //     "only-local" only the working tree has it (green)
+//   head: what the working tree is on now, { branch, hash } (branch null on a detached
+//   HEAD): a tab left open over a checkout compares another branch's files.
 export async function workingTreeFiles(git, root, ref) {
   const r = await git.read(root, ["diff", "--no-renames", "--name-status", "-z", "--end-of-options", String(ref), "--"]);
   if (!r.ok) return { ...r, files: [] };
@@ -67,7 +69,15 @@ export async function workingTreeFiles(git, root, ref) {
     if (!path) break;
     files.push({ path, state: letter === "A" ? "only-local" : letter === "D" ? "only-ref" : "changed" });
   }
-  return { ...r, files };
+  // The full ref, cut here: `symbolic-ref --short` answers "heads/main" when a tag "main"
+  // exists too.
+  const [on, at] = await Promise.all([
+    git.read(root, ["symbolic-ref", "--quiet", "HEAD"]),
+    git.read(root, ["rev-parse", "--verify", "--quiet", "HEAD^{commit}"]),
+  ]);
+  const full = on.ok ? on.out.trim() : "";
+  const head = { branch: full.startsWith("refs/heads/") ? full.slice(11) || null : null, hash: at.ok ? at.out.trim() || null : null };
+  return { ...r, files, head };
 }
 
 // Swap branches: what was only on one side is only on the other.

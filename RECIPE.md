@@ -3601,6 +3601,7 @@ commit `main` lacks)
      Down, Pick, Stop to Edit, Reword, Squash ▾, Drop, Undo, Redo, the commits oldest on
      top, the files and Commit Details on the right, Reset, Cancel and Start Rebasing. Move
      a commit up and Start Rebasing: the order changes and nothing is left in progress.
+     Squash's ▾ opens its Fixup menu right under the ▾, inside the dialog.
 202. In that dialog Squash, Fixup, Drop and Reword (double-click the subject) a commit
      each and start: the history shows exactly that. Closing with changes asks `Cancel
      Rebase` first.

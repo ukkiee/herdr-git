@@ -676,7 +676,9 @@ another machine runs every git command on that machine. A panel opened with
   Refresh, when the focused folder changes, and when another screen reports a change to
   this repository. A read asked for during a read, or while any screen writes to this
   repository, runs once that ends (when the write lets go of the repository, without
-  waiting for its report). A failed read keeps the list and shows git's words.
+  waiting for its report). A read of another folder doesn't wait for the read going, and
+  no read waits for one that started 80 s ago and hasn't ended. A failed read keeps the
+  list and shows git's words.
 - **Moving to another repository** (the focused pane's folder changes) shows that
   repository at once, also while this panel's own write still runs on the one before:
   the write goes on there, and the write error strip of the repository before goes away.
@@ -806,11 +808,15 @@ another machine runs every git command on that machine. A panel opened with
   every 10 s (one `for-each-ref`). While the panel is hidden it doesn't check; it catches
   up when it shows again. After a commit, checkout, branch, delete, fetch or push it reads
   again without Refresh. While any screen writes to the repository it doesn't check; it
-  catches up once the write lets go.
+  catches up once the write lets go. Refresh and a move to another folder look for the
+  repository again at once, also while a search is still going (on any space: the
+  panel shows every space it follows).
 - **Failed reads**: when finding the repository or reading the branches, commits or
   Commit details fails, what was shown stays, git's words show in the error strip, and
   the next 10 s check reads again without Refresh (Refresh does too); the strip goes once
-  a read works.
+  a read works. A search for the repository that hasn't ended 80 s after it started is
+  made again, and so is the read of a Branch tree or Commit list still showing `Loading…`
+  80 s after it was asked for.
 - **Moving to another repository** shows it at once, with a commit selected or while
   this panel's own write still runs on the one before (that write goes on there).
 - **Column widths**: drag the handles. The Commit list never goes below 360px. Widths
@@ -1158,6 +1164,10 @@ The rules and their reasons are in `docs/design.md` (section 4); what a person s
   was read before stays. A machine that can't be reached shows the same way; the next
   poll tries again. Every error strip has `View in Console`, which opens or picks the Git
   console tab.
+- In the Commit panel, the Log panel and the VCS widget, a git command whose answer hasn't come 5 s past its
+  timeout (35 s for a read) is given up on, so the screen doesn't stay on `Loading…` for
+  good: a read is asked once more, then it fails with `git did not answer in 35 s.` like
+  any git error. A command that may write is not run again, as it may have done its work.
 
 ### One git write at a time
 

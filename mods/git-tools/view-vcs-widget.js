@@ -27,6 +27,7 @@ import { div } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { exec, theme, notify, run } from "herdr";
 import { makeGit, repoRoot } from "./git.js";
+import { readTurns } from "./read-turns.js";
 import { readHeads, widgetFace } from "./git-heads.js";
 import { readOperation, continueOperation, abortOperation, skipOperation, operationName } from "./git-operation.js";
 import { checkout, deleteBranch } from "./git-branch.js";
@@ -55,7 +56,7 @@ export class VcsWidget {
     this.heads = null; // readHeads' result
     this.op = null; // readOperation's result, null when not read
     this.context = null;
-    this.loading = false;
+    this.reads = readTurns();
   }
 
   contextKey() { const { folder, on } = this.host.where(); return JSON.stringify([folder, on]); }
@@ -63,32 +64,33 @@ export class VcsWidget {
   // ---- reading
 
   refresh(cx) {
-    if (this.loading) { this.again = true; return; }
     const { folder, on } = this.host.where(), context = this.contextKey();
-    if (context !== this.context) { this.context = context; this.repo = null; this.heads = null; this.op = null; }
+    // A change that lands while this folder is read is read once that read ends. Another
+    // folder doesn't wait, nor does anything once the read in flight is stuck (read-turns.js).
+    if (context === this.context && this.reads.busy()) { this.again = true; return; }
+    if (context !== this.context) { this.context = context; this.repo = null; this.heads = null; this.op = null; this.reads.drop(); this.again = false; }
     if (!folder) return;
     // A write running there would be seen half done: read once it ends (catchUp).
     if (this.repo && readBlocked(this.host, this.repo)) { this.waiting = true; return; }
     this.waiting = false;
-    this.loading = true;
+    const turn = this.reads.start();
     cx.spawn(async (cx) => {
       try {
         let repo = this.repo;
         if (!repo) {
-          const git = makeGit(exec, on);
+          const git = makeGit(exec, on, { wait: this.host.wait });
           const top = await repoRoot(git, folder);
           if (context !== this.context) return;
-          if (!top.ok) { this.heads = null; this.op = null; return; }
+          if (!top.ok) { if (this.reads.use(turn)) { this.heads = null; this.op = null; } return; }
           repo = { git, root: top.root, on };
         }
         const [heads, op] = await Promise.all([readHeads(repo.git, repo.root), readOperation(repo.git, repo.root)]);
-        if (context !== this.context) return;
+        if (context !== this.context || !this.reads.use(turn)) return;
         this.repo = repo;
         this.heads = heads;
         this.op = op.ok ? op : null;
       } finally {
-        this.loading = false;
-        if (this.again) { this.again = false; cx.timer.after(0, (cx) => this.refresh(cx)); }
+        if (this.reads.end(turn) && this.again) { this.again = false; cx.timer.after(0, (cx) => this.refresh(cx)); }
         cx.notify();
       }
     });

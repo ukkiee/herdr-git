@@ -42,6 +42,7 @@ import { serveAction } from "./serve-actions.js";
 import { openVcsPopup, askAbort, branchMenuRows, deleteBlockOf, popupHandles, POPUP_ACTIONS, POPUP_WIDTH } from "./view-vcs-popup.js";
 
 const POLL = 10000;
+const FIRST_LOOK = 6000; // ms after the block starts: a first read still unanswered then is made again once
 const PAD = 2; // the block's padding each side of the widget
 // The layout block install.sh gives the widget (the git-tools layout on macOS), sized to the widget.
 const BLOCK_ID = "git-vcs-widget";
@@ -98,6 +99,16 @@ export class VcsWidget {
         cx.notify();
       }
     });
+  }
+
+  // The block's first read, started as it opens, has been seen to get no answer at all when
+  // the git-tools layout is switched back to: neither git's answer nor the runner's clock
+  // comes, and while that read counts as going (read-turns.js STUCK) every poll waits for it
+  // and the widget stays empty. So a first read still going is given up and made again once.
+  firstLook(cx) {
+    if (!this.reads.busy()) return;
+    this.reads.drop();
+    this.refresh(cx);
   }
 
   // On this computer: read again when a terminal's git moves a ref or HEAD, starts or
@@ -305,6 +316,7 @@ export default class VcsWidgetBlock {
     this.widget = new VcsWidget();
     this.widget.init(this, { who: "vcs.widget" });
     this.widget.refresh(cx);
+    cx.timer.after(FIRST_LOOK, (cx) => this.widget.firstLook(cx));
     cx.timer.every(POLL, (cx) => this.widget.refresh(cx));
   }
 

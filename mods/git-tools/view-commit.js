@@ -50,6 +50,7 @@ const GROUPS = [{ id: "changes" }, { id: "unversioned" }, { id: "last" }];
 const CLOSED = () => ({ changes: false, conflicts: false, unversioned: true, last: false });
 const COLLAPSED = () => ({ changes: new Set(), conflicts: new Set(), unversioned: new Set(), last: new Set() });
 const POLL = 10000;
+const FIRST_LOOK = 6000; // ms after the panel starts: a first read still unanswered then is made again once
 // How many folders the panel keeps the last view of (see remember).
 const SEEN = 8;
 // localStorage is per copy of the mod and survives restarts: the view mode stays as picked.
@@ -114,8 +115,20 @@ export default class CommitView {
     this.stashTab = new StashTab();
     this.stashTab.init(this);
     this.refresh(cx);
+    cx.timer.after(FIRST_LOOK, (cx) => this.firstLook(cx));
     // The watch can miss things (a remote space has none at all), so the timer stays on.
     cx.timer.every(POLL, (cx) => this.refresh(cx));
+  }
+
+  // The panel's first read, started as it opens, has been seen to get no answer at all when
+  // the git-tools layout is switched back to: neither git's answer nor the runner's clock
+  // comes, and while that read counts as going (read-turns.js STUCK) every poll waits for it
+  // and the panel stays on "Loading…". So a first read still going, before any answer was
+  // shown, is given up and made again once.
+  firstLook(cx) {
+    if (this.read || !this.reads.busy()) return;
+    this.reads.drop();
+    this.refresh(cx);
   }
 
   where() { return this.fixed ?? location(); }

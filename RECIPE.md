@@ -717,8 +717,10 @@ another machine runs every git command on that machine. A panel opened with
   path); on its group row or a folder they fold. A commit with no parent lists every
   file as added; a merge lists what it brought in against its first parent. When
   reading the last commit fails, git's words show in the read strip.
-- **Rollback notice**: shows when a rollback this panel ran recorded a snapshot. `N` is
-  the files sent to roll back less the ones skipped. **Restore…** opens the Restore
+- **Rollback notice**: shows when a rollback this panel ran recorded a snapshot and
+  rolled back a file. `N` is the files sent to roll back less the ones skipped; when
+  every file was skipped there is no notice, only the error strip naming them
+  (`rollbackNotice` in `git-rollback.js`). **Restore…** opens the Restore
   dialog with that snapshot selected. The notice goes on `x`, when this panel starts its
   next write, when any copy's write on that repository ends (its `changed`; the
   rollback's own doesn't count), when events went unseen (the bus's `changed` without a
@@ -1583,7 +1585,7 @@ the git ones run against real temporary repositories):
 | `one-at-a-time.js` | `oneAtATime(run)` → `ask(arg)` (at most one `run` going; a newer ask replaces a waiting one, which resolves undefined without running: Commit details' branch walks while arrowing through the log) |
 | `git-status.js` | `readStatus` |
 | `git-commit.js` | `commit`, `lastMessage`, `headIsPushed` |
-| `git-rollback.js` | `rollback` (→ `{ ok, code, out, err, msg?, snapshot, skipped: [{ path, reason, msg }] }`; `snapshot`: the Rollback snapshot's hash or null), `wordRollback(t, r)` (`r.msg` with its list of reasons worded again in `t`'s language) |
+| `git-rollback.js` | `rollback` (→ `{ ok, code, out, err, msg?, snapshot, skipped: [{ path, reason, msg }] }`; `snapshot`: the Rollback snapshot's hash or null), `wordRollback(t, r)` (`r.msg` with its list of reasons worded again in `t`'s language), `rollbackNotice(files, r)` (→ `{ snapshot, n }` for the Rollback notice, or null when no snapshot was recorded or every file was skipped) |
 | `git-snapshot.js` | `SNAPSHOTS` (`"refs/git-tools/rollback"`), `LIST_LIMIT` (50), `ACTIONS` (`["Rollback", "Reset", "Checkout"]`: the write a snapshot was taken before, its message's first word), `record(git, root, paths, copy)` → `{ ok, code, out, err, snapshot }` (only Rollback calls it), `listSnapshots(git, root)` → `{ ok, code, err, snapshots: [{ hash, time, files: [{ path, status }] }] }` (newest first, `status` `modified` / `added` / `deleted`), `restore(git, root, { snapshot, paths, copy })` → `{ ok, code, out, err, msg?, restored: [path], skipped: [{ path, reason, msg }], stagingSkipped: [{ path, reason, msg }], changed }` (`stagingSkipped`: restored paths whose staging stayed as it is now; `changed`: anything on disk changed, also when git failed partway), `applySnapshot(git, root, { snapshot })` (a snapshot made on another HEAD put back whole and 3-way, the way `git stash apply --index` applies a stash; conflicts left for the Conflicts dialog), `reasonList(skipped, word?)`, `wordRestore(t, r)` (r.msg with the skipped reasons, the staging reasons and a worded cause in t's language) |
 | `git-diff.js` | `MAX_ROWS` (5000), `MAX_CHARS` (400000), `parseDiff`, `readDiff` (`oldPath`: a renamed file's path before its commit), `touchesDiff(changed, root, path)` (whether watched changes can change a working file's diff) |
 | `git-push.js` | `PROTECTED` (`["main", "master"]`), `readPushPlan`, `readPushFiles`, `push` |

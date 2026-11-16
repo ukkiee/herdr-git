@@ -746,10 +746,13 @@ machine); back on a terminal, they follow its folder again.
   time the commit ends, what it shows there (checks, selection, message, Amend) stays
   as it is: a success clears the kept message of the repository committed to, and a
   failure shows in the error strip with that repository's folder name in front.
-- **Amend**: off while the repository has no commit. Turning it on fills an empty
-  message box with the last commit's message and, if any remote branch has that commit,
-  shows the force-push warning. With Amend on, Commit works with nothing checked (only
-  the message changes).
+- **Amend**: off while the repository has no commit. Turning it on keeps the message
+  box's text aside and puts the last commit's message in its place (unless something is
+  typed before git answers) and, if any remote branch has that commit, shows the
+  force-push warning. Turning it off again, Fixup… / Squash Into…, or the panel moving to
+  another repository (which turns it off) puts the kept text back (the moved-away
+  repository keeps it as its draft). After an Amend commit the box is empty. With Amend
+  on, Commit works with nothing checked (only the message changes).
 - **Commit and Push…**: commits; only if that worked, opens the Push dialog (also when the
   panel has moved to another repository meanwhile: the dialog names the branch and where
   it goes).
@@ -3014,7 +3017,9 @@ Each line is one check: do what it says, see what follows.
     `<hash> · <date> · <author> <email>`, then `In 1 branch: main` (or the branches).
 12. Double-click a file there: a Diff tab opens comparing `<parent> → <hash>`.
 13. Turn Amend on with the box empty: it fills with the last message; edit it, Commit:
-    the commit count is the same, the hash and message changed.
+    the commit count is the same, the hash and message changed. Type `draft`, turn Amend
+    on (the last message replaces it) and off again: the box says `draft`; the same after
+    going to another repository with Amend on and coming back.
 14. Check a file, type a message, Commit and Push…: the commit is made, then the Push
     dialog lists it with its files.
 15. Press Push: the dialog closes, the branch's `↑N` in the Branch tree goes away, and the

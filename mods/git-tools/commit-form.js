@@ -65,6 +65,7 @@ export default class CommitForm {
   init(host, cx) {
     this.host = host;
     this.amend = false;
+    this.draft = null; // what the message box held when Amend went on, or null
     this.pushed = false; // the last commit is on a remote: shown while Amend is on
     this.running = null; // "commit" | "push": which button started the commit running now
     // A failed commit's output on the shown repository is kept here, not in the panel's
@@ -120,9 +121,10 @@ export default class CommitForm {
     if (where === this.where) return;
     // A target belongs to the repository it was picked in.
     this.dropTarget();
-    if (this.where !== null) this.drafts.set(this.where, this.text.value());
+    // Amend goes off with the move: the text it replaced is what is put away.
+    if (this.where !== null) this.drafts.set(this.where, this.draft ?? this.text.value());
     this.where = where;
-    this.amend = false; this.pushed = false; this.error = null;
+    this.amend = false; this.pushed = false; this.error = null; this.draft = null;
     this.text.set_value(this.drafts.get(where) ?? "");
     // The message put in for the last repository's operation isn't this one's.
     this.filledKey = ""; this.filled = null;
@@ -172,19 +174,30 @@ export default class CommitForm {
     if (!repo || !host.hasHead || host.writeBlock() || this.inProgress() || this.aimed()) return;
     this.amend = !this.amend;
     this.pushed = false;
+    // On: the box's text is kept aside and the last commit's message takes its place;
+    // off: the text kept comes back.
+    if (this.amend) this.draft = this.text.value();
+    else this.putDraftBack();
     host.amendChanged(cx);
     cx.notify();
     if (!this.amend) return;
-    const where = this.where;
+    const where = this.where, draft = this.draft;
     cx.spawn(async (cx) => {
       const [last, remote] = await Promise.all([lastMessage(repo.git, repo.root), headIsPushed(repo.git, repo.root)]);
       // Unchecked again, or the panel moved on, while git was answering.
       if (!this.amend || this.where !== where) return;
-      // Only into an empty box: what the person typed is never replaced.
-      if (last.ok && !this.text.value().trim()) this.text.set_value(last.message);
+      // Typed into meanwhile: what the person typed stays.
+      if (last.ok && this.text.value() === draft) this.text.set_value(last.message);
       this.pushed = remote.ok && remote.pushed;
       cx.notify();
     });
+  }
+
+  // Amend going off by any way but a commit: the box gets back what it held before.
+  putDraftBack() {
+    if (this.draft == null) return;
+    this.text.set_value(this.draft);
+    this.draft = null;
   }
 
   // ---- Fixup and Squash Into: the checked changes go into an older commit
@@ -203,7 +216,7 @@ export default class CommitForm {
       if (!said.ok) { this.error = sentence(host.t, said.msg, said.err); cx.notify(); return; }
       this.follow();
       this.dropTarget();
-      if (this.amend) { this.amend = false; this.pushed = false; host.amendChanged(cx); }
+      if (this.amend) { this.amend = false; this.pushed = false; this.putDraftBack(); host.amendChanged(cx); }
       const message = said.messages[e.commit] ?? "";
       const squash = e.squash === true;
       this.target = { root: repo.root, on: repo.on ?? null, commit: e.commit, subject: message.split("\n")[0], squash, pushed: e.pushed === true, saved: squash ? this.text.value() : null };
@@ -349,7 +362,7 @@ export default class CommitForm {
         // The one to clear then is the put-away draft.
         if (this.where === where) {
           const was = this.amend;
-          this.text.set_value(""); this.amend = false; this.pushed = false;
+          this.text.set_value(""); this.amend = false; this.pushed = false; this.draft = null;
           if (was) host.amendChanged(cx);
         } else this.drafts.delete(where);
         // Included is cleared before the lock goes, so the read that follows is one read.

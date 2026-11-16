@@ -224,18 +224,21 @@ async function settled(git, root, before, run, request, from) {
 //   pull as Smart runs it again) when local changes refused it.
 //   branch: the remote's branch name ("main"); options: PULL_OPTIONS (others dropped).
 //   The remote is fetched first on its own, so a failed fetch is told apart from a merge
-//   step that failed (fetchFailed). Without an option, git does as the person's settings
-//   say (pull.rebase, pull.ff).
+//   step that failed (fetchFailed). Without --rebase or --no-rebase, a repository set to
+//   rebase on pull (pull.rebase, branch.<name>.rebase) rebases; any other merges
+//   (--no-rebase): git, told nothing, refuses branches that diverged and asks how to
+//   reconcile them. pull.ff still applies.
 export async function pull(git, root, { remote, branch, options = [] } = {}) {
   const opts = (Array.isArray(options) ? options : []).filter((o) => ACCEPTED.has(o));
   const rebase = opts.includes("--rebase") || (!opts.includes("--no-rebase") && await pullsByRebase(git, root));
+  const how = rebase || opts.includes("--no-rebase") ? [] : ["--no-rebase"];
   const request = { type: "pull", remote: str(remote), branch: str(branch), options: opts, rebase, target: `${str(remote)}/${str(branch)}` };
   if (!request.remote || !request.branch) return refuse("Choose a remote and a branch to pull.", { key: "remote.pickBranch" });
   const before = await readOperation(git, root);
   if (!before.ok) return failedWith(before);
   const fetched = await fetchRemote(git, root, request.remote);
   if (!fetched.ok) return failedWith(fetched, { fetchFailed: true, changed: true });
-  const run = await git(root, ["pull", NO_AUTOSTASH, ...opts, "--end-of-options", request.remote, `refs/heads/${request.branch}`], STEP);
+  const run = await git(root, ["pull", NO_AUTOSTASH, ...how, ...opts, "--end-of-options", request.remote, `refs/heads/${request.branch}`], STEP);
   return settled(git, root, before, run, request, before.head);
 }
 

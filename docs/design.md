@@ -399,12 +399,13 @@ Rollback은 Rollback dialog의 버튼으로만 실행되고, 쓰기 전에 버�
   않고 같은 실패로 돌리며, 알림은 안내를 맨 앞에 한 번만 둔다. 시간 한도는 fetch가 5분,
   merge·rebase 단계와 푸시처럼 훅을 돌릴 수 있는 단계가 10분이다.
 - **사용자의 git 설정은 그대로 둔다.** `pull.rebase`, `rebase.updateRefs`, `commit.gpgSign`, 훅은 git이
-  따르는 대로 따른다. 옵션 없이 갈라진 브랜치를 풀하면 git이 "어떻게 합칠지 지정하라"고 실패하는
-  것도 그대로 보인다. 예외 둘: merge, rebase, pull, 프로젝트 업데이트는 `--no-autostash`로 돌아서
+  따르는 대로 따른다. 옵션 없는 pull의 방식은 아래처럼 정해 넘긴다. 그 밖의 예외 둘: merge, rebase, pull, 프로젝트 업데이트는 `--no-autostash`로 돌아서
   사용자의 `merge.autoStash`·`rebase.autoStash`가 따로 stash하지 않는다(로컬 변경은 거절로 드러나
   Smart operation이 맡는다). 커밋 메시지의 정리는 위 "커밋"의 `--cleanup=whitespace`다.
 - **옵션 없는 pull의 방식**은 `branch.<브랜치>.rebase`, 없으면 `pull.rebase`로 정한다(false가 아닌
-  값은 리베이스). 로컬 변경 거절의 판정과 Smart 제안이 이 방식을 따른다.
+  값은 리베이스). 둘 다 없으면 `--no-rebase`로 병합한다. git은 방식을 듣지 못하면 갈라진 브랜치를
+  "어떻게 합칠지 지정하라"며 거절하는데, Pull 창에서 고르는 다른 원격 브랜치는 거의 늘 갈라져 있다.
+  `pull.ff`는 그대로 따른다. 로컬 변경 거절의 판정과 Smart 제안이 이 방식을 따른다.
 - **보이는 자리.** 진행 중 상태는 VCS widget("⚠ main 병합 중", 초록 ≫, 빨간 ■), Commit panel의 진행
   중 줄과 "충돌 병합" 노드, Log panel HEAD 줄의 "⚠ 분리된 HEAD"(rebase 중)에 같은 이름으로 보인다.
   이름은 현재 브랜치이고, 병합 대상은 `MERGE_MSG` 첫 줄의 이름(로컬 브랜치 우선)이다. ■은 확인

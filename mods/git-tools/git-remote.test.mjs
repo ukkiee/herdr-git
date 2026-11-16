@@ -121,8 +121,7 @@ const commitMine = (mine, path, at, word) => { edit(mine, path, at, word); sh(mi
   assert.equal(info.files, 1);
 }
 {
-  // --squash leaves the change staged, uncommitted. (On diverged branches git first wants
-  // to be told how to reconcile them, as it does for a pull without options.)
+  // --squash leaves the change staged, uncommitted.
   const { mine, theirs } = setup();
   push(theirs, "a.txt", 0, "their-a1");
   const before = head(mine);
@@ -183,6 +182,21 @@ const commitMine = (mine, path, at, word) => { edit(mine, path, at, word); sh(mi
   assert.equal(rev(m2, "HEAD"), rev(t2, "main"));
   assert.deepEqual(status(m2), before);
   assert.equal(text(m2, "a.txt").split("\n")[0], "their-a1");
+}
+{
+  // Diverged, no option picked and no pull setting: it merges (git alone would refuse and
+  // ask how to reconcile them), the tracked branch and another branch of the remote alike.
+  const { mine, theirs } = setup();
+  push(theirs, "a.txt", 0, "their-a1");
+  commitMine(mine, "b.txt", 0, "my-b1");
+  const merged = await pull(git, mine, { remote: "origin", branch: "main", options: [] });
+  assert.equal(merged.outcome, "done", merged.err);
+  assert.equal(parents(mine, "HEAD"), 2);
+  assert.equal(rev(mine, "HEAD^2"), rev(theirs, "main"));
+  const other = await pull(git, mine, { remote: "origin", branch: "feature", options: [] });
+  assert.equal(other.outcome, "done", other.err);
+  assert.equal(rev(mine, "HEAD^2"), rev(mine, "origin/feature"));
+  assert.equal(branch(mine), "main");
 }
 {
   // A repository set to pull by rebasing (pull.rebase, or the branch's own rebase setting)

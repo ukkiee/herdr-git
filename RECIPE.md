@@ -3521,9 +3521,12 @@ commit `main` lacks)
      `--root`, `--update-refs`); Rebase is off until a target is picked.
 171. VCS Operations popup → Pull…: `Pull to main` with `git pull` │ origin ▾ │ main ▾,
      Modify options ▾, Cancel and Pull. Pull brings the commit in and an `Update Info` tab
-     opens: `1 file(s) updated in 1 commit(s)`, the commit, and its files.
+     opens: `1 file(s) updated in 1 commit(s)`, the commit, and its files. With no option
+     picked and no `pull.rebase` set, Pull merges (`git pull --no-rebase`): after a local
+     commit that origin/main lacks, it makes a merge commit instead of asking how to
+     reconcile the branches.
 172. Pick another remote branch in the Pull dialog, pull, open it again: that branch is
-     picked.
+     picked. One that diverged from `main` is merged in the same way.
 173. VCS widget → Update Project…: `Update Project` with `Merge incoming changes into the
      current branch` (picked) and `Rebase the current branch on top of incoming changes`,
      Reset to the Remote Branch, Cancel and OK, with no empty space below them. OK

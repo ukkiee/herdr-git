@@ -854,7 +854,10 @@ machine); back on a terminal, they follow its folder again.
   10 to 20 s and the results don't blink; a failed read again keeps the old list. The
   first result is chosen, so Enter previews it. Emptying the box brings the tree back.
 - **Preview**: read-only, the whole file up to 400,000 characters. A file over 1 MiB,
-  or one that can't be read, can't be previewed; a file with a NUL byte is binary.
+  or one that can't be read, can't be previewed; a file with a NUL byte is binary. The
+  preview follows the file: each read of the panel (above) reads a preview drawn since
+  its last read again and shows the text the file holds now, in the same editor; a
+  hidden panel reads no file.
 - **Right-click** a row or a result: selects it and opens its menu. **Show Diff** (and
   the preview header's Show Diff) opens the file's Diff tab against HEAD, as the Commit
   panel opens a working file. **Copy Path** puts the absolute path on the clipboard

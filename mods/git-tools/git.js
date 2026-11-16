@@ -84,7 +84,7 @@ export function makeGit(exec, on, { record, wait } = {}) {
     if (timeout) options.timeout = timeout;
     else if (!reads(args)) options.timeout = WRITE_TIMEOUT;
     const vars = Object.entries(env ?? {}).map(([k, v]) => `${k}=${v}`);
-    const at = Date.now(), limit = (timeout || EXEC_TIMEOUT) + LATE;
+    const at = Date.now(), limit = (options.timeout || EXEC_TIMEOUT) + LATE;
     // `threw` apart from `failed`: an exec may reject with no error at all (undefined, "").
     let r, failed, threw, again = reads(args);
     for (let tries = 1; ; tries++) {

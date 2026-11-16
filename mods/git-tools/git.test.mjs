@@ -329,6 +329,15 @@ const settle = () => new Promise((go) => setImmediate(go));
   assert.deepEqual(clock.asked(), [10000]);
 }
 
+// A write that names no timeout runs up to WRITE_TIMEOUT, so the runner waits that long
+// (and 5 s more) before it gives up: a slow hook is not cut off at a read's 35 s.
+{
+  const clock = handClock(), x = losing();
+  makeGit(x.exec, null, { wait: clock.wait })(repo, ["checkout", "-b", "slow"]);
+  await settle();
+  assert.deepEqual(clock.asked(), [605000]);
+}
+
 // A command that may write is not run again: it may have done its work, only its answer
 // went missing. The Git console still gets its line.
 {

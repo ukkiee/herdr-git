@@ -53,7 +53,7 @@ export default class PullView {
     this.error = null;
     if (!this.root) return;
     cx.spawn(async (cx) => {
-      const targets = await readPullTargets(makeGit(exec, this.on), this.root);
+      const targets = await readPullTargets(makeGit(exec, this.on, { wait: this.wait }), this.root);
       if (!targets.ok) { this.targets = { ...targets, remotes: [] }; this.error = targets.err || this.t("ui.gitFailed"); cx.notify(); return; }
       const remembered = (await appSetting(MEMORY_KEY, {})) ?? {};
       this.targets = targets;

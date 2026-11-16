@@ -38,7 +38,7 @@ export function serveBranch(panel, e, cx) {
     // Its label is the Branch tree's own: the tree's delete button spins while the lock
     // holds exactly that text.
     serveRequest(panel, e, { key: "log.deleting" }, async (repo) => {
-      const r = await deleteBranch(makeGit(exec, repo.on), repo.root, name, { confirmed: true });
+      const r = await deleteBranch(makeGit(exec, repo.on, { wait: panel.wait }), repo.root, name, { confirmed: true });
       if (r.ok) panel.noteDeleted(repo, r.deleted);
       return r;
     }, cx);

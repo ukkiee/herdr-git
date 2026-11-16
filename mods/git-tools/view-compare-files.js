@@ -374,7 +374,7 @@ export class FileDiff extends DiffView {
     this.loading = true; this.again = false;
     cx.spawn(async (cx) => {
       try {
-        const r = await readFileDiff(makeGit(exec, this.on), this.root, { from: this.from, to: this.commit, path: this.path, oldPath: this.oldPath, reverse: this.reverse });
+        const r = await readFileDiff(makeGit(exec, this.on, { wait: this.wait }), this.root, { from: this.from, to: this.commit, path: this.path, oldPath: this.oldPath, reverse: this.reverse });
         if (r.ok || !this.result?.ok) this.apply(r);
         this.error = r.ok || !r.err ? null : { err: r.err };
       } catch (error) {
@@ -411,7 +411,7 @@ export class FileView {
       try {
         let text;
         if (this.rev) {
-          const r = await readRevisionFile(makeGit(exec, this.on), this.root, { rev: this.rev, path: this.path });
+          const r = await readRevisionFile(makeGit(exec, this.on, { wait: this.wait }), this.root, { rev: this.rev, path: this.path });
           text = r.ok ? (r.binary ? "\0" : r.text) : null;
         } else text = await readTextFile(`${this.root}/${this.path}`, { on: this.on });
         if (text === null || text === undefined) this.note = "compare.unreadable";

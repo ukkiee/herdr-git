@@ -205,7 +205,7 @@ export default class RollbackView {
       if (r.unheard) { this.running = false; return; }
       // Show what is left, so a second try doesn't work from a list that is no longer true.
       cx.spawn(async (cx) => {
-        const status = await readStatus(makeGit(exec, this.on), this.root);
+        const status = await readStatus(makeGit(exec, this.on, { wait: this.wait }), this.root);
         if (status.ok) {
           this.files = status.changes;
           this.picked = keepIncluded(this.picked, this.files);

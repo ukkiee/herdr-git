@@ -165,6 +165,24 @@ const flat = (text) => text.replace(/\s+/g, " ").trim();
   }
 }
 
+// A git call whose answer never comes is given up on only by a runner made with the copy's
+// clock (`makeGit(exec, on, { wait })`). docs/design.md's known limits and RECIPE.md say
+// which reads go without it (NO_CLOCK's files, outside any screen): every other makeGit
+// call passes `wait`, and each NO_CLOCK file is the one design.md names. A screen that makes
+// a runner without its clock fails here; give it the screen's (or the serving copy's) wait.
+{
+  const NO_CLOCK = ["files-data.js"];
+  const bare = new Set();
+  for (const [f, text] of Object.entries(code)) {
+    if (f === "git.js") continue;
+    for (const [, args] of text.matchAll(/\bmakeGit\(((?:[^()]|\([^()]*\))*)\)/g)) if (!/\bwait\s*:/.test(args)) bare.add(f);
+  }
+  assert.deepEqual([...bare].sort(), NO_CLOCK, "makeGit without the clock ({ wait }) only in the files docs/design.md's known limits names");
+  const limits = readFileSync(join(root, "docs/design.md"), "utf8").split("## 7. 알려진 한계")[1] ?? "";
+  for (const f of NO_CLOCK) assert.ok(limits.includes(`\`${f}\``), `docs/design.md's known limits names \`${f}\` as reads without the clock`);
+  assert.ok(flat(recipe).includes("(the Files panel's reads aside)"), "RECIPE.md says which reads go without the clock: (the Files panel's reads aside)");
+}
+
 // Done when 1 says how many `*.test.mjs` files mods/git-tools holds. A new test file
 // changes that number here.
 {

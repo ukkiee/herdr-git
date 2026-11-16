@@ -91,7 +91,7 @@ export default class DiffView {
     this.loading = true; this.again = false;
     cx.spawn(async (cx) => {
       try {
-        const r = await readDiff(makeGit(exec, this.on), this.root, { path: this.path, commit: this.commit, status: this.status, oldPath: this.oldPath });
+        const r = await readDiff(makeGit(exec, this.on, { wait: this.wait }), this.root, { path: this.path, commit: this.commit, status: this.status, oldPath: this.oldPath });
         // A failed read keeps the diff that was read before; git's words go in the strip.
         if (r.ok || !this.result?.ok) this.apply(r);
         this.error = r.ok || !r.err ? null : { err: r.err, msg: r.msg };

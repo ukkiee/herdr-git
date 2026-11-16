@@ -35,7 +35,7 @@ export function newTagAt(host, repo, commit, who) {
 export function newTagAtHead(host, repo, cx, who) {
   if (!repo || writeBlock(host, repo)) return;
   cx.spawn(async () => {
-    const r = await makeGit(exec, repo.on ?? null).read(repo.root, ["rev-parse", "--verify", "--quiet", "HEAD^{commit}"]);
+    const r = await makeGit(exec, repo.on ?? null, { wait: host.wait }).read(repo.root, ["rev-parse", "--verify", "--quiet", "HEAD^{commit}"]);
     if (r.ok) newTagAt(host, repo, { hash: r.out.trim() }, who);
   });
 }

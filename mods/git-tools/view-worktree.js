@@ -74,7 +74,7 @@ export default class NewWorktree {
   read(cx) {
     if (!this.root) return;
     cx.spawn(async (cx) => {
-      const r = await worktreeSources(makeGit(exec, this.on), this.root);
+      const r = await worktreeSources(makeGit(exec, this.on, { wait: this.wait }), this.root);
       if (!r.ok) { this.error = r.err; this.sources = []; cx.notify(); return; }
       this.sources = r.branches;
       const w = this.wanted;

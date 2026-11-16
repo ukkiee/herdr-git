@@ -81,7 +81,7 @@ export default class PatchView {
     cx.notify();
     cx.spawn(async (cx) => {
       let r;
-      try { r = await createPatch(makeGit(exec, this.on), this.root, this.options()); }
+      try { r = await createPatch(makeGit(exec, this.on, { wait: this.wait }), this.root, this.options()); }
       catch (error) { r = { ok: false, err: String(error?.message ?? error) }; }
       this.waiting = false;
       if (r.ok) {

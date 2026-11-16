@@ -28,18 +28,31 @@ export const PARALLEL = 4;
 const BUSY = /execs are running already/;
 const TRIES = 5;
 
-// makeGit(exec, on, { record? }) → git(cwd, args, { timeout?, env? }) → { ok, code, out, err }.
-// Never throws: a program that can't start or a machine that can't be reached is
-// { ok: false, code: -1 }. `out` is stdout exactly as git wrote it (-z output and diffs
-// depend on it); `err` is trimmed stderr, or trimmed stdout when stderr is empty (hooks
-// and some git errors print there).
+// herdr's exec gives up on a command at its timeout (30 s unless given) and rejects, yet its
+// answer has been seen to go missing: no process left and a promise that never settles. A
+// runner given a clock stops waiting LATE ms past the command's timeout, gives its place in
+// line to the next call and answers with a failure. A read is asked once more first: it
+// changes nothing. A command that may write is not, as it may have done its work.
+const EXEC_TIMEOUT = 30000;
+const LATE = 5000;
+const UNANSWERED = Symbol("unanswered");
+const never = new Promise(() => {});
+
+// makeGit(exec, on, { record?, wait? }) → git(cwd, args, { timeout?, env? }) → { ok, code, out, err }.
+// Never throws: a program that can't start, a machine that can't be reached or an answer
+// that never came is { ok: false, code: -1 }. `out` is stdout exactly as git wrote it (-z
+// output and diffs depend on it); `err` is trimmed stderr, or trimmed stdout when stderr is
+// empty (hooks and some git errors print there).
 // `on`: the space's machine, null for this computer. `env`: herdr's exec has no env
 // option, so variables go through the `env` program. `timeout`: ms (exec's default is 30 s,
 // its cap 10 min).
 // record(call): gets every command that may write once it ended, { at (ms), cwd, on,
 // args (git's, without env), code, stdout, stderr }, and is awaited so one copy's records
 // land in order. Default: the installed one (recordWith). Its failure never fails git.
-export function makeGit(exec, on, { record } = {}) {
+// wait(ms): the screen's clock, a promise that settles after `ms` (main.js gives each
+// screen one). Without it, or when it throws or rejects (its copy closed), the runner waits
+// for exec's answer however long it takes.
+export function makeGit(exec, on, { record, wait } = {}) {
   const note = async (call) => {
     const fn = record ?? installed;
     if (!fn || reads(call.args)) return;
@@ -55,22 +68,34 @@ export function makeGit(exec, on, { record } = {}) {
     if (flying === 0) for (const go of refused.splice(0)) go(ran);
     else if (ran) refused.shift()?.(true);
   };
+  // The exec's answer, or UNANSWERED once the clock rings first.
+  const answer = (running, ms) => {
+    let alarm;
+    try { alarm = wait ? Promise.resolve(wait(ms)).then(() => UNANSWERED, () => never) : null; }
+    catch { alarm = null; }
+    return alarm ? Promise.race([running, alarm]) : running;
+  };
   const git = async (cwd, args, { timeout, env } = {}) => {
     const options = { cwd, on };
     if (timeout) options.timeout = timeout;
     const vars = Object.entries(env ?? {}).map(([k, v]) => `${k}=${v}`);
-    const at = Date.now();
+    const at = Date.now(), limit = (timeout || EXEC_TIMEOUT) + LATE;
     // `threw` apart from `failed`: an exec may reject with no error at all (undefined, "").
-    let r, failed, threw;
+    let r, failed, threw, again = reads(args);
     for (let tries = 1; ; tries++) {
       await take();
       failed = undefined; threw = false;
+      let lost = false;
       flying++;
-      try { r = vars.length ? await exec("env", [...vars, "git", ...args], options) : await exec("git", args, options); }
+      try {
+        r = await answer(vars.length ? exec("env", [...vars, "git", ...args], options) : exec("git", args, options), limit);
+        if (r === UNANSWERED) { lost = threw = true; failed = new Error(`git did not answer in ${limit / 1000} s.`); }
+      }
       catch (error) { failed = error; threw = true; }
       finally { flying--; give(); }
-      const busy = threw && BUSY.test(String(failed?.message ?? failed));
+      const busy = threw && !lost && BUSY.test(String(failed?.message ?? failed));
       landed(!busy);
+      if (lost && again) { again = false; continue; }
       if (!busy || tries >= TRIES) break;
       let ran = false;
       while (!ran && flying > 0) ran = await new Promise((go) => refused.push(go));

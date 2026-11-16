@@ -13,6 +13,9 @@
 //                        `openMenu` and `answerMenu` (never another copy's)
 //   this.locks           set before init: this copy's side of the repository write locks
 //                        (ui.js `takeWrite`, `writeBlock`)
+//   this.wait            set before init: this copy's clock, wait(ms) → a promise that
+//                        settles after ms; handed to makeGit (git.js `wait`) so a git call
+//                        whose answer never comes doesn't hold the screen
 //   this.lang, this.t    set before init: the copy's language ("en" | "ko") and its
 //                        t(key, args) (i18n.js). Both are replaced when the system's
 //                        language turns out different, followed by a redraw: call
@@ -159,6 +162,9 @@ export default class GitTools extends View {
     this.screen = new (VIEWS[p.view] ?? (p.view === undefined && p.overlay ? OpenCommitPanel : Unknown))();
     this.screen.bus = this.events;
     this.screen.locks = this.locks;
+    // init's cx is the copy's async context: valid across awaits while the copy lives, and
+    // it throws once the copy closes (the runner then waits without a limit).
+    this.screen.wait = (ms) => cx.sleep(ms);
     const fixed = fixedLang(p);
     this.fixed = Boolean(fixed);
     this.speak(fixed ?? rememberedLang() ?? "en");

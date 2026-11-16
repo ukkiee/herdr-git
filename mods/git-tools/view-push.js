@@ -4,11 +4,12 @@
 // Right: the files they change (click a commit to see only its own). Bottom: Cancel and
 // Push; the ▾ next to Push holds Force Push, which is --force-with-lease (git-push.js)
 // and is disabled on a Protected branch.
-// The dialog doesn't run git push itself: it asks the Commit panel copy that opened it
-// (props.owner), which pushes under the repository's write lock (servePush, ui.js
-// serveRequest). Herdr closes a dialog on Esc even while it waits, and the push, the
-// "changed" and git's error must not go with it: the panel reads again afterwards and
-// shows a failure in its own error strip.
+// The dialog doesn't run git push itself: it asks the copy that opened it (props.owner: a
+// Commit panel, the Log panel or the VCS widget), which pushes under the repository's
+// write lock (servePush, ui.js serveRequest). Herdr closes a dialog on Esc even while it
+// waits, and the push, the "changed" and git's error must not go with it: the panels read
+// again afterwards, and a failure shows in the error strip of every Commit panel on the
+// repository (and the opener's own strip or notification).
 // Push pushes what the dialog shows or nothing: the panel reads the plan again right
 // before `git push`, and when the branch, remote, target or newest commit differ from
 // what the dialog showed, nothing is pushed and the dialog reads and shows the new plan
@@ -35,7 +36,7 @@ import { PROTECTED, readPushPlan, readPushFiles, push } from "./git-push.js";
 import { remoteFailure } from "./git-remote.js";
 import { formatTime } from "./i18n.js";
 import { buildRows } from "./tree.js";
-import { tip, openDialog, openMenu, dialogFrame, button, notice, errorStrip, row,icon, uiGlyph, ICON, fileGlyph, folderGlyph, darkLook, close, scriptedRepo, WindowedList, askOwner, serveRequest, writeBlock, sentence } from "./ui.js";
+import { tip, openDialog, openMenu, dialogFrame, button, notice, errorStrip, row,icon, uiGlyph, ICON, fileGlyph, folderGlyph, darkLook, close, scriptedRepo, WindowedList, askOwner, serveRequest, writeBlock, sentence, broadcast, clip } from "./ui.js";
 
 // openPush({ root, on, owner, lang })
 //   Opens the Push dialog for the repository's current branch. commit-form.js calls it
@@ -85,8 +86,17 @@ export function servePush(panel, e, cx) {
         msg: { key: "dialogs.push.moved", args: { why: sentence(t, moved.msg, moved.text) } },
       };
     }
-    return remoteFailure(t, await push(git, repo.root, { force: force === true, ...source }), "push");
+    return failedAt(panel, repo, remoteFailure(t, await push(git, repo.root, { force: force === true, ...source }), "push"));
   }, cx);
+}
+
+// failedAt(panel, repo, r) → r. A failed push also goes to every Commit panel on the
+// repository (view-commit.js, "push-failed"): the dialog may have closed, and the copy
+// that ran the push may be the Log panel or the VCS widget, which show it elsewhere or
+// only for a moment. `from` keeps the running copy from showing it twice.
+function failedAt(panel, repo, r) {
+  if (!r.ok) broadcast({ type: "push-failed", root: repo.root, on: repo.on ?? null, from: panel.bus.id, text: clip(sentence(panel.t, r.msg, r.err) || panel.t("ui.gitFailed")) });
+  return r;
 }
 
 // { one, other } in English: `n` picks.

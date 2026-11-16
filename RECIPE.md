@@ -952,18 +952,22 @@ another machine runs every git command on that machine. A panel opened with
   click the branch line to see all. Keys: ↑ ↓, Esc closes.
 - Target: the branch's upstream; without one, `origin` and the same name, and the push
   sets the upstream.
-- **Push** pushes exactly what the dialog shows, or nothing. The Commit panel that
-  opened the dialog runs it: right before `git push` it reads the plan again, and when
+- **Push** pushes exactly what the dialog shows, or nothing. The screen that opened the
+  dialog (the Commit panel, the Log panel or the VCS widget) runs it: right before
+  `git push` it reads the plan again, and when
   the branch, remote, target or newest commit differ from what the dialog shows, nothing
   is pushed, the dialog says what changed and shows the new plan. While it runs both
   buttons, × and Cancel do nothing. Success: every screen reads again and the dialog
-  closes. Failure: git's output stays in the dialog and in the Commit panel's error
-  strip, the commit is already made, Push can be pressed again.
+  closes. Failure: git's output stays in the dialog and in the error strip of every
+  Commit panel on the repository (the Log panel shows it in its own strip too, the VCS
+  widget in a notification), the commit is already made, Push can be pressed again.
+  git's output is what a pre-push hook printed (git leaves it on stdout), then git's
+  own words.
 - Esc closes the dialog even while it pushes (Herdr does that; the mod can't stop it).
-  The push goes on in the Commit panel: every screen reads again when it ends, and a
-  failure shows in the Commit panel's error strip.
-- When the Commit panel doesn't take the request within 3 s (it closed), nothing is
-  pushed and Push can be pressed again.
+  The push goes on in the screen that opened it: every screen reads again when it ends,
+  and a failure shows in the Commit panel's error strip.
+- When the screen that opened it doesn't take the request within 3 s (it closed),
+  nothing is pushed and Push can be pressed again.
 - **Force Push** is `--force-with-lease`: git refuses when someone pushed to the remote
   branch since your last fetch. Disabled when the branch or its target is `main` or
   `master`, and when there is nothing to push.

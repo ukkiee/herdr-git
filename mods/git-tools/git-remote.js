@@ -90,9 +90,13 @@ export function cannotReach(r, how) {
 // remoteFailure(t, r, how) → r when it went well; else r worded for a screen in t's
 // language: failureText's words in err (the credential hint first when cannotReach) and no
 // msg, so every screen shows the same and none adds the hint again.
+// A pushing git leaves what its pre-push hook prints on stdout, while `err` is stderr
+// (git.js): the hook's words, often the only reason given, go first, as git printed them.
 export function remoteFailure(t, r, how) {
   if (r?.ok) return r;
-  const err = failureText(t, { ...r, fetchFailed: Boolean(r?.fetchFailed) || cannotReach(r, how) });
+  const out = how === "push" && r?.code > 0 ? str(r.out).trim() : "";
+  const said = out && out !== str(r.err).trim() ? `${out}\n${str(r.err)}` : r?.err;
+  const err = failureText(t, { ...r, err: said, fetchFailed: Boolean(r?.fetchFailed) || cannotReach(r, how) });
   return { ...r, err, msg: undefined, fetchFailed: undefined };
 }
 

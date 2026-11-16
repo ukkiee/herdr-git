@@ -412,6 +412,15 @@ const commitMine = (mine, path, at, word) => { edit(mine, path, at, word); sh(mi
   assert.equal(hooked.code, 1, hooked.err);
   assert.match(hooked.err, /^hook says no\n/);
   assert.equal(remoteFailure(en, hooked, "push").err, hooked.err.trim());
+  // git leaves what a pre-push hook prints on stdout there: the words still come first,
+  // before git's own, for a branch and for a tag.
+  writeFileSync(`${mine}/.git/hooks/pre-push`, "#!/bin/sh\necho 'pre-push: refuses this push'\nexit 1\n");
+  const quiet = await pushBranch(git, mine, {});
+  assert.equal(quiet.code, 1, quiet.err);
+  assert.match(remoteFailure(en, quiet, "push").err, /^pre-push: refuses this push\n(.*\n)*error: failed to push some refs/);
+  assert.match(remoteFailure(ko, await pushTag(git, mine, { tag: "v1", remote: "origin" }), "push").err, /^pre-push: refuses this push\nerror: failed to push some refs/);
+  // With nothing on stderr, `err` already is stdout (git.js): said once.
+  assert.equal(remoteFailure(en, { ok: false, code: 1, out: "only on stdout\n", err: "only on stdout" }, "push").err, "only on stdout");
   sh(mine, "rm .git/hooks/pre-push");
 
   // A pre-receive hook on the remote that says no.

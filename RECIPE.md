@@ -854,7 +854,10 @@ machine); back on a terminal, they follow its folder again.
   10 to 20 s and the results don't blink; a failed read again keeps the old list. The
   first result is chosen, so Enter previews it. Emptying the box brings the tree back.
 - **Preview**: read-only, the whole file up to 400,000 characters. A file over 1 MiB,
-  or one that can't be read, can't be previewed; a file with a NUL byte is binary.
+  or one that can't be read, can't be previewed; a file with a NUL byte is binary. The
+  preview follows the file: each read of the panel (above) reads a preview drawn since
+  its last read again and shows the text the file holds now, in the same editor; a
+  hidden panel reads no file.
 - **Right-click** a row or a result: selects it and opens its menu. **Show Diff** (and
   the preview header's Show Diff) opens the file's Diff tab against HEAD, as the Commit
   panel opens a working file. **Copy Path** puts the absolute path on the clipboard
@@ -1116,7 +1119,10 @@ machine); back on a terminal, they follow its folder again.
   paths whose staging wasn't written are listed with `git failed before staging it`,
   and git's words end the result. A snapshot made before snapshots held the staging, or
   in a repository without a commit, leaves the index alone: an added file then comes
-  back untracked. A path
+  back untracked. A file that had only its staging changed when it was rolled back (its
+  working copy as HEAD had it) is in the list too, by what was staged (its Diff tab shows
+  that staged change), and Restore stages it again without writing the file; for such a
+  new file (staged, then deleted from disk) that only holds while nothing is at its path. A path
   is restored only when nothing changed it since: HEAD has the same version of it as
   when the rollback ran, the working tree matches HEAD there (for an added file: nothing
   at all is at the path, under any spelling the disk takes as the same name), and it
@@ -1864,7 +1870,10 @@ So a snapshot's diff against its first parent is what the rollback threw away, a
 second parent holds what was staged. The list is
 `log -g --max-count=50 --format=%x01%H %ct --name-status --no-renames --root --diff-merges=first-parent -z refs/git-tools/rollback --`
 (git 2.31 or later: with two parents `--name-status` lists nothing otherwise; one call; when it fails, `rev-parse -q --verify` tells a missing ref, an empty list,
-from git failing). It is read word by word between NULs: a status is always followed by
+from git failing). A second call, `log --no-walk=unsorted --format=%x01%H --name-status
+--no-renames -z` on the listed snapshots' second parents, adds the files that had only
+their staging changed: their working copy was as HEAD had it, so the first diff doesn't
+name them. It is read word by word between NULs: a status is always followed by
 its path, so a path holding `\x01`, a tab or a line break is one path. A type change
 counts as `modified`.
 
@@ -2435,7 +2444,8 @@ in English.
   and `ls-files -z --cached`, `--others --exclude-standard` and `--deleted`, with
   `config -z -f .gitmodules --get-regexp` and `ls-files -z --stage` on the paths it
   names (submodules); for the User popup
-  `log --use-mailmap --format=%aN%x00%aE`. Every read carries `--no-optional-locks -c core.fsmonitor=false -c diff.autoRefreshIndex=false`;
+  `log --use-mailmap --format=%aN%x00%aE`. Every read carries `--no-optional-locks -c core.fsmonitor=false -c diff.autoRefreshIndex=false -c log.showSignature=false`
+  (the last so a signed commit's verification lines never lead what `log` or `show` prints);
   the snapshot's commits and reflog and the step-aside commit carry
   `-c user.name=git-tools -c user.email=git-tools@localhost`,
   and Restore's one comparison with HEAD `-c diff.autoRefreshIndex=true`.
@@ -2459,7 +2469,8 @@ in English.
   needs 2.24). With an older git on a space's machine, the Date filter fails with git's
   error and branch and push actions fail too.
 - **For the git operations**, also: `merge`, `rebase` (and `rebase -i` with
-  `GIT_SEQUENCE_EDITOR` writing git-tools' todo list), `cherry-pick` (also `--no-commit`
+  `GIT_SEQUENCE_EDITOR` writing git-tools' todo list and, beside it, the file its `exec`
+  lines load their messages and paths from), `cherry-pick` (also `--no-commit`
   on a scratch index `<git dir>/git-tools-changes-index`), `revert`, `pull`, `stash`
   (`push`, `list`, `apply`, `pop`, `drop`, `clear`, `branch`), `reset` (`--soft`,
   `--mixed`, `--hard`, `--keep`), `tag`, `branch -m`, `branch --set-upstream-to`,
@@ -2500,7 +2511,10 @@ in English.
   `refs/git-tools/deleted-branches`. Each Rollback leaves the
   emptied file `<git dir>/git-tools-rollback-index-<copy>` (65 bytes in a SHA-1
   repository, 89 in a SHA-256 one) in the git folder, one for each Commit panel copy that
-  rolled back or restored there. Restore
+  rolled back or restored there. A history edit writes `rebase-merge/gittools-vars` in
+  the git folder while its rebase runs or is stopped (the new messages and the picked
+  paths, as shell assignments); git removes it with that folder when the rebase ends.
+  Restore
   writes working-tree files and the index entries of the paths it restored. git config
   is written only by a deleted branch's Restore, putting back that branch's
   `branch.<name>.remote` and `.merge`. The Files panel writes nothing.
@@ -3660,7 +3674,8 @@ commit `main` lacks)
      opens: `1 file(s) updated in 1 commit(s)`, the commit, and its files. With no option
      picked and no `pull.rebase` set, Pull merges (`git pull --no-rebase`): after a local
      commit that origin/main lacks, it makes a merge commit instead of asking how to
-     reconcile the branches.
+     reconcile the branches. With `--no-ff`, `--squash` or `--no-commit` picked, Pull
+     merges that way also where `pull.rebase` is set.
 172. Pick another remote branch in the Pull dialog, pull, open it again: that branch is
      picked. One that diverged from `main` is merged in the same way.
 173. VCS widget → Update Project…: `Update Project` with `Merge incoming changes into the
@@ -3750,12 +3765,15 @@ commit `main` lacks)
      a commit up and Start Rebasing: the order changes and nothing is left in progress.
      Squash's ▾ opens its Fixup menu right under the ▾, inside the dialog.
 202. In that dialog Squash, Fixup, Drop and Reword (double-click the subject) a commit
-     each and start: the history shows exactly that. Closing with changes asks `Cancel
+     each and start: the history shows exactly that. A Squash or Fixup right after a
+     dropped commit melds into the commit kept before the drop. Pick on a reworded row
+     shows the commit's own message again. Closing with changes asks `Cancel
      Rebase` first; Esc on that question closes only the question. Esc in a reword's box
      leaves the reword (asking first when its text changed) and the dialog stays.
 203. Mark a commit Stop to Edit and start: the notification `Rebase Stopped for Editing`
      says to continue or abort from the VCS widget or the Commit panel; Continue Rebase
-     there finishes.
+     there finishes. A commit reworded after that stop has its new message once the
+     rebase is continued.
 204. Drop every commit and start: `Git Rebase` asks first; the branch then sits on the
      picked commit's parent.
 
@@ -3785,7 +3803,8 @@ commit `main` lacks)
 213. Show Diff with Working Tree: a tab with `Difference between files in feature and
      current working tree on main:`, Swap branches, and files in blue (different), gray
      (only in feature) and green (a tracked file only the working tree has). Only files
-     git tracks are compared: an untracked file is not listed.
+     git tracks are compared: an untracked file is not listed. With the tab left open
+     over a checkout, the line names the branch checked out now.
 214. Right-click a commit → Compare with Local: `Changes Between <hash> and Local
      Version`. Pick two commits → Compare Versions: `Changes Between <a> and <b>`. Opening
      the same kind again replaces that tab; other kinds stay.
@@ -3975,7 +3994,9 @@ and `b.txt` and a new file `c.txt`)
      ` into <branch>`.
 266. In Rebasing Commits, Reword a commit and press ⌘↩ in its new message box: the row
      reads Reword and the message changes. ⌘↩ inside Edit Commit Message, Squashed Commit
-     Message and Extract Selected Changes confirms them too.
+     Message and Extract Selected Changes confirms them too. In all four the message box
+     has the keyboard as soon as it shows: typing goes into it without a click. Rebasing
+     Commits itself takes its keys (↑ ↓, P, R, D) right after it opens from the menu.
 267. In Commit details, right-click a file the commit added → Show Changes to Parents: the
      whole file shows as added. On a merge commit's file: one tab per parent, each named
      `<file> (<parent's 8-char hash>)`; with either tab focused, the Branch tree, the

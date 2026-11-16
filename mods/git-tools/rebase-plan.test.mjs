@@ -1,9 +1,18 @@
 // node rebase-plan.test.mjs: the rebase plan (a list of actions → git's to-do list) and
 // the edit check (why an edit item is off), as pure functions.
 import assert from "node:assert/strict";
-import { todoList, editCheck, MESSAGE_VAR } from "./rebase-plan.js";
+import { todoList, editCheck, shellVars, MESSAGE_VAR } from "./rebase-plan.js";
 
 const A = "a".repeat(40), B = "b".repeat(40), C = "c".repeat(40), D = "d".repeat(40);
+// An exec line that reads a variable loads the variables file first.
+const LOAD = ". \"$(git rev-parse --git-path rebase-merge/gittools-vars)\"";
+const amend = (n) => `exec ${LOAD} && git commit --amend --allow-empty -q --cleanup=whitespace -m "$${MESSAGE_VAR}${n}"`;
+
+// The variables file: one assignment a line, each value single-quoted as the shell reads
+// it back whole (line breaks, double quotes and `$` as they are, a single quote closed
+// around an escaped one).
+assert.equal(shellVars({ GITTOOLS_MSG_0: "it's \"x\"\n$HOME", GITTOOLS_PATHS_1: "a b" }), "GITTOOLS_MSG_0='it'\\''s \"x\"\n$HOME'\nGITTOOLS_PATHS_1='a b'");
+assert.equal(shellVars({}), "");
 
 // ---- the to-do list
 
@@ -20,7 +29,7 @@ const A = "a".repeat(40), B = "b".repeat(40), C = "c".repeat(40), D = "d".repeat
   assert.deepEqual(r.lines, [
     `pick ${A}`,
     `pick ${B}`,
-    `exec git commit --amend --allow-empty -q --cleanup=whitespace -m "$${MESSAGE_VAR}0"`,
+    amend(0),
     `edit ${C}`,
     `drop ${D}`,
   ]);
@@ -55,7 +64,7 @@ const A = "a".repeat(40), B = "b".repeat(40), C = "c".repeat(40), D = "d".repeat
   assert.equal(r.ok, true, r.err);
   assert.deepEqual(r.lines, [
     `pick ${A}`, `fixup ${B}`, `fixup ${C}`,
-    `exec git commit --amend --allow-empty -q --cleanup=whitespace -m "$${MESSAGE_VAR}0"`,
+    amend(0),
     `pick ${D}`,
   ]);
   assert.deepEqual(r.env, { [`${MESSAGE_VAR}0`]: "both" });
@@ -65,7 +74,7 @@ const A = "a".repeat(40), B = "b".repeat(40), C = "c".repeat(40), D = "d".repeat
 // A reworded head of a group: its message is the group's, set after the group.
 {
   const r = todoList([{ hash: A, action: "reword", message: "m" }, { hash: B, action: "fixup" }]);
-  assert.deepEqual(r.lines, [`pick ${A}`, `fixup ${B}`, `exec git commit --amend --allow-empty -q --cleanup=whitespace -m "$${MESSAGE_VAR}0"`]);
+  assert.deepEqual(r.lines, [`pick ${A}`, `fixup ${B}`, amend(0)]);
 }
 
 // Two messages: one variable each, numbered in order.
@@ -75,9 +84,26 @@ const A = "a".repeat(40), B = "b".repeat(40), C = "c".repeat(40), D = "d".repeat
   assert.equal(r.lines.filter((l) => l.startsWith("exec")).length, 2);
 }
 
+// A dropped commit between a commit and the ones melded into it leaves the group whole:
+// the squash and the fixup after it meld into the commit kept before it.
+{
+  const r = todoList([
+    { hash: A, action: "pick" },
+    { hash: B, action: "drop" },
+    { hash: C, action: "squash", message: "one and three" },
+    { hash: D, action: "fixup" },
+  ]);
+  assert.equal(r.ok, true, r.err);
+  assert.deepEqual(r.lines, [
+    `pick ${A}`, `drop ${B}`, `fixup ${C}`, `fixup ${D}`,
+    amend(0),
+  ]);
+  assert.deepEqual(r.groups, [{ head: A, members: [A, C, D] }]);
+}
+
 // A branch on a commit in the range follows it: update-ref after that commit's line, or
-// after the whole group the commit melds into, or after a dropped commit (onto what came
-// before it).
+// after the whole group the commit melds into. A dropped commit's branch lands on what
+// came before it: that group, once it is whole.
 {
   const r = todoList([
     { hash: A, action: "pick" },
@@ -86,10 +112,13 @@ const A = "a".repeat(40), B = "b".repeat(40), C = "c".repeat(40), D = "d".repeat
     { hash: D, action: "pick" },
   ], { refs: { [B]: ["refs/heads/side"], [C]: ["refs/heads/gone"], [D]: ["refs/heads/x", "refs/heads/y"] } });
   assert.deepEqual(r.lines, [
-    `pick ${A}`, `fixup ${B}`, "update-ref refs/heads/side",
-    `drop ${C}`, "update-ref refs/heads/gone",
+    `pick ${A}`, `fixup ${B}`, `drop ${C}`,
+    "update-ref refs/heads/side", "update-ref refs/heads/gone",
     `pick ${D}`, "update-ref refs/heads/x", "update-ref refs/heads/y",
   ]);
+  // With nothing kept before it, the branch moves where the drop stands.
+  const first = todoList([{ hash: A, action: "drop" }, { hash: B, action: "pick" }], { refs: { [A]: ["refs/heads/gone"] } });
+  assert.deepEqual(first.lines, [`drop ${A}`, "update-ref refs/heads/gone", `pick ${B}`]);
 }
 
 // Refused plans: a reword without a message, a squash or fixup with nothing before it to

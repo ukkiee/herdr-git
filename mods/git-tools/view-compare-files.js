@@ -96,6 +96,9 @@ export function commitVersions(host, commits) {
 // The commit a Commit details file row belongs to: its own when several commits are
 // picked, else the one shown.
 const commitOf = (host, m) => m?.item?.commit ?? host.details?.info?.hash ?? null;
+// The file's name before that commit renamed it: with several commits picked, the row's
+// own `from` is the whole range's, `own` that commit's change.
+const fromOf = (m) => (m.item.own ?? m.item).from ?? null;
 const usable = (host, m) => Boolean(host.repo && m && !m.folder && commitOf(host, m));
 
 // Compare with Local: the commit's file against the working file.
@@ -110,7 +113,7 @@ function withParent(host, m, cx, then) {
   if (!usable(host, m)) return;
   const repo = host.repo;
   cx.spawn(async (cx) => {
-    const p = await fileParent(repo.git, repo.root, { commit: commitOf(host, m), path: m.path, from: m.item.from ?? null });
+    const p = await fileParent(repo.git, repo.root, { commit: commitOf(host, m), path: m.path, from: fromOf(m) });
     if (!p.ok) host.failedOn(repo, p.err, cx);
     else if (p.parent) then(repo, p);
     cx.notify();
@@ -132,7 +135,7 @@ export function changesToParents(host, m, cx) {
     // A merge commit's tabs open at once, one per parent, each named after its parent: the
     // person tells them apart, and so does each tab's screen finding its own pane
     // (focus-repo.js registerTab) while the focus is on the last one.
-    const diffs = parentDiffs({ commit, parents: p.parents, path: m.path, from: m.item.from ?? null });
+    const diffs = parentDiffs({ commit, parents: p.parents, path: m.path, from: fromOf(m) });
     for (const d of diffs) {
       const name = diffs.length > 1 ? host.t("compare.revisionFileTab", { name: d.path.split("/").pop(), rev: short(d.from) }) : undefined;
       openFileDiff({ root: repo.root, on: repo.on, path: d.path, from: d.from, to: d.to, oldPath: d.oldPath, name });
@@ -205,7 +208,13 @@ export default class CompareFiles {
     cx.spawn(async (cx) => {
       try {
         const r = this.mode === "versions" ? await versionFiles(this.git(), root, this.from, this.to) : await workingTreeFiles(this.git(), root, this.ref);
-        if (r.ok) { this.files = r.files; this.error = null; this.build(); }
+        if (r.ok) {
+          this.files = r.files; this.error = null;
+          // The head line names what the working tree is on now, not what it was on when
+          // the tab opened.
+          if (this.mode === "working" && r.head) this.current = r.head.branch ?? (r.head.hash ? short(r.head.hash) : this.current);
+          this.build();
+        }
         else { this.files ??= []; this.error = r.err || this.t("ui.gitFailed"); }
       } catch (error) {
         this.files ??= []; this.error = String(error?.message ?? error);

@@ -18,7 +18,7 @@
 
 import { readOperation, settle } from "./git-operation.js";
 import { PROTECTED } from "./git-push.js";
-import { editCheck, todoList } from "./rebase-plan.js";
+import { editCheck, todoList, shellVars, VARS_FILE } from "./rebase-plan.js";
 import { commit as commitFiles } from "./git-commit.js";
 import { translator } from "./i18n.js";
 
@@ -29,9 +29,11 @@ const english = translator("en");
 const TIMEOUT = 600000;
 const HASH = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/;
 // The sequence editor: writes the list from a variable into the file git hands it (exec
-// has no stdin, and a file can't be written on another machine). Given as the variable,
-// which beats both sequence.editor and an exported GIT_SEQUENCE_EDITOR of the person's.
-const SEQUENCE_EDITOR = `sh -c 'printf "%s\\n" "$GITTOOLS_TODO" > "$1"' -`;
+// has no stdin, and a file can't be written on another machine), and beside it the file
+// the list's exec lines load their variables from (rebase-plan.js VARS_FILE). Given as the
+// variable, which beats both sequence.editor and an exported GIT_SEQUENCE_EDITOR of the
+// person's.
+const SEQUENCE_EDITOR = `sh -c 'printf "%s\\n" "$GITTOOLS_TODO" > "$1" && printf "%s\\n" "$GITTOOLS_VARS" > "$(dirname "$1")/${VARS_FILE}"' -`;
 
 const result = (r, extra = {}) => ({ ok: Boolean(r.ok), code: r.code ?? (r.ok ? 0 : -1), out: r.out ?? "", err: r.err ?? "", ...(r.msg ? { msg: r.msg } : {}), ...extra });
 const refused = (err, msg, operation = null) => ({ ok: false, code: -1, out: "", err, msg, outcome: "refused", operation, changed: false });
@@ -222,7 +224,7 @@ export async function runPlan(git, root, { oldest, steps } = {}) {
   // --no-autostash: the person's rebase.autoStash would put the changes aside too.
   const run = await git(root, ["rebase", "-i", "--no-autostash", "--no-autosquash", isRoot ? "--root" : `${oldest}^`], {
     timeout: TIMEOUT,
-    env: { GIT_SEQUENCE_EDITOR: SEQUENCE_EDITOR, GIT_EDITOR: "true", GITTOOLS_TODO: plan.lines.join("\n"), ...plan.env },
+    env: { GIT_SEQUENCE_EDITOR: SEQUENCE_EDITOR, GIT_EDITOR: "true", GITTOOLS_TODO: plan.lines.join("\n"), GITTOOLS_VARS: shellVars(plan.env) },
   });
   const after = await readOperation(git, root);
   const outcome = settle(before, after, run);

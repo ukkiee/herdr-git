@@ -62,21 +62,46 @@ export function pickedInOrder(sel, at) {
 // together, each as the change from before the oldest commit that touched it to after the
 // newest. commits: newest first, each { files: [{ path, status, from? }] } (git-show.js
 // readCommit). A file added and deleted inside the range has no change left and is not
-// listed.
+// listed. A file renamed inside the range is listed once, under its last name (a deleted
+// one too), from the name it had before the range.
 export function combineChanges(commits) {
-  const seen = new Map(); // path → { first (oldest), last (newest) }
+  // The file's name now → { first (oldest change), last (newest), from (its name before
+  // the range, when a rename gave it another) }.
+  const seen = new Map();
   for (let i = commits.length - 1; i >= 0; i--) {
     for (const f of commits[i]?.files ?? []) {
+      if (f.status === "renamed") {
+        // What the range did to it under its old name comes along to the new one.
+        const old = seen.get(f.from);
+        seen.delete(f.from);
+        seen.set(f.path, old ? { first: old.first, last: f, from: old.from ?? f.from } : { first: f, last: f, from: f.from });
+        continue;
+      }
       const s = seen.get(f.path);
-      if (s) s.last = f; else seen.set(f.path, { first: f, last: f });
+      if (s) s.last = f; else seen.set(f.path, { first: f, last: f, from: null });
     }
   }
   const out = [];
-  for (const [path, { first, last }] of [...seen].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))) {
+  for (const [path, { first, last, from }] of seen) {
     const before = first.status !== "added", after = last.status !== "deleted";
     if (!before && !after) continue;
-    if (first.status === "renamed" && after) out.push({ path, status: "renamed", from: first.from });
-    else out.push({ path, status: !before ? "added" : !after ? "deleted" : first === last ? first.status : "modified" });
+    if (!before) out.push({ path, status: "added" });
+    else if (!after) out.push({ path, status: "deleted" });
+    else if (from && from !== path) out.push({ path, status: "renamed", from });
+    else out.push({ path, status: first === last && !from ? first.status : "modified" });
   }
-  return out;
+  return out.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+}
+
+// newestChange(commits, path) → { commit, change } | null
+//   The newest of `commits` (newest first, as for combineChanges) that changed the file
+//   combineChanges lists as `path`, and that commit's own change of it ({ path, status,
+//   from? }). Show Diff and the file menu act on this one commit: the combined change may
+//   be a rename from a name this commit's parent doesn't have.
+export function newestChange(commits, path) {
+  for (const c of commits) {
+    const change = (c?.files ?? []).find((f) => f.path === path);
+    if (change) return { commit: c.hash, change };
+  }
+  return null;
 }

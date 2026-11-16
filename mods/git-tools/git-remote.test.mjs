@@ -241,6 +241,28 @@ const commitMine = (mine, path, at, word) => { edit(mine, path, at, word); sh(mi
   assert.equal(merged.request?.rebase ?? false, false);
 }
 {
+  // An option only a merge takes (--no-ff, --squash, --no-commit) says how to pull: a
+  // repository set to pull by rebasing still merges, and my commit stays as it was made.
+  for (const option of ["--no-ff", "--squash", "--no-commit"]) {
+    const { mine, theirs } = setup();
+    push(theirs, "a.txt", 0, "their-a1");
+    commitMine(mine, "c.txt", 0, "my-c1");
+    sh(mine, "git config pull.rebase true");
+    const made = head(mine);
+    const r = await pull(git, mine, { remote: "origin", branch: "main", options: [option] });
+    assert.equal(r.ok, true, `${option}: ${r.err}`);
+    if (option === "--no-ff") {
+      assert.equal(parents(mine, "HEAD"), 2, option);
+      assert.equal(rev(mine, "HEAD^1"), made, option);
+    } else {
+      // Nothing committed: what was pulled is staged (--no-commit also leaves the merge open).
+      assert.equal(head(mine), made, option);
+      assert.deepEqual(status(mine), ["M  a.txt"], option);
+      assert.equal(rev(mine, "MERGE_HEAD"), option === "--no-commit" ? rev(theirs, "main") : "", option);
+    }
+  }
+}
+{
   // No tracked branch: the pull dialog's own pick still works; a bare pull fails with git's
   // words.
   const { mine } = setup();

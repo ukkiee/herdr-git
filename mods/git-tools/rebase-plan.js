@@ -19,6 +19,15 @@ export const ACTIONS = ["pick", "reword", "edit", "squash", "fixup", "drop"];
 export const FILE_ACTIONS = ["extractChanges", "dropChanges"];
 // The variables the exec lines read the paths from: one per step, a path per line.
 export const PATHS_VAR = "GITTOOLS_PATHS_";
+// The variables live in a file of the rebase's own state folder (git-rewrite.js writes it
+// with the to-do list; git removes it with the folder), and every exec line that reads one
+// loads it first. The rebase's environment would not do: after a stop, the Continue is
+// another git, started without it.
+export const VARS_FILE = "gittools-vars";
+const LOAD_VARS = `. "$(git rev-parse --git-path rebase-merge/${VARS_FILE})"`;
+// shellVars(env) → the file's text: one assignment a line, single-quoted, so a value keeps
+// its line breaks, quotes and `$`.
+export const shellVars = (env) => Object.entries(env).map(([name, value]) => `${name}='${String(value).replace(/'/g, "'\\''")}'`).join("\n");
 const MELDS = new Set(["squash", "fixup"]);
 
 const refuse = (err, key, args = {}) => ({ ok: false, err, msg: { key, args }, lines: [], env: {}, groups: [] });
@@ -47,7 +56,8 @@ const AMEND_MESSAGE = "git commit --amend --allow-empty -q --cleanup=whitespace 
 // todoList(steps, { refs }) → { ok, err?, msg?, lines, env, groups }
 //   steps: [{ hash, action, message? }] in the order to replay, oldest first; action is
 //   one of ACTIONS:
-//   - pick: as it is. drop: left out.
+//   - pick: as it is. drop: left out (a squash or fixup after it melds into the commit
+//     kept before it).
 //   - reword: picked, then given `message` (required).
 //   - edit: picked, and the rebase stops after it (an operation in progress).
 //   - squash: melded into the commit before it. Without a message both messages stay, as
@@ -62,8 +72,9 @@ const AMEND_MESSAGE = "git commit --amend --allow-empty -q --cleanup=whitespace 
 //   A file step whose commit is the first one of the history says `root: true`.
 //   refs: { [hash]: [full ref name] } branches on commits of the range that move with
 //   them (update-ref lines), each after its commit, or after the group it melds into.
-//   lines: the to-do list, one command per line. env: the messages by variable name, for
-//   the rebase's environment. groups: [{ head, members }] the commits melded into one.
+//   lines: the to-do list, one command per line. env: the messages and paths by variable
+//   name, for the variables file (shellVars). groups: [{ head, members }] the commits
+//   melded into one.
 //   A message given for a group is set after the group's last step: setting it earlier,
 //   the next step melded would put its own message back.
 export function todoList(steps, { refs = {} } = {}) {
@@ -76,7 +87,7 @@ export function todoList(steps, { refs = {} } = {}) {
     if (group.message != null) {
       const name = `${MESSAGE_VAR}${Object.keys(env).length}`;
       env[name] = group.message;
-      lines.push(`exec ${AMEND_MESSAGE} "$${name}"`);
+      lines.push(`exec ${LOAD_VARS} && ${AMEND_MESSAGE} "$${name}"`);
     }
     if (group.members.length > 1) groups.push({ head: group.head, members: group.members });
     for (const ref of group.refs) lines.push(`update-ref ${ref}`);
@@ -99,6 +110,14 @@ export function todoList(steps, { refs = {} } = {}) {
       group.refs.push(...own);
       continue;
     }
+    if (action === "drop") {
+      // The group stays open past a dropped commit: a squash or fixup after it melds into
+      // the commit kept before it. A branch on the dropped commit lands on that group.
+      lines.push(`drop ${hash}`);
+      if (group) group.refs.push(...own);
+      else for (const ref of own) lines.push(`update-ref ${ref}`);
+      continue;
+    }
     close();
     if (FILE_ACTIONS.includes(action)) {
       const paths = Array.isArray(step.paths) ? step.paths : [];
@@ -107,21 +126,16 @@ export function todoList(steps, { refs = {} } = {}) {
       const list = `${PATHS_VAR}${Object.keys(env).length}`;
       env[list] = paths.map(pathLine).join("\n");
       lines.push(`pick ${hash}`);
-      if (action === "dropChanges") lines.push(`exec ${restore(list, step.root, "--staged --worktree")} && ${AMEND_SAME}`);
+      if (action === "dropChanges") lines.push(`exec ${LOAD_VARS} && ${restore(list, step.root, "--staged --worktree")} && ${AMEND_SAME}`);
       else {
         const name = `${MESSAGE_VAR}${Object.keys(env).length}`;
         env[name] = given;
-        lines.push(`exec c=$(git rev-parse HEAD) && ${restore(list, step.root, "--staged")} && ${AMEND_SAME}`
+        lines.push(`exec ${LOAD_VARS} && c=$(git rev-parse HEAD) && ${restore(list, step.root, "--staged")} && ${AMEND_SAME}`
           + ` && ${restore(list, null, "--staged", "\"$c\"")} && git commit -q --allow-empty -C "$c"`
           + ` && ${AMEND_MESSAGE} "$${name}"`);
       }
       picked = true;
       group = { head: hash, members: [hash], message: null, refs: [...own] };
-      continue;
-    }
-    if (action === "drop") {
-      lines.push(`drop ${hash}`);
-      for (const ref of own) lines.push(`update-ref ${ref}`);
       continue;
     }
     lines.push(`${action === "edit" ? "edit" : "pick"} ${hash}`);

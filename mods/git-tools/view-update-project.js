@@ -41,23 +41,27 @@ const str = (value) => (typeof value === "string" ? value : "");
 // itself. A result of updateBranches ({ results }) is told branch by branch.
 export function tellRemote(r, { root, on = null, panel, who = "ui.commitPanel", title = "remote.failed", quietFailure = false } = {}) {
   const t = panel?.t ?? ((key) => key), args = { root, on, owner: panel?.bus?.id ?? null, lang: panel?.lang, who };
+  // An operation left in progress: the Conflicts dialog when it stopped on conflicts,
+  // else a notification naming it.
+  const tellStopped = (x) => {
+    if (openConflictsIfStopped(x, args)) return;
+    const name = operationName(x.operation);
+    if (name) notify({ title: t(name.key, name.args), body: t("remote.stoppedBody", { op: t(name.key, name.args) }), level: "warning" });
+  };
   tellUnstaged(r, t);
   if (Array.isArray(r?.results)) {
     const bad = r.results.filter((x) => x.outcome === "failed" || x.outcome === "refused");
     if (bad.length) notify({ title: t(bad.some((x) => x.outcome === "failed") ? title : "remote.notUpdated"), body: branchesFailureText(t, r.results), level: "warning" });
     else if (r.results.every((x) => x.outcome === "empty")) notify({ title: t("remote.nothing"), level: "info" });
+    // Only the current branch's update can stop: the others move without a checkout.
+    const stopped = r.results.find((x) => x.outcome === "stopped");
+    if (stopped) tellStopped(stopped);
     const moved = r.results.find((x) => x.updated);
     if (moved) openUpdateInfo(t, { root, on, ...moved.updated });
     return;
   }
   if (r.outcome === "refused" && offerSmart(r, { ...args, request: r.request })) return;
-  if (r.outcome === "stopped") {
-    if (!openConflictsIfStopped(r, args)) {
-      const name = operationName(r.operation);
-      if (name) notify({ title: t(name.key, name.args), body: t("remote.stoppedBody", { op: t(name.key, name.args) }), level: "warning" });
-    }
-    return;
-  }
+  if (r.outcome === "stopped") { tellStopped(r); return; }
   if (r.outcome === "failed") { if (!quietFailure) notify({ title: t(title), body: failureText(t, r), level: "error" }); return; }
   if (r.outcome === "refused") { if (!quietFailure) notify({ title: t("remote.notUpdated"), body: sentence(t, r.msg, r.err), level: "warning" }); return; }
   if (r.outcome === "empty") { notify({ title: t("remote.nothing"), level: "info" }); return; }

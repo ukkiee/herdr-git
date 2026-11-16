@@ -141,6 +141,8 @@ export default class FilesView {
     this.enter(cx);
     const context = this.context, root = this.root, on = this.on;
     if (!root) return;
+    // A preview drawn since its last read follows the file: a hidden panel reads none.
+    if (this.file && this.previewDrawn) { this.previewDrawn = false; this.readPreview(cx); }
     // A search under way follows the folder too, but reads its list at most once per POLL:
     // outside a repository the list is a walk of up to 20,000 files, and a watch can fire
     // many times a second while files are written.
@@ -402,7 +404,7 @@ export default class FilesView {
 
   release() {
     this.code?.release();
-    this.code = null;
+    this.code = null; this.codeText = null;
   }
 
   // Previews the file at `path` (from the root), or goes back to the tree with null.
@@ -410,24 +412,41 @@ export default class FilesView {
     this.release();
     this.file = path; this.fileNote = null; this.cut = false;
     if (!path || !cx) return;
-    const context = this.context, root = this.root, on = this.on;
+    this.readPreview(cx);
+  }
+
+  // Reads the previewed file and shows what it holds now: when it is opened, and with the
+  // refreshes after (refresh). The editor stays and is given the new text: a new editor
+  // for every read would take memory that doesn't come back.
+  readPreview(cx) {
+    const path = this.file, context = this.context, root = this.root, on = this.on;
+    // One read of a file at a time; the one under way answers for this call too.
+    if (!path || (this.previewing?.path === path && this.previewing.context === context)) return;
+    const read = this.previewing = { path, context };
+    const mine = () => this.file === path && this.context === context;
     cx.spawn(async (cx) => {
       try {
         const text = await readTextFile(`${root}/${path}`, { on });
-        if (this.file !== path || this.context !== context) return;
-        if (text === null) { this.fileNote = "files.unavailable"; return; }
-        if (text.includes("\0")) { this.fileNote = "files.binary"; return; }
-        const t = theme();
-        this.cut = text.length > PREVIEW_CHARS;
-        this.code = EditorState.new({
-          language: editorLanguage(path), readonly: true,
-          value: this.cut ? text.slice(0, PREVIEW_CHARS) : text,
-          font_family: settings().font_family, font_size: 12,
-          syntax: { keyword: t.ansi5, string: t.ansi2, comment: t.dim, function: t.ansi4, type: t.ansi3, number: t.ansi1, constant: t.ansi6 },
-        });
+        if (!mine()) return;
+        if (text === null || text.includes("\0")) { this.release(); this.fileNote = text === null ? "files.unavailable" : "files.binary"; return; }
+        const value = text.length > PREVIEW_CHARS ? text.slice(0, PREVIEW_CHARS) : text;
+        this.cut = value.length < text.length; this.fileNote = null;
+        // Compared with the text handed over, not the editor's own: only a file that
+        // changed moves the view.
+        if (this.code && this.codeText !== value) this.code.set_value(value);
+        else if (!this.code) {
+          const t = theme();
+          this.code = EditorState.new({
+            language: editorLanguage(path), readonly: true, value,
+            font_family: settings().font_family, font_size: 12,
+            syntax: { keyword: t.ansi5, string: t.ansi2, comment: t.dim, function: t.ansi4, type: t.ansi3, number: t.ansi1, constant: t.ansi6 },
+          });
+        }
+        this.codeText = value;
       } catch {
-        if (this.file === path && this.context === context) this.fileNote = "files.unreadable";
+        if (mine()) { this.release(); this.fileNote = "files.unreadable"; }
       } finally {
+        if (this.previewing === read) this.previewing = null;
         cx.notify();
       }
     });
@@ -535,6 +554,7 @@ export default class FilesView {
   }
 
   renderPreview(t) {
+    this.previewDrawn = true;
     if (this.code) {
       return v_flex().flex_1().min_h(0)
         .when(this.cut, (el) => el.child(div().flex_none().px(12).py(4).border_b(1).border_color(t.border).text_size(11).text_color(t.dim)

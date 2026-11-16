@@ -12,7 +12,7 @@ import { div } from "gpui-kit";
 import { v_flex, TextareaState } from "gpui-base";
 import { theme } from "herdr";
 import { openDialog, dialogFrame, button, close, writeBlock, scrollText, textBox } from "./ui.js";
-import { initialStep, forcePushNote, askRewrite } from "./view-reword.js";
+import { initialStep, forcePushNote, askRewrite, focusMessage } from "./view-reword.js";
 
 // openSquash({ root, on, owner, commits, message, pushed, initial, lang })
 //   commits: the hashes picked, newest first. message: the message to start from.
@@ -37,6 +37,7 @@ export default class SquashView {
     this.error = null;
     this.handle = cx.focus_handle();
     this.handle.focus();
+    focusMessage(this, cx);
   }
 
   writing() { return this.waiting || !this.root ? null : writeBlock(this, { root: this.root, on: this.on }); }

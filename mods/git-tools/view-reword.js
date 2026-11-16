@@ -29,6 +29,16 @@ export function openReword({ root, on = null, owner = null, commit, pushed = fal
   return openDialog("reword", { root, on, owner, commit: { hash, author, message }, pushed, initial, lang }, { width: 560, height: 340 });
 }
 
+// focusMessage(screen, cx, open?): the message box (screen.text) takes the keyboard once it
+// is drawn, so what is typed lands in it without a click. Asked for at once, the focus is
+// lost: the box isn't drawn yet, and the panel that opened the dialog takes the keyboard
+// back when its menu closes. open: the dialog is on screen already and only the box is
+// new. Not while a question stands in the form's place.
+const OPENING = 300, DRAWN = 150;
+export function focusMessage(screen, cx, open = false) {
+  cx.timer.after(open ? DRAWN : OPENING, () => { if (!screen.initial && !screen.waiting) screen.text?.focus(); });
+}
+
 // initialStep(screen, id, t, cx): the question asked before an edit of the first commit,
 // as the dialog's whole frame, or null once answered (screen.initial false). screen:
 // { initial, overlay, t }.
@@ -39,7 +49,7 @@ export function initialStep(screen, id, t) {
     onClose: () => close(screen.overlay),
     footer: [
       button(`${id}-initial-cancel`, screen.t("dialogs.cancel"), t, { onClick: () => close(screen.overlay) }),
-      button(`${id}-initial-ok`, screen.t("rewrite.ok"), t, { kind: "primary", onClick: (_e, cx) => { screen.initial = false; screen.handle?.focus(); cx.notify(); } }),
+      button(`${id}-initial-ok`, screen.t("rewrite.ok"), t, { kind: "primary", onClick: (_e, cx) => { screen.initial = false; screen.handle?.focus(); focusMessage(screen, cx, true); cx.notify(); } }),
     ],
   });
 }
@@ -77,6 +87,7 @@ export default class RewordView {
     this.error = null;
     this.handle = cx.focus_handle();
     this.handle.focus();
+    focusMessage(this, cx);
   }
 
   writing() { return this.waiting || !this.root ? null : writeBlock(this, { root: this.root, on: this.on }); }

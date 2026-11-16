@@ -220,8 +220,11 @@ const STATUS = { M: "modified", T: "modified", A: "added", D: "deleted" };
 //   staging and was made on another HEAD than the one now, so Restore puts it back whole
 //   with applySnapshot (restore would skip every path HEAD changed since). files:
 //   [{ path, status }] by path, status "modified" | "added" | "deleted" against the HEAD
-//   it was made on. [] when nothing was ever rolled back here. Two git calls, plus one
-//   more only when the log fails.
+//   it was made on: the working file's change, or the staging's for a file whose working
+//   copy was as that HEAD had it. Such a file also has `staging`, the hash of the commit
+//   that holds its change (the snapshot's second parent; the snapshot's own diff shows
+//   none for it). [] when nothing was ever rolled back here. Two git
+//   calls, a third when a snapshot holds the staging, and one more only when the log fails.
 export async function listSnapshots(git, root) {
   const at = await headCommit(git, root);
   if (!at.ok) return { ok: false, code: at.code, err: at.err, snapshots: [] };
@@ -242,6 +245,8 @@ export async function listSnapshots(git, root) {
     return { ok: false, code: r.code, err: r.err, snapshots: [] };
   }
   const snapshots = [], words = r.out.split("\0");
+  // The second parent (the staging's commit) → the files of its snapshot.
+  const staged = new Map();
   let entry = null;
   for (let i = 0; i < words.length; i++) {
     const word = words[i];
@@ -253,12 +258,28 @@ export async function listSnapshots(git, root) {
       const threeWay = parents.length === 2 && parents[0] !== at.head;
       entry = { hash, time: Number(time), action, threeWay, files: [] };
       snapshots.push(entry);
+      if (parents.length === 2) staged.set(parents[1], entry.files);
       continue;
     }
     // The first status of an entry comes after a line break; the output ends with NUL.
     const status = STATUS[word.replace(/^\n/, "")[0]];
     const path = words[++i];
     if (entry && status && path !== undefined) entry.files.push({ path, status });
+  }
+  // A file with only its staging changed (the working file as HEAD had it) is no change
+  // of the snapshot against its first parent. It is one of the second parent, a commit on
+  // that same HEAD: those are read too, and add the files the first read didn't name.
+  if (staged.size) {
+    const s = await git.read(root, ["log", "--no-walk=unsorted", "--format=%x01%H", "--name-status", "--no-renames", "-z", "--no-color", ...staged.keys(), "--"]);
+    if (!s.ok) return { ok: false, code: s.code, err: s.err, snapshots: [] };
+    const parts = s.out.split("\0");
+    let files = null, staging = null;
+    for (let i = 0; i < parts.length; i++) {
+      if (parts[i].startsWith("\x01")) { staging = parts[i].slice(1).trim(); files = staged.get(staging) ?? null; continue; }
+      const status = STATUS[parts[i].replace(/^\n/, "")[0]];
+      const path = parts[++i];
+      if (files && status && path !== undefined && !files.some((f) => f.path === path)) files.push({ path, status, staging });
+    }
   }
   for (const { files } of snapshots) files.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
   return { ok: true, code: 0, err: "", snapshots };
@@ -296,6 +317,9 @@ const STAGING = {
 //   path the message names as only announced (intent-to-add) is announced again. A
 //   snapshot without a second parent (made before snapshots held the index, or in a
 //   repository without a commit) leaves the index alone: an added file comes back untracked.
+//   A path whose working file was as HEAD had it, with only its staging changed, is
+//   restored by its staging alone: no file is written. Such a path HEAD doesn't have is
+//   skipped as taken when anything is on disk at it now.
 //   restored: the paths brought back. skipped: [{ path, reason, msg }] for each path that
 //   changed in the meantime and is left exactly as it is, its index included:
 //   - HEAD has another version of it than the HEAD the snapshot was made on;
@@ -362,19 +386,30 @@ export async function restore(git, root, { snapshot, paths = [], copy } = {}) {
     if (was === is) return null;
     return !was ? "added" : !is ? "deleted" : "modified";
   };
-  const tracked = [], added = [];
+  // Only its staging was rolled back (the working file was as HEAD had it): no file to
+  // write, and the staging goes back with the others' below.
+  const stagedOnly = (path) => Boolean(staging) && !made.conflicts.has(path) && held.entries.get(path) !== then.entries.get(path);
+  const tracked = [], added = [], unwritten = [];
   for (const path of asked) {
     const k = kind(path);
-    if (!k) skip(path, "notIn");
+    if (!k && !stagedOnly(path)) skip(path, "notIn");
     else if (index.flagged.has(path)) skip(path, "flagged");
     else if (now.entries.get(path) !== then.entries.get(path)) skip(path, "headMoved");
+    else if (!k) unwritten.push(path);
     else if (k === "added" && index.paths.has(path)) skip(path, "tracked");
     else (k === "added" ? added : tracked).push(path);
   }
-  const changed = await differFromHead(git, root, tracked, at.head);
+  // A staging-only path too: its working file must still be as HEAD has it.
+  const changed = await differFromHead(git, root, [...tracked, ...unwritten], at.head);
   if (!changed.ok) return failed(changed);
-  for (const path of tracked) if (changed.paths.has(path)) skip(path, "changed");
+  for (const path of [...tracked, ...unwritten]) if (changed.paths.has(path)) skip(path, "changed");
+  // One HEAD doesn't have must still be missing: the diff above can't see an untracked file.
+  const newPaths = unwritten.filter((path) => !now.entries.has(path));
+  const there = newPaths.length ? await onDisk(git, root, newPaths) : { ok: true, paths: [] };
+  if (!there.ok) return failed(there);
+  for (const path of there.paths) skip(path, "taken");
   const write = tracked.filter((path) => !changed.paths.has(path));
+  for (const path of unwritten) if (!changed.paths.has(path) && !there.paths.includes(path)) { restored.push(path); already.push(path); }
 
   // Working tree only (no --staged), so the index stays; without overlay, a file the
   // snapshot lacks is deleted. Each of these holds what HEAD has, checked just above.

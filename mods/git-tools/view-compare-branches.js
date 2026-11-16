@@ -35,10 +35,12 @@ export function openBranchCompare(t, { root, on = null, a, b, aName, bName }) {
 // ---- the Branch tree's items, run by the Log panel (view-log.js ACTIONS)
 
 // The current branch as the opener read it ({ branch, hash }: the Branch tree's or the
-// VCS widget's HEAD): its name, or a short hash on a detached HEAD.
+// VCS widget's HEAD): its name, or a short hash on a detached HEAD. A detached HEAD is
+// compared by its commit: "HEAD" would be another commit after the next checkout, under
+// a tab still named by this hash.
 function currentOf(head) {
   if (head?.branch) return { ref: `refs/heads/${head.branch}`, name: head.branch };
-  return { ref: "HEAD", name: head?.hash ? short(head.hash) : "HEAD" };
+  return { ref: head?.hash ?? "HEAD", name: head?.hash ? short(head.hash) : "HEAD" };
 }
 
 // Compare with '<current>' (a branch row) and Compare with Current (the toolbar, on the

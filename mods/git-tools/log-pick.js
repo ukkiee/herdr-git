@@ -79,11 +79,12 @@ export const revertHere = (host, commits, cx) => commitsHere(host, commits, "rev
 export const cherryPickPicked = (host, cx) => commitsHere(host, host.pickedCommits(), "cherry-pick", cx);
 
 // The commit and paths of Commit details' file rows (a row, or several): the commit a
-// file's change is shown from, and a rename's two paths. Folders are skipped.
+// file's change is shown from, and a rename's two paths. Folders are skipped. With several
+// commits picked, the old name is that commit's own (`own`), not the whole range's.
 function filesOf(host, rows) {
   const files = listOf(rows).filter((m) => !m.folder && typeof m.path === "string");
   const commit = files.map((m) => m.item?.commit).find(Boolean) ?? host.details?.info?.hash ?? null;
-  const paths = files.flatMap((m) => [m.path, m.item?.from]).filter((p) => typeof p === "string" && p);
+  const paths = files.flatMap((m) => [m.path, (m.item?.own ?? m.item)?.from]).filter((p) => typeof p === "string" && p);
   return { commit, paths };
 }
 

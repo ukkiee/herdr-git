@@ -261,6 +261,75 @@ echo left > left && git add left && echo staged-other > other && git add other`)
   assert.equal(text(repo, "partly"), "head\nindex\nwork\n");
 }
 
+// A file with only its staging changed (the working file as HEAD has it; a staged new file
+// deleted from disk): the rollback's list names it, and Restore stages it again without
+// touching the working tree.
+{
+  const repo = init("restore-staged-only");
+  sh(repo, "echo head > a && echo head > b && git add -A && git commit -q -m first");
+  sh(repo, "echo index > a && git add a && echo head > a && echo new > fresh && git add fresh && rm fresh && echo work > b");
+  const before = { index: entries(repo), status: status(repo) };
+  const snapshot = await back(repo, [["a", "modified"], ["fresh", "added"], ["b", "modified"]], { deleteAdded: true });
+  assert.equal(sh(repo, "git show :a"), "head\n");
+
+  // Such a file names the commit that holds its change (the snapshot's second parent): the
+  // snapshot itself shows none for it.
+  const staging = sh(repo, `git rev-parse ${snapshot}^2`).trim();
+  const listed = await listSnapshots(git, repo);
+  assert.equal(listed.ok, true, listed.err);
+  assert.deepEqual(listed.snapshots[0].files, [{ path: "a", status: "modified", staging }, { path: "b", status: "modified" }, { path: "fresh", status: "added", staging }]);
+
+  const r = await restore(git, repo, { snapshot, paths: ["a", "fresh", "b"] });
+  assert.equal(r.ok, true, r.err);
+  assert.deepEqual(r.restored.sort(), ["a", "b", "fresh"]);
+  assert.deepEqual(r.stagingSkipped, []);
+  assert.equal(r.changed, true);
+  assert.deepEqual(status(repo), before.status);
+  assert.equal(entries(repo), before.index);
+  assert.equal(text(repo, "a"), "head\n");
+  assert.equal(existsSync(`${repo}/fresh`), false);
+  // A path the rollback never held is still not in it.
+  const other = await restore(git, repo, { snapshot, paths: ["nowhere"] });
+  assert.equal(other.skipped[0]?.msg.key, "restore.skipNotIn");
+}
+
+// Such a file edited after the rollback is left as it is, its index too, like any path
+// changed since.
+{
+  const repo = init("restore-staged-only-changed");
+  sh(repo, "echo head > a && git add -A && git commit -q -m first");
+  sh(repo, "echo index > a && git add a && echo head > a");
+  const snapshot = await back(repo, [["a", "modified"]]);
+  sh(repo, "echo 'new work' > a");
+  const before = entries(repo);
+  const r = await restore(git, repo, { snapshot, paths: ["a"] });
+  assert.equal(r.ok, false);
+  assert.deepEqual(r.restored, []);
+  assert.deepEqual(r.skipped.map((s) => [s.path, s.msg.key]), [["a", "restore.skipChanged"]]);
+  assert.equal(r.changed, false);
+  assert.equal(entries(repo), before);
+  assert.equal(text(repo, "a"), "new work\n");
+}
+
+// A staged new file deleted from disk before the rollback: a file made at its path after
+// the rollback is left as it is, the index too, so its old staging doesn't come back.
+{
+  const repo = init("restore-staged-only-taken");
+  sh(repo, "echo head > a && git add -A && git commit -q -m first");
+  sh(repo, "echo 'old staged' > fresh && git add fresh && rm fresh");
+  const snapshot = await back(repo, [["fresh", "added"]], { deleteAdded: true });
+  sh(repo, "echo 'new work' > fresh");
+  const before = entries(repo);
+  const r = await restore(git, repo, { snapshot, paths: ["fresh"] });
+  assert.equal(r.ok, false);
+  assert.deepEqual(r.restored, []);
+  assert.deepEqual(r.skipped.map((s) => [s.path, s.msg.key]), [["fresh", "restore.skipTaken"]]);
+  assert.equal(r.changed, false);
+  assert.equal(entries(repo), before);
+  assert.deepEqual(status(repo), ["?? fresh"]);
+  assert.equal(text(repo, "fresh"), "new work\n");
+}
+
 // A new file only announced with `git add -N` (intent-to-add) comes back announced, not
 // staged with empty content, so a plain `git commit` still leaves it out; an empty file
 // that was really staged comes back staged. Rolled back with and without deleting added

@@ -27,13 +27,15 @@ export function openPatch(host, { commits, paths = [] }) {
   openDialog("patch", { root: repo.root, on: repo.on, commits: list.map((c) => c.hash), paths, file, local: !repo.on, owner: host.bus.id, lang: host.lang }, { width: 560, height: 300 });
 }
 
-// A Commit details file row: that file of its commit (and its old name when renamed).
+// A Commit details file row: that file of its commit (and its old name when renamed). With
+// several commits picked, the old name is that commit's own (`own`), not the whole range's.
 export function openFilePatch(host, m) {
   const hash = m?.item?.commit ?? host.details?.info?.hash ?? null;
   if (!hash || !m || m.folder) return;
   const shown = host.details?.info;
   const subject = shown?.hash === hash ? (shown.message ?? "").split("\n")[0] : "";
-  openPatch(host, { commits: [{ hash, subject }], paths: [m.path, ...(m.item.from ? [m.item.from] : [])] });
+  const from = (m.item.own ?? m.item).from;
+  openPatch(host, { commits: [{ hash, subject }], paths: [m.path, ...(from ? [from] : [])] });
 }
 
 export default class PatchView {

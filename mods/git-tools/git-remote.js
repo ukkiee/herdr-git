@@ -58,6 +58,8 @@ export function togglePullOption(options, option) {
 
 // Also accepted from the branch menus: "Pull into … Using Merge".
 const ACCEPTED = new Set([...PULL_OPTIONS, "--no-rebase"]);
+// The options that say how a merge goes: a rebase has no use for them.
+const MERGE_ONLY = new Set(["--no-ff", "--squash", "--no-commit"]);
 
 const str = (value) => (typeof value === "string" ? value : "");
 
@@ -227,10 +229,12 @@ async function settled(git, root, before, run, request, from) {
 //   step that failed (fetchFailed). Without --rebase or --no-rebase, a repository set to
 //   rebase on pull (pull.rebase, branch.<name>.rebase) rebases; any other merges
 //   (--no-rebase): git, told nothing, refuses branches that diverged and asks how to
-//   reconcile them. pull.ff still applies.
+//   reconcile them. pull.ff still applies. An option only a merge takes (MERGE_ONLY) asks
+//   for a merge the same as --no-rebase does: git would rebase by the setting and drop it.
 export async function pull(git, root, { remote, branch, options = [] } = {}) {
   const opts = (Array.isArray(options) ? options : []).filter((o) => ACCEPTED.has(o));
-  const rebase = opts.includes("--rebase") || (!opts.includes("--no-rebase") && await pullsByRebase(git, root));
+  const merges = opts.includes("--no-rebase") || opts.some((o) => MERGE_ONLY.has(o));
+  const rebase = opts.includes("--rebase") || (!merges && await pullsByRebase(git, root));
   const how = rebase || opts.includes("--no-rebase") ? [] : ["--no-rebase"];
   const request = { type: "pull", remote: str(remote), branch: str(branch), options: opts, rebase, target: `${str(remote)}/${str(branch)}` };
   if (!request.remote || !request.branch) return refuse("Choose a remote and a branch to pull.", { key: "remote.pickBranch" });

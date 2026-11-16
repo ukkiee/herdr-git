@@ -116,8 +116,11 @@ export default class StashTab {
 
   readFiles(cx) {
     const hash = this.selected, repo = this.repo;
-    if (!hash || !repo || this.files.has(hash)) { this.rebuild(); return; }
-    this.files.set(hash, null);
+    // Kept: a read under way and one that worked. A failed one is read again the next time
+    // the stash is chosen or the list is refreshed, and stays on screen until that lands.
+    const had = this.files.get(hash);
+    if (!hash || !repo || had === null || had?.ok || had?.again) { this.rebuild(); return; }
+    this.files.set(hash, had ? { ...had, again: true } : null);
     this.rebuild();
     cx.spawn(async (cx) => {
       const r = await stashFiles(repo.git, repo.root, hash);

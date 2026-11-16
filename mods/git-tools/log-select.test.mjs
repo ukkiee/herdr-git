@@ -1,6 +1,6 @@
 // node log-select.test.mjs: picking commits in the Commit list, one or many (no app, no git).
 import assert from "node:assert/strict";
-import { NONE, pickCommit, pickForMenu, keepPicked, pickedInOrder, combineChanges } from "./log-select.js";
+import { NONE, pickCommit, pickForMenu, keepPicked, pickedInOrder, combineChanges, newestChange } from "./log-select.js";
 
 // The list as the Commit list holds it, newest first.
 const listOf = (hashes) => ({ at: (h) => { const i = hashes.indexOf(h); return i < 0 ? undefined : i; }, hashAt: (i) => hashes[i] });
@@ -110,6 +110,31 @@ const shown = (sel) => pickedInOrder(sel, list.at);
   assert.deepEqual(combineChanges([{ files: [{ path: "x", status: "modified" }] }]), [{ path: "x", status: "modified" }]);
   // Deleted, then made again: a change to the file.
   assert.deepEqual(combineChanges([{ files: [{ path: "x", status: "added" }] }, { files: [{ path: "x", status: "deleted" }] }]), [{ path: "x", status: "modified" }]);
+  // A file renamed in the range is one file, under its last name, from the name it had
+  // before the range: renamed twice, or changed and then renamed.
+  const renamed = (path, from) => ({ files: [{ path, status: "renamed", from }] });
+  assert.deepEqual(combineChanges([renamed("new.txt", "middle.txt"), renamed("middle.txt", "old.txt")]), [{ path: "new.txt", status: "renamed", from: "old.txt" }]);
+  assert.deepEqual(combineChanges([renamed("new.txt", "old.txt"), { files: [{ path: "old.txt", status: "modified" }] }]), [{ path: "new.txt", status: "renamed", from: "old.txt" }]);
+  // Added in the range and renamed after: an added file, by its last name.
+  assert.deepEqual(combineChanges([renamed("b.txt", "a.txt"), { files: [{ path: "a.txt", status: "added" }] }]), [{ path: "b.txt", status: "added" }]);
+  // Renamed and then deleted: gone, under the last name it had (the name its newest change
+  // is found by).
+  assert.deepEqual(combineChanges([{ files: [{ path: "b.txt", status: "deleted" }] }, renamed("b.txt", "a.txt")]), [{ path: "b.txt", status: "deleted" }]);
+  // Renamed and back: its own name again, changed.
+  assert.deepEqual(combineChanges([renamed("a.txt", "b.txt"), renamed("b.txt", "a.txt")]), [{ path: "a.txt", status: "modified" }]);
+}
+
+// Show Diff and the file menu act on the newest commit that changed a file, by that commit's
+// own change: the range's rename is from a name that commit's parent may not have.
+{
+  const commits = [
+    { hash: "c2", files: [{ path: "c.txt", status: "renamed", from: "b.txt" }, { path: "x.txt", status: "modified" }] },
+    { hash: "c1", files: [{ path: "b.txt", status: "renamed", from: "a.txt" }, { path: "x.txt", status: "added" }] },
+  ];
+  assert.deepEqual(combineChanges(commits), [{ path: "c.txt", status: "renamed", from: "a.txt" }, { path: "x.txt", status: "added" }]);
+  assert.deepEqual(newestChange(commits, "c.txt"), { commit: "c2", change: { path: "c.txt", status: "renamed", from: "b.txt" } });
+  assert.deepEqual(newestChange(commits, "x.txt"), { commit: "c2", change: { path: "x.txt", status: "modified" } });
+  assert.equal(newestChange(commits, "nowhere.txt"), null);
 }
 
 console.log("ok");

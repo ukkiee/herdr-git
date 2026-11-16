@@ -468,7 +468,9 @@ it). Toolbar: `Icon sheet` semibold, a 12px `muted` line of lookup timings
 (`#ffffff`) and `Dark` (`#1e1f22`). Below, under headings with their counts:
 `File icons (1714)`, `File icons with a dark variant (base on light, _dark on dark) (48)`,
 `Folder icons, closed (347)`, `Folder icons, open (346)`: each cell 170px wide in 32px
-rows, the icon at 14px and at 24px (the dark-variant cells: the base icon on a `#ffffff`
+rows, the icon at 14px and at 24px (a file icon as the panels draw it on that
+background: its `_dark` variant on a dark one when it has one; the dark-variant cells:
+the base icon on a `#ffffff`
 chip and the `_dark` one on a `#1e1f22` chip, both 14px) and its name at 12px, its file
 path as the tooltip. Only the rows in view are drawn. Its words are English only.
 
@@ -1605,7 +1607,7 @@ the git ones run against real temporary repositories):
 | `files-data.js` | `PER_FOLDER` (500), `TOTAL` (5000), `SEARCH_LIMIT` (20000), `readFolder(exec, folder, { on, platform, limit, room })` → `{ ok, entries: [{ name, dir }], limited, gone, denied, err }` (`denied`: there but without permission to list or enter it; `sh` only), `readMarks(exec, folder, { on })` → `{ ok, repo: { root, prefix } \| null, marks: { [path]: mark }, err }` (key `""`: the folder itself is inside an untracked or ignored folder), `readSearchList(exec, folder, { on, platform, limit })` → `{ ok, repo, files: [path], limited, err }` (at most `limit` files, inside a repository or not; no submodules), `roomFor(loaded, path, total?)` (a folder's share of `TOTAL`) |
 | `files-tree.js` | `markLookup(marks)` → `{ mark(path), dot(folder) }`, `SEARCH_SHOWN` (200), `rankSearch(files, query, { limit })` → `{ items: [{ path, name, dir }], limited }`, `visibleRows(entries, open, failed?)` → `[{ path, name, folder, depth, open, loading? }]` (a `loading` row under an open folder neither read nor in `failed`), `keepPressed(read, now, open)` → Map (a refresh's folder reads with the unfolded folders read meanwhile; none below a folder that failed), `pressLands(folders, open, path)` → boolean (an unfolded folder's read goes in only while it is open and every folder above it read fine), `failureKey({ folder, error })` → string, `stripFailure(failures, closed)` → `{ show, closed }` (the first folder read failure not closed by hand), `pressFailure(failure, closed)` → `{ show, closed }` (an unfolded folder's failure shows and leaves the closed ones), `moveKey(rows, current, key)` → `{ current, expand, collapse, preview }` (skips `loading` rows) |
 | `editor-language.js` | `editorLanguage(name)` (the extension the Files preview hands the editor: the file's own, or a close syntax's for a language the editor lacks) |
-| `icon-theme.js` | `THEME_ROOT` (`"mods/git-tools/icons/theme"`), `DEFAULT_FILE_ICON` (`"file"`), `DEFAULT_FOLDER_ICON` (`"folder"`), `DEFAULT_DISABLED_PACKS` (`["ANGULAR"]`), `DEFAULT_EXCLUDE` (`["Zeit Now Ignore"]`), `makeIconTheme({ fileRules, folderRules, disabledPacks, exclude, root })` → `{ fileIcon, folderIcon, warm, stats }`, and the shared `fileIcon(path, { dark })`, `folderIcon(name, { open })` → the icon's path, `warmIcons()` (compiles the shared rules; `main.js` init) |
+| `icon-theme.js` | `THEME_ROOT` (`"mods/git-tools/icons/theme"`), `DEFAULT_FILE_ICON` (`"file"`), `DEFAULT_FOLDER_ICON` (`"folder"`), `DEFAULT_DISABLED_PACKS` (`["ANGULAR"]`), `DEFAULT_EXCLUDE` (`["Zeit Now Ignore"]`), `makeIconTheme({ fileRules, folderRules, disabledPacks, exclude, root })` → `{ fileIcon, folderIcon, warm, stats }`, and the shared `fileIcon(path, { dark })`, `folderIcon(name, { open })` → the icon's path, `fileIconPath(icon, { dark, root })` (an icon name's file, its `_dark` variant on a dark background when it has one), `warmIcons()` (compiles the shared rules; `main.js` init) |
 | `icon-theme-data.js` | generated: `SOURCE`, `FILE_RULES`, `FOLDER_RULES` (`{ name, pattern, priority, icon, pack? }`, in source order), `DARK_FILE_ICONS`, `CLOSED_ONLY_FOLDER_ICONS`, `SKIPPED_RULES` |
 | `git-show.js` | `readCommit`, `readLastCommit(git, root, { known })` → `{ ok, err, hash, subject, files, same }` (`hash` null without a commit; `same`: HEAD is still `known`, nothing else read), `readContaining` |
 | `graph.js` | `layoutGraph(commits, carry)`, `graphWindow({ widest, listWidth, others, left })` → `{ room, left, max }`, `indexSegments(segments)`, `segmentsIn(index, from, to)`, `fitLabels(labels, room, { char, pad, gap, most })` → `{ shown, rest }` (`rest` 0 when not even `+N` fits), `reachableFrom(commits, start, { firstParent, through })` → Set (the hashes `start` reaches by the lines the graph draws), `collapseLinear(commits, { firstParent, through })` (the commits shown with linear branches folded: one parent, one child and no Ref label is left out), `longEdges(rows, { long, part })` → Map (with long edges off, where a line of `long` rows or more is cut and an arrow marks each cut) |
@@ -3251,7 +3253,8 @@ two emails, and one author reached only by a tag)
 93. Run
     `herdr-app do tab.new '{"name":"Icon sheet","mod":"git-tools","props":{"view":"icon-sheet"}}'`:
     the tab opens at once with `File icons (1714)` and the other three sections, and
-    every cell has a visible icon. The timing line reads `Lookup: timing…` and, once
+    every cell has a visible icon, on Herdr's dark background and on `Dark` too
+    (`11ty` and `agents` drawn in their light `_dark` ink). The timing line reads `Lookup: timing…` and, once
     every step has run, `Lookup (performance.now, 16 per step): file rules built … ms,
     3000 distinct paths … ms, …`, the 3,000 distinct paths under 1,500 ms;
     `herdr-app status` shows no `interrupted` error. `Background:` cycles

@@ -47,6 +47,14 @@ export function darkColor(color) {
   return 0.2126 * lin(rgb[0]) + 0.7152 * lin(rgb[1]) + 0.0722 * lin(rgb[2]) < DARK_BELOW;
 }
 
+const darkTwins = new Set(DARK_FILE_ICONS);
+
+// fileIconPath(icon, { dark, root }) → the file a file icon is drawn from: its _dark
+// variant on a dark background when it has one, else the icon itself.
+export function fileIconPath(icon, { dark = false, root = THEME_ROOT } = {}) {
+  return `${root}/files/${dark && darkTwins.has(icon) ? `${icon}_dark` : icon}.svg`;
+}
+
 const ranksAbove = (a, b) => !b || a.priority > b.priority || (a.priority === b.priority && a.order < b.order);
 
 // --- Rule tables --------------------------------------------------------------------------------
@@ -136,7 +144,6 @@ export function makeIconTheme({
   let folders = null;
   const fileMemo = new Map();
   const folderMemo = new Map();
-  const dark = new Set(DARK_FILE_ICONS);
   const closedOnly = new Set(CLOSED_ONLY_FOLDER_ICONS);
   const stats = { evaluations: 0 };
 
@@ -173,7 +180,7 @@ export function makeIconTheme({
       icon = best(files, name, path.startsWith("/") ? path : `/${path}`) ?? DEFAULT_FILE_ICON;
       fileMemo.set(path, icon);
     }
-    return `${root}/files/${onDark && dark.has(icon) ? `${icon}_dark` : icon}.svg`;
+    return fileIconPath(icon, { dark: onDark, root });
   };
 
   // `name` is one folder's name, not a path.

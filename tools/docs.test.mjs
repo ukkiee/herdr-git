@@ -165,6 +165,15 @@ const flat = (text) => text.replace(/\s+/g, " ").trim();
   }
 }
 
+// Done when 1 says how many `*.test.mjs` files mods/git-tools holds. A new test file
+// changes that number here.
+{
+  const tests = readdirSync(MOD).filter((f) => f.endsWith(".test.mjs")).length;
+  const said = recipe.match(/every `\*\.test\.mjs` in\s+`mods\/git-tools` \((\d+) files\)/);
+  assert.ok(said, 'RECIPE.md Done when 1 says "every `*.test.mjs` in `mods/git-tools` (N files)"');
+  assert.equal(Number(said[1]), tests, `RECIPE.md Done when 1: mods/git-tools holds ${tests} *.test.mjs files`);
+}
+
 // README.md and README.ko.md: the same sections in the same order, and each section holds
 // the same numbers (limits, sizes, versions, steps), as a set and with "1,000" read as
 // 1000. A number changed in one language only fails here. Both write numbers as digits

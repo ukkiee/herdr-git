@@ -71,7 +71,7 @@ export const ko = {
   "branches.checkoutAndUpdate": "체크아웃 후 업데이트",
   "branches.compareWith": "'{current}'와(과) 비교",
   "branches.showDiffWithWorkingTree": "작업 트리로 차이점 표시",
-  "branches.rebaseOnto": "'{current}'를 '{name}'으로 리베이스",
+  "branches.rebaseOnto": "'{current}'을(를) '{name}'(으)로 리베이스",
   "branches.mergeInto": "'{current}'에 '{name}' 병합",
   "branches.newWorktreeFrom": "'{name}'(으)로부터 새 워크트리…",
   "branches.update": "업데이트",

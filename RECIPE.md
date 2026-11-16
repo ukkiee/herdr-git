@@ -212,10 +212,17 @@ toolbar (`Git` semibold, `Log` 12px `muted`, Refresh, Hide) and the notice.
 
 **Branch tree** (12.5px text):
 
-- A vertical toolbar on the left, 30px wide, line on its right: New Branch… (`plus`),
-  Delete (`branch-delete`, tooltip `Delete '<name>'` or why not), Deleted Branches…
-  (`restore`, off only until the branches have been read; on while a write runs), Fetch (`fetch`,
-  spins while fetching), a 16×1px line, Expand All, Collapse All.
+- A vertical toolbar on the left, 30px wide, line on its right. Top to bottom, each
+  button's tooltip its name: Hide Git Branches (`hide-branches`, pressed while the tree
+  is hidden, when it is the only button left), New Branch… (`plus`), Update Selected
+  (`update`, off unless the cursor's branch tracks one), Delete (`branch-delete`, tooltip
+  `Delete '<name>'` or why not), Deleted Branches… (`restore`, off only until the branches
+  have been read; on while a write runs), Compare with Current (`compare`), Show My
+  Branches (`my-branches`, pressed while on), Fetch (`fetch`, spins while fetching),
+  Mark/Unmark As Favorite (`favorite`), Navigate Log to Selected Branch Head (`locate`),
+  Branches Pane Settings (`branch-settings`), a 16×1px line, Expand All (`expand-all`),
+  Collapse All (`collapse-all`). Compare with Current, Mark/Unmark As Favorite and Navigate
+  Log are off without a branch at the cursor. The buttons act on the cursor's branch.
 - A 34px filter row (as tall as the Commit list's toolbar): `search` icon (13px, `dim`,
   `accent` while typing) and an input, placeholder `Filter branches`.
 - The tree: `HEAD (Current Branch)` (or `HEAD (<7-char hash>)` when detached), then
@@ -2956,7 +2963,7 @@ Each line is one check: do what it says, see what follows.
 **Offline**
 
 1. Run `node layout.test.mjs` at the root, `node <file>` for every `*.test.mjs` in
-   `mods/git-tools` (53 files) and `node tools/gen-icon-theme.test.mjs`: each prints
+   `mods/git-tools` (54 files) and `node tools/gen-icon-theme.test.mjs`: each prints
    `ok` (the last one after `skip: …` unless `ICON_THEME_SOURCE` is set).
 2. Run `herdr-app check mods/git-tools`: it passes.
 
@@ -3156,8 +3163,9 @@ pre-push 20 s, reference-transaction 12 s, each made to fail when a check says s
     three checked and `Delete local copies of added files` on: under the Commit panel's
     form a row says `Rolled back 3 files.` with **Restore…** and an `x`, and
     `git log -g --oneline refs/git-tools/rollback` lists one `Rollback: 3 files`.
-69. Run `git log --oneline --all`: the snapshot shows as one commit; the Commit list,
-    the Branch tree and `git branch -a` don't show it.
+69. Run `git log --oneline --all`: the snapshot `Rollback: 3 files` and its staging
+    `Index of Rollback: 3 files` show as two commits; the Commit list,
+    the Branch tree and `git branch -a` don't show them.
 70. Press **Restore…**: the Restore dialog opens with the newest snapshot selected and
     `m`, `d`, `n` checked, in their status colors.
 71. Double-click `m` there: a Diff tab opens comparing `<parent> → <snapshot>` with the
@@ -3452,8 +3460,10 @@ conflicting file, and an ignored folder `node_modules`)
      Resolution: it is under Unresolved again and `git status` lists it as conflicted.
 151. Edit `a.txt` by hand while it is in conflict, then press Accept: `Overwrite Changes`
      asks first, with Discard and Accept.
-152. Check `a.txt` with its conflict markers left and press Commit, or Amend: nothing is
-     committed and the reason shows.
+152. While `a.txt` is still in conflict (`git status` lists it as unmerged), check it and
+     press Commit, or Amend: nothing is committed and the reason (`Resolve the conflicts
+     first: 1 file(s) still in conflict.`) shows. Once `git add a.txt` marks it resolved,
+     its content is not checked: it is committed as it is, conflict markers included.
 153. On `feature`, run `git rebase main` in a terminal: the widget reads `⚠ Rebasing
      feature`, the Log panel's HEAD row shows `Detached HEAD`, and the Conflicts dialog's
      Yours column is the commit being rebased (accepting it keeps feature's line). The
@@ -3635,7 +3645,8 @@ commit `main` lacks)
      with filters and Commit details.
 213. Show Diff with Working Tree: a tab with `Difference between files in feature and
      current working tree on main:`, Swap branches, and files in blue (different), gray
-     (only in feature) and green (only in the working tree).
+     (only in feature) and green (a tracked file only the working tree has). Only files
+     git tracks are compared: an untracked file is not listed.
 214. Right-click a commit → Compare with Local: `Changes Between <hash> and Local
      Version`. Pick two commits → Compare Versions: `Changes Between <a> and <b>`. Opening
      the same kind again replaces that tab; other kinds stay.
@@ -3781,7 +3792,8 @@ and `b.txt` and a new file `c.txt`)
      Commit panel and of the Log panel, with the operation's name and a sliding bar; with
      the Stash tab showing too; it goes away when the write ends.
 258. Right-click the long branch in the Branch tree, and open its menu in the widget popup:
-     every item reads to its end (`Rebase 'main' onto '<long name>'`).
+     every item reads to its end, and a branch name longer than 30 characters loses its
+     middle (`Rebase 'main' onto 'a-rather-long-b…for-the-widget'`).
 259. Open New Branch…, New Tag…, Git Reset and Update Project: each card is as tall as
      what it holds, with rounded corners, a line and a shadow, and no empty space under
      the buttons; the Conflicts, Push, Rollback and Restore dialogs fill their height as

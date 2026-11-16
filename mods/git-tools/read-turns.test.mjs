@@ -1,7 +1,9 @@
 // node read-turns.test.mjs: a screen's repeated read never stays "going" past STUCK, a newer
-// read can always start, and an answer older than one already used is dropped (no app, no git).
+// read can always start (up to the screen's `most` at once), and an answer older than one
+// already used is dropped (no app, no git: git.js's runner over an exec the test plays).
 import assert from "node:assert/strict";
 import { readTurns, STUCK } from "./read-turns.js";
+import { makeGit } from "./git.js";
 
 // A clock the test moves by hand.
 const clock = () => { let t = 1000; return { now: () => t, pass: (ms) => { t += ms; } }; };
@@ -105,6 +107,100 @@ const clock = () => { let t = 1000; return { now: () => t, pass: (ms) => { t += 
   const c = clock(), one = readTurns({ now: c.now }), two = readTurns({ now: c.now });
   one.start();
   assert.equal(two.busy(), false);
+}
+
+// most: at most that many reads go at once, stuck ones included. An ask past it starts
+// nothing and is kept, one however many came, until a read ends: again() then says once to
+// start it. Without `most` asking never waits.
+{
+  const c = clock(), reads = readTurns({ now: c.now, stuck: 6000, most: 2 });
+  const a = reads.ask();
+  c.pass(6000);
+  const b = reads.ask();
+  assert.deepEqual([typeof a, typeof b], ["number", "number"]);
+  c.pass(6000);
+  assert.equal(reads.busy(), false, "both are stuck");
+  assert.equal(reads.ask(), null, "two going already");
+  assert.equal(reads.ask(), null);
+  assert.equal(reads.again(), false, "no room yet");
+  assert.equal(reads.end(a), false, "the older one ends, not the newest");
+  assert.equal(reads.again(), true, "the kept ask may start now");
+  assert.equal(reads.again(), false, "once");
+  const d = reads.ask();
+  assert.equal(typeof d, "number");
+  assert.equal(reads.ask(), null);
+  assert.equal(reads.end(b), false);
+  assert.equal(reads.end(d), true);
+  assert.equal(reads.again(), true);
+  // An ask that found room keeps nothing; drop forgets what was kept.
+  const e = reads.ask(), f = reads.ask();
+  assert.equal(reads.ask(), null);
+  reads.drop();
+  assert.equal(reads.again(), false);
+  assert.equal(typeof reads.ask(), "number");
+  reads.end(e); reads.end(f);
+  const free = readTurns({ now: c.now });
+  for (let i = 0; i < 10; i++) assert.equal(typeof free.ask(), "number");
+}
+
+// The Conflicts dialog's way, with git.js's runner and a clock the test moves: it asks for a
+// read every 2 s while none started in the last 6 s is going, at most 2 at once. Every
+// git call goes unanswered for 10 minutes, then answers again. The reads going and the git
+// calls waiting stay bounded the whole time, and once answers come the newest state is shown
+// within a few reads.
+{
+  const POLL = 2000, UNANSWERED = 6000, OUTAGE = 600000;
+  let now = 0, alarms = [];
+  const wait = (ms) => new Promise((go) => alarms.push({ at: now + ms, go }));
+  let state = "before", answering = false, calls = 0, waiting = 0, mostWaiting = 0;
+  const exec = (_cmd, _args) => {
+    calls++;
+    if (answering) return Promise.resolve({ code: 0, stdout: state, stderr: "" });
+    waiting++; mostWaiting = Math.max(mostWaiting, waiting);
+    return new Promise(() => {});
+  };
+  const git = makeGit(exec, null, { wait, record: () => {} });
+  const reads = readTurns({ stuck: UNANSWERED, now: () => now, most: 2 });
+  let shown = null, going = 0, mostGoing = 0, started = 0;
+  const load = () => {
+    const turn = reads.ask();
+    if (turn === null) return;
+    started++; going++; mostGoing = Math.max(mostGoing, going);
+    (async () => {
+      const [op] = await Promise.all([git.read("/r", ["status"]), git.read("/r", ["symbolic-ref", "-q", "HEAD"])]);
+      going--;
+      const used = reads.use(turn);
+      reads.end(turn);
+      if (reads.again()) load();
+      if (used && op.ok) shown = op.out;
+    })();
+  };
+  const settle = async () => { for (let i = 0; i < 5; i++) await new Promise((go) => setImmediate(go)); };
+  // An alarm whose call is over (the answer came first) never matters; one that rings marks
+  // its unanswered call as given up on.
+  let next = POLL;
+  const ring = async (until, done = () => false) => {
+    while (!done()) {
+      alarms.sort((x, y) => x.at - y.at);
+      const t = Math.min(next, alarms[0]?.at ?? Infinity);
+      if (t > until) { now = until; return; }
+      now = t;
+      if (t === next) { if (!reads.busy()) load(); next += POLL; }
+      else { const a = alarms.shift(); if (!answering) waiting--; a.go(); }
+      await settle();
+    }
+  };
+  load();
+  await settle();
+  await ring(OUTAGE);
+  assert.ok(mostGoing <= 2, `reads going at once: ${mostGoing}`);
+  assert.ok(mostWaiting <= 4, `unanswered git calls at once: ${mostWaiting}`);
+  assert.equal(shown, null);
+  const before = started;
+  state = "after"; answering = true;
+  await ring(OUTAGE + 80000, () => shown === "after");
+  assert.equal(shown, "after", "the newest state is shown within 80 s of git answering again");
+  assert.ok(started - before <= 3, `reads started after git answered again before it showed: ${started - before}`);
 }
 
 // STUCK is past the longest a git runner with a clock waits for one read (git.js: two tries

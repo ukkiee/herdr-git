@@ -32,6 +32,9 @@ const POLL = 2000;
 // dialog often opens the moment the operation stops and a first read whose answer is lost
 // would leave it empty; an answer still lands when it comes (read-turns.js).
 const UNANSWERED = 6000;
+// The reads going at once: the first and one beside it. A read whose answer is lost holds
+// the runner's places until its clock gives up (git.js), so more would only queue up there.
+const GOING = 2;
 // Width of each side's column.
 const COLUMN = 190;
 const QUESTION_WIDTH = 460;
@@ -101,7 +104,7 @@ export default class ConflictsView {
     this.running = null; // "simple" while Resolve All Simple Conflicts runs
     this.simpleFrom = null; // unresolved files before it ran, until the next read
     this.simpleKept = 0; // files it left because they were edited by hand
-    this.reads = readTurns({ stuck: UNANSWERED });
+    this.reads = readTurns({ stuck: UNANSWERED, most: GOING });
     this.handle = cx.focus_handle();
     this.handle.focus();
     this.list = new WindowedList("conflicts-files", { rowHeight: ROW + 4 });
@@ -112,9 +115,12 @@ export default class ConflictsView {
   repo() { return { root: this.root, on: this.on }; }
 
   // Reads the operation and the branch again. An answer older than one shown is dropped.
+  // With GOING reads unanswered already, the read waits for one of them to end (again()),
+  // however many polls and "changed" asked meanwhile.
   load(cx) {
     if (!this.root) return;
-    const turn = this.reads.start();
+    const turn = this.reads.ask();
+    if (turn === null) return;
     cx.spawn(async (cx) => {
       const [op, head] = await Promise.all([
         readOperation(this.git, this.root),
@@ -122,6 +128,7 @@ export default class ConflictsView {
       ]);
       const used = this.reads.use(turn);
       this.reads.end(turn);
+      if (this.reads.again()) this.load(cx);
       if (!used) return;
       if (!op.ok) { this.error = sentence(this.t, op.msg, op.err); cx.notify(); return; }
       this.op = op;

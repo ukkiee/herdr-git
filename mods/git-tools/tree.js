@@ -66,30 +66,34 @@ export function buildRows(items, { grouped = false, collapsed = new Set(), compa
     node.files.push({ item, name });
   }
   const rows = [];
-  // Returns the paths under `node` and appends its rows when `shown`.
-  const walk = (node, depth, shown) => {
-    const paths = [];
-    for (const first of sortByName([...node.folders.values()], (f) => f.name)) {
-      let folder = first, name = first.name;
-      while (compact && !folder.files.length && folder.folders.size === 1) {
-        folder = folder.folders.values().next().value;
-        name += `/${folder.name}`;
-      }
-      const key = `${folder.path}/`, open = !collapsed.has(key);
-      const row = { key, depth, folder: true, open, name, dir: node.path, path: folder.path, count: 0, item: null, paths: null };
-      if (shown) rows.push(row);
-      row.paths = walk(folder, depth + 1, shown && open);
-      row.count = row.paths.length;
-      for (const path of row.paths) paths.push(path);
-    }
-    for (const file of sortByName(node.files, (f) => f.name)) {
-      if (shown) rows.push(fileRow(file.item, depth, file.name, node.path));
-      paths.push(file.item.path);
-    }
-    return paths;
-  };
-  walk(root, 0, true);
+  walkRows(root, 0, true, rows, collapsed, compact);
   return rows;
+}
+
+// Returns the paths under `node` and appends its rows to `rows` when `shown`. A function
+// of the module, handed what it needs: a closure inside buildRows that called itself would
+// hold itself, and with it every row it made, in a cycle, and the app's JS engine frees
+// no cycles.
+function walkRows(node, depth, shown, rows, collapsed, compact) {
+  const paths = [];
+  for (const first of sortByName([...node.folders.values()], (f) => f.name)) {
+    let folder = first, name = first.name;
+    while (compact && !folder.files.length && folder.folders.size === 1) {
+      folder = folder.folders.values().next().value;
+      name += `/${folder.name}`;
+    }
+    const key = `${folder.path}/`, open = !collapsed.has(key);
+    const row = { key, depth, folder: true, open, name, dir: node.path, path: folder.path, count: 0, item: null, paths: null };
+    if (shown) rows.push(row);
+    row.paths = walkRows(folder, depth + 1, shown && open, rows, collapsed, compact);
+    row.count = row.paths.length;
+    for (const path of row.paths) paths.push(path);
+  }
+  for (const file of sortByName(node.files, (f) => f.name)) {
+    if (shown) rows.push(fileRow(file.item, depth, file.name, node.path));
+    paths.push(file.item.path);
+  }
+  return paths;
 }
 
 // folderKeys(items, { compact }) → every folder key of the grouped tree, for Collapse All

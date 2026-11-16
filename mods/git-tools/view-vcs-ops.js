@@ -144,14 +144,21 @@ async function ask(panel, kind, group) {
 // or "commit". folder: the copy's props.folder (a tab on a chosen folder never opens it).
 export function vcsOpsCommand(panel, kind, cx, { folder = null } = {}) {
   if (!takesVcsOps(kind, { commitShown: commitPanelShown(layout()), logShown: logPanelShown() === true, folder })) return;
-  const open = (group) => cx.spawn(async (cx) => {
+  openGroup(panel, kind, undefined, cx);
+}
+
+// Shows the popup for `group` (the top list when undefined) and takes the pick: a group
+// opens the same way, an item runs. A function of the module, handed the panel: a closure
+// inside vcsOpsCommand that called itself would hold itself, and the panel with it, in a
+// cycle, and the app's JS engine frees no cycles.
+function openGroup(panel, kind, group, cx) {
+  cx.spawn(async (cx) => {
     const pick = await ask(panel, kind, group);
     if (!pick || typeof pick.id !== "string") return;
-    if (vcsOpsItems(handledBy(kind), pick.id).length) { open(pick.id); return; }
+    if (vcsOpsItems(handledBy(kind), pick.id).length) { openGroup(panel, kind, pick.id, cx); return; }
     if (handledBy(kind)(pick.id)) VCS_ACTIONS[pick.id].run(panel, cx, { kind });
     cx.notify();
   });
-  open(undefined);
 }
 
 export default class VcsOps {

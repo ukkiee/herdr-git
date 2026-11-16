@@ -90,19 +90,24 @@ const MAX_DEPTH = 40;
 //   → [{ path, name, folder, depth, open, loading? }]
 export function visibleRows(entries, open, failed = new Set()) {
   const out = [];
-  const walk = (prefix, depth) => {
-    if (depth > MAX_DEPTH) return;
-    for (const entry of entries.get(prefix) ?? []) {
-      const path = prefix ? `${prefix}/${entry.name}` : entry.name;
-      const isOpen = entry.dir && open.has(path);
-      out.push({ path, name: entry.name, folder: entry.dir, depth, open: isOpen });
-      if (!isOpen) continue;
-      if (entries.has(path)) walk(path, depth + 1);
-      else if (!failed.has(path) && depth < MAX_DEPTH) out.push({ path: `${path}/`, name: "", folder: false, depth: depth + 1, open: false, loading: true });
-    }
-  };
-  walk("", 0);
+  walkOpen("", 0, out, entries, open, failed);
   return out;
+}
+
+// Appends the rows of folder `prefix` and of the open folders under it to `out`. A
+// function of the module, handed what it needs: a closure inside visibleRows that called
+// itself would hold itself, and with it the rows and every folder's entries, in a cycle,
+// and the app's JS engine frees no cycles.
+function walkOpen(prefix, depth, out, entries, open, failed) {
+  if (depth > MAX_DEPTH) return;
+  for (const entry of entries.get(prefix) ?? []) {
+    const path = prefix ? `${prefix}/${entry.name}` : entry.name;
+    const isOpen = entry.dir && open.has(path);
+    out.push({ path, name: entry.name, folder: entry.dir, depth, open: isOpen });
+    if (!isOpen) continue;
+    if (entries.has(path)) walkOpen(path, depth + 1, out, entries, open, failed);
+    else if (!failed.has(path) && depth < MAX_DEPTH) out.push({ path: `${path}/`, name: "", folder: false, depth: depth + 1, open: false, loading: true });
+  }
 }
 
 // keepPressed: what a finished refresh leaves, per folder.

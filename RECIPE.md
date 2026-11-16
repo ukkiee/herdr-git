@@ -212,10 +212,17 @@ toolbar (`Git` semibold, `Log` 12px `muted`, Refresh, Hide) and the notice.
 
 **Branch tree** (12.5px text):
 
-- A vertical toolbar on the left, 30px wide, line on its right: New Branch… (`plus`),
-  Delete (`branch-delete`, tooltip `Delete '<name>'` or why not), Deleted Branches…
-  (`restore`, off only until the branches have been read; on while a write runs), Fetch (`fetch`,
-  spins while fetching), a 16×1px line, Expand All, Collapse All.
+- A vertical toolbar on the left, 30px wide, line on its right. Top to bottom, each
+  button's tooltip its name: Hide Git Branches (`hide-branches`, pressed while the tree
+  is hidden, when it is the only button left), New Branch… (`plus`), Update Selected
+  (`update`, off unless the cursor's branch tracks one), Delete (`branch-delete`, tooltip
+  `Delete '<name>'` or why not), Deleted Branches… (`restore`, off only until the branches
+  have been read; on while a write runs), Compare with Current (`compare`), Show My
+  Branches (`my-branches`, pressed while on), Fetch (`fetch`, spins while fetching),
+  Mark/Unmark As Favorite (`favorite`), Navigate Log to Selected Branch Head (`locate`),
+  Branches Pane Settings (`branch-settings`), a 16×1px line, Expand All (`expand-all`),
+  Collapse All (`collapse-all`). Compare with Current, Mark/Unmark As Favorite and Navigate
+  Log are off without a branch at the cursor. The buttons act on the cursor's branch.
 - A 34px filter row (as tall as the Commit list's toolbar): `search` icon (13px, `dim`,
   `accent` while typing) and an input, placeholder `Filter branches`.
 - The tree: `HEAD (Current Branch)` (or `HEAD (<7-char hash>)` when detached), then

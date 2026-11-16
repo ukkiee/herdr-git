@@ -60,6 +60,17 @@ const git = makeGit(exec, null);
   const spy = makeGit((cmd, args, options) => { seen.push({ cmd, args, options }); return Promise.resolve({ code: 0, stdout: "", stderr: "" }); }, "vps");
   await spy("/repo", ["commit", "-m", "x"], { timeout: 600000 });
   assert.deepEqual(seen[0].options, { cwd: "/repo", on: "vps", timeout: 600000 });
+  // A command that may write and names no time limit still waits up to exec's cap of
+  // 10 min: a hook (reference-transaction, post-checkout) may run past exec's 30 s
+  // default, and git stopped halfway may leave a ref half written or a lock behind.
+  for (const args of [["checkout", "-b", "x", "--"], ["branch", "-D", "--", "x"], ["tag", "v1"], ["update-ref", "refs/x", "HEAD"]]) {
+    seen.length = 0;
+    await spy("/repo", args);
+    assert.equal(seen[0].options.timeout, 600000, args.join(" "));
+  }
+  seen.length = 0;
+  await spy("/repo", ["reset", "-q"], { timeout: 120000 });
+  assert.equal(seen[0].options.timeout, 120000, "a write's own limit stands");
 }
 
 // Environment variables reach git (herdr's exec has no env option).

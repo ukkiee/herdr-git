@@ -2580,8 +2580,10 @@ in English.
   most 1,000 paths and 60,000 bytes; Commit passes all checked paths in one call, so
   checking a very large number of files can hit the system's argument-length limit.
 - `exec` has no env option: variables go through `env`. It stops a command after 30 s
-  unless told: commit and push wait up to 10 min (hooks, network), fetch 5 min, each
-  rollback call 2 min. Its output is capped at 8 MiB.
+  unless told: fetch waits up to 5 min; each call of Rollback, Restore and Apply Patch
+  2 min; every other command that may write (commit, push, checkout, a new or deleted
+  branch, a tag, a stash, …) 10 min (`git.js`), since hooks and the network may take that long and git stopped halfway may
+  leave a ref half written or a lock behind. Its output is capped at 8 MiB.
 - Reads must not write under `.git` (`git.js` `READ`), or the folder watch wakes the next
   read and the panel reads forever.
 - A commit refused by git (a hook, a merge in progress) takes back the

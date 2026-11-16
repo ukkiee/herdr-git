@@ -41,7 +41,7 @@ export default class RebaseView {
     this.on = p.on ?? null;
     this.owner = p.owner ?? null;
     this.who = typeof p.who === "string" ? p.who : "ui.commitPanel";
-    this.git = makeGit(exec, this.on);
+    this.git = makeGit(exec, this.on, { wait: this.wait });
     this.names = [];
     this.local = [];
     this.picked = [];

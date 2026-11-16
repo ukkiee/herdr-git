@@ -154,7 +154,7 @@ export default class VcsPopup {
     this.mode = p.mode === "abort" ? "abort" : "popup";
     this.kind = p.kind;
     if (this.mode === "abort") return;
-    this.repo = p.root ? { git: makeGit(exec, p.on ?? null), root: p.root, on: p.on ?? null } : null;
+    this.repo = p.root ? { git: makeGit(exec, p.on ?? null, { wait: this.wait }), root: p.root, on: p.on ?? null } : null;
     this.heads = null;
     this.prefs = { favorite: [], unfavorite: [] };
     this.op = null;

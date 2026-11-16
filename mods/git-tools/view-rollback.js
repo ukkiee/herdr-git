@@ -60,7 +60,7 @@ export function serveRollback(panel, e, cx) {
   // Runs outside the panel's own call: its words come from panel.t.
   serveRequest(panel, e, { key: "dialogs.rollback.running" }, async (repo) => {
     if (!list.length) return { ok: false, err: "No files to roll back.", msg: { key: "dialogs.rollback.noFiles", args: {} } };
-    const git = makeGit(exec, repo.on);
+    const git = makeGit(exec, repo.on, { wait: panel.wait });
     const timed = (cwd, args, options) => git(cwd, args, { timeout: TIMEOUT, ...options });
     timed.read = (cwd, args, options) => git.read(cwd, args, { timeout: TIMEOUT, ...options });
     const r = await rollback(timed, repo.root, { files: list, deleteAdded: deleteAdded === true, copy: panel.copy });

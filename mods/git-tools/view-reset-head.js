@@ -40,7 +40,7 @@ export default class ResetHeadView {
     this.on = p.on ?? null;
     this.owner = p.owner ?? null;
     this.who = typeof p.who === "string" ? p.who : "ui.commitPanel";
-    this.git = makeGit(exec, this.on);
+    this.git = makeGit(exec, this.on, { wait: this.wait });
     this.mode = "mixed";
     this.branch = undefined; // undefined: not read yet; null: a detached HEAD
     this.verdict = null; // checkCommit's answer for the text `verdict.text`

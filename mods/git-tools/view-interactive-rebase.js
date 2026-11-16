@@ -175,7 +175,7 @@ export default class InteractiveRebaseView {
     this.fileList = new WindowedList("ir-files");
     this.files = new Map(); // hash → readCommit result
     this.fileAt = -1;
-    this.git = makeGit(exec, this.on);
+    this.git = makeGit(exec, this.on, { wait: this.wait });
     this.dark = darkLook();
     this.waiting = false;
     this.error = null;

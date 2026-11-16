@@ -76,7 +76,7 @@ export default class CompareBranches {
     this.load(cx);
   }
 
-  git() { return makeGit(exec, this.repo?.on ?? null); }
+  git() { return makeGit(exec, this.repo?.on ?? null, { wait: this.wait }); }
 
   // The placeholders are fixed when an input is made: spoke() makes new ones holding what
   // was typed when the tab's language changes.

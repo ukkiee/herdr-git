@@ -87,6 +87,6 @@ export function serveAction(panel, e, cx) {
   const entry = Object.prototype.hasOwnProperty.call(SERVE_ACTIONS, e.action) ? SERVE_ACTIONS[e.action] : null;
   if (!entry) return false;
   const args = e.args ?? {};
-  serveRequest(panel, e, { key: entry.work }, (repo) => entry.run(makeGit(exec, repo.on), repo.root, args, panel), cx);
+  serveRequest(panel, e, { key: entry.work }, (repo) => entry.run(makeGit(exec, repo.on, { wait: panel.wait }), repo.root, args, panel), cx);
   return true;
 }

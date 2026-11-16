@@ -77,7 +77,7 @@ export default class DeletedBranchesView {
     this.root = p.root ?? null; this.on = p.on ?? null;
     this.owner = p.owner ?? null; // the Log panel copy that runs the restore
     this.scripted = p.chosen === true; // script commands that write are obeyed
-    this.git = makeGit(exec, this.on);
+    this.git = makeGit(exec, this.on, { wait: this.wait });
     this.branches = null; // readDeletedBranches' list; null until the first answer
     this.listError = null;
     this.picked = new Set(); // key() of the checked rows

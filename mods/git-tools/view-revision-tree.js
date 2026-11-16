@@ -51,7 +51,7 @@ export default class RevisionTree {
     this.load(cx);
   }
 
-  git() { return makeGit(exec, this.repo?.on ?? null); }
+  git() { return makeGit(exec, this.repo?.on ?? null, { wait: this.wait }); }
 
   load(cx) {
     if (!this.repo || !this.rev) { this.files = []; this.error = this.t("ui.gitFailed"); return; }

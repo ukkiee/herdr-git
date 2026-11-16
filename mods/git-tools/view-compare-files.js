@@ -195,7 +195,7 @@ export default class CompareFiles {
     if (this.mode !== "versions") cx.timer.every(POLL, (cx) => { if (this.drawn) { this.drawn = false; this.load(cx); } });
   }
 
-  git() { return makeGit(exec, this.repo?.on ?? null); }
+  git() { return makeGit(exec, this.repo?.on ?? null, { wait: this.wait }); }
 
   load(cx) {
     if (!this.repo) { this.files = []; this.error = this.t("dialogs.diff.noFileTab"); return; }

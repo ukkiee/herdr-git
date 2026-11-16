@@ -1232,9 +1232,9 @@ The rules and their reasons are in `docs/design.md` (section 4); what a person s
   poll tries again. Every error strip has `View in Console`, which opens or picks the Git
   console tab; a console tab it picks reads the log again and shows its end, where the
   failed command is, even if it was scrolled up (it posts `{ type: "console-end" }`).
-- In the Commit panel, the Log panel, the VCS widget, the Push and Conflicts dialogs and
-  the Update Info and History tabs, a git command whose answer hasn't come 5 s past its
-  timeout (35 s for a read) is given up on, so the screen doesn't stay on `Loading…` for
+- On every screen, and in the work the Commit panel runs for a dialog, a git command whose
+  answer hasn't come 5 s past its timeout (35 s for a read) is given up on (the Files
+  panel's reads aside), so the screen doesn't stay on `Loading…` for
   good: a read is asked once more, then it fails with `git did not answer in 35 s.` like
   any git error. A command that may write is not run again, as it may have done its work.
 

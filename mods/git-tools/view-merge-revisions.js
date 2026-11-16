@@ -77,7 +77,7 @@ export default class MergeRevisionsView {
     this.who = typeof p.who === "string" ? p.who : "ui.commitPanel";
     this.stash = typeof p.stash === "string" ? p.stash : null;
     this.path = typeof p.path === "string" ? p.path : null;
-    this.git = makeGit(exec, this.on);
+    this.git = makeGit(exec, this.on, { wait: this.wait });
     this.op = null;
     this.cols = columns(null, {});
     this.titles = paneTitles(null, {});

@@ -76,7 +76,7 @@ export function servePush(panel, e, cx) {
   // Runs outside the panel's own call: its words come from panel.t.
   const t = panel.t;
   serveRequest(panel, e, { key: force === true ? "dialogs.push.forcePushing" : "dialogs.push.pushing" }, async (repo) => {
-    const git = makeGit(exec, repo.on);
+    const git = makeGit(exec, repo.on, { wait: panel.wait });
     // git-push.js pushes the branch checked out at that moment, which may not be the
     // one the dialog showed (a checkout elsewhere since it opened).
     const moved = planMoved(shown, planOf(await readPushPlan(git, repo.root, source)));

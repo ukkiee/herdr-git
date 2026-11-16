@@ -642,7 +642,10 @@ dialog's own (`openDialog` in its file).
   with Group By: Directory, Expand All, Collapse All; buttons Force Checkout, `Don't
   Checkout` and `Smart Checkout` (default) for a checkout (a branch's, and a revision's:
   the Commit list's Checkout Revision and the VCS widget's Checkout Tag or Revision…),
-  Cancel and `Smart <name>` (default) for the rest.
+  Cancel and `Smart <name>` (default) for the rest. Force Checkout over a file git doesn't
+  track where the target has one (or a folder there, or a file where that file's folder
+  is) doesn't run: the error strip names those paths (the first 20, then `…`) and says to
+  move or delete them first, as a record can't bring them back.
 - **Dialogs**: Stash 520×300 and its Drop and Clear questions 460×190, Unstash 480×260,
   Merge 560×300, Rebase 640×280, Pull 560×230, Update Project 520×230, Git Reset 560×390,
   Reset Head 520×300, Edit Commit Message 560×340, Squashed Commit Message 560×360, Drop
@@ -2480,7 +2483,8 @@ in English.
   operations). `reset --hard` runs only for a Hard reset and Reset to the Remote Branch,
   and `checkout --force` only for Force Checkout, each after recording the local changes
   under `refs/git-tools/rollback` (`Reset: N files`, `Checkout: N files`); without the
-  record it doesn't run. The repository's local config gets `gittools.favorite`,
+  record it doesn't run, and `checkout --force` doesn't run either while it would write
+  over an untracked file. The repository's local config gets `gittools.favorite`,
   `gittools.unfavorite` and `gittools.smart-stash`. Each Rollback adds a
   snapshot commit (and, with a commit, its staging commit) and a reflog entry under
   `refs/git-tools/rollback`; each Delete adds a `deleted …` and a `parked` entry (and,
@@ -3599,7 +3603,9 @@ conflicting file, and an ignored folder `node_modules`)
      with conflicts` shows and the Conflicts dialog opens with `Conflicts during unstashing
      stash@{0}`.
 158. Again with Force Checkout: the checkout happens, and Restore Rolled-Back Changes…
-     lists a `Checkout` record with the changed file.
+     lists a `Checkout` record with the changed file. With an untracked `b.txt` of your
+     own on `main` (`feature` adds one), Force Checkout doesn't run: the error strip names
+     `b.txt`, HEAD stays and no record is added.
 159. With `a.txt` changed, pick `Merge 'feature' into 'main'`: `Git Merge Problem` with
      Cancel and Smart Merge; Smart Merge merges and `a.txt` is changed again.
 

@@ -125,12 +125,32 @@ export async function checkoutRevisionOf(git, root, { revision } = {}) {
   return { ...r, outcome: blocked.length ? "refused" : "failed", blocked };
 }
 
-// forceCheckout(git, root, { name, remote?, revision?, copy }) → { ok, code, out, err, msg?, snapshot, changed }
+// The paths named in a refusal's sentence; more are left out with "…".
+const NAMED = 20;
+
+// The untracked files (readStatus's unversioned) a forced checkout of `ref` would write
+// over: where the target has a file the index doesn't, a folder over an untracked file, or
+// a file over an untracked folder. → [path] in git's order, or null when git can't say.
+// Ignored files aren't counted: git writes over those on any checkout.
+async function untrackedInWay(git, root, ref, unversioned) {
+  if (!unversioned.length) return [];
+  // From the target's tree to the index: "D" is a path the target has and the index doesn't.
+  const r = await git.read(root, ["diff", "--cached", "--name-only", "-z", "--no-renames", "--diff-filter=D", "--end-of-options", ref, "--"]);
+  if (!r.ok) return null;
+  const files = new Set(zList(r.out)), folders = new Set();
+  for (const p of files) for (let i = p.indexOf("/"); i > 0; i = p.indexOf("/", i + 1)) folders.add(p.slice(0, i));
+  const under = (p) => { for (let i = p.indexOf("/"); i > 0; i = p.indexOf("/", i + 1)) if (files.has(p.slice(0, i))) return true; return false; };
+  return unversioned.map((u) => u.path).filter((p) => files.has(p) || folders.has(p) || under(p));
+}
+
+// forceCheckout(git, root, { name, remote?, revision?, copy }) → { ok, code, out, err, msg?, snapshot, changed, untracked? }
 //   Checks out over the local changes. `checkout --force` throws away every tracked change,
 //   not only the ones in the way, so all of them are recorded first as a snapshot named
 //   "Checkout" (git-snapshot.js record; copy: the calling copy's id). When that record
-//   fails, nothing is checked out. Untracked files stay as they are. revision: a commit to
-//   detach HEAD at instead of a branch.
+//   fails, nothing is checked out. It would also write over an untracked file where the
+//   target has one, which a snapshot can't hold: then nothing is recorded or checked out
+//   and `untracked` lists those paths (msg smart.untrackedInWay). Other untracked files
+//   stay as they are. revision: a commit to detach HEAD at instead of a branch.
 export async function forceCheckout(git, root, { name, remote = false, revision = "", copy } = {}) {
   const none = { snapshot: null, changed: false };
   const target = str(revision) ? { revision: str(revision) } : await checkoutTarget(git, root, { name: str(name), remote: remote === true });
@@ -140,6 +160,12 @@ export async function forceCheckout(git, root, { name, remote = false, revision 
   }
   const st = await readStatus(git, root);
   if (!st.ok) return { ok: false, code: -1, out: "", err: st.err, ...(st.msg ? { msg: st.msg } : {}), ...none };
+  const untracked = await untrackedInWay(git, root, target.revision ?? target.ref, st.unversioned);
+  if (untracked === null) return { ok: false, code: -1, out: "", err: "Couldn't tell which untracked files the checkout would overwrite.", msg: { key: "smart.untrackedUnknown" }, ...none };
+  if (untracked.length) {
+    const named = untracked.slice(0, NAMED).join("\n") + (untracked.length > NAMED ? "\n…" : "");
+    return { ok: false, code: -1, out: "", err: `Force Checkout would overwrite untracked files:\n${named}`, msg: { key: "smart.untrackedInWay", args: { n: untracked.length, paths: named } }, untracked, ...none };
+  }
   const made = await record(git, root, st.changes.map((c) => c.path), copy, "Checkout");
   if (!made.ok) return { ...made, ...none };
   // --end-of-options: a branch may be called "-f". A new local branch takes the full

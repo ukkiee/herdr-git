@@ -428,4 +428,41 @@ const resolve = (repo, last) => { edit(repo, "a.txt", 4, last); sh(repo, "git ad
   assert.deepEqual((await listSnapshots(git, forced)).snapshots[0].files.map((x) => x.path), ["a.txt"]);
 }
 
+// An untracked file where the target has one (or a folder, or the other way round) would
+// be written over by the forced checkout, and a snapshot records only tracked files: the
+// checkout is refused with those paths, for a branch and a revision alike, and nothing is
+// recorded or moved. Untracked files the target doesn't have don't stop it.
+{
+  const repo = init("force-untracked");
+  sh(repo, "git checkout -q -b nest main && mkdir n && echo x > n/x.txt && echo t > t && git add -A && git commit -q -m nest && git checkout -q main");
+  const side = sh(repo, "git rev-parse side").trim();
+  edit(repo, "a.txt", 0, "mine-a1");
+  write(repo, "s.txt", "only here\n");
+  write(repo, "u.txt", "u\n");
+  const before = status(repo), at = head(repo);
+  const checks = [
+    [{ name: "side" }, ["s.txt"]],
+    [{ revision: side }, ["s.txt"]],
+  ];
+  for (const [to, paths] of checks) {
+    const r = await forceCheckout(git, repo, { ...to, copy: "0123456789abcdef" });
+    assert.equal(r.ok, false);
+    assert.deepEqual([r.untracked, r.snapshot, r.changed], [paths, null, false]);
+    assert.equal(r.msg?.key, "smart.untrackedInWay");
+    assert.deepEqual([status(repo), head(repo), branch(repo)], [before, at, "main"]);
+    assert.equal(text(repo, "s.txt"), "only here\n");
+    assert.deepEqual((await listSnapshots(git, repo)).snapshots, []);
+  }
+  // A file where the target has a folder, and files inside a folder where it has a file.
+  sh(repo, "rm s.txt && echo mine > n && mkdir t && echo mine > t/y.txt");
+  const nest = await forceCheckout(git, repo, { name: "nest", copy: "0123456789abcdef" });
+  assert.deepEqual([nest.ok, nest.untracked], [false, ["n", "t/y.txt"]]);
+  assert.equal(text(repo, "t/y.txt"), "mine\n");
+  // Out of the way, it checks out and the untracked file it doesn't have stays.
+  sh(repo, "rm -r n t");
+  const r = await forceCheckout(git, repo, { name: "side", copy: "0123456789abcdef" });
+  assert.equal(r.ok, true, r.err);
+  assert.deepEqual([branch(repo), status(repo)], ["side", ["?? u.txt"]]);
+}
+
 console.log("ok");

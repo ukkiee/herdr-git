@@ -456,7 +456,10 @@ export default class MergeRevisionsView {
     const t = theme();
     const main = this.renderMain(t);
     if (this.confirm) return this.renderConfirm(t, main);
-    return main.track_focus(this.handle).on_key_down((e, cx) => {
+    // Herdr's Esc is its overlay.close action, which reaches us before on_key_down does:
+    // taken here, Esc goes through leave() (keeping a changed result) like × does.
+    const body = this.editor ? main : takeEscape(main, (cx) => this.leave(cx));
+    return body.track_focus(this.handle).on_key_down((e, cx) => {
       // Keys typed in the editor stay the editor's.
       if (this.editor) return;
       if (e.key === "escape") this.leave(cx);

@@ -530,6 +530,8 @@ export default class InteractiveRebaseView {
     })
       // Esc leaves a reword (asking first when it was changed); the dialog stays.
       .when(Boolean(this.editing), (el) => takeEscape(el, () => { this.leaveReword(); this.handle.focus(); }))
+      // Otherwise Esc is shut(): Cancel Rebase asks first when the plan was changed.
+      .when(!this.editing, (el) => takeEscape(el, (cx) => this.shut(cx)))
       .track_focus(this.handle).on_key_down((e, cx) => {
         if (!this.keyDown(e, cx)) return;
         cx.stop_propagation();

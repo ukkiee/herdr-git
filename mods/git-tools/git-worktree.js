@@ -77,12 +77,13 @@ export async function createWorktree(git, root, { source, newBranch, path } = {}
   return { ...(await git(root, args, { timeout: ADD_TIMEOUT })), path: where };
 }
 
-// checkoutRef(git, root, text) → git's result: HEAD detached at the commit a tag, branch
-// or hash names; a name nothing has is refused and HEAD stays.
-export async function checkoutRef(git, root, text) {
+// checkoutRef(git, root, text, { run }) → git's result: HEAD detached at the commit a tag,
+// branch or hash names; a name nothing has is refused and HEAD stays. run(hash): what
+// checks the commit out (default checkoutRevision), for a screen that offers Smart.
+export async function checkoutRef(git, root, text, { run = (hash) => checkoutRevision(git, root, hash) } = {}) {
   const ref = String(text ?? "").trim();
   if (!ref) return refused("Enter a reference name or a commit hash.", { key: "worktree.enterRef", args: {} });
   const found = ref.startsWith("-") ? { ok: false } : await git.read(root, ["rev-parse", "--verify", "--quiet", "--end-of-options", `${ref}^{commit}`]);
   if (!found.ok || !found.out.trim()) return refused(`Nothing is called '${ref}'.`, { key: "worktree.unknownRef", args: { ref } });
-  return checkoutRevision(git, root, found.out.trim());
+  return run(found.out.trim());
 }

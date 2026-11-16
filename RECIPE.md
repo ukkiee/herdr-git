@@ -613,8 +613,9 @@ dialog's own (`openDialog` in its file).
   on disk since the dialog read it, with Overwrite) are 460px cards over it.
 - **Smart dialog** (560×440): `Git <name> Problem`, a sentence, the blocking files' tree
   with Group By: Directory, Expand All, Collapse All; buttons Force Checkout, `Don't
-  Checkout` and `Smart Checkout` (default) for a checkout, Cancel and `Smart <name>`
-  (default) for the rest.
+  Checkout` and `Smart Checkout` (default) for a checkout (a branch's, and a revision's:
+  the Commit list's Checkout Revision and the VCS widget's Checkout Tag or Revision…),
+  Cancel and `Smart <name>` (default) for the rest.
 - **Dialogs**: Stash 520×300 and its Drop and Clear questions 460×190, Unstash 480×260,
   Merge 560×300, Rebase 640×280, Pull 560×230, Update Project 520×230, Git Reset 560×390,
   Reset Head 520×300, Edit Commit Message 560×340, Squashed Commit Message 560×360, Drop
@@ -898,7 +899,8 @@ another machine runs every git command on that machine. A panel opened with
     under it follows. Up and down scrolling into narrower history pulls it back within
     what those rows need. There is no key or drag for it.
   - **Copy Revision Number**: the full hash on the clipboard. **Checkout Revision**: a
-    detached HEAD at that commit (the HEAD row then reads `HEAD (<hash>)`). **New
+    detached HEAD at that commit (the HEAD row then reads `HEAD (<hash>)`); local
+    changes in the way open the Smart dialog, as a branch's checkout does. **New
     Branch…**: the New Branch dialog starting at that commit.
 - **Search and filters** (git does the filtering, so commits not read yet are filtered
   too):
@@ -1614,7 +1616,7 @@ the git ones run against real temporary repositories):
 | `pick-notes.js` | `pickNotes(type, commits, r)` → `[{ title, body, level }]` (the notifications a Cherry-Pick or Revert Commit ends with), `commitsOf(request)` → `[{ hash, subject }]`, `noteText(t, note)` |
 | `git-conflict.js`, `merge-chunks.js` | the three versions, accepting a side, saving a result, undoing a resolution, resolving simple conflicts; the chunks, decisions and result text |
 | `conflicts-model.js`, `merge-revisions-model.js` | what the two conflict dialogs show and allow |
-| `git-smart.js` | the blocking files per request, `smartRun`, the `gittools.smart-stash` mark |
+| `git-smart.js` | the blocking files per request (a checkout's `{ name, remote }` or `{ revision }`), `checkoutBranch` and `checkoutRevisionOf` (refused with the files in the way), `forceCheckout`, `smartRun`, the `gittools.smart-stash` mark |
 | `git-stash.js`, `git-reset.js`, `git-rewrite.js`, `rebase-plan.js`, `git-changes.js` | stash; reset and the record before a hard one; history edits through one rebase plan (`editCheck`, `readEditFacts`); file-level revert and cherry-pick |
 | `git-remote.js`, `git-refs.js`, `git-heads.js` | pull, update, Update Project, the Update Info range; tags, branch names, remotes, Push Tag; what the VCS widget shows |
 | `git-compare.js`, `git-revision.js`, `git-worktree.js` | comparisons, patches, Get from, Show Changes to Parents (`parentDiffs`); a revision's files, history, child commits; new worktrees and Checkout Tag or Revision |
@@ -3485,7 +3487,10 @@ conflicting file, and an ignored folder `node_modules`)
 
 156. Check out `feature` from the Branch tree: the `Git Checkout Problem` dialog lists
      `a.txt` with Group By: Directory, Expand All, Collapse All and the buttons Force
-     Checkout, Don't Checkout, Smart Checkout.
+     Checkout, Don't Checkout, Smart Checkout. Checkout Revision on `feature`'s commit
+     in the Commit list, and Checkout Tag or Revision… with its hash, open the same
+     dialog; Smart Checkout there leaves HEAD detached at it with `a.txt` changed again,
+     Force Checkout with `a.txt` recorded first and then gone.
 157. Press Smart Checkout: `feature` is current and `a.txt` is changed and staged again;
      if the change collides with `feature`'s line, a notification `Local changes came back
      with conflicts` shows and the Conflicts dialog opens with `Conflicts during unstashing

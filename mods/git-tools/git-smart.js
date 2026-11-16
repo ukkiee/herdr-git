@@ -8,7 +8,7 @@
 import { readStatus } from "./git-status.js";
 import { readOperation, runOperation, settle } from "./git-operation.js";
 import { createStash, applyStash, dropStash, listStashes } from "./git-stash.js";
-import { checkout } from "./git-branch.js";
+import { checkout, checkoutRevision } from "./git-branch.js";
 import { record } from "./git-snapshot.js";
 import { pull } from "./git-remote.js";
 import { editMessage, dropCommits, squashCommits, interactiveRebase, extractChanges, dropChanges } from "./git-rewrite.js";
@@ -62,6 +62,7 @@ async function checkoutTarget(git, root, { name, remote }) {
 // What each request touches, by type: (git, root, args) → [path] the request would write,
 // "all" when any tracked change stops it, or null when it has none in its way.
 //   checkout: { name, remote? }      files that differ between HEAD and the branch
+//             { revision }           or the commit a detached HEAD goes to (full hash)
 //   merge: { target }                files the target changed since the common commit
 //   pull: { rebase?, target? }       as merge (target: the upstream, "@{upstream}" when
 //                                    not given), or as rebase
@@ -70,6 +71,7 @@ async function checkoutTarget(git, root, { name, remote }) {
 // merge, pull (merge), cherry-pick and revert are also stopped by any staged change.
 const TOUCHES = {
   checkout: async (git, root, args) => {
+    if (str(args.revision)) return changedBetween(git, root, ["HEAD", str(args.revision)]);
     const target = await checkoutTarget(git, root, { name: str(args.name), remote: args.remote === true });
     return target ? changedBetween(git, root, ["HEAD", target.ref]) : [];
   },
@@ -115,14 +117,25 @@ export async function checkoutBranch(git, root, { name, remote = false } = {}) {
   return { ...r, outcome: blocked.length ? "refused" : "failed", blocked };
 }
 
-// forceCheckout(git, root, { name, remote?, copy }) → { ok, code, out, err, msg?, snapshot, changed }
+// checkoutRevisionOf(git, root, { revision }) → as checkoutBranch, for a detached HEAD at
+// a commit (git-branch.js checkoutRevision; revision: its full hash).
+export async function checkoutRevisionOf(git, root, { revision } = {}) {
+  const r = await checkoutRevision(git, root, str(revision));
+  if (r.ok) return { ...r, outcome: "done", blocked: [] };
+  const found = await blockedBy(git, root, { type: "checkout", revision: str(revision) });
+  const blocked = found.ok ? found.paths : [];
+  return { ...r, outcome: blocked.length ? "refused" : "failed", blocked };
+}
+
+// forceCheckout(git, root, { name, remote?, revision?, copy }) → { ok, code, out, err, msg?, snapshot, changed }
 //   Checks out over the local changes. `checkout --force` throws away every tracked change,
 //   not only the ones in the way, so all of them are recorded first as a snapshot named
 //   "Checkout" (git-snapshot.js record; copy: the calling copy's id). When that record
-//   fails, nothing is checked out. Untracked files stay as they are.
-export async function forceCheckout(git, root, { name, remote = false, copy } = {}) {
+//   fails, nothing is checked out. Untracked files stay as they are. revision: a commit to
+//   detach HEAD at instead of a branch.
+export async function forceCheckout(git, root, { name, remote = false, revision = "", copy } = {}) {
   const none = { snapshot: null, changed: false };
-  const target = await checkoutTarget(git, root, { name: str(name), remote: remote === true });
+  const target = str(revision) ? { revision: str(revision) } : await checkoutTarget(git, root, { name: str(name), remote: remote === true });
   if (!target) {
     const msg = remote ? { key: "log.notRemoteBranch", args: { name: str(name) } } : { key: "log.notLocalBranch", args: { name: str(name) } };
     return { ok: false, code: -1, out: "", err: `'${str(name)}' is not a branch.`, msg, ...none };
@@ -133,7 +146,8 @@ export async function forceCheckout(git, root, { name, remote = false, copy } = 
   if (!made.ok) return { ...made, ...none };
   // --end-of-options: a branch may be called "-f". A new local branch takes the full
   // remote ref, as git-branch.js checkout does.
-  const args = target.exists ? ["checkout", "--force", "--end-of-options", target.local, "--"]
+  const args = target.revision ? ["checkout", "--force", "--detach", "--end-of-options", target.revision, "--"]
+    : target.exists ? ["checkout", "--force", "--end-of-options", target.local, "--"]
     : ["checkout", "--force", "-b", target.local, "--track", target.ref, "--"];
   const r = await git(root, args, { timeout: TIMEOUT });
   return { ...r, snapshot: made.snapshot, changed: true };
@@ -144,7 +158,8 @@ export async function forceCheckout(git, root, { name, remote = false, copy } = 
 // The requests Smart runs itself, by type: (git, root, request) → a result. Any other
 // type is a git-operation.js runOperation request ({ type, ...args }).
 export const SMART_RUNS = {
-  checkout: (git, root, request) => checkout(git, root, str(request.name), { remote: request.remote === true }),
+  checkout: (git, root, request) => (str(request.revision) ? checkoutRevision(git, root, str(request.revision))
+    : checkout(git, root, str(request.name), { remote: request.remote === true })),
   pull: (git, root, request) => pull(git, root, request),
   // The history edits (git-rewrite.js), each a replay of the current branch that any
   // change to a tracked file stops. Fixup… and Squash Into… aren't here: they commit the

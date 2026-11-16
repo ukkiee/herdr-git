@@ -32,7 +32,7 @@ import { isFavorite, nextFavorites, refOf as fullRef, treeSettings, treeSettings
 import { appSetting, saveAppSetting } from "./app-files.js";
 import { smartCheckout } from "./view-smart.js";
 import { readOperation } from "./git-operation.js";
-import { shortenMiddle } from "./git-log.js";
+import { branchContext } from "./log-menus.js";
 import { folderKeys } from "./tree.js";
 import { openBranchNew, openBranchDelete } from "./view-branch-new.js";
 import { openDeletedBranches } from "./view-deleted-branches.js";
@@ -216,21 +216,26 @@ export default class LogBranches {
   at(key) { return key ? this.rows.index(key) : -1; }
   cursorRow() { const i = this.at(this.cursor); return i < 0 ? null : this.rows.row(i) ?? null; }
 
-  // What an action on a row works on: { name, from, scope, current, upstream }, or null
-  // for a folder. `from` is what a new branch would start at: the full ref name, since a
-  // tag or a local branch may share the short one. upstream: the branch a local one
-  // tracks (git-branch.js trackedBranch: none when gone), else null. A tag's scope is "tag".
+  // What an action on a row works on: { name, from, scope, current, upstream, gone }, or
+  // null for a folder. `from` is what a new branch would start at: the full ref name, since
+  // a tag or a local branch may share the short one. upstream: the branch a local one
+  // tracks (git-branch.js trackedBranch: none when gone), else null; gone: what it tracked
+  // is no longer on the remote. A tag's scope is "tag".
   target(m) {
     const d = this.data;
     if (!m || !d) return null;
     if (m.kind === "branch") {
       const from = `${m.scope === "remote" ? "refs/remotes/" : "refs/heads/"}${m.branch.name}`;
-      return { name: m.branch.name, from, scope: m.scope, current: m.scope === "local" && m.branch.current, upstream: m.scope === "local" ? trackedBranch(m.branch) : null };
+      const local = m.scope === "local";
+      return { name: m.branch.name, from, scope: m.scope, current: local && m.branch.current, upstream: local ? trackedBranch(m.branch) : null, gone: local && Boolean(m.branch.gone) };
     }
-    if (m.kind === "tag") return { name: m.branch.name, from: `refs/tags/${m.branch.name}`, scope: "tag", current: false, upstream: null };
+    if (m.kind === "tag") return { name: m.branch.name, from: `refs/tags/${m.branch.name}`, scope: "tag", current: false, upstream: null, gone: false };
     if (m.kind !== "head") return null;
-    if (d.head.branch) return { name: d.head.branch, from: `refs/heads/${d.head.branch}`, scope: "local", current: true, upstream: trackedBranch(d.local.find((b) => b.name === d.head.branch)) };
-    return d.head.hash ? { name: d.head.hash.slice(0, 7), from: d.head.hash, scope: "head", current: true, upstream: null } : null;
+    if (d.head.branch) {
+      const mine = d.local.find((b) => b.name === d.head.branch);
+      return { name: d.head.branch, from: `refs/heads/${d.head.branch}`, scope: "local", current: true, upstream: trackedBranch(mine), gone: Boolean(mine?.gone) };
+    }
+    return d.head.hash ? { name: d.head.hash.slice(0, 7), from: d.head.hash, scope: "head", current: true, upstream: null, gone: false } : null;
   }
 
   // Why Delete can't run on this target, or null when it can.
@@ -463,11 +468,8 @@ export default class LogBranches {
     const { host } = this, b = this.target(m), which = m ? this.menuOf(m, b) : null;
     if (!which) return;
     const d = this.data, tr = host.t;
-    const upstream = m.kind === "branch" && m.scope === "local" ? trackedBranch(m.branch) : null;
-    const ctx = {
-      name: b ? shortenMiddle(b.name, 30) : m.label, current: d?.head.branch ?? (d?.head.hash ? d.head.hash.slice(0, 7) : "HEAD"),
-      upstream: upstream ?? "", writing: host.writeBlock(), deleteBlock: b ? this.deleteBlock(b) : null, scope: b?.scope ?? null,
-    };
+    // A remote's folder has no branch: its label stands in for the name.
+    const ctx = branchContext(b ?? { name: m.label }, { head: d?.head, writing: host.writeBlock(), deleteBlock: b ? this.deleteBlock(b) : null });
     const items = host.items(which, ctx);
     if (!items.length) return;
     const target = b ?? { remote: m.label };

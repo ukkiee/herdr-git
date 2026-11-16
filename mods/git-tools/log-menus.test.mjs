@@ -1,6 +1,6 @@
 // node log-menus.test.mjs: the Log panel's menus and toolbars from one model (no app, no git).
 import assert from "node:assert/strict";
-import { MENUS, menuItems } from "./log-menus.js";
+import { MENUS, menuItems, branchContext } from "./log-menus.js";
 import { translator } from "./i18n.js";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -65,6 +65,15 @@ const all = (name, ctx = {}, t = ko) => look(menuItems(name, everything, ctx), t
   ]);
   // A current branch that tracks nothing has no Tracked Branch item.
   assert.ok(!all("currentBranch", { name: "main", current: "main" }).some((s) => s.startsWith("추적된 브랜치")));
+  // Update on the current branch (its row and the HEAD row) stays on without a tracked
+  // branch, and is off once the branch it tracked is gone (branchContext's gone).
+  const updateOff = (menu, b) => menuItems(menu, everything, branchContext(b, { head: { branch: "topic", hash: "a".repeat(40) } })).find((it) => it.id === "branch.update").disabled;
+  for (const menu of ["currentBranch", "headBranch"]) {
+    assert.equal(updateOff(menu, { name: "topic", scope: "local", upstream: null, gone: false }), false);
+    assert.equal(updateOff(menu, { name: "topic", scope: "local", upstream: null, gone: true }), true);
+  }
+  assert.equal(updateOff("localBranch", { name: "done", scope: "local", upstream: null, gone: true }), true);
+  assert.equal(updateOff("localBranch", { name: "done", scope: "local", upstream: "origin/done", gone: false }), false);
   // The HEAD row: the current branch's menu without its tracked branch.
   assert.deepEqual(all("headBranch", { name: "main", current: "main" }), [
     "'main'에서 새 브랜치…", "─", "작업 트리로 차이점 표시", "─", "'main'(으)로부터 새 워크트리…", "─",

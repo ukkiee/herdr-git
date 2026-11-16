@@ -9,7 +9,8 @@ import assert from "node:assert/strict";
 import { makeGit } from "./git.js";
 import { readHeads, widgetFace, popupRows, popupStep } from "./git-heads.js";
 import { translator } from "./i18n.js";
-import { menuItems } from "./log-menus.js";
+import { menuItems, branchContext } from "./log-menus.js";
+import { trackedBranch } from "./git-branch.js";
 
 // The person's own git settings stay out of every repository here.
 process.env.GIT_CONFIG_GLOBAL = "/dev/null";
@@ -75,6 +76,25 @@ commit(repo, "c.txt", "l1");
   const r = await readHeads(git, repo);
   assert.deepEqual(r.current, { name: "topic", upstream: "origin/topic", gone: true, ahead: 0, behind: 0 });
   assert.deepEqual(r.local.find((b) => b.name === "topic").gone, true);
+  // Its menus have nothing to update from, current or not: the VCS widget popup's rows
+  // (popupRows) and the Branch tree's (readBranches' branch, as its target hands it), each
+  // through branchContext. A current branch that never tracked one keeps Update on.
+  const update = (menu, b, head) => menuItems(menu, () => true, branchContext(b, { head })).find((it) => it.id === "branch.update")?.disabled;
+  const popupRow = (heads, name) => popupRows({ heads, op: { ok: true, kind: null, conflicts: [] }, query: "", folded: new Set(), handled: () => true }, translator("en"))
+    .find((row) => row.kind === "branch" && row.scope === "local" && row.name === name);
+  const treeRow = (heads, name) => { const b = heads.local.find((x) => x.name === name); return { name, scope: "local", current: b.current, upstream: trackedBranch(b), gone: b.gone }; };
+  for (const row of [popupRow(r, "topic"), treeRow(r, "topic")]) {
+    assert.deepEqual([row.current, row.upstream], [true, null]);
+    assert.equal(update("currentBranch", row, r.head), true, "current, gone: Update off");
+  }
+  raw(repo, ["checkout", "-q", "main"]);
+  const away = await readHeads(git, repo);
+  for (const row of [popupRow(away, "topic"), treeRow(away, "topic")]) assert.equal(update("localBranch", row, away.head), true, "not current, gone: Update off");
+  raw(repo, ["checkout", "-q", "-b", "untracked"]);
+  const none = await readHeads(git, repo);
+  for (const row of [popupRow(none, "untracked"), treeRow(none, "untracked")]) assert.equal(update("currentBranch", row, none.head), false, "current, never tracked: Update on");
+  raw(repo, ["checkout", "-q", "topic"]);
+  raw(repo, ["branch", "-q", "-D", "untracked"]);
 }
 
 // A detached HEAD: no current branch, the commit HEAD is on.

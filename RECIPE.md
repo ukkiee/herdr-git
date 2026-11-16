@@ -234,7 +234,9 @@ toolbar (`Git` semibold, `Log` 12px `muted`, Refresh, Hide) and the notice.
   `↑N` (`ansi2`) and `↓N` (`ansi4`) at 11px against its upstream. Tooltip: the name, or
   `<name> → <upstream>`. A branch whose upstream is gone from the remote (deleted there
   and pruned here, git's `[gone]`) shows as one that tracks nothing: no `→ <upstream>`,
-  no Tracked Branch menu, and Update and Checkout and Update are off. The row the Commit list is limited to has the `selected`
+  no Tracked Branch menu, and Update and Checkout and Update are off, the current
+  branch's Update too (in the VCS widget popup's menus as well; a current branch that
+  never tracked one keeps Update on). The row the Commit list is limited to has the `selected`
   background; the keyboard's cursor row has `hover`. `origin/HEAD` is not listed.
 - Filtering with no match: `No branches match`.
 

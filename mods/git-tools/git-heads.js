@@ -120,9 +120,10 @@ function ongoingItems(op) {
 //   { kind: "rule" }                         a line between sections
 //   { kind: "group", id, label, open, count } Recent, Local, Remote, Tags
 //   { kind: "folder", label }                a remote, under Remote
-//   { kind: "branch", scope, name, label, current, upstream, ahead, behind }
+//   { kind: "branch", scope, name, label, current, upstream, gone, ahead, behind }
 //     scope: "recent" | "local" | "remote" | "tag"; name: the full short name
-//     ("origin/main"), label: as the tree shows it ("main" under origin).
+//     ("origin/main"), label: as the tree shows it ("main" under origin). upstream: null
+//     when it tracks nothing or what it tracked is gone (gone: true).
 // query: the search box's text; it keeps the actions and branches whose name holds it
 // (any case), drops the groups left empty and opens the rest. folded: the group ids
 // folded. handled(id): whether the screen does that action; one it doesn't is left out.
@@ -152,7 +153,7 @@ export function popupRows({ heads, op, query = "", folded = new Set(), handled =
   const local = new Map((heads?.local ?? []).map((b) => [b.name, b]));
   const branch = (scope, name, label = name) => {
     const b = scope === "recent" || scope === "local" ? local.get(name) : null;
-    return { kind: "branch", scope, name, label, current: Boolean(b?.current), upstream: trackedBranch(b), ahead: b?.ahead ?? 0, behind: b?.behind ?? 0 };
+    return { kind: "branch", scope, name, label, current: Boolean(b?.current), upstream: trackedBranch(b), gone: Boolean(b?.gone), ahead: b?.ahead ?? 0, behind: b?.behind ?? 0 };
   };
   const trees = [];
   for (const [id, key] of GROUPS) {

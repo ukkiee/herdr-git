@@ -36,8 +36,7 @@ import { operateFromWidget } from "./view-merge.js";
 import { openNewWorktree } from "./view-worktree.js";
 import { checkoutRefFrom } from "./view-checkout-ref.js";
 import { compareWithCurrent, diffWithWorkingTree } from "./view-compare-branches.js";
-import { shortenMiddle } from "./git-log.js";
-import { menuItems } from "./log-menus.js";
+import { menuItems, branchContext } from "./log-menus.js";
 import { menuWidth, sideOf } from "./ui-size.js";
 import { MOD, openDialog, answerMenu, dialogFrame, button, uiGlyph, iconButton, darkLook, notice, writeBlock, menuMetrics, WindowedList } from "./ui.js";
 
@@ -98,10 +97,7 @@ export function deleteBlockOf(b, tr) {
 export function branchMenuRows(b, { head, writing = null, tr }) {
   const which = branchMenu(b);
   if (!which) return [];
-  const ctx = {
-    name: shortenMiddle(b.name, 30), current: head?.branch ?? (head?.hash ? head.hash.slice(0, 7) : "HEAD"),
-    upstream: b.upstream ?? "", writing, deleteBlock: deleteBlockOf(b, tr),
-  };
+  const ctx = branchContext(b, { head, writing, deleteBlock: deleteBlockOf(b, tr) });
   return menuItems(which, popupHandles, ctx).map((it) => ({
     label: tr(it.key, it.args), value: it.id, rule: it.rule, disabled: it.disabled, hint: it.hint ?? undefined,
     title: it.why ? (it.why.text ?? tr(it.why.key, it.why.args)) || undefined : undefined,

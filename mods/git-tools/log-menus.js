@@ -19,14 +19,15 @@
 //                  edit facts of the commits selected, git-rewrite.js readEditFacts) }
 //   file menu:     { writing, count (commits shown), files? ({ picked, total }: the commit's
 //                  files picked), edit? (the edit facts of the commit shown) }
-//   branch menus:  { name, current, upstream, writing, deleteBlock, scope (the row's:
-//                  "local" | "remote" | "head", a detached HEAD) }
+//   branch menus:  { name, current, upstream, gone, writing, deleteBlock, scope (the row's:
+//                  "local" | "remote" | "head", a detached HEAD) }: branchContext below
 //   toolbars:      { loaded, name, upstream (the cursor's local branch tracks one),
 //                  favoritable (the cursor is on a local or remote branch), writing,
 //                  deleteBlock, fixed (a Log tab on a chosen folder),
 //                  picked (the Log toolbar: how many commits the Commit list has picked) }
 
 import { editCheck } from "./rebase-plan.js";
+import { shortenMiddle } from "./git-log.js";
 
 const RULE = "|";
 
@@ -116,7 +117,9 @@ const ITEMS = {
   "branch.rebaseOnto": { key: "branches.rebaseOnto", args: both, write: true },
   "branch.mergeInto": { key: "branches.mergeInto", args: both, write: true },
   "branch.newWorktreeFrom": { key: "branches.newWorktreeFrom", args: name },
-  "branch.update": { key: "branches.update", write: true, when: (ctx) => (ctx.name === ctx.current ? null : tracked(ctx)) },
+  // The current branch updates without a tracked branch too (as git pull does), but not
+  // from one that is gone.
+  "branch.update": { key: "branches.update", write: true, when: (ctx) => (ctx.name === ctx.current && !ctx.gone ? null : tracked(ctx)) },
   "branch.push": { key: "branches.push" },
   "branch.trackedBranch": { key: "branches.trackedBranch", args: (ctx) => ({ upstream: ctx.upstream }), shown: (ctx) => Boolean(ctx.upstream) },
   "branch.pullRebase": { key: "branches.pullRebase", args: current, write: true },
@@ -226,4 +229,18 @@ export function menuItems(menu, handled, ctx = {}) {
     ruled = false;
   }
   return out;
+}
+
+// branchContext(b, { head, writing?, deleteBlock? }) → the branch menus' ctx (above) for a
+// row of the Branch tree or the VCS widget popup, so both menus decide alike.
+//   b: { name, scope?, upstream, gone }: upstream the branch it tracks (git-branch.js
+//   trackedBranch: null when none or gone); gone: the branch it tracked is no longer on the
+//   remote, which a current branch's Update can't do without.
+//   head: readHeads' or readBranches' head ({ branch, hash }): the current branch, else the
+//   short hash of a detached HEAD.
+export function branchContext(b, { head = null, writing = null, deleteBlock = null } = {}) {
+  return {
+    name: shortenMiddle(b.name, 30), current: head?.branch ?? (head?.hash ? head.hash.slice(0, 7) : "HEAD"),
+    upstream: b.upstream ?? "", gone: b.gone === true, writing, deleteBlock, scope: b.scope ?? null,
+  };
 }

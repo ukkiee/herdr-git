@@ -12,7 +12,7 @@ import { h_flex, v_flex } from "gpui-base";
 import { exec, theme } from "herdr";
 import { tip, ICON, fileGlyph, folderGlyph, darkLook, row, toolbar, spacer, iconButton, notice, errorStrip, WindowedList, panelFrame } from "./ui.js";
 import { makeGit } from "./git.js";
-import { readTurns } from "./read-turns.js";
+import { readTurns, pageAt } from "./read-turns.js";
 import { readCommit } from "./git-show.js";
 import { buildRows } from "./tree.js";
 import { formatDateTime } from "./i18n.js";
@@ -81,8 +81,10 @@ export default class HistoryTab {
       try {
         const r = await historyUpTo(this.git(), this.repo.root, { rev: this.rev, path: this.path, skip, max: PAGE });
         if (page !== this.page || !this.reads.use(turn)) return;
-        if (r.ok) { this.commits = more ? [...(this.commits ?? []), ...r.commits] : r.commits; this.more = r.more; this.error = null; }
-        else { this.commits ??= []; this.error = r.err || this.t("ui.gitFailed"); }
+        if (!r.ok) { this.commits ??= []; this.error = r.err || this.t("ui.gitFailed"); return; }
+        // A next page placed already (asked twice) is left out.
+        const commits = more ? pageAt(this.commits, skip, r.commits) : r.commits;
+        if (commits) { this.commits = commits; this.more = r.more; this.error = null; }
       } catch (error) {
         if (page === this.page) { this.commits ??= []; this.error = String(error?.message ?? error); }
       } finally {

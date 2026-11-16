@@ -65,3 +65,13 @@ export function readTurns({ stuck = STUCK, now = Date.now, most = Infinity } = {
     drop() { used = turn; open = false; going.clear(); kept = false; },
   };
 }
+
+// pageAt(list, skip, page) → `list` with `page` (what was read from `skip` on) after it, or
+// null when the list doesn't end at `skip` any more. use() lets an older answer through
+// while no newer one was shown, so the same next page asked twice (More pressed again while
+// the first read went unanswered) answers twice; placed both times, its items would show
+// twice and the next page would skip as many.
+export function pageAt(list, skip, page) {
+  const have = list ?? [];
+  return have.length === skip ? [...have, ...page] : null;
+}

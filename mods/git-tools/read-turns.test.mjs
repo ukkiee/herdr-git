@@ -2,7 +2,7 @@
 // read can always start (up to the screen's `most` at once), and an answer older than one
 // already used is dropped (no app, no git: git.js's runner over an exec the test plays).
 import assert from "node:assert/strict";
-import { readTurns, STUCK } from "./read-turns.js";
+import { readTurns, pageAt, STUCK } from "./read-turns.js";
 import { makeGit } from "./git.js";
 
 // A clock the test moves by hand.
@@ -201,6 +201,21 @@ const clock = () => { let t = 1000; return { now: () => t, pass: (ms) => { t += 
   await ring(OUTAGE + 80000, () => shown === "after");
   assert.equal(shown, "after", "the newest state is shown within 80 s of git answering again");
   assert.ok(started - before <= 3, `reads started after git answered again before it showed: ${started - before}`);
+}
+
+// pageAt: a page read from `skip` goes after the list only when the list still ends there.
+// The same page answered twice (More pressed again while the first read went unanswered),
+// or a page that lands after a later one, is left out: nothing shows twice and the next
+// page's skip (the list's length) stays right.
+{
+  const first = ["c1", "c2"];
+  const once = pageAt(first, 2, ["c3", "c4"]);
+  assert.deepEqual(once, ["c1", "c2", "c3", "c4"]);
+  assert.deepEqual(first, ["c1", "c2"], "the list given isn't changed");
+  assert.equal(pageAt(once, 2, ["c3", "c4"]), null, "the same page again");
+  assert.equal(pageAt(once, 6, ["c7"]), null, "a page past a gap");
+  assert.deepEqual(pageAt(null, 0, ["c1"]), ["c1"]);
+  assert.deepEqual(pageAt(once, 4, []), once);
 }
 
 // STUCK is past the longest a git runner with a clock waits for one read (git.js: two tries

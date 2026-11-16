@@ -659,7 +659,9 @@ dialog's own (`openDialog` in its file).
   Version`, `Changes Between <a> and <b>`, `<folder> at <rev>`, `History up to <rev>`,
   `Update Info`, `Console`. The `History up to <rev>` and `Update Info` tabs read again
   from the top on Refresh even while a read is going, and a first read still unanswered
-  after 6 s is made again once.
+  after 6 s is made again once. Their `Show more` asked again while its read went
+  unanswered adds that page once, whichever answer lands first, and the next page starts
+  after the last commit shown.
 
 ## How it behaves
 
@@ -1669,7 +1671,7 @@ the git ones run against real temporary repositories):
 | file | exports |
 |---|---|
 | `git.js` | `READ`, `makeGit(exec, on, { record, wait })` → `git(cwd, args, { timeout, env })` → `{ ok, code, out, err }` and `git.read` (with the screen's clock `wait`, a command whose answer hasn't come 5 s past its timeout is given up on: a read is asked once more, then it is `git did not answer in N s.`), `PARALLEL` (4: the git commands one runner keeps going at once; the rest wait their turn, and one Herdr refuses for too many execs at once is tried again after one of the runner's own ends, five runs at most), `repoRoot(git, folder)`, `chunks(paths, cost?)` (a path list split to fit one command each), `recordWith(fn)` (the recorder for runners made without one) |
-| `read-turns.js` | `readTurns({ stuck, now, most })` → `{ start, ask, again, busy, stuck, use, end, drop }` (a screen's repeated read: going only for `stuck` ms after it starts, a newer one may always start, up to `most` going at once through `ask`, the asks past it kept as one that `again` starts once a read ends; an answer is dropped only when a newer one was used), `STUCK` (80 s) |
+| `read-turns.js` | `readTurns({ stuck, now, most })` → `{ start, ask, again, busy, stuck, use, end, drop }` (a screen's repeated read: going only for `stuck` ms after it starts, a newer one may always start, up to `most` going at once through `ask`, the asks past it kept as one that `again` starts once a read ends; an answer is dropped only when a newer one was used), `pageAt(list, skip, page)` (the list with a page read from `skip` after it, or null when the list no longer ends there: a next page answered twice is placed once), `STUCK` (80 s) |
 | `one-at-a-time.js` | `oneAtATime(run)` → `ask(arg)` (at most one `run` going; a newer ask replaces a waiting one, which resolves undefined without running: Commit details' branch walks while arrowing through the log) |
 | `git-status.js` | `readStatus` |
 | `git-commit.js` | `commit`, `lastMessage`, `headIsPushed` |

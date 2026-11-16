@@ -13,6 +13,7 @@ import { push as pushBranch } from "./git-push.js";
 import { pushTag, fetchRemote } from "./git-refs.js";
 import { fetchAll } from "./git-branch.js";
 import { smartRun } from "./git-smart.js";
+import { pageAt } from "./read-turns.js";
 import { translator } from "./i18n.js";
 import { listSnapshots } from "./git-snapshot.js";
 
@@ -601,6 +602,17 @@ const commitMine = (mine, path, at, word) => { edit(mine, path, at, word); sh(mi
   const info = await readUpdate(git, mine, r.updated);
   assert.deepEqual(info.commits.map((c) => c.subject).filter((s) => !s.startsWith("Merge")), ["their-c1", "their-a1"]);
   assert.equal(info.files, 2);
+  // The Update Info tab reads a page at a time (here 1 commit). More pressed again while
+  // its read went unanswered asks for the same page twice: the older answer lands, then the
+  // newer; only the page that starts where the list ends is placed (read-turns.js pageAt),
+  // so no commit shows twice and the next page starts after the last one shown.
+  let shown = (await readUpdate(git, mine, { ...r.updated, skip: 0, max: 1 })).commits;
+  const [older, newer] = [await readUpdate(git, mine, { ...r.updated, skip: shown.length, max: 1 }), await readUpdate(git, mine, { ...r.updated, skip: shown.length, max: 1 })];
+  for (const answer of [older, newer]) shown = pageAt(shown, 1, answer.commits) ?? shown;
+  const last = await readUpdate(git, mine, { ...r.updated, skip: shown.length, max: 1 });
+  shown = pageAt(shown, shown.length, last.commits) ?? shown;
+  assert.deepEqual(shown.map((c) => c.hash), info.commits.map((c) => c.hash));
+  assert.equal(last.more, false);
   assert.equal((await updateProject(git, mine, { method: "merge" })).outcome, "empty", "nothing to update");
 }
 {

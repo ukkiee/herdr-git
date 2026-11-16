@@ -174,7 +174,7 @@ export default class VcsPopup {
   makeInput(value) {
     this.inputLang = this.lang;
     this.input = InputState.new({ placeholder: this.t("vcs.search"), value });
-    this.input.on("change", (_e, cx) => { this.at = -1; this.sub = null; this.list.top = 0; cx.notify(); });
+    this.input.on("change", (_e, cx) => { this.at = -1; this.sub = null; this.list.top = 0; this.rows(); cx.notify(); });
   }
 
   reload(cx) {
@@ -199,12 +199,20 @@ export default class VcsPopup {
       } : null;
       this.op = op?.ok ? op : null;
       this.err = heads.ok ? null : heads.err;
+      this.rows();
       cx.notify();
     });
   }
 
+  // Worked out once per answer, search text, fold and language, not in every render: an
+  // open Tags group in a big repository is tens of thousands of rows, more than a render
+  // has time for. What changes them works them out at once (it isn't render).
   rows() {
-    return popupRows({ heads: this.heads, op: this.op, query: this.input.value(), folded: this.folded, handled: popupHandles }, this.t);
+    const query = this.input.value(), m = this.made;
+    if (m && m.heads === this.heads && m.op === this.op && m.query === query && m.folded === this.foldTurn && m.t === this.t) return m.rows;
+    const rows = popupRows({ heads: this.heads, op: this.op, query, folded: this.folded, handled: popupHandles }, this.t);
+    this.made = { heads: this.heads, op: this.op, query, folded: this.foldTurn, t: this.t, rows };
+    return rows;
   }
 
   // Back to the widget, which runs it; the popup closes.
@@ -222,6 +230,8 @@ export default class VcsPopup {
     if (r.kind === "group") {
       this.sub = null;
       if (this.folded.has(r.id)) this.folded.delete(r.id); else this.folded.add(r.id);
+      this.foldTurn = (this.foldTurn ?? 0) + 1;
+      this.rows();
       cx.notify();
     } else if (r.kind === "action") this.answer({ id: r.id, ...(r.run ? { run: r.run } : {}) });
     else if (r.kind === "branch") {

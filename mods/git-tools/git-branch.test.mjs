@@ -1155,13 +1155,13 @@ const favorites = (cwd, key) => (ask(cwd, ["config", "--local", "--get-all", key
   raw(dir, ["checkout", "-q", "main"]);
   raw(dir, ["branch", "-q", "-D", "pushed"]);
 
-  // The Tags group: by name, each at its commit, an annotated tag looked through.
-  const mineAt = raw(dir, ["rev-parse", "mine"]);
+  // The Tags group: the names by name, annotated or not, "/" kept.
   raw(dir, ["tag", "v2", "main"]);
   raw(dir, ["tag", "-a", "-m", "one", "v1.0", "mine"]);
+  raw(dir, ["tag", "deploy/web", "main"]);
   const tagged = await readTags(git, dir);
   assert.equal(tagged.ok, true, tagged.err);
-  assert.deepEqual(tagged.tags, [{ name: "v1.0", hash: mineAt }, { name: "v2", hash: raw(dir, ["rev-parse", "main"]) }]);
+  assert.deepEqual(tagged.tags, ["deploy/web", "v1.0", "v2"]);
 
   const r = await readMyBranches(git, dir);
   assert.equal(r.ok, true, r.err);

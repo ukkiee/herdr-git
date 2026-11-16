@@ -65,6 +65,10 @@
 ## 렌더와 도구
 
 - `render`는 `cx.notify()`와 Herdr 라이브 데이터 변화마다 다시 돌고, 다시 그리기는 창 전체다. 파싱·정렬·그래프 계산은 캐시한다. [문서]
+- **`render` 한 번은 50 ms 남짓에서 끊긴다.** 시간만 보내는 `render`를 `herdr-app check`로 돌리면 45 ms는 통과하고 55 ms는 `interrupted`로 실패했다. 창에서는 끊긴 사본이 마지막으로 그린 화면 위에 "This view could not be re-rendered; showing the last version that worked / interrupted" 띠가 뜬다(Herdr 기본 `tabs` mod도 탭 81개에서 같은 띠를 냈다). `init`은 500 ms를 통과하고 2,000 ms에서 끊겼다. [실험: herdr-app 0.1.15, macOS]
+- **mod는 QuickJS로 돈다(JIT 없음).** 같은 컴퓨터에서 단순 반복 200만 번이 111 ms, 작은 객체 3만 개(템플릿 문자열 포함) 만들기가 89 ms였다. node보다 수십 배 느리므로 node로 잰 시간으로 한도를 가늠하지 않는다. [실험]
+- `herdr-app check`는 `init` 뒤 첫 `render` 전에 비동기 이어짐(`await` 뒤, `cx.timer.after(0)`)을 돌리지 않는다. 그래서 task와 timer 한 번의 한도는 재지 못했다. 다만 태그 3만 개를 객체로 나누는 일(QuickJS 105–144 ms)이 `await` 뒤에서 끝까지 돈 것으로 보아 `render`보다 넉넉하다. [실험/짐작]
+- `herdr-app check`는 실행 중인 앱에 검사를 맡기는 것으로 보인다(무거운 mod를 검사해도 CLI 자신의 CPU 시간은 0.02초였다). 그래서 잰 시간에는 그때 앱이 얼마나 바쁜지가 섞인다. [관측]
 - import는 `gpui-kit`, `gpui-base`, `herdr`, 같은 폴더의 `./x.js`뿐이다. 폴더 밖 import는 심볼릭 링크 포함 거부된다. [문서/코드]
 - **다시 불러오기는 메모리를 돌려주지 않는다.** mod 폴더의 파일을 저장해 사본들이 다시 불려 올 때마다 Herdr 프로세스의 메모리가 늘고 줄지 않는다. git-tools의 사본 셋이 떠 있을 때 한 번에 약 5 MB였다. 앱을 켠 뒤 45번쯤, 늘어난 양이 약 256 MB일 때 git-tools의 다시 불러오기가 `Null"null"`로 실패했고 다른 mod의 화면에도 `out of memory` 띠가 떴다. 그 뒤로는 앱을 다시 시작해야 풀린다. `herdr-app check`는 10번을 돌려도 늘지 않았다. [실험: herdr-app 0.1.15, macOS]
 - `herdr-app check <mod 폴더>`: 한 번 로드해 초기 묘사를 검사한다. 레이아웃 계산, 지연 행, 이후 async 상태는 보지 않는다. [문서]

@@ -239,4 +239,20 @@ const shape = (rows, tr = en) => rows.map((r) => r.kind === "rule" ? "|"
   assert.deepEqual(popupRows({ heads: heads(), op: op(), query: "nothing-like-this", folded: new Set(), handled: all }, en), []);
 }
 
+// A folded group is its count alone: none of what it hides is read or made into a row,
+// so a repository with tens of thousands of tags opens the popup as fast as any.
+{
+  const reads = { n: 0 };
+  const names = Array.from({ length: 30000 }, (_, i) => `v${i}`);
+  const tags = new Proxy(names, { get: (list, key) => { if (typeof key === "string" && /^\d+$/.test(key)) reads.n++; return Reflect.get(list, key); } });
+  const remote = Array.from({ length: 1500 }, (_, i) => ({ name: `origin/b${i}` }));
+  const rows = popupRows({ heads: heads({ tags, remote }), op: op(), query: "", folded: new Set(["remote", "tags"]), handled: all }, en);
+  assert.deepEqual(rows.filter((r) => r.kind === "group" && r.id !== "recent" && r.id !== "local").map((r) => [r.label, r.open, r.count]), [["Remote", false, 1500], ["Tags", false, 30000]]);
+  assert.equal(rows.some((r) => r.kind === "branch" && (r.scope === "tag" || r.scope === "remote")), false);
+  assert.equal(reads.n, 0);
+  // Open, they are rows as before.
+  const open = popupRows({ heads: heads({ tags: names.slice(0, 3), remote: remote.slice(0, 2) }), op: op(), query: "", folded: new Set(["recent", "local"]), handled: all }, en);
+  assert.deepEqual(shape(open).slice(-8), ["[Remote]", "origin/", "remote:origin/b0", "remote:origin/b1", "[Tags]", "tag:v0", "tag:v1", "tag:v2"]);
+}
+
 console.log("git-heads: ok");

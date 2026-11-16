@@ -28,12 +28,12 @@ import { div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { theme } from "herdr";
 import { readBranches, deleteBranch, readFavorites, setFavorite, readMyBranches, readTags } from "./git-branch.js";
-import { isFavorite, nextFavorites, orderBranches, orderTreeRows, refOf as fullRef, treeSettings, treeSettingsMenu, toggleTreeSetting } from "./branch-order.js";
+import { isFavorite, nextFavorites, refOf as fullRef, treeSettings, treeSettingsMenu, toggleTreeSetting, treeRows } from "./branch-order.js";
 import { appSetting, saveAppSetting } from "./app-files.js";
 import { smartCheckout } from "./view-smart.js";
 import { readOperation } from "./git-operation.js";
 import { shortenMiddle } from "./git-log.js";
-import { buildRows, folderKeys, parentIndex } from "./tree.js";
+import { folderKeys } from "./tree.js";
 import { openBranchNew, openBranchDelete } from "./view-branch-new.js";
 import { openDeletedBranches } from "./view-deleted-branches.js";
 import { tip, uiGlyph, darkLook, ICON, row, iconButton, notice, broadcast, openMenu, sentence, WindowedList } from "./ui.js";
@@ -78,8 +78,8 @@ export default class LogBranches {
     this.collapsed = new Set(); // "local", "remote", "local:feature/", "remote:origin/x/"
     this.cursor = null; // key of the row the keyboard is on
     this.picked = null; // key of the row whose click set host.branch
-    this.rows = [];
-    this.stale = true; // rows must be worked out again
+    this.rows = treeRows(null);
+    this.stale = true; // rows must be worked out again (see current)
     this.list = new WindowedList("log-branch-rows");
     this.handle = cx.focus_handle();
     this.prefs = { favorite: [], unfavorite: [] }; // git-branch.js readFavorites
@@ -104,7 +104,7 @@ export default class LogBranches {
   makeInput(value) {
     this.inputLang = this.host.lang;
     this.input = InputState.new({ placeholder: this.host.t("log.filterBranches"), value });
-    this.input.on("change", (_e, cx) => { this.stale = true; this.list.top = 0; cx.notify(); });
+    this.input.on("change", (_e, cx) => { this.build(); this.list.top = 0; cx.notify(); });
     this.input.on("focus", (_e, cx) => { this.typing = true; cx.notify(); });
     this.input.on("blur", (_e, cx) => { this.typing = false; cx.notify(); });
   }
@@ -143,7 +143,7 @@ export default class LogBranches {
       this.failed = null;
       const before = this.picked ? this.refOf(this.picked) : null;
       this.data = r;
-      this.stale = true;
+      this.build();
       this.follow(before, cx);
       cx.notify();
     });
@@ -171,7 +171,8 @@ export default class LogBranches {
     if (!d || !key) return null;
     if (key === "head") return d.head.branch ?? (d.head.hash ? "HEAD" : null);
     const cut = key.indexOf(":"), scope = key.slice(0, cut), name = key.slice(cut + 1);
-    if (!(d[scope] ?? []).some((b) => b.name === name)) return null;
+    // Tags are names (git-branch.js readTags), branches readBranches entries.
+    if (scope === "tags" ? !(d.tags ?? []).includes(name) : !(d[scope] ?? []).some((b) => b.name === name)) return null;
     // A tag by its full name: a branch may have the same short one.
     return scope === "tags" ? `refs/tags/${name}` : name;
   }
@@ -184,67 +185,36 @@ export default class LogBranches {
     if (this.picked && this.refOf(this.picked) === ref) return this.picked;
     if (d.local.some((b) => b.name === ref)) return `local:${ref}`;
     if (d.remote.some((b) => b.name === ref)) return `remote:${ref}`;
-    if (ref.startsWith("refs/tags/") && (d.tags ?? []).some((b) => `refs/tags/${b.name}` === ref)) return `tags:${ref.slice(10)}`;
+    if (ref.startsWith("refs/tags/") && (d.tags ?? []).includes(ref.slice(10))) return `tags:${ref.slice(10)}`;
     return null;
   }
 
   words() { return this.input.value().trim().toLowerCase(); }
 
+  // The rows (branch-order.js treeRows): { length, row(i), index(key), parent(i) }. Show My
+  // Branches shows only branches holding a commit of the person's (git-branch.js
+  // readMyBranches); none at all while user.email isn't set.
   build() {
-    const d = this.data, rows = [], tr = this.host.t;
     this.stale = false;
     this.builtLang = this.host.lang;
-    this.rows = rows;
-    if (!d) return;
-    const words = this.words();
-    const match = (name) => !words || name.toLowerCase().includes(words);
-    const current = tr("log.headCurrent");
-    if (match(current) || (d.head.branch && match(d.head.branch))) {
-      const label = d.head.branch ? current : d.rebasing ? `⚠ ${tr("vcs.detachedHead")}` : d.head.hash ? `HEAD (${d.head.hash.slice(0, 7)})` : "HEAD";
-      rows.push({ key: "head", kind: "head", depth: 0, label });
-    }
-    const { grouped } = this.settings;
-    // Show My Branches: only those holding a commit of the person's (git-branch.js
-    // readMyBranches); none at all while user.email isn't set.
-    const mine = this.settings.mine ? this.mine : null;
-    const shown = (scope, b) => !this.settings.mine || Boolean(mine?.refs.has(fullRef(scope, b.name)));
-    for (const [scope, key] of GROUPS) {
-      const label = tr(key);
-      const how = { scope, current: d.head.branch, prefs: this.prefs };
-      const items = orderBranches(d[scope].filter((b) => match(b.name) && shown(scope, b)), how).map((b) => ({ path: b.name, branch: b }));
-      if ((words || this.settings.mine) && !items.length) continue;
-      // While filtering everything that matches shows, whatever is folded.
-      const open = words ? true : !this.collapsed.has(scope);
-      rows.push({ key: scope, kind: "group", depth: 0, label, open, count: items.length });
-      if (!open) continue;
-      if (!grouped) {
-        for (const it of items) rows.push({ key: `${scope}:${it.path}`, kind: "branch", scope, depth: 1, label: it.path, branch: it.branch });
-        continue;
-      }
-      const folded = new Set();
-      if (!words) for (const key of this.collapsed) if (key.startsWith(`${scope}:`)) folded.add(key.slice(scope.length + 1));
-      for (const r of orderTreeRows(buildRows(items, { grouped: true, collapsed: folded }), how)) {
-        rows.push(r.folder
-          ? { key: `${scope}:${r.key}`, kind: "folder", depth: r.depth + 1, label: r.name, open: r.open, count: r.count }
-          : { key: `${scope}:${r.path}`, kind: "branch", scope, depth: r.depth + 1, label: r.name, branch: r.item.branch });
-      }
-    }
-    const tags = this.settings.tags ? (d.tags ?? []).filter((b) => match(b.name)) : [];
-    if (tags.length) {
-      const open = words ? true : !this.collapsed.has("tags");
-      rows.push({ key: "tags", kind: "group", depth: 0, label: tr("vcs.tags"), open, count: tags.length });
-      if (open) for (const b of tags) rows.push({ key: `tags:${b.name}`, kind: "tag", scope: "tags", depth: 1, label: b.name, branch: b });
-    }
+    this.rows = treeRows(this.data, {
+      settings: this.settings, prefs: this.prefs, mine: this.settings.mine ? this.mine : null,
+      words: this.words(), collapsed: this.collapsed, t: this.host.t,
+    });
   }
 
-  // Rows hold their words: worked out again when the copy's language changes.
+  // For a key, a click or a command: the rows as they are now. What changes them (a read,
+  // the filter, a fold, a favorite, a setting) builds them at once; rows hold their words,
+  // so a language change builds them too. render never builds them: in a repository with
+  // thousands of branches and tags that takes longer than Herdr gives a render, which it
+  // then stops ("interrupted"). It draws the last ones and has a timer build new ones.
   current() {
     if (this.stale || this.builtLang !== this.host.lang) this.build();
     return this.rows;
   }
 
-  at(key) { return key ? this.current().findIndex((r) => r.key === key) : -1; }
-  cursorRow() { const i = this.at(this.cursor); return i < 0 ? null : this.rows[i]; }
+  at(key) { return key ? this.rows.index(key) : -1; }
+  cursorRow() { const i = this.at(this.cursor); return i < 0 ? null : this.rows.row(i) ?? null; }
 
   // What an action on a row works on: { name, from, scope, current, upstream }, or null
   // for a folder. `from` is what a new branch would start at: the full ref name, since a
@@ -276,7 +246,7 @@ export default class LogBranches {
 
   setFold(key, folded, cx) {
     if (folded) this.collapsed.add(key); else this.collapsed.delete(key);
-    this.stale = true;
+    this.build();
     cx.notify();
   }
 
@@ -300,7 +270,7 @@ export default class LogBranches {
     const rows = this.current(), n = rows.length;
     if (!n) return;
     const i = Math.max(0, Math.min(n - 1, to));
-    this.cursor = rows[i].key;
+    this.cursor = rows.row(i).key;
     this.list.reveal(i, n);
     cx.notify();
   }
@@ -310,23 +280,23 @@ export default class LogBranches {
     if (!n) return;
     const now = this.at(this.cursor);
     const next = now < 0 ? (by > 0 ? 0 : n - 1) : Math.max(0, Math.min(n - 1, now + by));
-    this.cursor = rows[next].key;
+    this.cursor = rows.row(next).key;
     this.list.reveal(next, n);
     cx.notify();
   }
 
   // Left folds an open folder, else goes to the row it sits under; right unfolds.
   fold(left, cx) {
-    const rows = this.current(), i = this.at(this.cursor), m = rows[i];
+    const rows = this.current(), i = this.at(this.cursor), m = i < 0 ? null : rows.row(i);
     if (!m) return;
     const folder = m.kind === "group" || m.kind === "folder";
     if (folder && m.open === left && !this.words()) return this.setFold(m.key, left, cx);
     if (!left) return;
-    const parent = parentIndex(rows, i);
-    if (parent >= 0) { this.cursor = rows[parent].key; this.list.reveal(parent, rows.length); cx.notify(); }
+    const parent = rows.parent(i);
+    if (parent >= 0) { this.cursor = rows.row(parent).key; this.list.reveal(parent, rows.length); cx.notify(); }
   }
 
-  expandAll(cx) { this.collapsed = new Set(); this.stale = true; cx.notify(); }
+  expandAll(cx) { this.collapsed = new Set(); this.build(); cx.notify(); }
 
   collapseAll(cx) {
     const next = new Set(), d = this.data;
@@ -336,7 +306,7 @@ export default class LogBranches {
     }
     next.add("tags");
     this.collapsed = next;
-    this.stale = true;
+    this.build();
     this.list.top = 0;
     cx.notify();
   }
@@ -354,7 +324,7 @@ export default class LogBranches {
     if (!repo || !ref) return;
     const on = !isFavorite(ref, this.prefs);
     this.prefs = nextFavorites(this.prefs, ref, on);
-    this.stale = true;
+    this.build();
     cx.notify();
     cx.spawn(async (cx) => {
       const r = await setFavorite(repo.git, repo.root, ref, on);
@@ -384,7 +354,7 @@ export default class LogBranches {
     const before = this.settings;
     if (JSON.stringify(next) === JSON.stringify(before)) return;
     this.settings = next;
-    this.stale = true;
+    this.build();
     if ((next.tags && !before.tags) || (next.mine && !before.mine)) this.reload(cx);
     cx.notify();
     cx.spawn(async (cx) => {
@@ -525,7 +495,7 @@ export default class LogBranches {
   //   branches-collapse-all, branches-focus, branches-filter-focus,
   //   branches-filter:<text> (sets the filter input; no text clears it)
   command(name, cx) {
-    const m = this.cursorRow(), page = Math.max(1, this.list.fit - 1), n = this.current().length;
+    const n = this.current().length, m = this.cursorRow(), page = Math.max(1, this.list.fit - 1);
     if (name === "branches-next") this.move(1, cx);
     else if (name === "branches-prev") this.move(-1, cx);
     else if (name === "branches-page-down") this.move(page, cx);
@@ -546,7 +516,7 @@ export default class LogBranches {
     else if (name === "branches-collapse-all") this.collapseAll(cx);
     else if (name === "branches-focus") this.handle.focus();
     else if (name === "branches-filter-focus") this.input.focus();
-    else if (name.startsWith(FILTER_COMMAND)) { this.input.set_value(name.slice(FILTER_COMMAND.length)); this.stale = true; this.list.top = 0; cx.notify(); }
+    else if (name.startsWith(FILTER_COMMAND)) { this.input.set_value(name.slice(FILTER_COMMAND.length)); this.build(); this.list.top = 0; cx.notify(); }
   }
 
   // ---- drawing
@@ -556,7 +526,7 @@ export default class LogBranches {
   }
 
   treeRow(i, t, limited) {
-    const m = this.rows[i], cursor = this.cursor === m.key && limited !== m.key;
+    const m = this.rows.row(i), cursor = this.cursor === m.key && limited !== m.key;
     let el = row(`log-branch-${i}`, t, { selected: limited === m.key }).pl(6 + m.depth * INDENT).pr(10).gap(5)
       .when(cursor, (el) => el.bg(t.hover))
       .on_click((_e, cx) => { this.handle.focus(); this.activate(m, cx); })
@@ -632,8 +602,12 @@ export default class LogBranches {
       this.relabeling = true;
       cx.timer.after(1, (cx) => { this.relabeling = false; if (this.inputLang !== this.host.lang) { const typing = this.typing; this.makeInput(this.input.value()); if (typing) this.input.focus(); cx.notify(); } });
     }
+    if ((this.stale || this.builtLang !== host.lang) && !this.building) {
+      this.building = true;
+      cx.timer.after(0, (cx) => { this.building = false; this.current(); cx.notify(); });
+    }
     if (this.hidden()) return h_flex().id("log-branch-tree").size_full().min_h(0).items_start().child(this.tools(t));
-    const rows = this.current(), n = rows.length, limited = this.limitedKey();
+    const rows = this.rows, n = rows.length, limited = this.limitedKey();
     const noEmail = this.settings.mine && this.mine && !this.mine.email;
     const body = !this.read ? notice(tr("ui.loading"), t, { busy: true })
       : noEmail ? notice(tr("branch-tree.noEmail"), t)

@@ -5,8 +5,8 @@ import { execFile, execFileSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
-import { paneTitles, openFile, layoutRows, chunkButtons, toolbar, countWords, seekConflict, nextFile, leftToDecide, saveQuestion, stageSave, saveRequest } from "./merge-revisions-model.js";
-import { localPlacer, remotePlacer } from "./git-conflict.js";
+import { paneTitles, openFile, layoutRows, chunkButtons, toolbar, countWords, seekConflict, nextFile, leftToDecide, saveQuestion, stageSave, saveRequest, keepRequest } from "./merge-revisions-model.js";
+import { localPlacer, remotePlacer, readVersions } from "./git-conflict.js";
 import { columns } from "./conflicts-model.js";
 import { decide, resultText, edit } from "./merge-chunks.js";
 import { translator } from "./i18n.js";
@@ -297,4 +297,30 @@ const versions = (base, ours, theirs, extra = {}) => ({ ok: true, path: "src/alp
   const notNow = await saveRequest(git, local, late.args, here);
   assert.equal(notNow.ok, false);
   assert.equal(existsSync(late.args.file), false);
+
+  // Closing the dialog with a changed result keeps it (keepRequest): the text goes into
+  // the working file and nothing else changes. The file stays in conflict, its index
+  // entries (the three stages) are as git left them, and the staged file is removed.
+  const kept = conflicted("kept");
+  const stagesBefore = sh(kept, "git ls-files -s");
+  const stagedKeep = await stageSave(exec, null, { path: "src/alpha.txt", text: "a\nM and F\n", dir });
+  const keptR = await keepRequest(git, kept, stagedKeep.args, here);
+  assert.equal(keptR.ok, true, keptR.err);
+  assert.equal(readFileSync(`${kept}/src/alpha.txt`, "utf8"), "a\nM and F\n");
+  assert.equal(sh(kept, "git ls-files -s"), stagesBefore);
+  assert.match(sh(kept, "git ls-files -u"), /src\/alpha\.txt/);
+  assert.equal(existsSync(stagedKeep.args.file), false, "the staged file is removed");
+  // Opened again, the dialog goes on from that text: no conflict marks in the working
+  // file, so it is the result. With git's marks still in it, the result is worked out
+  // from the three versions as at first.
+  const cols = columns(op({ kind: "merge", target: "feature" }), { branch: "main" });
+  const again = await readVersions(git, kept, "src/alpha.txt", { read: async (p) => readFileSync(p, "utf8") });
+  assert.equal(resultText(openFile(again, cols).state), "a\nM and F\n");
+  const fresh = conflicted("fresh");
+  const marked = await readVersions(git, fresh, "src/alpha.txt", { read: async (p) => readFileSync(p, "utf8") });
+  assert.match(marked.worktree, /^<{7} /m);
+  assert.equal(resultText(openFile(marked, cols).state), "a\nb\n");
+  // Refused like a save: a file that isn't a staged result is left alone.
+  assert.equal((await keepRequest(git, kept, { path: "src/alpha.txt", file: victim }, here)).msg.key, "conflicts.badRequest");
+  assert.equal(readFileSync(victim, "utf8"), "mine\n");
 }

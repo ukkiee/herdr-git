@@ -22,7 +22,7 @@ import { h_flex, v_flex } from "gpui-base";
 import { exec, theme } from "herdr";
 import { makeGit } from "./git.js";
 import { readStatus } from "./git-status.js";
-import { rollback, wordRollback } from "./git-rollback.js";
+import { rollback, wordRollback, rollbackNotice } from "./git-rollback.js";
 import { buildRows, checkState, toggleIncluded, keepIncluded, folderKeys, parentIndex } from "./tree.js";
 import { openDialog, dialogFrame, button, iconButton, checkbox, row, notice, errorStrip, uiGlyph, ICON, fileGlyph, folderGlyph, darkLook, close, WindowedList, askOwner, serveRequest, writeBlock, sentence } from "./ui.js";
 
@@ -49,7 +49,8 @@ const TIMEOUT = 120000;
 // serveRollback(panel, e, cx)
 //   The Commit panel's side: rolls back e.args.files ([{ path, status }]) in
 //   e.args.root under the write lock (ui.js serveRequest). When the rollback recorded a
-//   Rollback snapshot, the panel hears of it before the lock goes:
+//   Rollback snapshot and rolled back a file (git-rollback.js rollbackNotice), the panel
+//   hears of it before the lock goes:
 //   panel.rolledBack(repo, { snapshot, n, by }) (n: the files rolled back; by: the
 //   request's key, which the "changed" told after it carries).
 //   panel.copy: the panel copy's id (ui.js copyId), which names its scratch index.
@@ -63,7 +64,8 @@ export function serveRollback(panel, e, cx) {
     const timed = (cwd, args, options) => git(cwd, args, { timeout: TIMEOUT, ...options });
     timed.read = (cwd, args, options) => git.read(cwd, args, { timeout: TIMEOUT, ...options });
     const r = await rollback(timed, repo.root, { files: list, deleteAdded: deleteAdded === true, copy: panel.copy });
-    if (r.snapshot) panel.rolledBack?.(repo, { snapshot: r.snapshot, n: list.length - r.skipped.length, by: e.key });
+    const notice = rollbackNotice(list, r);
+    if (notice) panel.rolledBack?.(repo, { ...notice, by: e.key });
     // The skipped reasons go into the msg worded in the panel's language: the dialog gets
     // the msg, not the list. Cut like the answer's err, since it travels in shared state.
     const msg = wordRollback(panel.t, r);

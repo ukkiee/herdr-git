@@ -7,7 +7,7 @@ import { mkdtempSync, writeFileSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
 import { makeGit } from "./git.js";
-import { readHeads, widgetFace, popupRows } from "./git-heads.js";
+import { readHeads, widgetFace, popupRows, popupStep } from "./git-heads.js";
 import { translator } from "./i18n.js";
 import { menuItems } from "./log-menus.js";
 
@@ -275,6 +275,22 @@ const shape = (rows, tr = en) => rows.map((r) => r.kind === "rule" ? "|"
   // Open, they are rows as before.
   const open = popupRows({ heads: heads({ tags: names.slice(0, 3), remote: remote.slice(0, 2) }), op: op(), query: "", folded: new Set(["recent", "local"]), handled: all }, en);
   assert.deepEqual(shape(open).slice(-8), ["[Remote]", "origin/", "remote:origin/b0", "remote:origin/b1", "[Tags]", "tag:v0", "tag:v1", "tag:v2"]);
+}
+
+// ↓ and ↑ in the popup skip lines and remote folders. While searching, the groups stay
+// open whatever is pressed, so their heads are skipped too: ↓ after typing lands on the
+// first branch. Without a search a head folds and unfolds, and the keys stop on it.
+{
+  const query = "TOP";
+  const rows = popupRows({ heads: heads(), op: op(), query, folded: new Set(), handled: all }, en);
+  const label = (i) => shape([rows[i]])[0];
+  assert.equal(label(popupStep(rows, -1, 1, { query })), "recent:topic");
+  assert.equal(label(popupStep(rows, popupStep(rows, -1, 1, { query }), 1, { query })), "local:topic");
+  assert.equal(label(popupStep(rows, -1, -1, { query })), "remote:origin/topic");
+  const plain = popupRows({ heads: heads(), op: op(), query: "", folded: new Set(["recent", "local", "remote", "tags"]), handled: all }, en);
+  assert.equal(shape([plain[popupStep(plain, -1, 1, { query: "" })]])[0], shape(plain)[0]);
+  assert.equal(shape([plain[popupStep(plain, -1, -1, { query: "" })]])[0], "[Tags]");
+  assert.equal(popupStep([], -1, 1, { query: "" }), -1);
 }
 
 console.log("git-heads: ok");

@@ -172,7 +172,7 @@ export default class IconSheet {
     return panelFrame("icon-sheet", t)
       .child(toolbar(t)
         .child(div().px(4).font_semibold().child("Icon sheet"))
-        .child(div().id("icon-sheet-timing").min_w(0).truncate().text_size(12).text_color(t.muted).map((el) => tip(el, this.timing)).child(this.timing))
+        .child(div().id("icon-sheet-timing").min_w(0).truncate().text_size(12).text_color(t.muted).map((el) => tip(el, this.timing, "icon-sheet-timing")).child(this.timing))
         .child(spacer())
         .child(button("icon-sheet-look", `Background: ${lookLabel}`, t, {
           onClick: (_e, cx) => { this.look = LOOKS[(LOOKS.indexOf(this.look) + 1) % LOOKS.length]; cx.notify(); },

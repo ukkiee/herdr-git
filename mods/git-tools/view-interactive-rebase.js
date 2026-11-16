@@ -37,8 +37,10 @@ import { openDiff } from "./view-diff.js";
 import { initialStep, forcePushNote } from "./view-reword.js";
 import { offerRewriteSmart, servedWhere } from "./log-rewrite.js";
 import { formatDateTime } from "./i18n.js";
+import { pressSpot } from "./ui-size.js";
 
 const SHORT = 8;
+const FIXUP_MENU = 180;
 const MELDS = new Set(["squash", "fixup"]);
 const GRAPH = 28, LANE = 9, MELD_LANE = 19, DOT = 7;
 // The action column's color: what stays as it is is plain, what changes stands out.
@@ -311,11 +313,16 @@ export default class InteractiveRebaseView {
 
   // ---- closing and starting
 
-  shut() {
+  // The × and Cancel are clicks: the keyboard may have left the dialog with the press, and
+  // an Esc that doesn't reach it closes the whole dialog (Herdr's), so the question takes
+  // the keyboard back.
+  shut(cx) {
     if (this.waiting) return;
-    if (this.editing) { this.leaveReword(); if (this.editing) return; }
-    if (this.changed()) this.asking = "cancel";
-    else close(this.overlay);
+    if (this.editing) this.leaveReword();
+    if (!this.editing && this.changed()) this.asking = "cancel";
+    else if (!this.editing) { close(this.overlay); return; }
+    this.handle.focus();
+    cx.notify();
   }
 
   run(cx, { noopAsked = false } = {}) {
@@ -359,12 +366,13 @@ export default class InteractiveRebaseView {
     return null;
   }
 
-  tool(id, label, t, { off, title, onClick }) {
+  tool(id, label, t, { off, title, onPress, onClick }) {
     let el = h_flex().id(id).h(24).px(8).flex_none().items_center().rounded(4).text_size(12.5)
       .text_color(off ? t.dim : t.foreground);
-    el = tip(el, title);
+    el = tip(el, title, id);
     if (off) return el.child(label);
     return el.cursor_pointer().hover((s) => s.bg(t.hover))
+      .when(Boolean(onPress), (el) => el.on_mouse_down("left", (e, cx) => onPress(e, cx)))
       .on_click((e, cx) => { cx.stop_propagation(); onClick(e, cx); })
       .child(label);
   }
@@ -372,10 +380,13 @@ export default class InteractiveRebaseView {
   toolbar(t) {
     const off = this.can(), tool = (name, label, title) => this.tool(`ir-tool-${name}`, label, t, { off: off[name], title, onClick: (_e, cx) => this.act(name, cx) });
     const meldOff = off.meld;
+    // A click carries no position, so the menu would open where Herdr last saw the
+    // pointer, outside this dialog: the press before it gives the spot under the ▾.
     const fixupMenu = this.tool("ir-tool-squash-more", "▾", t, {
       off: meldOff, title: this.t("interactive.fixup"),
-      onClick: (e, cx) => {
-        const at = e?.position;
+      onPress: (e) => { this.fixupAt = pressSpot(e, { width: FIXUP_MENU }); },
+      onClick: (_e, cx) => {
+        const at = this.fixupAt;
         cx.spawn(async (cx) => {
           const v = await this.openFixupMenu(at);
           if (v === "fixup") this.act("fixup", cx);
@@ -400,7 +411,7 @@ export default class InteractiveRebaseView {
   }
 
   openFixupMenu(at) {
-    return openMenu(this.bus, [{ label: this.t("interactive.fixup"), value: "fixup" }], { width: 180, at, lang: this.lang });
+    return openMenu(this.bus, [{ label: this.t("interactive.fixup"), value: "fixup" }], { width: FIXUP_MENU, at, lang: this.lang });
   }
 
   // The graph cell: one lane down the left with a dot per commit; a commit that melds
@@ -505,11 +516,11 @@ export default class InteractiveRebaseView {
       .when(!off.reset, (el) => el.cursor_pointer().hover((s) => s.underline()).on_click((_e, cx) => { cx.stop_propagation(); this.act("reset", cx); }))
       .child(this.t("interactive.reset"));
     return dialogFrame("interactive-rebase", this.t("interactive.title"), t, {
-      body, onClose: () => this.shut(),
+      body, onClose: (_e, cx) => this.shut(cx),
       note: this.waiting ? this.t("interactive.rebasing") : "",
       footer: [
         resetLink, spacer(),
-        button("ir-cancel-button", this.t("dialogs.cancel"), t, { disabled: this.waiting, onClick: () => this.shut() }),
+        button("ir-cancel-button", this.t("dialogs.cancel"), t, { disabled: this.waiting, onClick: (_e, cx) => this.shut(cx) }),
         button("ir-start", this.t("interactive.start"), t, {
           kind: "primary", disabled: Boolean(writing) || !this.root || !plan.ok, busy: this.waiting, title: writing ?? why ?? undefined,
           onClick: (_e, cx) => this.run(cx),
@@ -535,7 +546,7 @@ export default class InteractiveRebaseView {
       this.handle.focus();
       return true;
     }
-    if (key === "escape") this.shut();
+    if (key === "escape") this.shut(cx);
     else if (key === "enter" && cmd) this.run(cx);
     else if ((key === "up" || key === "down") && m.alt) this.act(key, cx);
     else if (key === "up" || key === "down") { this.step(key === "up" ? -1 : 1, Boolean(m.shift)); this.readFiles(cx); }

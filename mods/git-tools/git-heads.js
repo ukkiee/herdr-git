@@ -127,6 +127,20 @@ function ongoingItems(op) {
 // (any case), drops the groups left empty and opens the rest. folded: the group ids
 // folded. handled(id): whether the screen does that action; one it doesn't is left out.
 // t: the translator the labels are worded with.
+// popupStep(rows, at, by, { query }) → the row ↓ (by 1) or ↑ (by -1) moves the keyboard
+// to from row `at` (-1: none yet), round the ends. Lines and remote folders are skipped;
+// while searching (query) the group heads too, since a search keeps every group open and
+// a head does nothing then. `at` again when no row takes the keyboard.
+export function popupStep(rows, at, by, { query = "" } = {}) {
+  const n = rows.length, searching = Boolean(String(query).trim());
+  const from = at < 0 && by < 0 ? n : at;
+  for (let step = 1; step <= n; step++) {
+    const i = (((from + by * step) % n) + n) % n, kind = rows[i].kind;
+    if (kind !== "rule" && kind !== "folder" && !(searching && kind === "group")) return i;
+  }
+  return at;
+}
+
 export function popupRows({ heads, op, query = "", folded = new Set(), handled = () => true }, t) {
   const words = String(query).trim().toLowerCase();
   const hit = (text) => !words || text.toLowerCase().includes(words);

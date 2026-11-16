@@ -42,6 +42,13 @@ export async function worktreeSources(git, root) {
   return { ok: true, code: 0, out: "", err: "", branches: [...local.sort(byName), ...remote.sort(byName)], current: head.ok ? head.out.trim() || null : null };
 }
 
+// sourceTaken(source, { newBranch }) → whether the New Worktree dialog warns that the
+// source branch is checked out in a worktree: only when the source itself would be
+// checked out. With a new branch the source is only where that branch starts.
+export function sourceTaken(source, { newBranch = false } = {}) {
+  return Boolean(source?.checkedOut) && !newBranch;
+}
+
 // worktreePath(root, branch) → the folder beside the repository named after it and the
 // branch: "/work/app" and "feature/login" → "/work/app-feature-login".
 export function worktreePath(root, branch) {

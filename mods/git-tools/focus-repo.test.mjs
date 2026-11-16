@@ -82,6 +82,19 @@ const tab = (pane) => ({ pane, terminal: null, mod: "git-tools", tab: `tab-${pan
   assert.equal(isTabScreen({ view: "update-info", root: "/r", on: null }), true);
 }
 
+// A Commit panel or Log tab opened on a chosen folder (props.folder, props.on) is a tab
+// of that repository too: while it has the focus the side panels follow its folder, not
+// the space's. A dialog opened from one is not a tab.
+{
+  const panes = [term("p1", "/a"), tab("p5")];
+  assert.equal(isTabScreen({ view: "commit", folder: "/work/hooks" }), true);
+  assert.equal(isTabScreen({ view: "log", folder: "/work/hooks", on: "box" }), true);
+  assert.equal(isTabScreen({ view: "rollback", folder: "/work/hooks", overlay: "o1" }), false);
+  const got = registerTab({}, { props: { view: "commit", folder: "/work/hooks", on: "box" }, focused: { pane: "p5" }, panes });
+  assert.deepEqual(got, { pane: "p5", record: { p5: { root: "/work/hooks", on: "box" } } });
+  assert.deepEqual(whereFocused({ space, focused: { pane: "p5" }, panes, tabs: got.record }), { folder: "/work/hooks", on: "box", space: "s1" });
+}
+
 // A tab with no repository (the Git console, the icon sheet) records itself as having
 // none, so a tab opened next never takes its pane for its own; the panels follow the
 // folder there as before.
@@ -117,6 +130,29 @@ const tab = (pane) => ({ pane, terminal: null, mod: "git-tools", tab: `tab-${pan
   // A tab that holds a terminal too was split by hand: no tab this mod opens looks so.
   const mixed = [tab("p5"), term("p7", "/a", { tab: "tab-p5" })];
   assert.equal(registerTab({}, { props, focused: { pane: "p5" }, panes: mixed }), null);
+}
+
+// Tabs opened one right after another (Show Changes to Parents on a merge commit: one tab
+// per parent): the focus is on the last one while each screen records itself, so a
+// screen opened by newTab finds its pane by its tab's name (props.tabName), never takes
+// the focused pane of another tab, and the earlier tab is recorded too.
+{
+  const named = (pane, tabId) => ({ pane, terminal: null, mod: "git-tools", tab: tabId, cwd: null });
+  const panes = [term("p1", "/a"), named("p5", "t5"), named("p6", "t6")];
+  const tabs = [{ id: "tab1", name: "1" }, { id: "t5", name: "8ea89cf → f4d7f02" }, { id: "t6", name: "15adeb4 → f4d7f02" }];
+  const first = { view: "diff", root: "/r38", on: null, tabName: "8ea89cf → f4d7f02" };
+  const second = { view: "diff", root: "/r38", on: null, tabName: "15adeb4 → f4d7f02" };
+  const focused = { pane: "p6" };
+  const a = registerTab({}, { props: first, focused, panes, tabs });
+  assert.equal(a.pane, "p5");
+  const b = registerTab(a.record, { props: second, focused, panes, tabs });
+  assert.deepEqual(b, { pane: "p6", record: { p5: { root: "/r38", on: null }, p6: { root: "/r38", on: null } } });
+  // The first tab's pane isn't listed yet: no guess at all, not the focused second tab.
+  assert.equal(registerTab({}, { props: first, focused, panes: [term("p1", "/a"), named("p6", "t6")], tabs }), null);
+  // Two unrecorded tabs of the same name: the focused one, else none.
+  const twins = [named("p5", "t5"), named("p6", "t6")], same = [{ id: "t5", name: "x" }, { id: "t6", name: "x" }];
+  assert.equal(registerTab({}, { props: { ...first, tabName: "x" }, focused: { pane: "p6" }, panes: twins, tabs: same }).pane, "p6");
+  assert.equal(registerTab({}, { props: { ...first, tabName: "x" }, focused: { pane: "p1" }, panes: [term("p1", "/a"), ...twins], tabs: same }), null);
 }
 
 // A tab's screen that closes takes its entry out; nothing to take: nothing to store.

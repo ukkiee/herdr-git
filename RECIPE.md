@@ -603,7 +603,11 @@ dialog's own (`openDialog` in its file).
   default); off, the files are a flat list with each file's folder dim beside it.
 - **The VCS widget popup's branch menus** open inside the popup beside the row (click,
   right-click, Enter or →; ← or Esc closes), on the popup's left on macOS and its right
-  elsewhere; an item is picked as it is pressed.
+  elsewhere; an item is picked as it is pressed. While a menu is open the popup holds the
+  keyboard (opened with the mouse too), so ↑ ↓ Enter ← Esc work in the menu and Esc
+  leaves the popup open; once it closes, typing goes to the search box again. ↓ and ↑
+  skip lines and remote folders, and while searching the group heads too (a search
+  keeps every group open): ↓ after typing lands on the first match.
 - **Commit panel in progress**: above the tree a row `⚠ <operation>` with Continue (≫),
   Abort and, for a rebase or several picks, Skip Commit; a `Merge Conflicts` node with a
   `Resolve` link and the conflicted files in the conflict color; the files the operation
@@ -625,7 +629,13 @@ dialog's own (`openDialog` in its file).
   Edit Result Directly and the count; bottom Accept Left, Accept Right │ Save and Close,
   Apply Changes (default). Arrows and chunk buttons are characters, not icons. Its
   questions (`Unprocessed Changes`, `Overwrite Changes`, and the one when the file changed
-  on disk since the dialog read it, with Overwrite) are 460px cards over it.
+  on disk since the dialog read it, with Overwrite) are 460px cards over it. × and Esc
+  close it without asking: a result changed since the file was opened is written to the
+  working file first (still in conflict, its staging unchanged; `conflicts-keep`), and
+  an unchanged one writes nothing. Opening the file again goes on from the working file
+  when it has no conflict marks (`<<<<<<<` / `>>>>>>>` lines); with git's marks the
+  result starts from the three versions as before. When keeping fails, git's words show
+  and the next × or Esc closes without keeping.
 - **Smart dialog** (560×440): `Git <name> Problem`, a sentence, the blocking files' tree
   with Group By: Directory, Expand All, Collapse All; buttons Force Checkout, `Don't
   Checkout` and `Smart Checkout` (default) for a checkout (a branch's, and a revision's:
@@ -655,7 +665,10 @@ Progress bar.
 
 Both panels follow the focused pane's folder, else the space's folder. A space on
 another machine runs every git command on that machine. A panel opened with
-`props.folder` (and `props.on`) stays on that folder instead.
+`props.folder` (and `props.on`) stays on that folder instead. While a tab git-tools
+opened has the focus (a Diff, Compare, History or Update Info tab, or a Commit panel or
+Log tab opened with `props.folder`), the side panels follow that tab's repository (and
+machine); back on a terminal, they follow its folder again.
 
 ### Language
 
@@ -731,6 +744,8 @@ another machine runs every git command on that machine. A panel opened with
   Operations popup, or Fixup… / Squash Into… opened the panel; not the Changes button):
   ↑ ↓ move, ← folds (or goes to the parent), →
   unfolds (or goes to the first child), Space checks, Enter opens the Diff tab or folds.
+  Tab puts the keyboard in the commit message (not while a Fixup target, which has no
+  message box, is set); Shift-Tab in the message comes back to the list.
 - **Right-click** a row: selects it and opens its menu.
 - **View Options**: the menu toggles Group By: Directory. The choice is kept.
 - **Expand All / Collapse All**: every group (the Last commit group too) and every folder.
@@ -749,8 +764,10 @@ another machine runs every git command on that machine. A panel opened with
   path); on its group row or a folder they fold. A commit with no parent lists every
   file as added; a merge lists what it brought in against its first parent. When
   reading the last commit fails, git's words show in the read strip.
-- **Rollback notice**: shows when a rollback this panel ran recorded a snapshot. `N` is
-  the files sent to roll back less the ones skipped. **Restore…** opens the Restore
+- **Rollback notice**: shows when a rollback this panel ran recorded a snapshot and
+  rolled back a file. `N` is the files sent to roll back less the ones skipped; when
+  every file was skipped there is no notice, only the error strip naming them
+  (`rollbackNotice` in `git-rollback.js`). **Restore…** opens the Restore
   dialog with that snapshot selected. The notice goes on `x`, when this panel starts its
   next write, when any copy's write on that repository ends (its `changed`; the
   rollback's own doesn't count), when events went unseen (the bus's `changed` without a
@@ -769,10 +786,13 @@ another machine runs every git command on that machine. A panel opened with
   time the commit ends, what it shows there (checks, selection, message, Amend) stays
   as it is: a success clears the kept message of the repository committed to, and a
   failure shows in the error strip with that repository's folder name in front.
-- **Amend**: off while the repository has no commit. Turning it on fills an empty
-  message box with the last commit's message and, if any remote branch has that commit,
-  shows the force-push warning. With Amend on, Commit works with nothing checked (only
-  the message changes).
+- **Amend**: off while the repository has no commit. Turning it on keeps the message
+  box's text aside and puts the last commit's message in its place (unless something is
+  typed before git answers) and, if any remote branch has that commit, shows the
+  force-push warning. Turning it off again, Fixup… / Squash Into…, or the panel moving to
+  another repository (which turns it off) puts the kept text back (the moved-away
+  repository keeps it as its draft). After an Amend commit the box is empty. With Amend
+  on, Commit works with nothing checked (only the message changes).
 - **Commit and Push…**: commits; only if that worked, opens the Push dialog (also when the
   panel has moved to another repository meanwhile: the dialog names the branch and where
   it goes).
@@ -1210,7 +1230,8 @@ The rules and their reasons are in `docs/design.md` (section 4); what a person s
 - git's words go in the error strip of the panel or dialog where it happened, and what
   was read before stays. A machine that can't be reached shows the same way; the next
   poll tries again. Every error strip has `View in Console`, which opens or picks the Git
-  console tab.
+  console tab; a console tab it picks reads the log again and shows its end, where the
+  failed command is, even if it was scrolled up (it posts `{ type: "console-end" }`).
 - In the Commit panel, the Log panel, the VCS widget, the Push and Conflicts dialogs and
   the Update Info and History tabs, a git command whose answer hasn't come 5 s past its
   timeout (35 s for a read) is given up on, so the screen doesn't stay on `Loading…` for
@@ -1382,7 +1403,8 @@ unseen until an error shows, as the card is only as tall as what it holds. The
 conflict dialogs' questions are a 460px card over the dialog on a dark veil, as tall as
 what it holds.
 
-For a git-tools tab (a screen with `props.root` and no `props.overlay`), `main.js`
+For a git-tools tab (a screen with `props.root` or `props.folder` and no
+`props.overlay`), `main.js`
 records the tab's pane with its repository (`claimTab` in `init`, again from `render`
 while it isn't recorded, `releaseTab` in `close`).
 
@@ -1588,13 +1610,22 @@ filter and branch changes and next batch run anyway).
 **Two more shared values.** `git-tools.menus`: how many popup menus `openMenu` has open;
 while it isn't 0, `tip(el, text)` in `ui.js` attaches no tooltip, and every screen
 attaches its tooltips only through `tip` (`ui-ids.test.mjs` fails on a `.tooltip(` call
-anywhere else; the menu screens draw their own). `git-tools.tabs`:
+anywhere else; the menu screens draw their own). Herdr builds a tooltip once, when the
+pointer comes to rest, and keeps it while the element is the same, so `tip(el, text, id)`
+takes the element's id where the text can change under a resting pointer (Commit after
+Amend Commit, Push naming another branch, every `button` and `iconButton`): it names the
+element `<id>~<a short hash of the text>`, and a new text drops the old tooltip and
+builds a new one at the next rest. `git-tools.tabs`:
 `{ <pane id>: { root, on } }`, the git-tools tabs and the repository each was opened on
 (`focus-repo.js`: `registerTab`, `forgetTab`, `whereFocused`); `location()` in `ui.js`
 follows a recorded pane's repository while it has the focus. A pane id is Herdr's
 `props().pane` when there is one, else the focused pane when it is the only git-tools
-pane of its tab and not recorded yet; `newTab` also notes the pane `tab.new` added
-(`panes()` before and after). Panes that closed drop out on the next write.
+pane of its tab and not recorded yet. A tab `newTab` opened carries its name in
+`props.tabName`, and its screen takes the one unrecorded lone git-tools pane of a tab of
+that name (with several, the focused one of them), never another tab's: tabs opened one
+after another (Show Changes to Parents) each record their own pane while the focus is on
+the last. `newTab` also notes the pane `tab.new` added (`panes()` before and after).
+Panes that closed drop out on the next write.
 
 **A dialog's write.** Push, Rollback, Restore, New Branch and Delete Branch never run a git write
 themselves. The dialog calls `askOwner`, which posts a `request` to `props.owner` and
@@ -1614,7 +1645,8 @@ it moved (the answer then has `moved: true`). Every other dialog's write is a li
 `SERVE_ACTIONS` in `serve-actions.js`: `"<name>": { work: "<words key>", run: (git, root,
 args, panel) => … }`, served by the Commit panel, the Log panel and the VCS widget block
 alike: `conflicts-accept`, `conflicts-unresolve`, `conflicts-resolve-simple`,
-`conflicts-save` (the result travels as a temporary file's path), `reset`,
+`conflicts-save` (the result travels as a temporary file's path), `conflicts-keep` (the
+same, written to the working file without marking it resolved), `reset`,
 `restore-3way`, `patch-create`, `stash-create`, `stash-apply`, `stash-drop`,
 `stash-clear`, `branch-create`, `rewrite-reword`, `rewrite-squash`, `rewrite-drop`,
 `rewrite-extract`, `rewrite-drop-changes`, `rebase-interactive`, `smart-run`,
@@ -1635,7 +1667,7 @@ the git ones run against real temporary repositories):
 | `one-at-a-time.js` | `oneAtATime(run)` → `ask(arg)` (at most one `run` going; a newer ask replaces a waiting one, which resolves undefined without running: Commit details' branch walks while arrowing through the log) |
 | `git-status.js` | `readStatus` |
 | `git-commit.js` | `commit`, `lastMessage`, `headIsPushed` |
-| `git-rollback.js` | `rollback` (→ `{ ok, code, out, err, msg?, snapshot, skipped: [{ path, reason, msg }] }`; `snapshot`: the Rollback snapshot's hash or null), `wordRollback(t, r)` (`r.msg` with its list of reasons worded again in `t`'s language) |
+| `git-rollback.js` | `rollback` (→ `{ ok, code, out, err, msg?, snapshot, skipped: [{ path, reason, msg }] }`; `snapshot`: the Rollback snapshot's hash or null), `wordRollback(t, r)` (`r.msg` with its list of reasons worded again in `t`'s language), `rollbackNotice(files, r)` (→ `{ snapshot, n }` for the Rollback notice, or null when no snapshot was recorded or every file was skipped) |
 | `git-snapshot.js` | `SNAPSHOTS` (`"refs/git-tools/rollback"`), `LIST_LIMIT` (50), `ACTIONS` (`["Rollback", "Reset", "Checkout"]`: the write a snapshot was taken before, its message's first word), `record(git, root, paths, copy)` → `{ ok, code, out, err, snapshot }` (only Rollback calls it), `listSnapshots(git, root)` → `{ ok, code, err, snapshots: [{ hash, time, files: [{ path, status }] }] }` (newest first, `status` `modified` / `added` / `deleted`), `restore(git, root, { snapshot, paths, copy })` → `{ ok, code, out, err, msg?, restored: [path], skipped: [{ path, reason, msg }], stagingSkipped: [{ path, reason, msg }], changed }` (`stagingSkipped`: restored paths whose staging stayed as it is now; `changed`: anything on disk changed, also when git failed partway), `applySnapshot(git, root, { snapshot, copy })` (a snapshot made on another HEAD put back whole and 3-way, the way `git stash apply --index` applies a stash; conflicts left for the Conflicts dialog; changed files HEAD no longer has are written as the snapshot had them instead, in `revived`), `reasonList(skipped, word?)`, `wordRestore(t, r)` (r.msg with the skipped reasons, the staging reasons and a worded cause in t's language) |
 | `git-diff.js` | `MAX_ROWS` (5000), `MAX_CHARS` (400000), `parseDiff`, `readDiff` (`oldPath`: a renamed file's path before its commit), `touchesDiff(changed, root, path)` (whether watched changes can change a working file's diff) |
 | `git-push.js` | `PROTECTED` (`["main", "master"]`), `readPushPlan`, `readPushFiles`, `push` |
@@ -1660,7 +1692,7 @@ the git ones run against real temporary repositories):
 | `conflicts-model.js`, `merge-revisions-model.js` | what the two conflict dialogs show and allow |
 | `git-smart.js` | the blocking files per request (a checkout's `{ name, remote }` or `{ revision }`), `checkoutBranch` and `checkoutRevisionOf` (refused with the files in the way), `forceCheckout`, `smartRun`, the `gittools.smart-stash` mark |
 | `git-stash.js`, `git-reset.js`, `git-rewrite.js`, `rebase-plan.js`, `git-changes.js` | stash; reset and the record before a hard one; history edits through one rebase plan (`editCheck`, `readEditFacts`); file-level revert and cherry-pick |
-| `git-remote.js`, `git-refs.js`, `git-heads.js` | pull, update, Update Project, the Update Info range; tags, branch names, remotes, Push Tag; what the VCS widget shows |
+| `git-remote.js`, `git-refs.js`, `git-heads.js` | pull, update, Update Project, the Update Info range; tags, branch names, remotes, Push Tag; what the VCS widget shows, the popup's rows (`popupRows`) and where ↑ ↓ go among them (`popupStep`) |
 | `git-compare.js`, `git-revision.js`, `git-worktree.js` | comparisons, patches, Get from, Show Changes to Parents (`parentDiffs`); a revision's files, history, child commits; new worktrees and Checkout Tag or Revision |
 | `git-patch.js` | `readPatchFiles(text)` (pure: a patch's files, statuses and names as `git apply -p1` takes them), `applyPatch(git, root, { file, paths })` (checked files only, always named with `--include`, in parts when there are many; a 3-way retry; conflicts from `ls-files -u`), `READ_LIMIT`, `readMayBeCut(text)` (the 1 MiB read limit in UTF-8 bytes), `homePath(typed, home)` (a leading `~` or `~/` as that machine's home), `changesCommit(git, root, { paths, message })` (a commit of the checked local changes on HEAD, no ref) |
 | `git-console.js`, `log-menus.js`, `log-select.js`, `log-options.js`, `branch-order.js`, `vcs-ops.js`, `ui-icons.js` | console records, with a URL's credentials hidden; the Log panel's menus; picking commits; graph and view options; branch order and favorites (the widget popup's favorites first) and the Branch tree's rows (`treeRows`, a tag's row made when asked for); the VCS Operations popup's items; UI icons |
@@ -2928,9 +2960,12 @@ in English.
   variable; text made ahead (Branch tree rows, the Commit list's times, Commit details'
   meta line) is kept with its language and made again when the language changes.
 - `InputState` and `TextareaState` take their placeholder only when made. When a copy's
-  language changes, the inputs (`log-filters.js`, `log-branches.js`) and the message box
-  (`commit-form.js`) are made again outside render, in a timer, carrying the typed text
-  over; the old state isn't released (a handler may still hold it).
+  language changes, the inputs (`log-filters.js`, `log-branches.js`, `view-files.js`,
+  the VCS widget popup's search) and the message box (`commit-form.js`) are made again
+  outside render, in a timer, carrying the typed text over; the Compare tab's filter
+  inputs (User, Date, Path) are made again in its `spoke(cx)`, which `main.js` calls
+  outside render. The old state isn't released (a handler may still hold it). Dialogs
+  need none of this: they open with a fixed language (`props.lang`).
 - `speakAs` only holds during a screen call from `main.js`. A click handler or the code
   after an `await` is outside it: pass `screen.t` or `tr`, or the shared parts speak
   English. A dialog or menu opened there needs `lang: this.lang`, or it opens in the
@@ -3063,7 +3098,9 @@ Each line is one check: do what it says, see what follows.
     `<hash> · <date> · <author> <email>`, then `In 1 branch: main` (or the branches).
 12. Double-click a file there: a Diff tab opens comparing `<parent> → <hash>`.
 13. Turn Amend on with the box empty: it fills with the last message; edit it, Commit:
-    the commit count is the same, the hash and message changed.
+    the commit count is the same, the hash and message changed. Type `draft`, turn Amend
+    on (the last message replaces it) and off again: the box says `draft`; the same after
+    going to another repository with Amend on and coming back.
 14. Check a file, type a message, Commit and Push…: the commit is made, then the Push
     dialog lists it with its files.
 15. Press Push: the dialog closes, the branch's `↑N` in the Branch tree goes away, and the
@@ -3116,7 +3153,8 @@ Each line is one check: do what it says, see what follows.
 36. With the side panel at its 280px minimum, the Commit panel's toolbar, Amend line and
     both buttons don't overlap.
 37. With the keyboard only: `cmd-k` opens the Commit panel; in its list ↑ ↓ ← → Space
-    Enter work; `cmd-enter` in the message commits; Esc closes the Rollback and Push
+    Enter work; Tab goes to the message, where typed text lands (Shift-Tab goes back to
+    the list); `cmd-enter` in the message commits; Esc closes the Rollback and Push
     dialogs; ↑ ↓ Enter work in a popup menu and in the Branch tree.
 38. Press `cmd-shift-l` until `main` shows (it moves to the next layout each time):
     Herdr's own Changes shows under the Changes button, Herdr's own Files under the
@@ -3691,6 +3729,7 @@ commit `main` lacks)
      Down, Pick, Stop to Edit, Reword, Squash ▾, Drop, Undo, Redo, the commits oldest on
      top, the files and Commit Details on the right, Reset, Cancel and Start Rebasing. Move
      a commit up and Start Rebasing: the order changes and nothing is left in progress.
+     Squash's ▾ opens its Fixup menu right under the ▾, inside the dialog.
 202. In that dialog Squash, Fixup, Drop and Reword (double-click the subject) a commit
      each and start: the history shows exactly that. Closing with changes asks `Cancel
      Rebase` first.
@@ -3783,7 +3822,9 @@ commit `main` lacks)
      shows a notification.
 233. New Worktree…: `New Worktree` with Source branch ▾, New branch, Location and Create
      Worktree and Open; a branch checked out elsewhere shows `The selected branch is
-     already checked out in another worktree`; Create opens a new space on that folder.
+     already checked out in another worktree`, which goes as soon as New branch is on (the
+     source is then only where the new branch starts); Create opens a new space on that
+     folder.
 234. Press `cmd-shift-v` with the Commit panel showing: a `VCS Operations` popup with
      group Git and numbered items; press a number to run one, Esc closes it. With only the
      Files panel showing, nothing opens.
@@ -3791,7 +3832,8 @@ commit `main` lacks)
      repository, command and output, a failure with `Exit code N`; a new commit's commands
      follow at once.
 236. Make any git-tools action fail: its error strip has View in Console, which opens or
-     picks the Console tab.
+     picks the Console tab, scrolled to its end: the failed command and its exit code show
+     even if the tab had been scrolled up.
 
 **Button and menu icons**
 
@@ -3868,7 +3910,9 @@ and `b.txt` and a new file `c.txt`)
      window.
 255. In the popup, branch rows have ›. Click one, right-click it, or press Enter or →: the
      popup stays open and the branch's menu shows beside the row (on the popup's left);
-     an item runs when pressed; ← and Esc close the menu. On the current branch,
+     an item runs when pressed; ← and Esc close the menu and leave the popup open, also
+     when the menu was opened with the mouse. Type a name and press ↓: the first matching
+     branch is highlighted, not a group's head. On the current branch,
      `Tracked Branch 'origin/main'` turns the menu into `origin/main`'s menu in place.
 256. Mark a branch as a favorite: in the popup's Local and Remote groups ★ branches come
      first, then the current branch, then by name; the Branch tree keeps the current
@@ -3888,10 +3932,14 @@ and `b.txt` and a new file `c.txt`)
 
 260. While `a.txt` is in conflict, edit it by hand and press Accept in the Conflicts
      dialog: `Overwrite Changes` is a small card over the dialog with the dialog dim
-     behind it; Esc, Enter and Cancel work on it.
+     behind it; Esc, Enter and Cancel work on it, and Esc closes only the card.
 261. Resolve Manually, then edit `a.txt` in a terminal and press Apply Changes (or Save and
      Close): a question says the file was changed on disk, with Overwrite. Edit it by
      hand before opening and press Accept Left: the overwrite question shows first.
+     In Resolve Manually, take one side with » and close with ×: no question, `a.txt`
+     now holds that result and is still in conflict (`git status` shows it unmerged, the
+     staging unchanged); Resolve Manually again shows that result. Close without changing
+     anything: the file is untouched.
 262. With two simple conflicts, one of them edited by hand, press Resolve All Simple
      Conflicts: the edited file stays as you left it and the bottom reads `1 file edited
      by hand was left as it is.` A file at the repository's top shows no folder beside
@@ -3909,7 +3957,10 @@ and `b.txt` and a new file `c.txt`)
      reads Reword and the message changes. ⌘↩ inside Edit Commit Message, Squashed Commit
      Message and Extract Selected Changes confirms them too.
 267. In Commit details, right-click a file the commit added → Show Changes to Parents: the
-     whole file shows as added. On a merge commit's file: one tab per parent.
+     whole file shows as added. On a merge commit's file: one tab per parent, each named
+     `<file> (<parent's 8-char hash>)`; with either tab focused, the Branch tree, the
+     Commit panel and the VCS widget show that repository, and both tabs' panes are
+     under `git-tools.tabs`.
 268. In a space whose terminal has `cd`'d into another repository, Pull and look at the
      `Update Info` tab: the Branch tree, the Commit panel and the VCS widget show that
      repository while the tab has the focus; click the terminal: they follow it. The

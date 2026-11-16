@@ -23,7 +23,7 @@ import { div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input, Popup } from "gpui-base";
 import { exec, theme, openOverlay, closeOverlay } from "herdr";
 import { makeGit, repoRoot } from "./git.js";
-import { readHeads, popupRows } from "./git-heads.js";
+import { readHeads, popupRows, popupStep } from "./git-heads.js";
 import { readFavorites } from "./git-branch.js";
 import { isFavorite, orderBranches, refOf } from "./branch-order.js";
 import { readOperation } from "./git-operation.js";
@@ -166,6 +166,10 @@ export default class VcsPopup {
     // The open branch menu: { row (its index in rows()), target, items, at }, or null.
     this.sub = null;
     this.list = new WindowedList("vcs-popup-rows", { rowHeight: ROW_H });
+    // The popup's own keyboard place, held while a branch's menu is open: a press on a row
+    // takes the keyboard from the search box, and keys that reach no handler here go to
+    // Herdr, whose Esc closes the whole popup.
+    this.handle = cx.focus_handle();
     this.makeInput("");
     this.input.focus();
     this.reload(cx);
@@ -238,8 +242,16 @@ export default class VcsPopup {
       // A second press on the same row closes its menu.
       if (this.sub?.row === i && this.sub.rowName === r.name) this.sub = null;
       else this.openSub(i, { name: r.name, scope: r.scope === "recent" ? "local" : r.scope, current: r.current, upstream: r.upstream });
+      this.keysTo();
       cx.notify();
     }
+  }
+
+  // The keyboard: the popup's own while a branch's menu is open (its keys and Esc are
+  // the menu's), the search box otherwise.
+  keysTo() {
+    if (this.sub) this.handle.focus();
+    else this.input.focus();
   }
 
   // The menu of branch `target` beside row i, the row of branch `rowName` (the tracked
@@ -290,11 +302,10 @@ export default class VcsPopup {
 
   move(by, rows) {
     this.sub = null;
-    const n = rows.length;
-    for (let step = 1; step <= n; step++) {
-      const i = (((this.at + by * step) % n) + n) % n;
-      if (rows[i].kind !== "rule" && rows[i].kind !== "folder") { this.at = i; this.list.reveal(i, n); return; }
-    }
+    const i = popupStep(rows, this.at, by, { query: this.input.value() });
+    if (i < 0) return;
+    this.at = i;
+    this.list.reveal(i, rows.length);
   }
 
   rowFor(r, i, t) {
@@ -371,13 +382,14 @@ export default class VcsPopup {
         : !n ? notice(this.t("vcs.nothing"), t)
           : this.list.render(n, (i) => this.rowFor(rows[i], i, t), t);
     return v_flex().id("vcs-popup").w_full().h(HEIGHT).p(PAD).bg(t.popover).text_size(12.8)
+      .track_focus(this.handle)
       .on_key_down((e, cx) => {
         // While a branch's menu is open the keys move in it; ← or Esc closes it.
         if (this.sub) {
           if (e.key === "down") this.moveSub(1);
           else if (e.key === "up") this.moveSub(-1);
           else if (e.key === "enter") this.pickSub(this.sub.at);
-          else if (e.key === "left" || e.key === "escape") this.sub = null;
+          else if (e.key === "left" || e.key === "escape") { this.sub = null; this.keysTo(); }
           else return;
           cx.stop_propagation();
           cx.notify();

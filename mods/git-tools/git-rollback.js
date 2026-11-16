@@ -105,6 +105,16 @@ export async function rollback(git, root, { files = [], deleteAdded = false, cop
   return { ok: true, code: 0, out: "", err: "", skipped, snapshot };
 }
 
+// rollbackNotice(files, r) → { snapshot, n } for the notice after rollback(files) gave r
+// (n: the files rolled back), or null when there is nothing to tell: no snapshot was
+// recorded, or every file was skipped (a snapshot is recorded before files that turn out
+// to be in the way are skipped, so it may exist while nothing was rolled back).
+export function rollbackNotice(files, r) {
+  if (!r?.snapshot) return null;
+  const n = files.filter((file) => file && file.status !== "unversioned").length - (r.skipped?.length ?? 0);
+  return n > 0 ? { snapshot: r.snapshot, n } : null;
+}
+
 // Nothing has been written when this is returned, so no path is listed as skipped.
 // cause: the msg of the failure, when git-snapshot.js worded it (see wordRollback).
 const notRecorded = (r) => ({

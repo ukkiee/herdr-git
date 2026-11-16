@@ -7,7 +7,7 @@ import { existsSync, mkdirSync, mkdtempSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
 import { makeGit } from "./git.js";
-import { createWorktree, worktreeSources, worktreePath, checkoutRef } from "./git-worktree.js";
+import { createWorktree, worktreeSources, worktreePath, checkoutRef, sourceTaken } from "./git-worktree.js";
 import { translator } from "./i18n.js";
 
 // The user's own git settings stay out of every git these tests start.
@@ -148,6 +148,15 @@ assert.equal(worktreePath("/app", "x"), "/app-x");
     { name: "origin/main", scope: "remote", checkedOut: null },
   ]);
   assert.equal(r.current, "main");
+  // The dialog warns that a source is checked out elsewhere only when it would be
+  // checked out itself: with New branch on it is only where the new branch starts (the
+  // new-branch case above makes one from the checked-out main).
+  const [feature, main, remote] = r.branches;
+  assert.equal(sourceTaken(feature, { newBranch: false }), true);
+  assert.equal(sourceTaken(main, { newBranch: false }), true);
+  assert.equal(sourceTaken(main, { newBranch: true }), false);
+  assert.equal(sourceTaken(remote, { newBranch: false }), false);
+  assert.equal(sourceTaken(null, { newBranch: false }), false);
   sh(repo, "git checkout -q --detach");
   assert.equal((await worktreeSources(git, repo)).current, null);
 }

@@ -626,7 +626,7 @@ export default class CommitView {
       const last = this.last;
       // A commit made with an empty message has no subject: its short hash stands in.
       // A subject can be long, so it is the one cut and the file count stays whole.
-      return tip(el, last?.hash ?? "")
+      return tip(el, last?.hash ?? "", `commit-row-${r.id}`)
         .child(div().flex_initial().min_w(0).truncate().font_semibold().child(last?.subject || (last?.hash ?? "").slice(0, 8)))
         .child(div().flex_none().text_size(12).text_color(t.dim).child(count));
     }
@@ -696,6 +696,12 @@ export default class CommitView {
         .when(shown !== null && !gitButtonPlaced(), (el) => el.child(iconButton("commit-log", "panel-bottom", t, { title: this.t("commit.gitLog"), active: shown === true, onClick: () => toggleLogPanel() }))))
       .child(div().id("commit-list").flex_1().min_h(0).track_focus(this.handle)
         .on_key_down((e, cx) => {
+          // Tab goes on to the message box, so the keyboard alone gets from picking files
+          // to cmd-enter (Shift-Tab there comes back: commit-form.js).
+          if (e.keystroke === "tab") {
+            if (this.repo && this.form.focusMessage()) { cx.stop_propagation(); cx.notify(); }
+            return;
+          }
           const name = { up: "up", down: "down", left: "left", right: "right", space: "space", enter: "enter" }[e.keystroke];
           if (!name) return;
           this.act(name);

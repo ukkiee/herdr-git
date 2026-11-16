@@ -174,7 +174,9 @@ export default class ConflictsView {
     cx.spawn(async (cx) => {
       const v = await readVersions(this.git, this.root, path, { read: (p) => readTextFile(p, { on: this.on }) });
       this.checking = false;
-      if (v.ok && editedSince(v)) this.confirm = { path, column };
+      // The card takes the keyboard: Accept was a click, which may have taken it from the
+      // dialog, and an Esc that doesn't reach the card closes the whole dialog (Herdr's).
+      if (v.ok && editedSince(v)) { this.confirm = { path, column }; this.handle.focus(); }
       else this.take(path, column, cx);
       cx.notify();
     });

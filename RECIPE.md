@@ -1116,7 +1116,10 @@ machine); back on a terminal, they follow its folder again.
   paths whose staging wasn't written are listed with `git failed before staging it`,
   and git's words end the result. A snapshot made before snapshots held the staging, or
   in a repository without a commit, leaves the index alone: an added file then comes
-  back untracked. A path
+  back untracked. A file that had only its staging changed when it was rolled back (its
+  working copy as HEAD had it) is in the list too, by what was staged (its Diff tab shows
+  that staged change), and Restore stages it again without writing the file; for such a
+  new file (staged, then deleted from disk) that only holds while nothing is at its path. A path
   is restored only when nothing changed it since: HEAD has the same version of it as
   when the rollback ran, the working tree matches HEAD there (for an added file: nothing
   at all is at the path, under any spelling the disk takes as the same name), and it
@@ -1864,7 +1867,10 @@ So a snapshot's diff against its first parent is what the rollback threw away, a
 second parent holds what was staged. The list is
 `log -g --max-count=50 --format=%x01%H %ct --name-status --no-renames --root --diff-merges=first-parent -z refs/git-tools/rollback --`
 (git 2.31 or later: with two parents `--name-status` lists nothing otherwise; one call; when it fails, `rev-parse -q --verify` tells a missing ref, an empty list,
-from git failing). It is read word by word between NULs: a status is always followed by
+from git failing). A second call, `log --no-walk=unsorted --format=%x01%H --name-status
+--no-renames -z` on the listed snapshots' second parents, adds the files that had only
+their staging changed: their working copy was as HEAD had it, so the first diff doesn't
+name them. It is read word by word between NULs: a status is always followed by
 its path, so a path holding `\x01`, a tab or a line break is one path. A type change
 counts as `modified`.
 

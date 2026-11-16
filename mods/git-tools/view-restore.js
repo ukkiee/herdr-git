@@ -183,7 +183,9 @@ export default class RestoreView {
   showDiff(r) {
     const snapshot = this.current();
     if (!snapshot || r?.folder) return false;
-    openDiff({ root: this.root, on: this.on, path: r.item.path, commit: snapshot.hash, status: r.item.status });
+    // A file with only its staging rolled back shows that staging's change: the snapshot
+    // itself holds none for it (git-snapshot.js listSnapshots, `staging`).
+    openDiff({ root: this.root, on: this.on, path: r.item.path, commit: r.item.staging ?? snapshot.hash, status: r.item.status });
     return true;
   }
 

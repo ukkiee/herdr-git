@@ -110,6 +110,7 @@ export function branchMenuRows(b, { head, writing = null, tr }) {
 // and below), the search row and the gap under it.
 const WIDTH = 380, HEIGHT = 520, ROW_H = 26, PAD = 5, SEARCH_H = 32, GAP = 4;
 const LIST_H = HEIGHT - 2 * PAD - SEARCH_H - GAP;
+const FIRST_LOOK = 6000; // ms after the popup opens: a first read still unanswered then is made again once
 const newKey = (what) => `${what}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
 export const POPUP_WIDTH = WIDTH;
@@ -169,6 +170,15 @@ export default class VcsPopup {
     this.makeInput("");
     this.input.focus();
     this.reload(cx);
+    cx.timer.after(FIRST_LOOK, (cx) => this.firstLook(cx));
+  }
+
+  // A popup opened by the press that also closes the one before it (a press on the widget
+  // while its popup is open) has been seen to get no answer at all to its first read:
+  // neither git's answer nor the runner's clock comes, and the popup stays on "Loading".
+  // So a popup with no read done yet reads again once.
+  firstLook(cx) {
+    if (!this.read) this.reload(cx);
   }
 
   makeInput(value) {

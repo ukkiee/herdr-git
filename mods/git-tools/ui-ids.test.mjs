@@ -53,4 +53,22 @@ export function bareTooltips(text) {
   assert.deepEqual(bare, []);
 }
 
+// Herdr's Esc is its `overlay.close` action, which comes before any on_key_down and closes
+// the whole dialog or popup. A card drawn over a dialog (an element whose id ends in
+// "-question") or a gpui-base Popup inside a popup overlay closes alone on Esc only when
+// its screen takes that action while it is open (ui.js takeEscape).
+export function innerWithoutEscape(text) {
+  const source = text.split("\n").filter((line) => !/^\s*\/\//.test(line)).join("\n");
+  return /\.id\(\s*"[^"]*-question"\s*\)|Popup\.new\(/.test(source) && !/\btakeEscape\(/.test(source);
+}
+{
+  assert.equal(innerWithoutEscape(`div().id("a-question")`), true);
+  assert.equal(innerWithoutEscape(`Popup.new("m", trigger)`), true);
+  assert.equal(innerWithoutEscape(`takeEscape(div().id("a-question"), close)`), false);
+  assert.equal(innerWithoutEscape(`div().id("a")\n  // Popup.new( in a comment`), false);
+  const missing = readdirSync(here).filter((name) => name.endsWith(".js") && name !== "ui.js"
+    && innerWithoutEscape(readFileSync(join(here, name), "utf8")));
+  assert.deepEqual(missing, []);
+}
+
 console.log("ok");

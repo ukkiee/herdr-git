@@ -188,8 +188,8 @@ git 모듈과 순수 계산 모듈은 `herdr`를 import하지 않는다. 그래�
   버려진다. 그래서 사건은 공유 값에 쓰고, 각 사본이 자기 `render`에서 새 번호를 보고 자기
   타이머에서 받는다. 8개보다 많이 놓친 사본은 모두 다시 읽으라는 사건을 받는다.
 - **창의 쓰기**: 창은 git 쓰기를 직접 하지 않는다. 창을 연 패널 사본(`props.owner`)에 요청하고,
-  그 패널이 잠금을 잡고 실행한다. Herdr는 Esc로 창을 닫는 것을 막지 못하게 하고, 닫힌 사본의
-  다음 `await` 뒤는 실행되지 않는다. 패널이 실행하면 창이 닫혀도 쓰기, 다시 읽기, 실패 표시가
+  그 패널이 잠금을 잡고 실행한다. 창은 쓰는 중에도 Esc로 닫히고(창 자체에서는 Herdr의 Esc를 받지
+  않는다, 5절 "Esc는 Herdr의 동작이다"), 닫힌 사본의 다음 `await` 뒤는 실행되지 않는다. 패널이 실행하면 창이 닫혀도 쓰기, 다시 읽기, 실패 표시가
   끝까지 간다. 3초 남짓 안에 패널이 요청을 받았다고 답하지 않으면 창은 요청을 버리고 아무것도
   시작하지 않았다고 알린다. Push, Rollback, Restore, New Branch, Delete Branch, Deleted Branches는
   각 패널의 `serve`가, 그 밖의 요청(충돌 수락·저장·되돌리기, stash, reset, 3-way Restore, Smart,
@@ -971,6 +971,15 @@ Herdr는 mod를 QuickJS로 돌린다. JIT가 없고, 한 호출이 너무 오래
   두 버튼을 달지 못하고, 어디서 잇는지를 문장으로 알린다.
 - **전역 키가 먼저 받는다.** Herdr 전역 키(F2의 탭 이름 바꾸기 등)는 mod의 `on_key_down`보다 먼저
   가져간다. 그래서 Branch tree의 이름 변경은 메뉴로만 한다.
+- **Esc는 Herdr의 동작이다.** 오버레이 위의 Esc는 Herdr의 `overlay.close` 동작이고, `on_key_down`보다
+  먼저 와서 맨 위의 창이나 팝업을 통째로 닫는다. 키 처리기의 `stop_propagation`으로는 막지 못하고,
+  키보드를 가진 요소(또는 그 바깥 요소)가 `on_action("overlay.close", …)`로 받아야 남는다. 그래서
+  창·팝업 안에 그린 안쪽 부분(VCS widget 팝업의 브랜치 메뉴, 충돌 창과 Merge Revisions dialog의 질문
+  카드, 커밋 리베이스 창의 질문과 메시지 고치기)이 열린 동안만 `ui.js`의 `takeEscape`로 그 동작을
+  받아 안쪽만 닫는다. 키보드가 그 요소 안에 있어야 동작이 거기를 지나므로, 화면 바탕(focus handle을
+  단 요소)에 달고, 마우스로 열 때도 키보드가 창 밖으로 가지 않게 한다. 창 자체의 Esc는 받지 않아
+  지금처럼 닫힌다. `openMenu`의 메뉴는 따로 뜬 팝업이라 Esc가 그 팝업만 닫는다.
+  `ui-ids.test.mjs`가 질문 카드(`-question` id)나 `Popup`을 그리는 화면이 `takeEscape`를 쓰는지 본다.
 - **메뉴 막대.** mod가 메뉴 막대에 항목을 넣는 API를 찾지 못했다. 그래서 git 메뉴는 VCS Operations
   popup이다. Herdr에는 메뉴 부품이 없고 mod가 그리는 팝업 메뉴(`view-menu.js`)는 하위 메뉴를 그리지
   않아서, 하위 메뉴는 두 번째 메뉴로 연다. VCS widget 팝업만 자기 안에 하위 메뉴를 그린다(4절).

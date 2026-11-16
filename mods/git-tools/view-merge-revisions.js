@@ -28,7 +28,7 @@ import { columns, editedSince } from "./conflicts-model.js";
 import { writerOn, readerOn } from "./view-conflicts.js";
 import { decide, applyNonConflicting, resolveSimple, resultText, edit } from "./merge-chunks.js";
 import { paneTitles, openFile, layoutRows, chunkButtons, toolbar, countWords, seekConflict, nextFile, leftToDecide, saveQuestion, leaveQuestion, stageSave } from "./merge-revisions-model.js";
-import { tip, dialogFrame, button, iconButton, close, askOwner, writeBlock, scrollText, sentence, notice, WindowedList } from "./ui.js";
+import { tip, dialogFrame, button, iconButton, close, askOwner, writeBlock, scrollText, sentence, notice, WindowedList, takeEscape } from "./ui.js";
 
 // Where a local space's result is staged for the panel: the app's own git-tools folder
 // (app-files.js).
@@ -435,12 +435,14 @@ export default class MergeRevisionsView {
           button(`${id}-yes`, ok, t, { kind: "primary", onClick: (_e, cx) => yes(cx) }),
         ],
       }));
-    return div().relative().size_full()
+    const shell = div().relative().size_full()
       .child(behind)
       .child(div().id("mr-question").absolute().inset_0().flex().items_center().justify_center().bg(tint(t.canvas, "99"))
         .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
         .on_mouse_down("right", (_e, cx) => cx.stop_propagation())
-        .child(card))
+        .child(card));
+    // Esc closes only the card.
+    return takeEscape(shell, () => { this.confirm = null; })
       .track_focus(this.handle).on_key_down((e, cx) => {
         if (e.key === "escape") this.confirm = null;
         else if (e.key === "enter") yes(cx);

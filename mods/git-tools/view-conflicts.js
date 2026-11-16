@@ -21,7 +21,7 @@ import { readTurns } from "./read-turns.js";
 import { readOperation } from "./git-operation.js";
 import { readVersions, remoteWriter } from "./git-conflict.js";
 import { heading, columns, sortFiles, controls, pick, editedSince, editedAmong, stoppedOnConflicts } from "./conflicts-model.js";
-import { tip, openDialog, dialogFrame, button, close, askOwner, writeBlock, scrollText, sentence, openMenu, uiGlyph, fileGlyph, darkLook, WindowedList, ROW } from "./ui.js";
+import { tip, openDialog, dialogFrame, button, close, askOwner, writeBlock, scrollText, sentence, openMenu, uiGlyph, fileGlyph, darkLook, WindowedList, ROW, takeEscape } from "./ui.js";
 
 // The dialog's size; the Commit panel's "Resolve" link opens it the same size.
 const SIZE = { width: 760, height: 460 };
@@ -338,12 +338,14 @@ export default class ConflictsView {
         button("conflicts-overwrite-ok", this.t("conflicts.discardAccept"), t, { kind: "primary", onClick: (_e, cx) => this.take(path, column, cx) }),
       ],
     });
-    return div().relative().size_full()
+    const shell = div().relative().size_full()
       .child(behind)
       .child(div().id("conflicts-question").absolute().inset_0().bg(tint(t.canvas, "99"))
         .on_mouse_down("left", stopPress)
         .on_mouse_down("right", stopPress)
-        .child(card))
+        .child(card));
+    // Esc closes only the card.
+    return takeEscape(shell, () => { this.confirm = null; })
       .track_focus(this.handle).on_key_down((e, cx) => {
         if (e.key === "escape") this.confirm = null;
         else if (e.key === "enter") this.take(path, column, cx);

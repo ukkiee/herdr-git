@@ -218,16 +218,14 @@ export async function setFavorite(git, root, ref, on) {
   return { ok: true, code: 0, out: "", err: "", ...after };
 }
 
-// readTags(git, root) → { ok, code, out, err, tags }: tags [{ name, hash }] by name, hash
-// the commit the tag points at (an annotated tag's own object is looked through).
+// readTags(git, root) → { ok, code, out, err, tags }: tags, the tag names by name. Names
+// only, one split of git's output: a repository can have tens of thousands of tags, and
+// an object per tag costs QuickJS a tenth of a second there.
 export async function readTags(git, root) {
-  const r = await git.read(root, ["for-each-ref", "--format=%(refname)%00%(objectname)%00%(*objectname)", "--sort=refname", "refs/tags/"]);
+  const r = await git.read(root, ["for-each-ref", "--format=%(refname:lstrip=2)", "--sort=refname", "refs/tags/"]);
   if (!r.ok) return { ...r, tags: [] };
-  const tags = [];
-  for (const line of r.out.split("\n")) {
-    const [ref, hash, peeled] = line.split("\0");
-    if (ref) tags.push({ name: ref.slice("refs/tags/".length), hash: peeled || hash });
-  }
+  const tags = r.out.split("\n");
+  if (tags[tags.length - 1] === "") tags.pop();
   return { ok: true, code: 0, out: "", err: "", tags };
 }
 

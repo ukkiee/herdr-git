@@ -1,7 +1,7 @@
 // node branch-order.test.mjs: the Branch tree's and the VCS widget popup's order, the
 // favorites (main and master by default, until unmarked), and the Branch tree's settings.
 import assert from "node:assert/strict";
-import { isFavorite, nextFavorites, orderBranches, orderTreeRows, treeSettings, treeSettingsMenu, toggleTreeSetting } from "./branch-order.js";
+import { isFavorite, nextFavorites, orderBranches, orderTreeRows, treeSettings, treeSettingsMenu, toggleTreeSetting, treeRows } from "./branch-order.js";
 import { buildRows } from "./tree.js";
 import { popupRows } from "./git-heads.js";
 
@@ -153,6 +153,97 @@ const local = (...list) => list.map((name) => ({ name }));
   assert.deepEqual(toggleTreeSetting(defaults, "mine"), { ...defaults, mine: true });
   assert.deepEqual(toggleTreeSetting(defaults, "hidden"), { ...defaults, hidden: true });
   assert.deepEqual(toggleTreeSetting(defaults, "nothing"), defaults);
+}
+
+// ---- the Branch tree's rows
+{
+  const t = (key) => ({ "log.headCurrent": "HEAD (Current Branch)", "log.local": "Local", "log.remote": "Remote", "vcs.tags": "Tags", "vcs.detachedHead": "Detached HEAD" })[key] ?? key;
+  const data = {
+    head: { branch: "topic", hash: "0123456789abcdef" },
+    local: [{ name: "topic", current: true }, { name: "feature/b" }, { name: "main" }, { name: "feature/a" }],
+    remote: [{ name: "origin/main" }, { name: "origin/feature/a" }, { name: "origin/zeta" }],
+    tags: ["v1.0", "v2.0", "release/3"],
+  };
+  const settings = treeSettings(null);
+  const all = (rows) => Array.from({ length: rows.length }, (_, i) => rows.row(i));
+  const look = (rows) => all(rows).map((r) => `${"  ".repeat(r.depth)}${r.kind}:${r.label}${r.count !== undefined ? ` (${r.count})` : ""}`);
+
+  // HEAD, then Local and Remote with "/" making folders (folders first, then the current
+  // branch, the favorites, the rest by name), then the tags in the order read.
+  const rows = treeRows(data, { settings, prefs: none, t });
+  assert.deepEqual(look(rows), [
+    "head:HEAD (Current Branch)",
+    "group:Local (4)", "  folder:feature (2)", "    branch:a", "    branch:b", "  branch:topic", "  branch:main",
+    "group:Remote (3)", "  folder:origin (3)", "    folder:feature (1)", "      branch:a", "    branch:main", "    branch:zeta",
+    "group:Tags (3)", "  tag:v1.0", "  tag:v2.0", "  tag:release/3",
+  ]);
+  // Keys as the screen uses them; a branch row carries its readBranches entry, a tag row its name.
+  assert.deepEqual(all(rows).map((r) => r.key), [
+    "head", "local", "local:feature/", "local:feature/a", "local:feature/b", "local:topic", "local:main",
+    "remote", "remote:origin/", "remote:origin/feature/", "remote:origin/feature/a", "remote:origin/main", "remote:origin/zeta",
+    "tags", "tags:v1.0", "tags:v2.0", "tags:release/3",
+  ]);
+  assert.equal(rows.row(5).branch, data.local[0]);
+  assert.deepEqual(rows.row(16), { key: "tags:release/3", kind: "tag", scope: "tags", depth: 1, label: "release/3", branch: { name: "release/3" } });
+  assert.equal(rows.row(17), undefined);
+  // index: by key, tags included; parent: the row one sits under.
+  assert.equal(rows.index("remote:origin/zeta"), 12);
+  assert.equal(rows.index("tags:v2.0"), 15);
+  assert.equal(rows.index("tags:nope"), -1);
+  assert.equal(rows.index("local:nope"), -1);
+  assert.equal(rows.parent(15), 13);
+  assert.equal(rows.parent(10), 9);
+  assert.equal(rows.parent(1), -1);
+
+  // Folded: a group or a folder hides what is under it and keeps its count.
+  const folded = treeRows(data, { settings, prefs: none, t, collapsed: new Set(["tags", "remote:origin/", "local"]) });
+  assert.deepEqual(look(folded), ["head:HEAD (Current Branch)", "group:Local (4)", "group:Remote (3)", "  folder:origin (3)", "group:Tags (3)"]);
+  assert.equal(folded.index("tags:v1.0"), -1);
+  assert.equal(folded.row(5), undefined);
+
+  // Words: matching names only, unfolded whatever was folded, groups without one dropped.
+  const typed = treeRows(data, { settings, prefs: none, t, words: "a", collapsed: new Set(["tags", "local"]) });
+  assert.deepEqual(look(typed), [
+    "head:HEAD (Current Branch)",
+    "group:Local (3)", "  folder:feature (2)", "    branch:a", "    branch:b", "  branch:main",
+    "group:Remote (3)", "  folder:origin (3)", "    folder:feature (1)", "      branch:a", "    branch:main", "    branch:zeta",
+    "group:Tags (1)", "  tag:release/3",
+  ]);
+  assert.deepEqual(look(treeRows(data, { settings, prefs: none, t, words: "v2" })), ["group:Tags (1)", "  tag:v2.0"]);
+
+  // Show Tags off, Group by Directory off; a detached HEAD, during a rebase too.
+  const flat = treeRows({ ...data, head: { branch: null, hash: "0123456789abcdef" } }, { settings: { ...settings, grouped: false, tags: false }, prefs: none, t });
+  assert.deepEqual(look(flat), [
+    "head:HEAD (0123456)",
+    "group:Local (4)", "  branch:main", "  branch:feature/a", "  branch:feature/b", "  branch:topic",
+    "group:Remote (3)", "  branch:origin/main", "  branch:origin/feature/a", "  branch:origin/zeta",
+  ]);
+  assert.equal(treeRows({ ...data, head: { branch: null, hash: "0123456789abcdef" }, rebasing: true }, { settings, prefs: none, t }).row(0).label, "⚠ Detached HEAD");
+
+  // Show My Branches: only those holding a commit of the person's; none before that is read.
+  const mine = treeRows(data, { settings: { ...settings, mine: true, tags: false }, prefs: none, t, mine: { refs: new Set(["refs/heads/main", "refs/remotes/origin/zeta"]) } });
+  assert.deepEqual(look(mine), ["head:HEAD (Current Branch)", "group:Local (1)", "  branch:main", "group:Remote (1)", "  folder:origin (1)", "    branch:zeta"]);
+  assert.deepEqual(look(treeRows(data, { settings: { ...settings, mine: true, tags: false }, prefs: none, t, mine: null })), ["head:HEAD (Current Branch)"]);
+
+  // Nothing read yet: no rows.
+  assert.equal(treeRows(null, { settings, prefs: none, t }).length, 0);
+}
+
+// A repository with tens of thousands of tags: making the rows reads none of them, and a
+// row is made for a tag only when it is asked for, so the tree costs the same with 30,000
+// tags as with none. (QuickJS gives a render about 50 ms; 30,000 row objects took 90.)
+{
+  const reads = { n: 0 };
+  const names = Array.from({ length: 30000 }, (_, i) => `v${i}`);
+  const tags = new Proxy(names, { get: (list, key) => { if (typeof key === "string" && /^\d+$/.test(key)) reads.n++; return Reflect.get(list, key); } });
+  const rows = treeRows({ head: { branch: "main", hash: "abc" }, local: [{ name: "main", current: true }], remote: [], tags }, { settings: treeSettings(null), prefs: none });
+  assert.equal(reads.n, 0);
+  // HEAD, Local and main, Remote (empty), Tags, the tags.
+  assert.equal(rows.length, 1 + 2 + 1 + 1 + 30000);
+  assert.equal(rows.row(rows.length - 1).label, "v29999");
+  assert.equal(reads.n, 1);
+  assert.equal(rows.parent(rows.length - 1), 4);
+  assert.equal(reads.n, 1);
 }
 
 console.log("ok");

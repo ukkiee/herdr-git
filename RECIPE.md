@@ -1588,7 +1588,7 @@ the git ones run against real temporary repositories):
 | `git-diff.js` | `MAX_ROWS` (5000), `MAX_CHARS` (400000), `parseDiff`, `readDiff` (`oldPath`: a renamed file's path before its commit), `touchesDiff(changed, root, path)` (whether watched changes can change a working file's diff) |
 | `git-push.js` | `PROTECTED` (`["main", "master"]`), `readPushPlan`, `readPushFiles`, `push` |
 | `git-log.js` | `readLog`, `readRefsState`, `readGitDir`, `refsChanged`, `resolveCommit`, `shortenMiddle`, `labelRefs`, `formatCommitTime`, `readNotPicked(git, root, branch)` → `{ ok, err, notPicked: [hash] }` (the branch's commits whose change HEAD has no copy of, `git cherry`'s "+") |
-| `git-branch.js` | `readBranches`, `readTags(git, root)` → `{ ok, code, out, err, tags: [{ name, hash }] }`, `readFavorites(git, root)`, `setFavorite(git, root, ref, on)` (the `gittools.favorite` and `gittools.unfavorite` marks), `readMyBranches(git, root)` → `{ ok, code, out, err, email, mine }` (`mine`: branches holding a commit by `user.email`), `checkout`, `checkoutRevision`, `checkBranchName`, `createBranch`, `fetchAll`, `deleteBranch` (refuses a branch checked out in another worktree before recording, `branches.checkedOutElsewhere`; records the branch first and deletes nothing when that fails; a branch it removed comes back as `deleted: { name, hash, upstream }`, `upstream` `{ remote, merge }` or null, read before `branch -D`), `restoreBranch(git, root, { name, hash, upstream })`, `readDeletedBranches(git, root)` → `{ ok, err, branches: [{ name, hash, subject, time, upstream, restorable, reason, msg? }] }` (newest first, at most 50), `restoreBranches(git, root, branches)` → `{ ok, code, out, err, msg?, restored: [{ name, hash }], skipped: [{ name, hash, reason, msg? }], untracked: [{ name, hash, err }] }` (`untracked`: restored branches whose upstream config failed, with git's words) |
+| `git-branch.js` | `readBranches`, `readTags(git, root)` → `{ ok, code, out, err, tags: [name] }`, `readFavorites(git, root)`, `setFavorite(git, root, ref, on)` (the `gittools.favorite` and `gittools.unfavorite` marks), `readMyBranches(git, root)` → `{ ok, code, out, err, email, mine }` (`mine`: branches holding a commit by `user.email`), `checkout`, `checkoutRevision`, `checkBranchName`, `createBranch`, `fetchAll`, `deleteBranch` (refuses a branch checked out in another worktree before recording, `branches.checkedOutElsewhere`; records the branch first and deletes nothing when that fails; a branch it removed comes back as `deleted: { name, hash, upstream }`, `upstream` `{ remote, merge }` or null, read before `branch -D`), `restoreBranch(git, root, { name, hash, upstream })`, `readDeletedBranches(git, root)` → `{ ok, err, branches: [{ name, hash, subject, time, upstream, restorable, reason, msg? }] }` (newest first, at most 50), `restoreBranches(git, root, branches)` → `{ ok, code, out, err, msg?, restored: [{ name, hash }], skipped: [{ name, hash, reason, msg? }], untracked: [{ name, hash, err }] }` (`untracked`: restored branches whose upstream config failed, with git's words) |
 | `git-log-filter.js` | `DATE_PRESETS` (`{ label, key, since }`: `label` is the saved English name, `key` the words), `datePreset(label)`, `dateText(t, { dateLabel, since, until })`, `isDate`, `filterArgs` (`users: [{ name } \| { text }]` besides `user`), `isHash`, `readMe`, `userOf`, `readAuthors(git, root)` → `{ ok, err, authors: [{ name, emails }] }`, `matchAuthors(authors, query)`, `readBranchNames` |
 | `i18n.js` | `LANGS` (`["en", "ko"]`), `pickLang(tags)`, `readAppleLanguages(stdout)`, `readLocaleEnv(stdout)`, `systemLang(platform, read)` (→ `"ko" \| "en"`, or null when it isn't known; `platform` `"macos"`, `"linux"` or `"windows"`, where an empty answer is not known), `TABLES`, `translator(lang, tables?)` → `t(key, args)` (`t.lang`), `sentence(t, msg, text)`, `formatTime(seconds, lang, now?)`, `formatDateTime(seconds, lang)` |
 | `messages-<area>.js` | `en` and `ko` (one file per area, see "Words") |
@@ -1611,7 +1611,7 @@ the git ones run against real temporary repositories):
 | `git-remote.js`, `git-refs.js`, `git-heads.js` | pull, update, Update Project, the Update Info range; tags, branch names, remotes, Push Tag; what the VCS widget shows |
 | `git-compare.js`, `git-revision.js`, `git-worktree.js` | comparisons, patches, Get from, Show Changes to Parents (`parentDiffs`); a revision's files, history, child commits; new worktrees and Checkout Tag or Revision |
 | `git-patch.js` | `readPatchFiles(text)` (pure: a patch's files, statuses and names as `git apply -p1` takes them), `applyPatch(git, root, { file, paths })` (checked files only, always named with `--include`, in parts when there are many; a 3-way retry; conflicts from `ls-files -u`), `READ_LIMIT`, `readMayBeCut(text)` (the 1 MiB read limit in UTF-8 bytes), `homePath(typed, home)` (a leading `~` or `~/` as that machine's home), `changesCommit(git, root, { paths, message })` (a commit of the checked local changes on HEAD, no ref) |
-| `git-console.js`, `log-menus.js`, `log-select.js`, `log-options.js`, `branch-order.js`, `vcs-ops.js`, `ui-icons.js` | console records, with a URL's credentials hidden; the Log panel's menus; picking commits; graph and view options; branch order and favorites (the widget popup's favorites first); the VCS Operations popup's items; UI icons |
+| `git-console.js`, `log-menus.js`, `log-select.js`, `log-options.js`, `branch-order.js`, `vcs-ops.js`, `ui-icons.js` | console records, with a URL's credentials hidden; the Log panel's menus; picking commits; graph and view options; branch order and favorites (the widget popup's favorites first) and the Branch tree's rows (`treeRows`, a tag's row made when asked for); the VCS Operations popup's items; UI icons |
 | `ui-size.js`, `focus-repo.js` | `textWidth`, `menuWidth`, `MENU_TEXT`, `HINT_TEXT`, `belowSpot`, `pressSpot`, `sideOf`, `dialogFills`, `dialogRoom`, `ERROR_BOX`, `ERROR_ROOM`, `widgetBlockWidth`; `whereFocused`, `newPanes`, `rememberTab`, `isTabScreen`, `registerTab`, `forgetTab` |
 
 Each of these files' header says what it exports and why.
@@ -2439,6 +2439,19 @@ in English.
   `max_h(...).overflow_y_scroll()` with `Scrollbar.vertical(id)` laid over it.
 - The Branch popup draws only the rows in view (`WindowedList`): a repository can have
   thousands of branches, and every render would build them all.
+- Herdr stops a render that runs past about 50 ms and leaves the last frame under a strip
+  `This view could not be re-rendered; showing the last version that worked / interrupted`
+  (`herdr-app check` on herdr-app 0.1.15: 45 ms passes, 55 ms is stopped). Mods run in
+  QuickJS, where making 30,000 small objects alone takes about 90 ms. So a render's work
+  must follow the rows in view, never the size of the repository: the Branch tree's rows
+  are made when what they show changes (a read, the filter, a fold, a favorite, a
+  setting; a timer when the language changes), never in `render`, and a tag's row only
+  when it is drawn (`branch-order.js` `treeRows`). `readTags` reads names alone, one split
+  of git's output. The VCS widget popup keeps its rows until the answer, the search text,
+  a fold or the language changes, and a folded group only counts. Measured in QuickJS on
+  a repository with 32,056 refs (30,300 tags, 1,557 remote branches): every row as an
+  object, tags included, 155–183 ms; without the tag rows 25–44 ms; the 30 rows in view
+  under 1 ms. Tags as `{ name, hash }` objects 105 ms, names alone 2–4 ms.
 - A preview stands in only until its own full read lands: `LogList.awaited` holds that
   turn and the full read clears it. The `loading` flag can't say this, since reading
   the next batch sets it again, and a late preview would then replace the full rows
@@ -3147,7 +3160,9 @@ pre-push 20 s, reference-transaction 12 s, each made to fail when a check says s
     shows the first lines and the wheel scrolls it to the last one.
 64. Open a repository with 30,000 annotated tags: the Commit list shows its commits
     without tag labels while Refresh still spins, then the tag labels appear and the
-    commit that only a tag reaches is in the list.
+    commit that only a tag reaches is in the list. The Branch tree's Tags group counts
+    30,000 and scrolls to the last tag; typing in its filter, folding Tags and opening
+    the VCS widget popup never put up `This view could not be re-rendered`.
 65. Check out a commit (Checkout Revision): the Commit panel shows
     `HEAD is detached: a commit made here is on no branch. Create a branch to keep it.`
     above the message box; check out a branch and the line is gone.

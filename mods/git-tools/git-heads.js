@@ -141,6 +141,13 @@ export function popupRows({ heads, op, query = "", folded = new Set(), handled =
   };
   const trees = [];
   for (const [id, key] of GROUPS) {
+    // Folded (never while searching): the count alone, nothing it hides is made into a
+    // row. A repository can have tens of thousands of tags.
+    if (!words && folded.has(id)) {
+      const count = (id === "recent" ? heads?.recent : heads?.[id])?.length ?? 0;
+      if (count) trees.push({ kind: "group", id, label: t(key), open: false, count });
+      continue;
+    }
     let rows;
     if (id === "remote") {
       rows = [];
@@ -157,8 +164,8 @@ export function popupRows({ heads, op, query = "", folded = new Set(), handled =
     }
     const count = rows.filter((r) => r.kind === "branch").length;
     if (!count) continue;
-    const open = Boolean(words) || !folded.has(id);
-    trees.push({ kind: "group", id, label: t(key), open, count }, ...(open ? rows : []));
+    trees.push({ kind: "group", id, label: t(key), open: true, count });
+    for (const r of rows) trees.push(r);
   }
   const sections = [actions(TOP), actions(ongoingItems(op)), actions(NEW), trees].filter((s) => s.length);
   return sections.flatMap((s, i) => (i ? [{ kind: "rule" }, ...s] : s));

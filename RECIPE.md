@@ -2876,9 +2876,12 @@ in English.
   variable; text made ahead (Branch tree rows, the Commit list's times, Commit details'
   meta line) is kept with its language and made again when the language changes.
 - `InputState` and `TextareaState` take their placeholder only when made. When a copy's
-  language changes, the inputs (`log-filters.js`, `log-branches.js`) and the message box
-  (`commit-form.js`) are made again outside render, in a timer, carrying the typed text
-  over; the old state isn't released (a handler may still hold it).
+  language changes, the inputs (`log-filters.js`, `log-branches.js`, `view-files.js`,
+  the VCS widget popup's search) and the message box (`commit-form.js`) are made again
+  outside render, in a timer, carrying the typed text over; the Compare tab's filter
+  inputs (User, Date, Path) are made again in its `spoke(cx)`, which `main.js` calls
+  outside render. The old state isn't released (a handler may still hold it). Dialogs
+  need none of this: they open with a fixed language (`props.lang`).
 - `speakAs` only holds during a screen call from `main.js`. A click handler or the code
   after an `await` is outside it: pass `screen.t` or `tr`, or the shared parts speak
   English. A dialog or menu opened there needs `lang: this.lang`, or it opens in the

@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { textWidth, menuWidth, belowSpot, pressSpot, sideOf, dialogFills, dialogRoom, ERROR_BOX, ERROR_ROOM, widgetBlockWidth } from "./ui-size.js";
+import { textWidth, menuWidth, menuChecks, MENU_CHECK, MENU_GAP, belowSpot, pressSpot, sideOf, dialogFills, dialogRoom, ERROR_BOX, ERROR_ROOM, widgetBlockWidth } from "./ui-size.js";
 
 // ---- text: a Hangul syllable is as wide as the font size, Latin letters narrower
 {
@@ -34,6 +34,27 @@ import { textWidth, menuWidth, belowSpot, pressSpot, sideOf, dialogFills, dialog
   assert.ok(menuWidth([{ label: "가".repeat(20), hint: "⌥⌘N" }]) > menuWidth([{ label: "가".repeat(20) }]));
   // Whole pixels.
   assert.equal(w, Math.ceil(w));
+}
+
+// ---- menus with a check slot: a menu where any item says checked (true or false) keeps a
+// slot before the labels of those items, and the width makes room for it
+{
+  const label = "가".repeat(20);
+  assert.equal(menuChecks([{ label: "Checkout" }, { label: "Delete" }]), false);
+  assert.equal(menuChecks([{ label: "Group", checked: false }]), true);
+  assert.equal(menuChecks([{ label: "Sort", value: null, disabled: true }, { label: "Date", checked: true }]), true);
+
+  const plain = menuWidth([{ label }]);
+  assert.equal(menuWidth([{ label, checked: true }]), plain + MENU_CHECK + MENU_GAP);
+  // An unchecked item keeps the same slot, so its label starts where a checked one's does.
+  assert.equal(menuWidth([{ label, checked: false }]), plain + MENU_CHECK + MENU_GAP);
+  // A group name in a check menu has no slot: it starts at the row's left edge.
+  assert.equal(menuWidth([{ label, value: null, disabled: true }, { label: "Date", checked: true }]), plain);
+  // A menu without checks keeps its width.
+  assert.equal(menuWidth([{ label, hint: "⌥⌘N" }]), menuWidth([{ label, hint: "⌥⌘N", checked: undefined }]));
+  // The slot is as wide as the commit panel's checkbox, and the gap is the row's.
+  assert.equal(MENU_CHECK, 14);
+  assert.equal(MENU_GAP, 9);
 }
 
 // ---- the widget's popup: right under the widget, its left edge on the widget's

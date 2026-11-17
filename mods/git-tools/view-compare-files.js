@@ -272,7 +272,7 @@ export default class CompareFiles {
 
   options(e, cx) {
     cx.spawn(async (cx) => {
-      const picked = await openMenu(this.bus, [{ label: this.t("compare.groupByDirectory"), value: "group", hint: this.grouped ? "✓" : "" }], { width: 240, at: e?.position, lang: this.lang });
+      const picked = await openMenu(this.bus, [{ label: this.t("compare.groupByDirectory"), value: "group", checked: Boolean(this.grouped) }], { width: 240, at: e?.position, lang: this.lang });
       if (picked === "group") { this.grouped = !this.grouped; this.build(); }
       cx.notify();
     });

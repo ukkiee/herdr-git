@@ -323,7 +323,9 @@ toolbar (`Git` semibold, `Log` 12px `muted`, Refresh, Hide) and the notice.
   84px), a tooltip with the whole value, and an 18px `x` beside it that clears it.
 - `filter-x` (Clear all filters) at the end while any filter or the branch limit is set.
 - Each button opens a popup under it: 260px wide, 5px padding, 8px corners, `border`,
-  `popover`, a shadow, 12.5px text, 26px items with a 12px `check` on the one in force.
+  `popover`, a shadow, 12.5px text, 26px items. Each item starts with a 14px check slot
+  (as a popup menu's) that shows the Commit panel checkbox's tick (11px, no box, in the
+  item's text color) on the one in force.
   - Branch: an input (`Search branches`), then every branch as 26px rows, 10 rows
     (260px) at a time with a 6px scroll thumb on the right: `HEAD` (hint: the current
     branch or `detached`), then `Local` and `Remote` headings at 11px `dim` over their
@@ -335,7 +337,7 @@ toolbar (`Git` semibold, `Log` 12px `muted`, Refresh, Hide) and the notice.
     input, by name. An author row's hint is its email, or the first email and `+N` when
     the name has several: the hint takes at most 110px and only the email is cut with
     `…`, never the `+N`. The row's tooltip is the name and every email, one per line.
-    Checked rows have the 12px `check`. While the authors are first
+    Checked rows have the tick in their check slot. While the authors are first
     read, a `Loading…` row (`dim`); a typed input that matches none, `No matching users`;
     a failed read, git's words at 12px `ansi1`. Last, at 11px `dim`:
     `Enter checks a row or adds the text`. The button's value is the one entry (`me`, a
@@ -577,13 +579,18 @@ the one of the row or button that opened it doesn't sit over the menu; it comes 
 when the menu closes. Items 28px, 8px side
 padding, 6px corners; the keyboard's item has `selected`, others `hover`; a disabled
 item is `dim` (its tooltip says why); a hint at 11px `dim` on the right; a 1px `border`
-line can sit above an item. Width: at least 220px (or the width said), wider to fit the
-longest label, up to 560px.
+line can sit above an item. A menu with items that can be on keeps a 14px check slot
+before those items' labels, 9px from the label (the row's gap): an item that is on shows
+the Commit panel checkbox's tick there (11px, no box, in the item's text color: `dim`
+when the item is off-limits), one that is off leaves it empty, so the labels start in
+one place. A group name in such a menu has no slot and starts at the row's left edge; a
+menu with nothing to check has no slot at all. Width: at least 220px (or the width
+said), wider to fit the longest label (and the check slot), up to 560px.
 
 | where | items |
 |---|---|
 | Commit panel, a row | `Show Diff` (files only), `Rollback…` (rows in Changes only) |
-| Commit panel, View Options | `Group By: Directory` (hint `✓` while on) |
+| Commit panel, View Options | `Group By: Directory` (ticked while on) |
 | Branch tree, another local branch (300px) | `Checkout`, `New Branch from '<name>'…`, `Checkout and Rebase onto '<current>'`, `Checkout and Update`, line, `Compare with '<current>'`, `Show Diff with Working Tree`, line, `Rebase '<current>' onto '<name>'`, `Merge '<name>' into '<current>'`, line, `New Worktree from '<name>'…`, line, `Update`, `Push…`, line, `Rename…`, `Delete` |
 | Branch tree, the current branch | `New Branch from '<name>'…`, line, `Show Diff with Working Tree`, line, `New Worktree from '<name>'…`, line, `Update`, `Push…`, `Tracked Branch '<upstream>'` (a second menu), line, `Rename…` (a detached HEAD has no Tracked Branch and no Rename…) |
 | Branch tree, a remote branch | as another local branch without Checkout and Update, Update, Push… and Rename…, with `Pull into '<current>' Using Rebase`, `Pull into '<current>' Using Merge` before `Delete` |
@@ -1772,7 +1779,7 @@ the git ones run against real temporary repositories):
 | `git-compare.js`, `git-revision.js`, `git-worktree.js` | comparisons, patches, Get from, Show Changes to Parents (`parentDiffs`); a revision's files, history, child commits; new worktrees and Checkout Tag or Revision |
 | `git-patch.js` | `readPatchFiles(text)` (pure: a patch's files, statuses and names as `git apply -p1` takes them), `applyPatch(git, root, { file, paths })` (checked files only, always named with `--include`, in parts when there are many; a 3-way retry; conflicts from `ls-files -u`), `READ_LIMIT`, `readMayBeCut(text)` (the 1 MiB read limit in UTF-8 bytes), `homePath(typed, home)` (a leading `~` or `~/` as that machine's home), `changesCommit(git, root, { paths, message })` (a commit of the checked local changes on HEAD, no ref) |
 | `git-console.js`, `log-menus.js`, `log-select.js`, `log-options.js`, `branch-order.js`, `vcs-ops.js`, `ui-icons.js` | console records, with a URL's credentials hidden; the Log panel's menus; picking commits; graph and view options; branch order and favorites (the widget popup's favorites first) and the Branch tree's rows (`treeRows`, a tag's row made when asked for); the VCS Operations popup's items; UI icons |
-| `ui-size.js`, `focus-repo.js` | `textWidth`, `menuWidth`, `MENU_TEXT`, `HINT_TEXT`, `belowSpot`, `pressSpot`, `sideOf`, `dialogFills`, `dialogRoom`, `ERROR_BOX`, `ERROR_ROOM`, `widgetBlockWidth`; `whereFocused`, `newPanes`, `rememberTab`, `isTabScreen`, `registerTab`, `forgetTab` |
+| `ui-size.js`, `focus-repo.js` | `textWidth`, `menuWidth`, `menuChecks`, `MENU_TEXT`, `HINT_TEXT`, `MENU_GAP`, `MENU_CHECK`, `belowSpot`, `pressSpot`, `sideOf`, `dialogFills`, `dialogRoom`, `ERROR_BOX`, `ERROR_ROOM`, `widgetBlockWidth`; `whereFocused`, `newPanes`, `rememberTab`, `isTabScreen`, `registerTab`, `forgetTab` |
 | `skeleton.js` | `HEIGHT` (720: the height a list fills before its column is measured), `ROOM` (24: the empty end of a bar that takes a row's rest), `LEAD` (the fixed places `slot`, `check`, `icon`, `file`, `mark`, `dot`: their width and what stands in for them), `skeletonRows(specs, { height })` → `[{ height, left, right, gap, pieces }]` (a skeleton list's rows from a screen's description of its real rows, as many as the height shows plus one; `ui.js` `skeleton` draws them), `skeletonCount(specs, height)` (that many rows without the pieces: a new height redraws only when it changes), `skeletonFills(specs)` (whether a section fills, so the height is measured), `skeletonSize(id)` (what a screen keeps for one list: the element id and the measured height), `checkSize(size)` (the size when it came from `skeletonSize` or is left out, else an error naming what it got) |
 
 Each of these files' header says what it exports and why.
@@ -3910,7 +3917,7 @@ commit `main` lacks)
      `user.email`, `Set user.email in git to see your branches.`
 225. Hide Git Branches: the tree narrows to its toolbar; press it again to bring it back.
 226. Branches Pane Settings ⋮: On Single Click (Update Branch Filter / Navigate Log to
-     Branch Head), Group by Directory, Show Tags, each with ✓; with Navigate Log, clicking
+     Branch Head), Group by Directory, Show Tags, each ticked while on; with Navigate Log, clicking
      a branch selects its head commit.
 227. Graph Options ◇: Topologically, First Parent and No Merges each change the list and its
      lines; Collapse Linear Branches draws folded runs as a dotted line.

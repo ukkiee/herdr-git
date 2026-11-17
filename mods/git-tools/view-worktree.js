@@ -123,7 +123,7 @@ export default class NewWorktree {
     cx.spawn(async (cx) => {
       const items = [];
       this.sources.forEach((b, i) => {
-        items.push({ label: b.name, value: String(i), hint: b === this.source ? "✓" : "", rule: i > 0 && b.scope !== this.sources[i - 1].scope });
+        items.push({ label: b.name, value: String(i), checked: b === this.source, rule: i > 0 && b.scope !== this.sources[i - 1].scope });
       });
       const picked = await openMenu(this.bus, items, { width: 300, at, lang: this.lang });
       this.listOpen = false;

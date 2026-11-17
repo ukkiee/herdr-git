@@ -96,6 +96,14 @@ export function widgetFace(heads, op) {
   return { kind: "branch", name: heads.current.name, ahead: heads.current.ahead, behind: heads.current.behind };
 }
 
+// faceOf(heads) → the part of readHeads' result widgetFace and the widget's branch menu
+// use ({ ok, head, current }), or null when nothing was read. What the widget keeps of a
+// folder it left: the branch and tag lists are megabytes in a big repository.
+export function faceOf(heads) {
+  if (!heads) return null;
+  return { ok: heads.ok, head: heads.head, current: heads.current };
+}
+
 // The popup's actions, by section, in the reference product's order. The ones in the
 // middle show only while an operation is in progress (ongoingItems).
 const TOP = ["vcs.updateProject", "vcs.commit", "vcs.push"];

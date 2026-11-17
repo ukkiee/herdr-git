@@ -16,6 +16,7 @@ import { v_flex } from "gpui-base";
 import { exec, theme } from "herdr";
 import { makeGit, repoRoot } from "./git.js";
 import { readTurns, STUCK } from "./read-turns.js";
+import { moveRecent } from "./recent.js";
 import { readRefsState, readGitDir, refsChanged, resolveCommit } from "./git-log.js";
 import { fetchAll, restoreBranch, trackedBranch } from "./git-branch.js";
 import { remoteFailure } from "./git-remote.js";
@@ -67,6 +68,10 @@ const FILTERS_MIN = 420, TOOLBAR_REST = 100;
 const SHORT = 7; // a hash as Commit details and the Branch tree's HEAD row show it
 const FIRST_LOOK = 6000; // ms after the panel starts: what is still unread then is read again once
 const FIRST_DRAW = 100; // ms between the looks of the panel's own timer at what landed (redraw)
+// How many folders besides the one shown the panel keeps the last view of (see remember).
+// Fewer than the Commit panel: a big repository's first 1,000 commits, branches and tags
+// are about 2 MB a folder, and every mod shares one heap.
+const SEEN = 4;
 
 const stored = (column) => {
   try { const n = Number(localStorage.getItem(column.key)); return n >= column.min ? n : column.width; }
@@ -231,6 +236,8 @@ export default class LogView {
     // file is read, app-wide, saved on every change.
     this.options = readOptions(undefined);
     this.me = null; // the email of the user git is configured with in this.repo
+    // context key → what the panel showed there when it left (see remember), newest last.
+    this.seen = new Map();
     this.branches = new LogBranches();
     this.filters = new LogFilters();
     this.list = new LogList();
@@ -582,10 +589,12 @@ export default class LogView {
   refresh(cx) {
     const { folder, on } = this.where(), context = this.contextKey();
     if (context !== this.context) {
+      const left = this.context, kept = this.remember();
       this.context = context; this.error = null; this.writeError = null; this.notRepo = false; this.read = false;
       this.lost = false; this.lostMark = null; this.jumpTurn++;
       this.finding.drop();
       this.setRepo(null, cx);
+      if (this.recall(moveRecent(this.seen, left, kept, context, SEEN), cx)) this.redraw(cx);
     }
     if (!folder) return;
     const turn = this.finding.start();
@@ -618,6 +627,35 @@ export default class LogView {
     });
   }
 
+  // Leaving a folder: what the Branch tree and the Commit list show of its repository is
+  // kept, so coming back shows it at once instead of the loading skeleton (recall); the
+  // read that follows puts it right. The selection and Commit details are not: a move
+  // clears them, as it clears the branch limit. → what to keep (refresh puts it in `seen`
+  // after taking out the folder come back to, recent.js moveRecent), or null.
+  remember() {
+    if (!this.context || !this.repo || !this.read || this.notRepo) return null;
+    const list = this.list.keep(), branches = this.branches.keep();
+    if (!list && !branches) return null;
+    return { repo: this.repo, folder: this.folder, me: this.me, list, branches };
+  }
+
+  // Back on a folder seen before: its Branch tree and Commit list as they were left, rows
+  // laid out again here (a timer: refresh never runs in render). → true when there was one.
+  // setRepo(null) ran just before, so a tree not kept shows its skeleton, not the last one.
+  recall(was, cx) {
+    if (!was) return false;
+    // A new record, not the one kept: a watch loop still waiting from the visit before
+    // checks `this.repo === repo`, so it ends instead of running beside the one below.
+    const repo = { ...was.repo };
+    this.repo = repo; this.folder = was.folder; this.me = was.me;
+    this.read = true;
+    this.branches.restore(was.branches);
+    this.list.restore(was.list);
+    // refresh calls setRepo (which starts the watch) only for another root.
+    this.watch(repo, cx);
+    return true;
+  }
+
   // Another repository (or none): the branch limit and the selection belonged to the old one.
   setRepo(repo, cx) {
     this.repo = repo;
@@ -628,7 +666,10 @@ export default class LogView {
     this.refs = null;
     if (this.picks.picked.size || this.selected) { this.picks = NONE; this.selected = null; this.detailsOf = ""; this.details.show(null, cx); }
     this.me = null;
-    if (!repo) { this.list.reload(cx); return; }
+    // No repository: both columns are emptied, and their reads still on the way are
+    // dropped (each reload takes a new turn), so one from the folder left can't land over
+    // what recall puts back.
+    if (!repo) { this.list.reload(cx); this.branches.reload(cx); return; }
     this.watch(repo, cx);
     // Whose commits My Commits highlights.
     cx.spawn(async (cx) => {

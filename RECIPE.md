@@ -613,7 +613,10 @@ dialog's own (`openDialog` in its file).
   ■ (abort, after a 420×150 question). The name is cut when the widget would pass 360px.
   Until the block's first read answers, one skeleton bar fills the block at the width
   the layout kept, with no icon or ▾, and the block isn't resized; outside a repository
-  it then shrinks to 4px. When the kept width is that 4px (the last folder wasn't a
+  it then shrinks to 4px. Moving to another folder does the same until that folder's
+  first answer, except for the 8 folders it last left: those show what they showed
+  (branch, ↓ ↑, operation) at once at their own width, and the read that follows
+  changes only what moved since. When the kept width is that 4px (the last folder wasn't a
   repository), the bar doesn't show until the read answers: the block is resized once,
   to the answer, rather than widened for the bar and again for the widget.
   Click: a 380×520 popup 2px below the widget, kept inside the block's right end: the
@@ -794,7 +797,7 @@ machine); back on a terminal, they follow its folder again.
   list show at once as they were left, without the skeleton, and the read that follows
   puts them right (files gone since then leave the checks). A commit that succeeds
   while the panel shows another repository clears the checks kept for its own. The
-  panel keeps this for the last 8 folders; a folder not among them starts with
+  panel keeps this for the 8 folders it last left; a folder not among them starts with
   the skeleton and nothing checked.
 - **A detached HEAD** shows its warning line for as long as it lasts; Commit stays one
   press (no second confirmation).
@@ -879,7 +882,10 @@ machine); back on a terminal, they follow its folder again.
   while the panel is hidden), and when the focused folder changes. A read asked for
   during a read runs once that ends. A folder unfolded while a read runs keeps what its
   own read found: the read's result is merged with it, not put over it. Coming back to
-  a folder shows its unfolded folders and its previewed file as they were left.
+  a folder shows its unfolded folders and its previewed file as they were left. For the
+  8 folders last left the tree itself (its entries, git marks and place) shows at once too,
+  without the skeleton, and the read that follows puts it right; an older folder shows
+  the skeleton until its read lands, then its unfolded folders as they were.
 - **git marks** come from one `git status` of the repository the folder is in; outside a
   repository there are none. When the panel's folder is itself inside an untracked or
   an ignored folder, git names only that folder, and every path in the panel takes its
@@ -938,6 +944,19 @@ machine); back on a terminal, they follow its folder again.
   still unread is read again.
 - **Moving to another repository** shows it at once, with a commit selected or while
   this panel's own write still runs on the one before (that write goes on there).
+- **Coming back to a folder** shown before: the Branch tree (with its folding and place)
+  and the Commit list (its first 1,000 commits, folded as they were, at the commit that
+  was on top, or at the top when that one was further down) show at once, without the
+  skeleton, and the read that follows replaces them. The selection, Commit details and
+  the branch limit are not kept: a move clears them, as it always has. The Commit list
+  is read afresh with its skeleton (the Branch tree still shows at once) when it was
+  kept under a branch limit, or under other filters or graph and sort options than the
+  ones now set, or when it was read past its first 1,000 commits with No Merges on and
+  merges were left out of it; also when its read hadn't landed or had failed on
+  leaving. A Branch tree whose read hadn't landed or had failed shows its skeleton.
+  The panel keeps this for the 4 folders it last left (a big repository's commits,
+  branches and tags are about 2 MB each); a folder not among them starts with the
+  skeleton.
 - **Column widths**: drag the handles. The Commit list never goes below 360px. Widths
   are kept.
 - **Branch tree**:
@@ -1768,11 +1787,12 @@ the git ones run against real temporary repositories):
 | `conflicts-model.js`, `merge-revisions-model.js` | what the two conflict dialogs show and allow |
 | `git-smart.js` | the blocking files per request (a checkout's `{ name, remote }` or `{ revision }`), `checkoutBranch` and `checkoutRevisionOf` (refused with the files in the way), `forceCheckout`, `smartRun`, the `gittools.smart-stash` mark |
 | `git-stash.js`, `git-reset.js`, `git-rewrite.js`, `rebase-plan.js`, `git-changes.js` | stash; reset and the record before a hard one; history edits through one rebase plan (`editCheck`, `readEditFacts`); file-level revert and cherry-pick |
-| `git-remote.js`, `git-refs.js`, `git-heads.js` | pull, update, Update Project, the Update Info range; tags, branch names, remotes, Push Tag; what the VCS widget shows, the popup's rows (`popupRows`), where ↑ ↓ go among them (`popupStep`) and the branch a row's menu is about (`popupTarget`) |
+| `git-remote.js`, `git-refs.js`, `git-heads.js` | pull, update, Update Project, the Update Info range; tags, branch names, remotes, Push Tag; what the VCS widget shows and keeps of a folder it left (`faceOf`), the popup's rows (`popupRows`), where ↑ ↓ go among them (`popupStep`) and the branch a row's menu is about (`popupTarget`) |
 | `git-compare.js`, `git-revision.js`, `git-worktree.js` | comparisons, patches, Get from, Show Changes to Parents (`parentDiffs`); a revision's files, history, child commits; new worktrees and Checkout Tag or Revision |
 | `git-patch.js` | `readPatchFiles(text)` (pure: a patch's files, statuses and names as `git apply -p1` takes them), `applyPatch(git, root, { file, paths })` (checked files only, always named with `--include`, in parts when there are many; a 3-way retry; conflicts from `ls-files -u`), `READ_LIMIT`, `readMayBeCut(text)` (the 1 MiB read limit in UTF-8 bytes), `homePath(typed, home)` (a leading `~` or `~/` as that machine's home), `changesCommit(git, root, { paths, message })` (a commit of the checked local changes on HEAD, no ref) |
 | `git-console.js`, `log-menus.js`, `log-select.js`, `log-options.js`, `branch-order.js`, `vcs-ops.js`, `ui-icons.js` | console records, with a URL's credentials hidden; the Log panel's menus; picking commits; graph and view options; branch order and favorites (the widget popup's favorites first) and the Branch tree's rows (`treeRows`, a tag's row made when asked for); the VCS Operations popup's items; UI icons |
 | `ui-size.js`, `focus-repo.js` | `textWidth`, `menuWidth`, `MENU_TEXT`, `HINT_TEXT`, `belowSpot`, `pressSpot`, `sideOf`, `dialogFills`, `dialogRoom`, `ERROR_BOX`, `ERROR_ROOM`, `widgetBlockWidth`; `whereFocused`, `newPanes`, `rememberTab`, `isTabScreen`, `registerTab`, `forgetTab` |
+| `recent.js` | `keepRecent(map, key, value, limit)` (the newest last; past `limit` the oldest go: what a panel keeps of the folders it left), `takeRecent(map, key)` (taken out as it is used), `moveRecent(map, from, kept, to, limit)` (a move: the folder come back to is taken out before the one left goes in, so `limit` folders are kept besides the one shown), `firstBatch({ commits, seen, through }, batch)` → the Commit list's first `batch` commits, or null under No Merges with merges left out past one batch (where they end in git's order is lost) |
 | `skeleton.js` | `HEIGHT` (720: the height a list fills before its column is measured), `ROOM` (24: the empty end of a bar that takes a row's rest), `LEAD` (the fixed places `slot`, `check`, `icon`, `file`, `mark`, `dot`: their width and what stands in for them), `skeletonRows(specs, { height })` → `[{ height, left, right, gap, pieces }]` (a skeleton list's rows from a screen's description of its real rows, as many as the height shows plus one; `ui.js` `skeleton` draws them), `skeletonCount(specs, height)` (that many rows without the pieces: a new height redraws only when it changes), `skeletonFills(specs)` (whether a section fills, so the height is measured), `skeletonSize(id)` (what a screen keeps for one list: the element id and the measured height), `checkSize(size)` (the size when it came from `skeletonSize` or is left out, else an error naming what it got) |
 
 Each of these files' header says what it exports and why.
@@ -3169,7 +3189,7 @@ Each line is one check: do what it says, see what follows.
 **Offline**
 
 1. Run `node layout.test.mjs` at the root, `node <file>` for every `*.test.mjs` in
-   `mods/git-tools` (58 files) and `node tools/gen-icon-theme.test.mjs`: each prints
+   `mods/git-tools` (59 files) and `node tools/gen-icon-theme.test.mjs`: each prints
    `ok` (the last one after `skip: …` unless `ICON_THEME_SOURCE` is set).
 2. Run `herdr-app check mods/git-tools`: it passes.
 

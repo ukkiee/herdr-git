@@ -137,7 +137,6 @@ export default class LogBranches {
       ]);
       // A favorite or a tag that can't be read only goes without its star or its group.
       r.tags = tagged?.ok ? tagged.tags : [];
-      if (prefs.ok) this.prefs = { favorite: prefs.favorite, unfavorite: prefs.unfavorite };
       // A rebase runs on a detached HEAD, and the HEAD row says so then. Asked only while
       // HEAD is detached: reading the operation also reads the working tree's status.
       if (r.ok && !r.head.branch && r.head.hash) {
@@ -145,6 +144,7 @@ export default class LogBranches {
         r.rebasing = op.ok && op.kind === "rebase";
       }
       if (turn !== this.turn) return;
+      if (prefs.ok) this.prefs = { favorite: prefs.favorite, unfavorite: prefs.unfavorite };
       this.read = true;
       if (!r.ok) { this.failed = r.err; host.fail(r.err, cx); host.redraw(cx); return; }
       this.mine = my?.ok ? { email: my.email, refs: new Set(my.mine) } : null;
@@ -158,6 +158,26 @@ export default class LogBranches {
       this.follow(before, cx);
       host.redraw(cx);
     });
+  }
+
+  // What the panel keeps of the tree when it leaves the folder (view-log.js remember): what
+  // was read and the folding, not the rows (restore builds them again). null when there is
+  // nothing read to keep.
+  keep() {
+    if (!this.read || !this.data || this.failed || !this.key) return null;
+    return { key: this.key, data: this.data, prefs: this.prefs, mine: this.mine, collapsed: this.collapsed, top: this.list.top };
+  }
+
+  // Back on a folder: the tree as keep() left it. With the key the same, the reload that
+  // follows leaves it until its read lands. Called right after a reload with no repository
+  // (view-log.js setRepo), whose new turn drops the folder left's read still on the way and
+  // which cleared the cursor and the picked row.
+  restore(was) {
+    if (!was) return;
+    this.key = was.key; this.data = was.data; this.prefs = was.prefs; this.mine = was.mine; this.collapsed = was.collapsed;
+    this.read = true;
+    this.build();
+    this.list.top = was.top;
   }
 
   // The limit this tree set on the Commit list follows what it was set on: HEAD moves

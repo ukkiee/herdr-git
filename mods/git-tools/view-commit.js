@@ -395,11 +395,15 @@ export default class CommitView {
     // Watched again by the next read: the root and its git folder go together.
     const failed = () => { if (live()) this.unwatch(); };
     mine.stops.push(watchSettled(mine.root, { live, wake: (cx) => this.refresh(cx), failed }, cx));
-    cx.spawn(async (cx) => {
-      const where = await readGitDir(repo.git, repo.root, { own: true });
-      if (!where.ok || !live() || where.dir.startsWith(`${mine.root}/`)) return;
-      mine.stops.push(watchSettled(where.dir, { live, wakes: (paths) => stateChanged(where.dir, paths), wake: (cx) => this.refresh(cx) }, cx));
-    });
+    // A task the host refuses costs the watches only, not what refresh reads right after
+    // (the Stash tab): like a folder that can't be watched.
+    try {
+      cx.spawn(async (cx) => {
+        const where = await readGitDir(repo.git, repo.root, { own: true });
+        if (!where.ok || !live() || where.dir.startsWith(`${mine.root}/`)) return;
+        mine.stops.push(watchSettled(where.dir, { live, wakes: (paths) => stateChanged(where.dir, paths), wake: (cx) => this.refresh(cx) }, cx));
+      });
+    } catch { failed(); }
   }
 
   // The watches stop: their pending calls are cancelled now, not at the folder's next change.

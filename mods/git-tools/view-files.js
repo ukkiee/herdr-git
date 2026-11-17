@@ -132,9 +132,10 @@ export default class FilesView {
 
   // A folder change is taken up first: the open folders and the previewed file of the
   // folder left are kept for coming back, and what its tree showed too (remember).
+  // → true when the folder changed.
   enter(cx) {
     const key = this.contextKey();
-    if (key === this.context?.key) return;
+    if (key === this.context?.key) return false;
     if (this.context) this.saved.set(this.context.key, { open: this.open, file: this.file });
     const left = this.context?.key, kept = this.remember();
     const { folder, on } = this.where();
@@ -151,6 +152,7 @@ export default class FilesView {
     if (was?.file) this.show(was.file);
     this.arrived = true;
     if (left !== undefined) this.stay.moved();
+    return true;
   }
 
   // What the tree shows of the folder left, so coming back draws it at once instead of the
@@ -171,10 +173,12 @@ export default class FilesView {
     if (this.list) this.list.top = was.top;
   }
 
+  // → false when it changed nothing to draw: the same folder, and nothing read (no folder
+  // here, or one that hasn't stayed DWELL ms yet).
   refresh(cx) {
-    this.enter(cx);
+    const moved = this.enter(cx);
     const context = this.context, root = this.root, on = this.on;
-    if (!root || this.stay.hold(cx, (cx) => this.refresh(cx))) return;
+    if (!root || this.stay.hold(cx, (cx) => this.refresh(cx))) return moved;
     if (this.arrived) {
       this.arrived = false;
       if (this.file) this.readPreview(cx);
@@ -188,7 +192,7 @@ export default class FilesView {
     // many times a second while files are written.
     if (this.searching() && this.listed?.ok && Date.now() - this.listedAt >= POLL) this.readList(cx, { again: true });
     // A change that lands while a read is running is read once that one is done.
-    if (this.loading) { this.again = true; return; }
+    if (this.loading) { this.again = true; return true; }
     this.loading = true; this.again = false;
     const platform = hostWindow()?.platform ?? null;
     spawnOrUndo(cx, () => { this.loading = false; }, async (cx) => {
@@ -227,6 +231,7 @@ export default class FilesView {
         cx.notify();
       }
     });
+    return true;
   }
 
   // Only this computer's folders can be watched. Reads write nothing under .git, so a
@@ -609,9 +614,11 @@ export default class FilesView {
   render(cx) {
     // Another folder to follow: read in a timer, since nothing may start inside render
     // (cx.notify throws there and cx.spawn runs its first part there). A timer the host
-    // refuses leaves nothing set: the next render tries again (later.js).
+    // refuses leaves nothing set: the next render tries again (later.js). It redraws only
+    // when the refresh changed something: a redraw for nothing would come back here and
+    // set the next timer, over and over.
     if (this.contextKey() !== this.context?.key || this.stay.late()) {
-      this.moving.after(cx, 0, (cx) => { if (this.contextKey() !== this.context?.key || this.stay.late()) { this.refresh(cx); cx.notify(); } });
+      this.moving.after(cx, 0, (cx) => { if ((this.contextKey() !== this.context?.key || this.stay.late()) && this.refresh(cx)) cx.notify(); });
     }
     // Not here: render may not make the redraw a new input needs.
     if (this.inputLang !== this.lang) {

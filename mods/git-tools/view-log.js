@@ -696,12 +696,16 @@ export default class LogView {
     this.unwatch();
     this.watching = repo;
     const live = () => this.watching === repo && this.repo === repo;
-    spawnOrUndo(cx, () => { this.watching = null; }, async (cx) => {
-      const where = await readGitDir(repo.git, repo.root);
-      if (!where.ok || !live()) { if (this.watching === repo) this.watching = null; return; }
-      // A folder that can't be watched is not tried again for this record: the poll reads.
-      this.watcher = watchSettled(where.dir, { live, wakes: (paths) => refsChanged(where.dir, paths), wake: (cx) => this.poll(cx) }, cx);
-    });
+    // A task the host refuses costs the watch only, not the reads refresh makes right after:
+    // the poll reads meanwhile, and the next refresh tries the watch again.
+    try {
+      cx.spawn(async (cx) => {
+        const where = await readGitDir(repo.git, repo.root);
+        if (!where.ok || !live()) { if (this.watching === repo) this.watching = null; return; }
+        // A folder that can't be watched is not tried again for this record: the poll reads.
+        this.watcher = watchSettled(where.dir, { live, wakes: (paths) => refsChanged(where.dir, paths), wake: (cx) => this.poll(cx) }, cx);
+      });
+    } catch { this.watching = null; }
   }
 
   // The watch stops: its pending call is cancelled now, not at the folder's next change.
@@ -730,8 +734,11 @@ export default class LogView {
     // A folder moved to is read once it has stayed DWELL ms (refresh): nothing of it before
     // then, and a read that lost its timer to the host's limit is made now.
     if (this.stay.late()) { this.refresh(cx); return; }
-    if (this.stay.hold(cx, (cx) => this.refresh(cx))) return;
     const repo = this.repo, lost = this.lost || this.finding.stuck();
+    // Only a read is held. With no repository and nothing lost there is none (a place with
+    // no folder among them): a hold there whose timer the host refused would leave late()
+    // on, and refresh, which returns before hold with no folder, would never take it off.
+    if ((repo || lost) && this.stay.hold(cx, (cx) => this.refresh(cx))) return;
     if (this.readBlocked() || !this.shown()) { this.stale = Boolean(repo) || lost; return; }
     // Not beside a search still going: on a slow machine the checks would pile them up.
     if (lost) { this.stale = false; if (!this.finding.busy()) this.refresh(cx); return; }

@@ -133,18 +133,71 @@ const fakeCx = () => {
   assert.equal(failed, 1);
 }
 
-// The screens: no file watches a folder but through this module, and every watch a screen
-// starts is kept, so it can be stopped.
+// A screen that keeps a watch stops it when it leaves the folder: its unwatch() calls stop(),
+// and the code that takes a move to another folder up (the method that calls stay.moved())
+// reaches unwatch() before that, itself or through a method of the file that calls it (reset,
+// setRepo). watch() doesn't count: it stops a watch only to start the next one. A screen that
+// doesn't follow the folder stops its watch in close(). → what is missing, one line each.
+export function unstopped(lines) {
+  const methods = [];
+  let open = null;
+  for (const l of lines) {
+    // Methods as the files write them: two spaces in, ending on a line of their own.
+    const head = /^  (?:async )?(\w+)\([^)]*\) \{(.*)$/.exec(l.line);
+    if (!open && head) {
+      open = { name: head[1], lines: [l] };
+      if (/\}\s*$/.test(head[2])) { methods.push(open); open = null; }
+      continue;
+    }
+    if (!open) continue;
+    open.lines.push(l);
+    if (/^  \}\s*$/.test(l.line)) { methods.push(open); open = null; }
+  }
+  const out = [];
+  const unwatch = methods.find((m) => m.name === "unwatch");
+  if (!unwatch) return ["no unwatch()"];
+  if (!unwatch.lines.some((l) => /\.stop\(\)/.test(l.line))) out.push(`${unwatch.lines[0].n}: unwatch() calls no stop()`);
+  const stops = new Set(["unwatch", ...methods.filter((m) => m.name !== "watch" && m.lines.some((l) => /\bthis\.unwatch\(\)/.test(l.line))).map((m) => m.name)]);
+  const calls = (ls) => ls.some((l) => [...l.line.matchAll(/\bthis\.(\w+)\(/g)].some((c) => stops.has(c[1])));
+  const moves = methods.filter((m) => m.lines.some((l) => /\.stay\.moved\(\)/.test(l.line)));
+  for (const m of moves) {
+    const at = m.lines.findIndex((l) => /\.stay\.moved\(\)/.test(l.line));
+    if (!calls(m.lines.slice(0, at + 1))) out.push(`${m.lines[at].n}: ${m.name}() moves on without unwatch()`);
+  }
+  if (!moves.length) {
+    const close = methods.find((m) => m.name === "close");
+    if (!close || !calls(close.lines)) out.push("close() leaves the watch going");
+  }
+  return out;
+}
+{
+  const plain = (text) => text.split("\n").map((line, i) => ({ line, n: i + 1 }));
+  const screen = (move, stop) => plain(`  refresh(cx) {\n    ${move}\n    this.stay.moved();\n  }\n  reset() {\n    this.unwatch();\n  }\n  watch(cx) {\n    this.unwatch();\n  }\n  unwatch() { ${stop} }`);
+  assert.deepEqual(unstopped(screen("this.unwatch();", "this.watcher?.stop();")), []);
+  assert.deepEqual(unstopped(screen("this.reset();", "this.watcher?.stop();")), [], "through a method that unwatches");
+  assert.deepEqual(unstopped(screen("this.watch(cx);", "this.watcher?.stop();")), ["3: refresh() moves on without unwatch()"], "watch() is no way of leaving");
+  assert.deepEqual(unstopped(screen("this.unwatch();", "this.watcher = null;")), ["11: unwatch() calls no stop()"]);
+  assert.deepEqual(unstopped(plain("  close() { this.closed = true; }\n  unwatch() { this.watcher?.stop(); }")), ["close() leaves the watch going"]);
+  assert.deepEqual(unstopped(plain("  close() { this.closed = true; this.unwatch(); }\n  unwatch() { this.watcher?.stop(); }")), []);
+}
+
+// The screens: no file watches a folder but through this module, every watch a screen starts
+// is kept, so it can be stopped, and stopped when the screen leaves the folder (unstopped).
 {
   const here = dirname(fileURLToPath(import.meta.url));
   const code = (name) => readFileSync(join(here, name), "utf8").split("\n").map((line, i) => ({ line, n: i + 1 })).filter(({ line }) => !/^\s*\/\//.test(line));
   const files = readdirSync(here).filter((name) => name.endsWith(".js")).sort();
   const problems = [];
   for (const name of files) {
+    let keeps = false;
     for (const { line, n } of code(name)) {
       if (/\bwatchFolder\(/.test(line) && !["folder-watch.js", "ui.js"].includes(name)) problems.push(`${name}:${n}: watchFolder( outside folder-watch.js`);
-      if (/\bwatchSettled\(/.test(line) && name !== "folder-watch.js" && !/export (const|function) watchSettled|(=|\.push\(|return)\s*watchSettled\(/.test(line)) problems.push(`${name}:${n}: a watch nobody keeps`);
+      if (!/\bwatchSettled\(/.test(line) || name === "folder-watch.js" || /export (const|function) watchSettled/.test(line)) continue;
+      if (/(=|\.push\(|return)\s*watchSettled\(/.test(line)) keeps = true;
+      else problems.push(`${name}:${n}: a watch nobody keeps`);
     }
+    // ui.js hands herdr's watchFolder in and returns the watch to its caller.
+    if (keeps && name !== "ui.js") problems.push(...unstopped(code(name)).map((p) => `${name}:${p}`));
   }
   assert.deepEqual(problems, []);
 }

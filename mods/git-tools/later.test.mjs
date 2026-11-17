@@ -84,6 +84,51 @@ const fakeCx = () => {
   assert.equal(d.late(), false);
 }
 
+// dwell, moved on before the held read's timer rang, to a place with no folder: nothing
+// there calls hold, so the hold of the folder left must go with the move. Kept, it would make
+// late() hold for good, and a screen that takes late() up in render would draw, set a timer
+// and draw again for as long as it stays there.
+{
+  let now = 0;
+  const f = fakeCx(), d = dwell({ now: () => now });
+  d.moved();
+  assert.equal(d.hold(f.cx, () => {}), true);
+  now += 100;
+  d.moved();
+  now += 400;
+  f.fire(); // its read finds no folder and returns before hold
+  now += DWELL;
+  assert.equal(d.late(), false, "a move drops the hold of the folder left");
+}
+
+// dwell, the same with no move: the timer rang and its read returned before hold (no folder
+// there, or a write under way). The timer was set, so nothing is late.
+{
+  let now = 0;
+  const f = fakeCx(), d = dwell({ now: () => now });
+  d.moved();
+  assert.equal(d.hold(f.cx, () => {}), true);
+  now += DWELL;
+  f.fire();
+  now += DWELL;
+  assert.equal(d.late(), false, "a timer that rang leaves nothing late");
+}
+
+// dwell, a refused timer, then a move to a place with no folder: late() is about the folder
+// held, and that one was left.
+{
+  let now = 0;
+  const f = fakeCx(), d = dwell({ now: () => now });
+  d.moved();
+  f.refuse(true);
+  assert.equal(d.hold(f.cx, () => {}), true);
+  f.refuse(false);
+  now += 100;
+  d.moved();
+  now += DWELL;
+  assert.equal(d.late(), false, "a move drops a hold whose timer was refused");
+}
+
 // spawnOrUndo: a refused task puts back what was set for it and is thrown on; a task that
 // starts runs, and nothing is put back.
 {

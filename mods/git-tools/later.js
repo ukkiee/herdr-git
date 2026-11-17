@@ -33,18 +33,23 @@ function setOnce(state, cx, ms, fn) {
 export const DWELL = 500;
 
 // dwell({ now? }) → {
-//   moved()            the followed folder changed now: its reads wait DWELL ms from now
+//   moved()            the followed folder changed now: its reads wait DWELL ms from now.
+//                      A read held for the folder left is dropped: only a hold made after
+//                      the move counts for late()
 //   hold(cx, fn) → bool  true while the folder hasn't stayed DWELL ms: the read waits, and
 //                      one timer calls fn(cx) when the time is up (fn reads again; a call
 //                      while that timer waits sets no other). False once it has: read now.
 //   late()             a read was held, its timer couldn't be set, and the time is up: the
-//                      screen's render or poll takes it up
+//                      screen's render or poll takes it up. A timer that rang took its hold
+//                      with it, whatever fn did then
 // }
-// Before the first move nothing is held: a panel's first look reads at once.
+// Before the first move nothing is held: a panel's first look reads at once. A place with no
+// folder never calls hold, so it is never late: a late() that held there would have the
+// screen's render ask for a read that returns before hold, on every redraw.
 export function dwell({ now = Date.now } = {}) {
   const state = { now, until: 0, held: false, set: false };
   return {
-    moved: () => { state.until = state.now() + DWELL; },
+    moved: () => { state.until = state.now() + DWELL; state.held = false; },
     hold: (cx, fn) => hold(state, cx, fn),
     late: () => state.held && !state.set && state.now() >= state.until,
   };
@@ -56,7 +61,7 @@ function hold(state, cx, fn) {
   state.held = true;
   if (state.set) return true;
   state.set = true;
-  try { cx.timer.after(left, (cx) => { state.set = false; fn(cx); }); }
+  try { cx.timer.after(left, (cx) => { state.set = false; state.held = false; fn(cx); }); }
   catch { state.set = false; }
   return true;
 }

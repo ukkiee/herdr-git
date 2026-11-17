@@ -167,11 +167,15 @@ export class VcsWidget {
     this.unwatch();
     this.watching = repo;
     const live = () => this.watching === repo && this.repo === repo;
-    spawnOrUndo(cx, () => { this.watching = null; }, async (cx) => {
-      const where = await readGitDir(repo.git, repo.root);
-      if (!where.ok || !live()) return;
-      this.watcher = watchSettled(where.dir, { live, wakes: (paths) => stateChanged(where.dir, paths), wake: (cx) => this.refresh(cx) }, cx);
-    });
+    // A task the host refuses costs the watch only: the poll reads meanwhile, and the next
+    // read tries the watch again.
+    try {
+      cx.spawn(async (cx) => {
+        const where = await readGitDir(repo.git, repo.root);
+        if (!where.ok || !live()) return;
+        this.watcher = watchSettled(where.dir, { live, wakes: (paths) => stateChanged(where.dir, paths), wake: (cx) => this.refresh(cx) }, cx);
+      });
+    } catch { this.watching = null; }
   }
 
   // The watch stops: its pending call is cancelled now, not at the folder's next change.

@@ -66,6 +66,23 @@ function hold(state, cx, fn) {
   return true;
 }
 
+// What Herdr says when it refuses a task or a timer (docs/herdr-mod-platform.md).
+const REFUSED = /outstanding host task limit/;
+
+// each(...fns): calls every fn in turn, also past one whose task or timer the host refuses.
+// For reads made one after another (a panel's parts, a preview beside its folder, the read
+// that waited and the redraw after it): a refused one costs only itself, and the screen's
+// next read or poll asks again, so its refusal is not thrown on. Any other error is, once
+// every fn has run.
+export function each(...fns) {
+  let error = null;
+  for (const fn of fns) {
+    try { fn(); }
+    catch (e) { if (!error && !REFUSED.test(String(e?.message ?? e))) error = e; }
+  }
+  if (error) throw error;
+}
+
 // spawnOrUndo(cx, undo, body): cx.spawn(body). When the host refuses the task, undo() puts
 // back what was set for it (a "loading" mark, the write lock) and the refusal is thrown on,
 // as cx.spawn would have, so it is still reported.

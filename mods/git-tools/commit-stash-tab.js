@@ -19,7 +19,7 @@ import { div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { listStashes, stashFiles } from "./git-stash.js";
 import { readTurns } from "./read-turns.js";
-import { spawnOrUndo } from "./later.js";
+import { each, spawnOrUndo } from "./later.js";
 import { buildRows, folderKeys } from "./tree.js";
 import { formatDateTime } from "./i18n.js";
 import { tip, uiGlyph, ICON, fileGlyph, folderGlyph, darkLook, panelFrame, toolbar, spacer, iconButton, button, row, notice, skeleton, skeletonSize, errorStrip, WindowedList, openMenu, broadcast, sentence, progressBar, writeName } from "./ui.js";
@@ -80,7 +80,8 @@ export default class StashTab {
         for (const hash of this.files.keys()) if (!this.stashes.some((s) => s.hash === hash)) this.files.delete(hash);
         this.readFiles(cx);
       } finally {
-        if (this.reads.end(turn) && this.again) this.refresh(cx);
+        // The read that waited, refused, still leaves this one drawn: the panel's next read asks.
+        if (this.reads.end(turn) && this.again) each(() => this.refresh(cx));
         cx.notify();
       }
     });

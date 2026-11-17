@@ -29,7 +29,7 @@ import { exec, theme, settings, readTextFile, window as hostWindow } from "herdr
 import { readFolder, readMarks, readSearchList, roomFor, PER_FOLDER, TOTAL, SEARCH_LIMIT } from "./files-data.js";
 import { markLookup, visibleRows, keepPressed, pressLands, stripFailure, pressFailure, failureKey, rankSearch, moveKey, SEARCH_SHOWN } from "./files-tree.js";
 import { tip, location, watchSettled, ICON, icon, uiGlyph, fileGlyph, folderGlyph, darkLook, panelFrame, toolbar, iconButton, row, notice, skeleton, skeletonSize, errorStrip, WindowedList, openMenu } from "./ui.js";
-import { oneTimer, dwell, spawnOrUndo } from "./later.js";
+import { oneTimer, dwell, each, spawnOrUndo } from "./later.js";
 import { openDiff } from "./view-diff.js";
 import { moveRecent } from "./recent.js";
 import { editorLanguage } from "./editor-language.js";
@@ -179,18 +179,20 @@ export default class FilesView {
     const moved = this.enter(cx);
     const context = this.context, root = this.root, on = this.on;
     if (!root || this.stay.hold(cx, (cx) => this.refresh(cx))) return moved;
+    // The preview and the search list are read apart from the folder: one the host refuses
+    // costs the folder's read nothing. A preview drawn asks again on the next refresh.
     if (this.arrived) {
       this.arrived = false;
-      if (this.file) this.readPreview(cx);
+      if (this.file) each(() => this.readPreview(cx));
       // A search still typed searches the new folder.
-      if (this.searching()) this.readList(cx);
+      if (this.searching()) each(() => this.readList(cx));
     }
     // A preview drawn since its last read follows the file: a hidden panel reads none.
-    if (this.file && this.previewDrawn) { this.previewDrawn = false; this.readPreview(cx); }
+    if (this.file && this.previewDrawn) { this.previewDrawn = false; each(() => this.readPreview(cx)); }
     // A search under way follows the folder too, but reads its list at most once per POLL:
     // outside a repository the list is a walk of up to 20,000 files, and a watch can fire
     // many times a second while files are written.
-    if (this.searching() && this.listed?.ok && Date.now() - this.listedAt >= POLL) this.readList(cx, { again: true });
+    if (this.searching() && this.listed?.ok && Date.now() - this.listedAt >= POLL) each(() => this.readList(cx, { again: true }));
     // A change that lands while a read is running is read once that one is done.
     if (this.loading) { this.again = true; return true; }
     this.loading = true; this.again = false;
@@ -226,7 +228,8 @@ export default class FilesView {
       } finally {
         if (this.context === context) {
           this.loading = false; this.read = true;
-          if (this.again) this.refresh(cx);
+          // The read that waited, refused, still leaves this one drawn: the next refresh reads.
+          if (this.again) each(() => this.refresh(cx));
         }
         cx.notify();
       }

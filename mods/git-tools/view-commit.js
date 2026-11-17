@@ -26,7 +26,7 @@ import { h_flex } from "gpui-base";
 import { exec, theme } from "herdr";
 import { makeGit, repoRoot } from "./git.js";
 import { readTurns } from "./read-turns.js";
-import { oneTimer, dwell } from "./later.js";
+import { oneTimer, dwell, each } from "./later.js";
 import { moveRecent } from "./recent.js";
 import { readStatus } from "./git-status.js";
 import { readGitDir, stateChanged } from "./git-log.js";
@@ -325,8 +325,9 @@ export default class CommitView {
           // Unread (git failed on the state files): the operation shown before stays, and
           // the commit module reads it again before committing anyway.
           if (op?.ok) this.op = op;
-          // Nothing in progress: what a stopped Smart left in the stash comes back now.
-          settleSmartMark(this, repo, op, cx);
+          // Nothing in progress: what a stopped Smart left in the stash comes back now. A task
+          // the host refuses for it costs this read nothing: the next read tries again.
+          each(() => settleSmartMark(this, repo, op, cx));
           this.apply(status);
           this.error = last && !last.ok ? sentence(this.t, last.msg, last.err) : op && !op.ok ? sentence(this.t, op.msg, op.err) : null;
         }
@@ -337,7 +338,8 @@ export default class CommitView {
         // Read once an answer shows, or the newest read is over; what waited for that runs.
         const newest = this.reads.end(turn);
         if ((newest || used) && !held) this.read = true;
-        if (newest && this.again) this.refresh(cx);
+        // The read that waited, refused, still leaves this one drawn: the next change or POLL reads.
+        if (newest && this.again) each(() => this.refresh(cx));
         cx.notify();
       }
     });

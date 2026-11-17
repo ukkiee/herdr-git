@@ -74,7 +74,7 @@ import { openCommitMenu } from "./log-details.js";
 import { tip, ROW, row, notice, skeleton, skeletonSize, strokePath, WindowedList, openMenu, uiGlyph } from "./ui.js";
 import { relatives } from "./git-revision.js";
 import { firstBatch } from "./recent.js";
-import { oneTimer } from "./later.js";
+import { oneTimer, each } from "./later.js";
 
 const BATCH = 1000;
 const LANE = 14, PAD = 5, MID = ROW / 2;
@@ -376,7 +376,8 @@ export default class LogList {
     cx.spawn(async (cx) => {
       const work = this.fetch(true);
       this.awaited = first ? this.turn : null;
-      if (first) this.preview(this.turn, moved, cx);
+      // A preview the host refuses leaves the full read to land alone.
+      if (first) each(() => this.preview(this.turn, moved, cx));
       const r = await work;
       if (!r) return;
       if (!r.ok) { this.failed = r.err; host.fail(r.err, cx); this.failedMark = host.errorMark; }
@@ -394,7 +395,7 @@ export default class LogList {
         if (host.picks.picked.size) host.keepPicks(cx);
         // The branches may have moved: git cherry is asked again.
         this.notPicked = null;
-        this.readNotPicked(cx);
+        each(() => this.readNotPicked(cx));
       }
       host.redraw(cx);
     });

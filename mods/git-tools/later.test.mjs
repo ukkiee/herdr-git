@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { oneTimer, dwell, DWELL, spawnOrUndo } from "./later.js";
+import { oneTimer, dwell, DWELL, each, spawnOrUndo } from "./later.js";
 
 const REFUSED = "exceeded the per-runtime outstanding host task limit of 1024";
 
@@ -127,6 +127,20 @@ const fakeCx = () => {
   d.moved();
   now += DWELL;
   assert.equal(d.late(), false, "a move drops a hold whose timer was refused");
+}
+
+// each: a refused task or timer costs only its own call; the calls after it still run, and the
+// refusal goes no further. Any other error is thrown, once every call has run.
+{
+  const f = fakeCx();
+  const ran = [];
+  f.refuse(true);
+  each(() => f.cx.spawn(() => ran.push("a")), () => { ran.push("b"); f.cx.timer.after(0, () => {}); }, () => ran.push("c"));
+  assert.deepEqual(ran, ["b", "c"]);
+  f.refuse(false);
+  const bug = new TypeError("x is not a function");
+  assert.throws(() => each(() => { throw bug; }, () => ran.push("d")), (e) => e === bug);
+  assert.deepEqual(ran, ["b", "c", "d"], "the calls after a bug still run");
 }
 
 // spawnOrUndo: a refused task puts back what was set for it and is thrown on; a task that

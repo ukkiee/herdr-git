@@ -29,7 +29,7 @@ import { h_flex } from "gpui-base";
 import { exec, theme, notify, run } from "herdr";
 import { makeGit, repoRoot } from "./git.js";
 import { readTurns } from "./read-turns.js";
-import { oneTimer, dwell, spawnOrUndo } from "./later.js";
+import { oneTimer, dwell, each, spawnOrUndo } from "./later.js";
 import { readHeads, widgetFace, faceOf } from "./git-heads.js";
 import { moveRecent } from "./recent.js";
 import { readGitDir, stateChanged } from "./git-log.js";
@@ -125,7 +125,8 @@ export class VcsWidget {
         this.op = op.ok ? op : null;
         this.watch(repo, cx);
       } finally {
-        if (this.reads.end(turn) && this.again) { this.again = false; cx.timer.after(0, (cx) => this.refresh(cx)); }
+        // The read that waited, its timer refused, still leaves this one drawn: the POLL reads.
+        if (this.reads.end(turn) && this.again) { this.again = false; each(() => cx.timer.after(0, (cx) => this.refresh(cx))); }
         cx.notify();
       }
     });

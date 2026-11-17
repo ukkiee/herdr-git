@@ -16,7 +16,7 @@ import { v_flex } from "gpui-base";
 import { exec, theme } from "herdr";
 import { makeGit, repoRoot } from "./git.js";
 import { readTurns, STUCK } from "./read-turns.js";
-import { oneTimer, dwell, spawnOrUndo } from "./later.js";
+import { oneTimer, dwell, each, spawnOrUndo } from "./later.js";
 import { moveRecent } from "./recent.js";
 import { readRefsState, readGitDir, refsChanged, resolveCommit } from "./git-log.js";
 import { fetchAll, restoreBranch, trackedBranch } from "./git-branch.js";
@@ -452,9 +452,9 @@ export default class LogView {
 
   reload(cx) {
     this.reloadAt = Date.now();
-    this.branches.reload(cx);
-    this.list.reload(cx);
-    this.details.retry(cx);
+    // A part whose read the host refuses costs the others nothing: the poll reads it again
+    // (unread, or the refs' next move).
+    each(() => this.branches.reload(cx), () => this.list.reload(cx), () => this.details.retry(cx));
     cx.notify();
   }
 
@@ -680,13 +680,14 @@ export default class LogView {
     // what recall puts back.
     if (!repo) { this.list.reload(cx); this.branches.reload(cx); return; }
     this.watch(repo, cx);
-    // Whose commits My Commits highlights.
-    cx.spawn(async (cx) => {
+    // Whose commits My Commits highlights. A task the host refuses leaves it unknown (null)
+    // for this repository, and costs nothing of the reads refresh makes right after.
+    each(() => cx.spawn(async (cx) => {
       const r = await readMe(repo.git, repo.root);
       if (repo !== this.repo) return;
       this.me = r.ok && r.email ? r.email : null;
       cx.notify();
-    });
+    }));
   }
 
   // On this computer: wake when a ref or HEAD moves (commit, checkout, fetch). One watch, for
@@ -730,7 +731,8 @@ export default class LogView {
   // never answered, is looked for again; a details read or a next batch of the list that
   // failed is read again, and so are branches or a list whose first read never answered.
   poll(cx) {
-    if (this.drawsWidget() && this.shown()) this.widget.refresh(cx);
+    // The widget's read is its own: one the host refuses costs this poll nothing.
+    if (this.drawsWidget() && this.shown()) each(() => this.widget.refresh(cx));
     // A folder moved to is read once it has stayed DWELL ms (refresh): nothing of it before
     // then, and a read that lost its timer to the host's limit is made now.
     if (this.stay.late()) { this.refresh(cx); return; }
@@ -760,7 +762,7 @@ export default class LogView {
         if (this.pollMark != null && this.errorMark === this.pollMark) { this.error = null; cx.notify(); }
         this.pollMark = null;
         if (r.state !== this.refs || this.list.failed || this.branches.failed || this.unread()) { this.refs = r.state; this.reload(cx); }
-        else { this.details.retry(cx); this.list.retry(cx); }
+        else each(() => this.details.retry(cx), () => this.list.retry(cx));
       }
       if (last && this.again) { this.again = false; this.poll(cx); }
     });

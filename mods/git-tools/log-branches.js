@@ -34,7 +34,7 @@ import { smartCheckout } from "./view-smart.js";
 import { readOperation } from "./git-operation.js";
 import { branchContext } from "./log-menus.js";
 import { folderKeys } from "./tree.js";
-import { oneTimer, spawnOrUndo } from "./later.js";
+import { oneTimer, each, spawnOrUndo } from "./later.js";
 import { openBranchNew, openBranchDelete } from "./view-branch-new.js";
 import { openDeletedBranches } from "./view-deleted-branches.js";
 import { tip, uiGlyph, darkLook, ICON, row, iconButton, notice, skeleton, skeletonSize, broadcast, openMenu, sentence, WindowedList } from "./ui.js";
@@ -158,7 +158,8 @@ export default class LogBranches {
       const before = this.picked ? this.refOf(this.picked) : null;
       this.data = r;
       this.build();
-      this.follow(before, cx);
+      // Following a moved limit reads the list again: a refusal there still draws the tree.
+      each(() => this.follow(before, cx));
       host.redraw(cx);
     });
   }

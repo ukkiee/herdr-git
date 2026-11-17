@@ -974,16 +974,19 @@ for (const target of ["folder", "file", "none"]) {
   const saved = { author: process.env.GIT_AUTHOR_DATE, committer: process.env.GIT_COMMITTER_DATE };
   process.env.GIT_AUTHOR_DATE = process.env.GIT_COMMITTER_DATE = "2026-01-02T03:04:05Z";
   try {
-    let reached, release, moved;
+    let reached, release, atRefB;
     const atA = new Promise((resolve) => { reached = resolve; });
     const barrier = new Promise((resolve) => { release = resolve; });
-    const refA = new Promise((resolve) => { moved = resolve; });
+    const refB = new Promise((resolve) => { atRefB = resolve; });
+    let a;
+    // A moves the ref once B has recorded its tree, and B moves it once A is done: the
+    // copies never touch the disk at once (a checkout rewriting the file can show it as
+    // missing to the other copy, which then skips it as something else there).
     const runner = (who) => {
       const run = async (cwd, args, options) => {
-        if (who === "B" && args.includes("update-ref")) await refA;
-        const r = await git(cwd, args, options);
-        if (who === "A" && args.includes("update-ref")) moved();
-        return r;
+        if (who === "A" && args.includes("update-ref")) await refB;
+        if (who === "B" && args.includes("update-ref")) { atRefB(); await a; }
+        return git(cwd, args, options);
       };
       run.read = async (cwd, args, options) => {
         const r = await git.read(cwd, args, options);
@@ -995,7 +998,7 @@ for (const target of ["folder", "file", "none"]) {
       return run;
     };
     const files = [{ path: "a", status: "modified" }];
-    const a = rollback(runner("A"), repo, { files });
+    a = rollback(runner("A"), repo, { files });
     await atA;
     // B starts once A has read the snapshot before its own, and B's id is another.
     sh(repo, "echo work > a");

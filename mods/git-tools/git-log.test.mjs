@@ -285,7 +285,12 @@ const all = await readLog(git, repo);
 {
   const dir = `${tmp}/watched`;
   mkdirSync(dir);
-  const env = { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t", GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" };
+  // maintenance.auto off: a commit starts a detached `git maintenance run --auto` that can
+  // still be taking and dropping objects/maintenance.lock while snapshot() walks the folder.
+  const env = {
+    ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t", GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1",
+    GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "maintenance.auto", GIT_CONFIG_VALUE_0: "false",
+  };
   const g = (args) => execFileSync("git", args, { cwd: dir, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env });
   g(["init", "-q", "-b", "main"]);
   writeFileSync(`${dir}/a.txt`, "base\n"); g(["add", "-A"]); g(["commit", "-q", "-m", "base"]);

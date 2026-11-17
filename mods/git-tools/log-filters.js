@@ -21,12 +21,13 @@
 // configured user, { name } for an author checked in the popup, { text } for letters
 // typed and entered. A commit by any of them stays (git-log-filter.js filterArgs).
 
-import { div } from "gpui-kit";
+import { div, svg } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input, Popover } from "gpui-base";
 import { theme, props } from "herdr";
 import { resolveCommit } from "./git-log.js";
 import { filterArgs, isHash, isDate, readMe, userOf, readBranchNames, readAuthors, matchAuthors, DATE_PRESETS, datePreset, dateText } from "./git-log-filter.js";
-import { tip as tipOn, uiGlyph, darkLook, ICON, iconButton, sentence, WindowedList } from "./ui.js";
+import { tip as tipOn, uiGlyph, darkLook, icon, iconButton, sentence, WindowedList } from "./ui.js";
+import { MENU_CHECK } from "./ui-size.js";
 
 const EMPTY = { text: "", regex: false, matchCase: false, users: [], since: "", until: "", dateLabel: "", path: "" };
 const POPUP_W = 260, ITEM = 26, BRANCH_ROWS = 10, USER_ROWS = 10;
@@ -519,13 +520,17 @@ export default class LogFilters {
 
   // more: a short count after the hint ("+1") that the hint's cut never hides.
   // tip: the row's tooltip, for a hint that may be cut.
+  // checked: the row's check slot (a popup menu's, MENU_CHECK wide) shows the commit panel
+  // checkbox's tick, without the box, in the row's text color.
   item(id, label, t, { hint, more = "", tip = "", checked = false, disabled = false, active = false, onClick } = {}) {
+    const color = disabled ? t.dim : t.foreground;
     return h_flex().id(id).h(ITEM).flex_none().w_full().min_w(0).px(8).gap(8).items_center().rounded(5)
-      .text_color(disabled ? t.dim : t.foreground)
+      .text_color(color)
       .when(active, (el) => el.bg(t.hover))
       .when(!disabled, (el) => el.cursor_pointer().hover((s) => s.bg(t.hover)).on_click((_e, cx) => { cx.stop_propagation(); onClick(cx); }))
       .map((el) => tipOn(el, tip))
-      .child(div().size(ICON).flex_none().when(checked, (el) => el.child(uiGlyph("check"))))
+      .child(div().w(MENU_CHECK).flex_none().flex().items_center().justify_center()
+        .when(checked, (el) => el.child(svg(icon("checkbox-all")).size(11).text_color(color))))
       .child(div().flex_1().min_w(0).truncate().child(label))
       .when(Boolean(hint), (el) => el.child(h_flex().flex_none().max_w(110).min_w(0).gap(3).text_size(11).text_color(t.dim)
         .child(div().flex_initial().min_w(0).truncate().child(hint ?? ""))

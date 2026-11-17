@@ -209,7 +209,7 @@ export default class StashTab {
 
   viewOptions(cx) {
     cx.spawn(async (cx) => {
-      const picked = await openMenu(this.host.bus, [{ label: this.host.t("commit.groupByDirectory"), value: "group", hint: this.grouped ? "✓" : "" }], { lang: this.host.lang });
+      const picked = await openMenu(this.host.bus, [{ label: this.host.t("commit.groupByDirectory"), value: "group", checked: Boolean(this.grouped) }], { lang: this.host.lang });
       if (picked === "group") { this.grouped = !this.grouped; this.rebuild(); }
       cx.notify();
     });

@@ -42,7 +42,7 @@ export const UI_ICONS = {
   // Clear all filters: no reference icon, the filter funnel is the nearest.
   "filter-x": color("icons/expui/general/filter.svg"),
   "x": color("icons/expui/general/closeSmall.svg"),
-  // A menu item's check mark: in the item's text color, like the reference menus.
+  // The Conflicts dialog's resolved mark: in the text color.
   "check": tint("icons/expui/actions/checked.svg"),
   "branch-item": color("icons/expui/general/vcs.svg"),
   "search": tint("icons/expui/general/search.svg"),

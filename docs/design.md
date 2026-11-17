@@ -959,11 +959,18 @@ Rollback은 Rollback dialog의 버튼으로만 실행되고, 쓰기 전에 버�
   `common/src/main/resources/` 아래 경로를 그대로 쓴다. 라이선스와 출처는 `mods/git-tools/icons/ui/` 폴더의
   `LICENSE`와 `NOTICE.md`에 있다.
 - 이름 → 파일, 컬러인지 글자색인지는 데이터다(`ui-icons.js`). `ui-icons.test.mjs`가 모든 파일이 있는지
-  본다. 화면은 `uiGlyph`·`iconButton`으로만 그린다. `svg(icon(…))`는 spinner와 체크박스 표시에만 쓰고,
-  테스트가 다른 자리를 막는다.
+  본다. 화면은 `uiGlyph`·`iconButton`으로만 그린다. `svg(icon(…))`는 spinner, 커밋 창 체크박스
+  표시(`ui.js` `checkbox`), 메뉴 체크(`view-menu.js`, `log-filters.js`)에만 쓰고, 테스트가 다른
+  자리를 막는다.
+- **메뉴 체크**: 켜고 끌 수 있는 항목이 있는 메뉴(항목에 `checked`가 true나 false)는 그 항목들의 라벨
+  앞에 체크박스 상자와 같은 14px 칸을 두고, 켜진 항목에만 커밋 창 체크박스의 틱(`checkbox-all`,
+  11px, 상자 없이)을 그 행의 글자색으로 그린다. 그래서 라벨은 체크 여부와 관계없이 같은 자리에서
+  시작한다. `checked`가 없는 행(그룹 이름)과 체크할 항목이 없는 메뉴에는 칸이 없다. 칸 폭과 그 뒤
+  간격은 `ui-size.js`의 상수 하나를 화면과 `menuWidth`가 함께 쓴다. Log 필터 팝업(Branch, User,
+  Date)의 행도 같은 14px 칸(`MENU_CHECK`)과 틱을 쓴다. 그 행의 간격은 8px로 메뉴와 다르다.
 - **컬러**: 툴바·메뉴의 동작 아이콘과 브랜치 행(현재 브랜치, 브랜치, 태그, 별)은 파일의 색 그대로
-  `image()`로 그린다. **글자색**: 트리 화살표, 폴더, 검색 칸 돋보기, 메뉴 체크는 같은 모양을 `svg()`로
-  글자색에 칠한다.
+  `image()`로 그린다. **글자색**: 트리 화살표, 폴더, 검색 칸 돋보기, Conflicts dialog의 해결 표시
+  (`check`), 메뉴 체크의 틱은 같은 모양을 `svg()`로 글자색에 칠한다.
 - **꺼진 버튼**은 같은 모양을 `t.dim`에 opacity 0.5로 칠한다. mod에는 회색 필터가 없다. 컬러 아이콘은
   hover에 밝아지지 않는다.
 - **크기**는 16px이고 버튼 칸은 24px다. 트리 화살표 자리도 16px라 폴더 행과 파일 행의 줄이 맞는다.

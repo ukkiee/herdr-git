@@ -73,6 +73,7 @@ import { readArgs } from "./log-options.js";
 import { openCommitMenu } from "./log-details.js";
 import { tip, ROW, row, notice, skeleton, skeletonSize, strokePath, WindowedList, openMenu, uiGlyph } from "./ui.js";
 import { relatives } from "./git-revision.js";
+import { firstBatch } from "./recent.js";
 
 const BATCH = 1000;
 const LANE = 14, PAD = 5, MID = ROW / 2;
@@ -395,6 +396,38 @@ export default class LogList {
       }
       host.redraw(cx);
     });
+  }
+
+  // What the panel keeps of the list when it leaves the folder (view-log.js remember): the
+  // commits of the first batch, not the rows (restore lays them out again), and the commit
+  // on top. null when there is nothing whole to keep: not read yet, a first look whose
+  // full read hasn't landed, a failed read, or a list recent.js firstBatch can't cut.
+  keep() {
+    if (!this.read || this.awaited !== null || this.failed || !this.key) return null;
+    const first = firstBatch({ commits: this.commits, seen: this.seen, through: this.through }, BATCH);
+    if (!first) return null;
+    return {
+      ...first, key: this.key, view: this.view, more: this.more || first.seen < this.seen,
+      collapsed: this.collapsed, top: this.rows[this.list.top]?.commit.hash ?? null, left: this.left,
+    };
+  }
+
+  // Back on a folder: what keep() gave, laid out as rows again, at the commit that was on
+  // top (or the top, when it was past the first batch). With the key and the view the same,
+  // the reload that follows leaves them until its read lands. Kept under another view (a
+  // branch limit, which a move clears), the list is read afresh instead.
+  restore(was) {
+    const { host } = this;
+    if (!was || !host.repo) return;
+    const view = JSON.stringify([host.branch, host.filterArgs, readArgs(host.options)]);
+    if (was.view !== view) return;
+    this.key = was.key; this.view = view;
+    this.collapsed = was.collapsed;
+    this.add({ commits: was.commits, read: was.seen, through: was.through }, true);
+    this.more = was.more;
+    this.read = true;
+    this.list.top = (was.top && this.index.get(was.top)) ?? 0;
+    this.left = was.left;
   }
 
   // Nothing read is kept: another repository, or none.

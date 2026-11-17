@@ -426,7 +426,7 @@ export default class LogDetails {
   // The toolbar's View Options: picked at once, then saved, then the other panels told.
   displayOptions(cx) {
     const host = this.host;
-    const rows = detailsMenu(this.options).map((it) => ({ label: host.t(it.key), value: it.id, hint: it.checked ? "✓" : "" }));
+    const rows = detailsMenu(this.options).map((it) => ({ label: host.t(it.key), value: it.id, checked: Boolean(it.checked) }));
     cx.spawn(async (cx) => {
       const id = await openMenu(host.bus, rows, { width: 220, lang: host.lang });
       this.handle.focus();

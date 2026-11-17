@@ -92,7 +92,7 @@ export default class PullView {
   chooseOptions(cx) {
     if (this.waiting) return;
     cx.spawn(async (cx) => {
-      const items = PULL_OPTIONS.map((o) => ({ label: `${this.options.includes(o) ? "✓ " : ""}${OPTION_WORDS[o](this.t)}`, value: o, hint: o }));
+      const items = PULL_OPTIONS.map((o) => ({ label: OPTION_WORDS[o](this.t), value: o, checked: this.options.includes(o), hint: o }));
       const o = await openMenu(this.bus, items, { width: 480, lang: this.lang });
       if (typeof o === "string") this.options = togglePullOption(this.options, o);
       cx.notify();

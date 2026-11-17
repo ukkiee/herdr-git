@@ -7,7 +7,8 @@ import { mkdtempSync, writeFileSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
 import { makeGit } from "./git.js";
-import { readHeads, widgetFace, popupRows, popupStep } from "./git-heads.js";
+import { readHeads, widgetFace, faceOf, popupRows, popupStep } from "./git-heads.js";
+import { readOperation } from "./git-operation.js";
 import { translator } from "./i18n.js";
 import { menuItems, branchContext } from "./log-menus.js";
 import { trackedBranch } from "./git-branch.js";
@@ -153,6 +154,43 @@ commit(repo, "c.txt", "l1");
   const down = await readHeads(makeGit(() => Promise.reject(new Error("machine vps is unreachable")), "vps"), "/repo");
   assert.equal(down.ok, false);
   assert.deepEqual([down.recent, down.tags, down.local], [[], [], []]);
+}
+
+// What the widget keeps of a folder it left (faceOf) shows as the whole read does: a
+// branch with commits to pull and to push, a detached HEAD, a merge in conflict, no
+// repository. It holds none of the branch and tag lists.
+{
+  const face = `${tmp}/face`;
+  raw(tmp, ["clone", "-q", origin, face]);
+  commit(face, "d.txt", "f1");
+  commit(other, "e.txt", "o3");
+  raw(other, ["push", "-q", "origin", "HEAD:main"]);
+  raw(face, ["fetch", "-q"]);
+  raw(face, ["tag", "v-face"]);
+  const looks = [];
+  const look = async (where) => {
+    const op = await readOperation(git, where);
+    looks.push([await readHeads(git, where), op.ok ? op : null]);
+  };
+  await look(face);
+  raw(face, ["checkout", "-q", "--detach"]);
+  await look(face);
+  raw(face, ["checkout", "-q", "main"]);
+  raw(face, ["checkout", "-q", "-b", "clash"]);
+  commit(face, "d.txt", "clash");
+  raw(face, ["checkout", "-q", "main"]);
+  commit(face, "d.txt", "main side");
+  try { raw(face, ["merge", "-q", "clash"]); } catch { /* the conflict is the case */ }
+  await look(face);
+  await look(tmp);
+  const kinds = looks.map(([h, op]) => widgetFace(h, op)?.kind ?? null);
+  assert.deepEqual(kinds, ["branch", "detached", "progress", null]);
+  assert.deepEqual(widgetFace(...looks[0]), { kind: "branch", name: "main", ahead: 1, behind: 1 });
+  for (const [h, op] of looks) {
+    assert.deepEqual(widgetFace(faceOf(h), op), widgetFace(h, op));
+    for (const list of ["local", "remote", "tags", "recent"]) assert.equal(faceOf(h)?.[list], undefined, list);
+  }
+  raw(face, ["merge", "--abort"]);
 }
 
 // ---- what the widget shows (widgetFace)

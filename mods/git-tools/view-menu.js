@@ -1,18 +1,24 @@
 // Popup menu screen. Opened by ui.js `openMenu(bus, items, { width, at })`, which resolves
 // in the opener's copy with the picked item's value.
-// props: { key, items: [{ label, value, disabled?, hint?, title?, rule? }], overlay }.
+// props: { key, items: [{ label, value, disabled?, hint?, title?, rule?, checked? }], overlay }.
 // ↑/↓ move, Enter picks, Esc or a click beside it closes (the opener gets null).
+// When any item has `checked` (true or false), each such item gets a check slot before its
+// label, as wide as the commit panel's checkbox, and a true one draws that checkbox's tick
+// there, without the box, in the item's text color. Labels of those items then start in one
+// place; an item without `checked` (a group name) starts at the row's left edge.
 
-import { div } from "gpui-kit";
+import { div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { theme, closeOverlay } from "herdr";
-import { answerMenu, menuMetrics } from "./ui.js";
+import { answerMenu, menuMetrics, icon } from "./ui.js";
+import { menuChecks } from "./ui-size.js";
 
 export default class Menu {
   init(p, cx) {
     this.key = p.key;
     this.overlay = p.overlay;
     this.items = Array.isArray(p.items) ? p.items : [];
+    this.checks = menuChecks(this.items);
     this.at = this.items.findIndex((it) => !it.disabled);
     this.handle = cx.focus_handle();
     this.handle.focus();
@@ -50,15 +56,19 @@ export default class Menu {
         cx.stop_propagation();
         cx.notify();
       })
-      .children(this.items.map((item, i) =>
-        v_flex().flex_none()
+      .children(this.items.map((item, i) => {
+        const color = item.disabled ? t.dim : t.foreground;
+        return v_flex().flex_none()
           .when(Boolean(item.rule) && i > 0, (el) => el.child(div().mx(7).my(4).h(1).bg(t.border)))
-          .child(h_flex().id(`git-menu-${i}`).h(m.row).px(8).gap(9).rounded(6).items_center()
-            .text_color(item.disabled ? t.dim : t.foreground)
+          .child(h_flex().id(`git-menu-${i}`).h(m.row).px(8).gap(m.gap).rounded(6).items_center()
+            .text_color(color)
             .when(i === this.at && !item.disabled, (el) => el.bg(t.selected))
             .when(!item.disabled, (el) => el.hover((s) => s.bg(t.hover)).on_click(() => this.pick(i)))
             .when(Boolean(item.title), (el) => el.tooltip(item.title))
+            .when(this.checks && typeof item.checked === "boolean", (el) => el.child(div().w(m.check).flex_none().flex().items_center().justify_center()
+              .when(item.checked, (el) => el.child(svg(icon("checkbox-all")).size(11).text_color(color)))))
             .child(div().flex_1().min_w(0).truncate().child(item.label))
-            .when(Boolean(item.hint), (el) => el.child(div().flex_none().text_size(11).text_color(t.dim).child(item.hint))))));
+            .when(Boolean(item.hint), (el) => el.child(div().flex_none().text_size(11).text_color(t.dim).child(item.hint))));
+      }));
   }
 }

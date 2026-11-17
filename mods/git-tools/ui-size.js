@@ -27,17 +27,26 @@ export function textWidth(text, size) {
 }
 
 // The menu screen's (view-menu.js) row: the menu's padding on both sides, the row's own,
-// the gap before a hint, and a little room so an estimate short by a few px still fits.
-export const MENU_TEXT = 12.8, HINT_TEXT = 11;
-const MENU_SIDES = 2 * 5 + 2 * 8 + 12, HINT_GAP = 9;
+// and a little room so an estimate short by a few px still fits. MENU_GAP is the row's gap,
+// both before a hint and after the check slot. MENU_CHECK is the check slot's width, the
+// commit panel's checkbox's, so a menu's tick sits like the commit panel's.
+export const MENU_TEXT = 12.8, HINT_TEXT = 11, MENU_GAP = 9, MENU_CHECK = 14;
+const MENU_SIDES = 2 * 5 + 2 * 8 + 12;
+
+// A menu has a check slot when any item says `checked` (true or false). In such a menu every
+// item with `checked` gets the slot, ticked or empty, so their labels start in one place;
+// an item without it (a group name) starts at the row's left edge.
+export const menuChecks = (items) => (items ?? []).some((it) => typeof it?.checked === "boolean");
 
 // menuWidth(items, { min, max }) → the menu's width in whole px: the longest row's need
-// ([{ label, hint? }]), at least `min` and at most `max` (past it the label is cut).
+// ([{ label, hint?, checked? }]), at least `min` and at most `max` (past it the label is cut).
 export function menuWidth(items, { min = 220, max = 560 } = {}) {
   let need = 0;
+  const checks = menuChecks(items);
   for (const it of items ?? []) {
-    const hint = it?.hint ? HINT_GAP + textWidth(it.hint, HINT_TEXT) : 0;
-    need = Math.max(need, textWidth(it?.label ?? "", MENU_TEXT) + hint);
+    const hint = it?.hint ? MENU_GAP + textWidth(it.hint, HINT_TEXT) : 0;
+    const slot = checks && typeof it?.checked === "boolean" ? MENU_CHECK + MENU_GAP : 0;
+    need = Math.max(need, slot + textWidth(it?.label ?? "", MENU_TEXT) + hint);
   }
   return Math.ceil(Math.min(max, Math.max(min, need + MENU_SIDES)));
 }

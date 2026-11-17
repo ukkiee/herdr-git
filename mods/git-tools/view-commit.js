@@ -26,6 +26,7 @@ import { h_flex } from "gpui-base";
 import { exec, theme } from "herdr";
 import { makeGit, repoRoot } from "./git.js";
 import { readTurns } from "./read-turns.js";
+import { moveRecent } from "./recent.js";
 import { readStatus } from "./git-status.js";
 import { readGitDir, stateChanged } from "./git-log.js";
 import { readOperation } from "./git-operation.js";
@@ -51,7 +52,7 @@ const CLOSED = () => ({ changes: false, conflicts: false, unversioned: true, las
 const COLLAPSED = () => ({ changes: new Set(), conflicts: new Set(), unversioned: new Set(), last: new Set() });
 const POLL = 10000;
 const FIRST_LOOK = 6000; // ms after the panel starts: a first read still unanswered then is made again once
-// How many folders the panel keeps the last view of (see remember).
+// How many folders besides the one shown the panel keeps the last view of (see remember).
 const SEEN = 8;
 // localStorage is per copy of the mod and survives restarts: the view mode stays as picked.
 const GROUPED_KEY = "commit.grouped";
@@ -241,7 +242,7 @@ export default class CommitView {
     // repository left behind must not keep that repository on screen.
     if (context !== this.context) {
       this.reads.drop(); this.again = false;
-      this.remember();
+      const left = this.context, kept = this.remember();
       this.context = context; this.repo = null; this.watching = null; this.lost = false;
       // A write's failure belongs to the repository it ran on, like a read's.
       this.error = null; this.writeError = null; this.note = null; this.notRepo = false; this.read = false;
@@ -250,7 +251,10 @@ export default class CommitView {
       this.collapsed = COLLAPSED();
       this.apply({ hasHead: false, changes: [], unversioned: [] });
       this.list.top = 0;
-      this.recall(context);
+      this.recall(moveRecent(this.seen, left, kept, context, SEEN));
+      // Drawn now, not when the read ends: the window would keep the folder left on screen
+      // until then. Never called from render (render takes a move up in a timer).
+      cx.notify();
     }
     if (this.readBlocked()) { this.waiting = true; return; }
     this.waiting = false;
@@ -327,24 +331,20 @@ export default class CommitView {
 
   // Leaving a folder: what the panel shows of its repository is kept, so coming back
   // shows it at once instead of "Loading…" (recall); the read that follows puts it right.
+  // → what to keep (refresh puts it in `seen`, recent.js moveRecent), or null.
   remember() {
-    if (!this.context || !this.repo || !this.read || this.notRepo) return;
-    this.seen.delete(this.context);
-    this.seen.set(this.context, {
+    if (!this.context || !this.repo || !this.read || this.notRepo) return null;
+    return {
       repo: this.repo, op: this.op, status: { hasHead: this.hasHead, detached: this.detached, changes: this.changes, unversioned: this.unversioned },
       picked: this.picked, selected: this.selected, closed: this.closed, collapsed: this.collapsed, top: this.list.top,
-    });
-    // A handful of folders are gone back and forth between; the rest are read afresh.
-    while (this.seen.size > SEEN) this.seen.delete(this.seen.keys().next().value);
+    };
   }
 
   // Back on a folder seen before: its files, Included, folding and place in the list as
   // they were left. They may be out of date for the moment the read takes; files gone
   // since then drop out of Included when it lands (apply).
-  recall(context) {
-    const was = this.seen.get(context);
+  recall(was) {
     if (!was) return;
-    this.seen.delete(context);
     this.repo = was.repo;
     this.picked = was.picked; this.selected = was.selected;
     this.closed = was.closed; this.collapsed = was.collapsed;
@@ -545,7 +545,7 @@ export default class CommitView {
 
   viewOptions(cx) {
     cx.spawn(async (cx) => {
-      const picked = await openMenu(this.bus, [{ label: this.t("commit.groupByDirectory"), value: "group", hint: this.grouped ? "✓" : "" }], { lang: this.lang });
+      const picked = await openMenu(this.bus, [{ label: this.t("commit.groupByDirectory"), value: "group", checked: Boolean(this.grouped) }], { lang: this.lang });
       if (picked === "group") this.setGrouped(!this.grouped);
       cx.notify();
     });

@@ -28,7 +28,7 @@ import { h_flex, v_flex, Editor, EditorState, InputState, Input } from "gpui-bas
 import { exec, theme, settings, watchFolder, readTextFile, window as hostWindow } from "herdr";
 import { readFolder, readMarks, readSearchList, roomFor, PER_FOLDER, TOTAL, SEARCH_LIMIT } from "./files-data.js";
 import { markLookup, visibleRows, keepPressed, pressLands, stripFailure, pressFailure, failureKey, rankSearch, moveKey, SEARCH_SHOWN } from "./files-tree.js";
-import { tip, location, ICON, icon, uiGlyph, fileGlyph, folderGlyph, darkLook, panelFrame, toolbar, iconButton, row, notice, errorStrip, WindowedList, openMenu } from "./ui.js";
+import { tip, location, ICON, icon, uiGlyph, fileGlyph, folderGlyph, darkLook, panelFrame, toolbar, iconButton, row, notice, skeleton, skeletonSize, errorStrip, WindowedList, openMenu } from "./ui.js";
 import { openDiff } from "./view-diff.js";
 import { editorLanguage } from "./editor-language.js";
 
@@ -57,6 +57,7 @@ export default class FilesView {
     this.reset();
     this.list = new WindowedList("files-tree");
     this.found = new WindowedList("files-found");
+    this.waits = { tree: skeletonSize("files-tree-wait"), found: skeletonSize("files-found-wait"), preview: skeletonSize("files-preview-wait") };
     // The panel takes the keyboard when a row is pressed, as the Commit panel does: the
     // mod isn't "focusable", so Herdr never hands it over.
     this.handle = cx.focus_handle();
@@ -509,7 +510,7 @@ export default class FilesView {
     if (!this.root) return notice(this.t("files.noFolder"), t);
     if (this.gone) return notice(this.t("files.gone", { folder: this.root }), t);
     if (this.rootError) return notice(this.say(this.rootError), t);
-    if (!this.read) return notice(this.t("ui.loading"), t, { busy: true });
+    if (!this.read) return skeleton(t, undefined, this.waits.tree);
     if (!this.rows.length) return notice(this.t("files.empty"), t);
     return this.list.render(this.rows.length, (i) => this.renderRow(i, t), t);
   }
@@ -531,7 +532,7 @@ export default class FilesView {
 
   renderFound(t) {
     if (this.listed && !this.listed.ok) return notice(this.listed.err || "?", t);
-    if (!this.ranked) return notice(this.t("ui.loading"), t, { busy: true });
+    if (!this.ranked) return skeleton(t, undefined, this.waits.found);
     const n = this.ranked.items.length;
     if (!n) return notice(this.t("files.noMatches"), t);
     return this.found.render(n, (i) => this.renderHit(i, t), t);
@@ -561,7 +562,8 @@ export default class FilesView {
           .child(this.t("files.truncated", { n: grouped(PREVIEW_CHARS) }))))
         .child(Editor.new(this.code).flex_1().min_h(0));
     }
-    return notice(this.fileNote ? this.t(this.fileNote) : this.t("files.loadingFile"), t, { busy: !this.fileNote });
+    if (this.fileNote) return notice(this.t(this.fileNote), t);
+    return div().flex_1().min_h(0).w_full().child(skeleton(t, undefined, this.waits.preview));
   }
 
   render(cx) {

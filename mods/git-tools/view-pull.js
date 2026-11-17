@@ -17,7 +17,7 @@ import { exec, theme } from "herdr";
 import { makeGit } from "./git.js";
 import { readPullTargets, pullDefault, togglePullOption, PULL_OPTIONS } from "./git-remote.js";
 import { appSetting, saveAppSetting } from "./app-files.js";
-import { tip, openDialog, dialogFrame, button, close, askOwner, writeBlock, scrollText, sentence, openMenu, uiGlyph, darkLook, notice } from "./ui.js";
+import { tip, openDialog, dialogFrame, button, close, askOwner, writeBlock, scrollText, sentence, openMenu, uiGlyph, darkLook, notice, skeleton } from "./ui.js";
 
 // App setting: { "<machine>\t<root>\t<branch>": "<remote>/<branch>" }.
 const MEMORY_KEY = "pull.branches";
@@ -120,13 +120,25 @@ export default class PullView {
 
   shut() { if (!this.waiting) close(this.overlay); }
 
+  // A picker's box: its value, then ⌄ right after it.
+  pickerBox(el, value, t) {
+    return el.h(28).px(8).gap(6).min_w(0).items_center().rounded(6).border_1().border_color(t.input).bg(t.background)
+      .child(value)
+      .child(uiGlyph("chevron-down", { dark: darkLook(t.popover), size: 12 }));
+  }
+
   picker(id, text, t, onClick) {
-    const dark = darkLook(t.popover);
-    return h_flex().id(id).h(28).px(8).gap(6).min_w(0).items_center().rounded(6).border_1().border_color(t.input).bg(t.background)
+    return this.pickerBox(h_flex().id(id), div().min_w(0).truncate().child(text), t)
       .cursor_pointer().hover((s) => s.bg(t.hover))
-      .on_click((_e, cx) => { cx.stop_propagation(); onClick(cx); })
-      .child(div().min_w(0).truncate().child(text))
-      .child(uiGlyph("chevron-down", { dark, size: 12 }));
+      .on_click((_e, cx) => { cx.stop_propagation(); onClick(cx); });
+  }
+
+  // A picker's box while the remotes are read: the same box laid out the same way, with a
+  // bar of a usual name's width where the value goes, so ⌄ moves only by how much longer
+  // or shorter the real name is.
+  waitingPicker(bar, t) {
+    return this.pickerBox(h_flex(), div().w(bar).min_w(0).h_full()
+      .child(skeleton(t, { rows: 1, rowHeight: 26, indent: [0, 0], padRight: 0, cols: [{ fill: true }] })), t);
   }
 
   render() {
@@ -134,14 +146,13 @@ export default class PullView {
     const branch = targets?.branch ?? "HEAD";
     const said = this.error ?? writing;
     let body;
-    if (!targets) body = notice(this.t("remote.reading"), t, { busy: true });
-    else if (!pick) body = notice(this.t("remote.noRemotes"), t);
+    if (targets && !pick) body = notice(this.t("remote.noRemotes"), t);
     else {
       body = v_flex().w_full().px(14).py(12).gap(10)
         .child(h_flex().w_full().gap(8).items_center()
           .child(div().flex_none().px(8).h(28).flex().items_center().rounded(6).bg(t.raised).text_color(t.muted).child("git pull"))
-          .child(this.picker("pull-remote", pick.remote, t, (cx) => this.chooseRemote(cx)))
-          .child(div().flex_1().min_w(0).child(this.picker("pull-branch", pick.branch, t, (cx) => this.chooseBranch(cx)))))
+          .child(!pick ? this.waitingPicker(40, t) : this.picker("pull-remote", pick.remote, t, (cx) => this.chooseRemote(cx)))
+          .child(div().flex_1().min_w(0).child(!pick ? this.waitingPicker(64, t) : this.picker("pull-branch", pick.branch, t, (cx) => this.chooseBranch(cx)))))
         .when(this.options.length > 0, (el) => el.child(h_flex().w_full().gap(6).flex_wrap().children(this.options.map((o) =>
           h_flex().id(`pull-option-${o.slice(2)}`).h(22).px(8).items_center().rounded(4).bg(t.raised).text_size(12).cursor_pointer()
             .map((el) => tip(el, OPTION_WORDS[o](this.t)))

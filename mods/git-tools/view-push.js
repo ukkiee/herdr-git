@@ -37,7 +37,7 @@ import { PROTECTED, readPushPlan, readPushFiles, push } from "./git-push.js";
 import { remoteFailure } from "./git-remote.js";
 import { formatTime } from "./i18n.js";
 import { buildRows } from "./tree.js";
-import { tip, openDialog, openMenu, dialogFrame, button, notice, errorStrip, row,icon, uiGlyph, ICON, fileGlyph, folderGlyph, darkLook, close, scriptedRepo, WindowedList, askOwner, serveRequest, writeBlock, sentence, broadcast, clip } from "./ui.js";
+import { tip, openDialog, openMenu, dialogFrame, button, notice, skeleton, skeletonSize, errorStrip, row,icon, uiGlyph, ICON, fileGlyph, folderGlyph, darkLook, close, scriptedRepo, WindowedList, askOwner, serveRequest, writeBlock, sentence, broadcast, clip } from "./ui.js";
 
 // openPush({ root, on, owner, lang })
 //   Opens the Push dialog for the repository's current branch. commit-form.js calls it
@@ -107,6 +107,19 @@ const FIRST_LOOK = 6000; // ms after the dialog opens: the plan or files still u
 const grouped = (n) => String(n).replace(/\B(?=(\d{3})+$)/g, ",");
 const stop = (_e, cx) => cx.stop_propagation();
 
+// The two columns' rows while they are read (ui.js skeleton), as the real rows lay them
+// out. Left: the 28px target row (branch → remote:target … count), then commitRow's
+// (dot, subject, author, time) one level in. Right: the 28px file count line, then
+// fileRow's (the arrow's place, the icon, the name).
+const SKELETON_COMMITS = [
+  { rows: 1, rowHeight: 28, indent: [8, 0], cols: [{ fit: 48 }, { fit: 96 }, { spacer: true }, { fit: 52 }] },
+  { indent: [8, 16], depth: [1], lead: ["dot"], cols: [{ grow: true }, { fit: 48 }, { fit: 60 }] },
+];
+const SKELETON_FILES = [
+  { rows: 1, rowHeight: 28, indent: [10, 0], cols: [{ fit: 48 }] },
+  { indent: [8, 16], depth: [0, 1, 1, 1, 0], lead: ["slot", "file"] },
+];
+
 // What Push would send, small enough to travel with the request: the dialog sends the
 // plan on screen, the panel compares it with a plan read right before pushing.
 const planOf = (plan) => (plan ? {
@@ -160,6 +173,7 @@ export default class PushView {
     this.error = null; // git's output from the push that failed
     this.commitList = new WindowedList("push-commits");
     this.fileList = new WindowedList("push-files");
+    this.waits = { commits: skeletonSize("push-commits-wait"), files: skeletonSize("push-files-wait") };
     this.handle = cx.focus_handle();
     this.handle.focus();
     this.load(cx);
@@ -409,21 +423,21 @@ export default class PushView {
   body(t) {
     const plan = this.plan;
     if (!this.root) return notice(this.t("dialogs.push.noRepositoryDot"), t);
-    if (!plan) return notice(this.t("ui.loading"), t, { busy: true });
-    const commits = plan.commits.length;
-    const left = v_flex().flex_1().min_w(0).min_h(0)
+    const commits = plan?.commits.length ?? 0;
+    // Before the plan is read both columns stand, each with its own skeleton.
+    const left = !plan ? v_flex().flex_1().min_w(0).min_h(0).child(skeleton(t, SKELETON_COMMITS, this.waits.commits)) : v_flex().flex_1().min_w(0).min_h(0)
       .child(this.targetRow(t))
       .child(div().flex_1().min_h(0).child(
         !plan.ok ? div().id("push-plan-error").p(12).text_color(t.ansi1).child(this.planError())
           : !commits ? notice(this.t("dialogs.push.noCommits"), t)
           : this.commitList.render(commits, (i) => this.commitRow(i, t), t)));
     const files = this.files, filesError = this.filesError;
-    const right = v_flex().w(290).flex_none().min_h(0).border_l(1).border_color(t.border)
+    const frame = v_flex().w(290).flex_none().min_h(0).border_l(1).border_color(t.border);
+    const right = files === null || !plan ? frame.child(skeleton(t, SKELETON_FILES, this.waits.files)) : frame
       .child(h_flex().h(28).flex_none().px(10).items_center().text_size(12).text_color(t.dim)
-        .child(files?.length && !filesError ? countOf(this.t, "dialogs.files", files.length) : ""))
+        .child(files.length && !filesError ? countOf(this.t, "dialogs.files", files.length) : ""))
       .child(div().flex_1().min_h(0).child(
-        files === null ? notice(this.t("ui.loading"), t, { busy: true })
-          : filesError ? div().p(12).text_size(12).text_color(t.ansi1).child(sentence(this.t, filesError.msg, filesError.err))
+        filesError ? div().p(12).text_size(12).text_color(t.ansi1).child(sentence(this.t, filesError.msg, filesError.err))
           : !files.length ? notice(plan.ok && commits ? this.t("dialogs.push.noFiles") : "", t)
           : this.fileList.render(this.fileRows.length, (i) => this.fileRow(i, t), t)));
     return v_flex().size_full().min_h(0)

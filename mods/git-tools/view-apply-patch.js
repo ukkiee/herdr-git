@@ -18,8 +18,8 @@ import { exec, theme, notify, readTextFile, pickFolder, appHome, home } from "he
 import { readPatchFiles, applyPatch, readMayBeCut, homePath } from "./git-patch.js";
 import { stageText, dropStaged, isStaged } from "./git-conflict.js";
 import { openConflicts } from "./view-conflicts.js";
-import { CheckedFiles } from "./view-create-patch.js";
-import { openDialog, dialogFrame, button, iconButton, notice, errorStrip, close, askOwner, writeBlock, sentence } from "./ui.js";
+import { CheckedFiles, CHECKED_SKELETON } from "./view-create-patch.js";
+import { openDialog, dialogFrame, button, iconButton, skeleton, skeletonSize, errorStrip, close, askOwner, writeBlock, sentence } from "./ui.js";
 
 const strings = (value) => (Array.isArray(value) ? value.filter((v) => typeof v === "string" && v) : []);
 // Typing the path reads the file once the typing stops this long.
@@ -189,7 +189,7 @@ export default class ApplyPatchView {
     const t = theme(), writing = this.writing();
     const focus = () => this.handle.focus();
     const empty = this.reading ? this.t("patch.reading") : this.problem ?? (this.clipboard ? "" : this.t("patch.noFile"));
-    const list = this.reading ? notice(this.t("patch.reading"), t, { busy: true })
+    const list = this.reading ? skeleton(t, CHECKED_SKELETON, this.listSize ??= skeletonSize("apply-patch-wait"))
       : this.tree.render(t, this.t, { disabled: this.running, empty, label: (item) => this.label(item), focus });
     const body = v_flex().size_full().min_h(0)
       .when(!this.clipboard, (el) => el.child(this.pathRow(t)))

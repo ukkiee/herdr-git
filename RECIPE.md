@@ -28,6 +28,27 @@ another machine run git there.
 Colors are the theme's names (`t.ansi4` is written `ansi4`). Text is 13px unless said.
 Rows are 24px. Icons are 15px in 24px square buttons (5px corners) unless said.
 
+**Loading** (the skeleton): while something is read, only the place its data goes waits.
+Toolbars, search boxes, filter rows, column frames, headers and buttons are drawn from
+the start, and a screen split into columns waits in each column on its own. The waiting
+place shows faint rows in `muted`, the whole list pulsing between 22% and 45% opacity
+every 1.2 s: bars 8px tall with round ends where text goes, 14px squares (3px corners)
+where checkboxes and icons go, small dots where a commit's dot goes. A bar that takes the
+rest of a row stops 24px short of what follows it. The list measures its column and draws
+just the rows that column shows, plus one for the part-row at the bottom (720px' worth
+until it is measured). Lists draw them in their real rows' shape, given with each screen
+below (the Compare branches, History and Update Info tabs: commit rows and, in the
+340px details column, file rows; Merge Revisions: a line number and a line in each of
+the three panes, under its toolbar and pane titles); the rest (Git console, Diff tab,
+Compare files tab, Files panel, Commit details, Stash files, file previews) draw a plain
+shape: 24px rows, 12px in, one name bar each. A form as tall
+as its fields (Pull, Edit Remote) draws its boxes and a bar in each where the value goes.
+Pull's two pickers are laid out as once read, each as wide as its value, with a bar of a
+usual name's width (40px for the remote, 64px for the branch) and ⌄ right after it, so ⌄
+moves only by how much the real name differs.
+A spinner stays only in short places: a filter menu's item, `Show more`, an unfolded
+folder's row, and buttons.
+
 The words quoted here are the English ones. On a computer whose first preferred language
 is Korean every word the mod writes is Korean instead (see "Language" under How it
 behaves; every sentence in both languages is in "Words" under Built from). Branch names,
@@ -121,9 +142,11 @@ The right side panel, in place of Herdr's own Changes. A card: 10px corners, 1px
   scrolling, an `x` (Dismiss) on the right. A write that ends after the panel has moved
   to another repository puts that repository's folder name in front:
   `slowhook: <git's output>`.
-- **States** in place of the list, centered in `dim`: `Loading…` with a 14px spinner
-  (first read of a folder), `No changes`, `<folder> is not in a git repository.` (then there is no
-  form).
+- **States** in place of the list: the skeleton (first read of a folder) in the rows'
+  shape (8px plus 16px per level: a group's fold arrow place, checkbox, name and count;
+  folders and files one and two levels in, with their icon), with the form under it at
+  half opacity taking no presses until the repository is found; centered in `dim`,
+  `No changes`, `<folder> is not in a git repository.` (then there is no form).
 
 ### Files panel
 
@@ -168,8 +191,8 @@ OS. The same card as the Commit panel. Top to bottom:
   also takes it off the closed ones, so later refreshes keep it until it is closed again.
 - **States** in place of the tree, centered in `dim`: `No folder`,
   `<folder> no longer exists.`, `<folder> can't be read: no permission.`, the words of a
-  top folder that can't be read otherwise, `Loading…`
-  with a 14px spinner, `No files`. In place of the results: `Loading…`,
+  top folder that can't be read otherwise, the skeleton, `No files`. In place of the
+  results: the skeleton,
   `No matching files`, or the words of a file list that can't be read.
 - **Preview**, in place of the search box, the tree and the notes: the file in a
   read-only editor at 12px in the terminal font (`settings().font_family`), with syntax
@@ -177,7 +200,7 @@ OS. The same card as the Commit panel. Top to bottom:
   `ansi3`, numbers `ansi1`, constants `ansi6`). A file past 400,000 characters has a
   line over the editor (line under it, 12px by 4px padding, 11px `dim`):
   `Showing the first 400,000 characters of this file`. In the editor's place, centered:
-  `Loading file…` with a spinner, `This file is no longer available`,
+  the skeleton, `This file is no longer available`,
   `Binary file · no text preview`, or
   `Cannot preview this file (binary, too large, or unreadable)`.
 
@@ -227,8 +250,10 @@ toolbar (`Git` semibold, `Log` 12px `muted`, Refresh, Hide) and the notice.
   `accent` while typing) and an input, placeholder `Filter branches`.
 - The tree: `HEAD (Current Branch)` (or `HEAD (<7-char hash>)` when detached), then
   **Local** and **Remote** groups (semibold, count at 11px `dim`). A `/` in a name makes
-  folders (`folder` icon 13px, count shown while folded). Indent 6px plus 12px per
-  level. Each level (the group, every folder, every remote) reads the current branch,
+  folders (`folder` icon 13px, count shown while folded). Indent 6px plus 21px per
+  level (the fold arrow's 16px place and the 5px gap), and every row keeps the arrow's
+  place, empty on HEAD, branches and tags: siblings' icons line up, and a child's arrow
+  sits under its parent's icon. Each level (the group, every folder, every remote) reads the current branch,
   the favorites (★), the folders by name, then the other branches by name. Branch rows: `branch-item` icon (13px) in `ansi3` for the current branch (whose
   name is semibold), `ansi2` for other local branches, `ansi5` for remote ones; then
   `↑N` (`ansi2`) and `↓N` (`ansi4`) at 11px against its upstream. Tooltip: the name, or
@@ -238,7 +263,9 @@ toolbar (`Git` semibold, `Log` 12px `muted`, Refresh, Hide) and the notice.
   branch's Update too (in the VCS widget popup's menus as well; a current branch that
   never tracked one keeps Update on). The row the Commit list is limited to has the `selected`
   background; the keyboard's cursor row has `hover`. `origin/HEAD` is not listed.
-- Filtering with no match: `No branches match`.
+- Filtering with no match: `No branches match`. While the branches are read: the
+  skeleton in the tree's rows' shape (the arrow's place and a name at depth 0; the
+  arrow's place, an icon and a name below), under the toolbar and filter row.
 
 **Commit list** (the middle column):
 
@@ -280,7 +307,10 @@ toolbar (`Git` semibold, `Log` 12px `muted`, Refresh, Hide) and the notice.
     them, so its author and time stay in line with the other rows.
   - Time: `Moments ago`, `N minutes ago` within the hour, `Today 2:30 PM`,
     `Yesterday 11:06 PM`, else `11/9/26, 9:05 AM` (local time).
-- **States**: `Loading…`, `No commits yet`, `No commits matching filters`.
+- **States**: the skeleton while commits are read (a lane's dot, a subject bar, and bars
+  in the author and time columns the width shows), `No commits yet`,
+  `No commits matching filters`. Before the repository is found the whole panel is one
+  plain skeleton under a toolbar.
 
 **Filter row** (inside the Commit list's toolbar):
 
@@ -359,7 +389,7 @@ A tab in the shown space, titled with the file name, `background`:
   with tabs as 4 spaces. Added rows have `ansi2` at alpha `0x24` behind them, deleted
   rows `ansi1` at `0x24`. Hunk headers (`@@ … @@`) on `raised` in `dim`. Git's own
   `\ No newline at end of file` in `dim`. No syntax colors, no side-by-side view.
-- States: `Loading…`, `Binary file`, `Contents are identical`, `Empty file`,
+- States: the skeleton, `Binary file`, `Contents are identical`, `Empty file`,
   `Can't show this diff.`, and git's words in an error strip.
 
 ### Push dialog
@@ -378,6 +408,10 @@ at 12px `muted` on the left, buttons on the right). Title `Push Commits`.
   `HEAD is detached: check out a branch to push.`).
 - Right, 290px, line on its left: `N files` (12px `dim`) and the files of the selection
   (all commits, or one) as a folder tree; a folder row folds on click.
+- While the commits are read both columns stand, each with its own skeleton inside it:
+  left, the 28px target line and commit rows (dot, subject, author, time); right, the
+  count line and file rows (the arrow's place, icon, name). Picking a commit reads its
+  files again, and only the right column shows the skeleton.
 - Footer: the note `<branch> will track <remote>/<target>` when the branch has no
   upstream (`Pushing to <remote>…` while pushing; `Another git operation is running: <label>`
   while another screen writes to the repository), **Cancel**, and the **Push ▾** split
@@ -451,8 +485,11 @@ Modal, 760×480, title `Restore Rolled-Back Changes`.
   files as a folder tree (compact folders, Icon theme icons, a fold arrow on folders,
   a checkbox on every row), names in status colors: modified `ansi4`, added `ansi2`,
   deleted `muted` struck through. Folder rows end with `N files` at 12px `dim`.
-- In place of both: `Loading…` with a spinner, `Nothing has been rolled back in this
-  repository.` (no snapshot), or git's words in `ansi1`.
+- Both columns stand from the start. While the snapshots are read the left one is a
+  skeleton of snapshot rows (icon, action, time, count) and the right one keeps its
+  check-all line, empty, over a skeleton of file rows (the arrow's place, checkbox, icon,
+  name, 8px plus 16px per level). In the left column instead: `Nothing has been rolled
+  back in this repository.` (no snapshot), or git's words in `ansi1`.
 - After a Restore, a row above the footer (line above, `raised`, scrolling past 108px):
   `Restored N files.`, or
   `Restored N files. Not restored, to keep what is there now:` and one
@@ -518,7 +555,8 @@ Modal, 760×480, title `Deleted Branches`.
   and name `dim`, its checkbox off and disabled, and in the subject's place, at 12px
   `ansi3`, `a branch of this name exists now at another commit`; its tooltip is the
   subject.
-- In place of the list: `Loading…` with a spinner,
+- While the branches are read the check-all line stands, empty, over a skeleton of
+  branch rows (checkbox, icon, name, hash, subject, time). In place of the list:
   `No deleted branches are kept in this repository.`, or git's words in `ansi1`.
 - After a Restore, a row above the footer (line above, `raised`, scrolling past 108px):
   `Restored N branches.`, or `Restored N branches. Not restored:` and one
@@ -573,11 +611,26 @@ dialog's own (`openDialog` in its file).
   `⚠ Merging main` and the like (`ops.merging`, `ops.rebasing`, `ops.cherryPicking`,
   `ops.reverting`, named after the current branch) with a green ≫ (resolve, or continue when no conflict is left) and a red
   ■ (abort, after a 420×150 question). The name is cut when the widget would pass 360px.
+  Until the block's first read answers, one skeleton bar fills the block at the width
+  the layout kept, with no icon or ▾, and the block isn't resized; outside a repository
+  it then shrinks to 4px. When the kept width is that 4px (the last folder wasn't a
+  repository), the bar doesn't show until the read answers: the block is resized once,
+  to the answer, rather than widened for the bar and again for the widget.
   Click: a 380×520 popup 2px below the widget, kept inside the block's right end: the
   search box `Search for branches and actions` with Refresh; Update Project…, Commit…,
   Push…; the in-progress items; New Branch…, New Worktree…, Checkout Tag or Revision…;
   then Recent (up to 5), Local, Remote and Tags trees, each branch row with a › opening
-  the same menu as the Branch tree beside it. A Recent row shows the branch it tracks on
+  the same menu as the Branch tree beside it. While the popup reads, the six actions and
+  a line show at once and can be picked (the widget runs them on its own repository);
+  the groups' place is a skeleton in their rows' shape (26px rows: a group's name, then
+  branches 26px in and a remote's 44px in, each with an icon, a name bar and ›). The
+  in-progress items of the operation the widget already shows stand from the start and can
+  be picked too (the widget runs them on its own operation, as ≫ and ■ do), so nothing
+  below them moves when the read answers; the read's answer replaces them if it differs
+  (the operation ended meanwhile). Branches… in the VCS Operations popup opens it with the
+  operation the Commit panel has read; from a Log panel whose widget hasn't read that
+  repository (the Git button is in the window's top bar), the items join once the popup's
+  read answers. A Recent row shows the branch it tracks on
   its right (11px `dim`), none when that branch is gone from the remote. Local and Remote read favorites (★) first,
   then the current branch, then by name.
 - **VCS Operations popup** (`cmd-shift-v`, 300px wide, as tall as its rows): title `VCS
@@ -629,7 +682,8 @@ dialog's own (`openDialog` in its file).
   (read only), middle `Result <path>`, right `Changes from <name>`; chunk buttons ✕ ≫ and
   ≪ ✕ on the borders; toolbar ↑ ↓, `Apply non-conflicting changes:` ≫ ⇋ ≪, the magic wand,
   Edit Result Directly and the count; bottom Accept Left, Accept Right │ Save and Close,
-  Apply Changes (default). Arrows and chunk buttons are characters, not icons. Its
+  Apply Changes (default); while the file is read all four stand dimmed, so the row
+  doesn't move when it lands. Arrows and chunk buttons are characters, not icons. Its
   questions (`Unprocessed Changes`, `Overwrite Changes`, and the one when the file changed
   on disk since the dialog read it, with Overwrite) are 460px cards over it; Esc on a card
   closes only the card. × and Esc close it without asking about what is left to decide: a result changed since the file
@@ -737,11 +791,11 @@ machine); back on a terminal, they follow its folder again.
   repository at once, also while this panel's own write still runs on the one before:
   the write goes on there, and the write error strip of the repository before goes away.
 - **Coming back to a folder** shown before: its files, checks, folding and place in the
-  list show at once as they were left, without `Loading…`, and the read that follows
+  list show at once as they were left, without the skeleton, and the read that follows
   puts them right (files gone since then leave the checks). A commit that succeeds
   while the panel shows another repository clears the checks kept for its own. The
   panel keeps this for the last 8 folders; a folder not among them starts with
-  `Loading…` and nothing checked.
+  the skeleton and nothing checked.
 - **A detached HEAD** shows its warning line for as long as it lasts; Commit stays one
   press (no second confirmation).
 - **Click** a row: selects it. **Double-click**: a file opens its Diff tab, a group or
@@ -879,7 +933,7 @@ machine); back on a terminal, they follow its folder again.
   Commit details fails, what was shown stays, git's words show in the error strip, and
   the next 10 s check reads again without Refresh (Refresh does too); the strip goes once
   a read works. A search for the repository that hasn't ended 80 s after it started is
-  made again, and so is the read of a Branch tree or Commit list still showing `Loading…`
+  made again, and so is the read of a Branch tree or Commit list still showing the skeleton
   80 s after it was asked for. Once, 6 s after the panel (or a Log tab) starts, what is
   still unread is read again.
 - **Moving to another repository** shows it at once, with a commit selected or while
@@ -1250,7 +1304,7 @@ The rules and their reasons are in `docs/design.md` (section 4); what a person s
   failed command is, even if it was scrolled up (it posts `{ type: "console-end" }`).
 - On every screen, and in the work the Commit panel runs for a dialog, a git command whose
   answer hasn't come 5 s past its timeout (35 s for a read) is given up on (the Files
-  panel's reads aside), so the screen doesn't stay on `Loading…` for
+  panel's reads aside), so the screen doesn't stay loading for
   good: a read is asked once more, then it fails with `git did not answer in 35 s.` like
   any git error. A command that may write is not run again, as it may have done its work.
 
@@ -1565,7 +1619,10 @@ opening copy's, `this.bus` on a screen, `host.bus` in a Log panel part; `at`: `{
 in window coordinates, a mouse event's `position`, passed to `openOverlay` as its `at`),
 `answerMenu(bus, key, value)`,
 `menuMetrics`; `panelFrame`, `toolbar`, `spacer`, `row`, `iconButton`, `checkbox`,
-`button`, `notice`, `notRepository`, `errorStrip`, `scrollText`, `dialogFrame`, `close`,
+`button`, `notice`, `skeleton(t, specs, size)` (the loading skeleton: a screen's
+description of its rows, `skeleton.js`, or none for the plain shape; `size`, a
+`skeletonSize(id)` the screen keeps, one per list, where the list remembers its measured
+height; anything else is an error), `skeletonSize` (from `skeleton.js`), `notRepository`, `errorStrip`, `scrollText`, `dialogFrame`, `close`,
 `takeEscape(el, onEscape)` (answers Herdr's `overlay.close` on `el`, so Esc runs
 `onEscape(cx)` and the overlay stays; only while an inner menu, card or question is open), `textBox`,
 `strokePath`, and `WindowedList` (draws only the rows in view, its own wheel handling
@@ -1716,6 +1773,7 @@ the git ones run against real temporary repositories):
 | `git-patch.js` | `readPatchFiles(text)` (pure: a patch's files, statuses and names as `git apply -p1` takes them), `applyPatch(git, root, { file, paths })` (checked files only, always named with `--include`, in parts when there are many; a 3-way retry; conflicts from `ls-files -u`), `READ_LIMIT`, `readMayBeCut(text)` (the 1 MiB read limit in UTF-8 bytes), `homePath(typed, home)` (a leading `~` or `~/` as that machine's home), `changesCommit(git, root, { paths, message })` (a commit of the checked local changes on HEAD, no ref) |
 | `git-console.js`, `log-menus.js`, `log-select.js`, `log-options.js`, `branch-order.js`, `vcs-ops.js`, `ui-icons.js` | console records, with a URL's credentials hidden; the Log panel's menus; picking commits; graph and view options; branch order and favorites (the widget popup's favorites first) and the Branch tree's rows (`treeRows`, a tag's row made when asked for); the VCS Operations popup's items; UI icons |
 | `ui-size.js`, `focus-repo.js` | `textWidth`, `menuWidth`, `MENU_TEXT`, `HINT_TEXT`, `belowSpot`, `pressSpot`, `sideOf`, `dialogFills`, `dialogRoom`, `ERROR_BOX`, `ERROR_ROOM`, `widgetBlockWidth`; `whereFocused`, `newPanes`, `rememberTab`, `isTabScreen`, `registerTab`, `forgetTab` |
+| `skeleton.js` | `HEIGHT` (720: the height a list fills before its column is measured), `ROOM` (24: the empty end of a bar that takes a row's rest), `LEAD` (the fixed places `slot`, `check`, `icon`, `file`, `mark`, `dot`: their width and what stands in for them), `skeletonRows(specs, { height })` → `[{ height, left, right, gap, pieces }]` (a skeleton list's rows from a screen's description of its real rows, as many as the height shows plus one; `ui.js` `skeleton` draws them), `skeletonCount(specs, height)` (that many rows without the pieces: a new height redraws only when it changes), `skeletonFills(specs)` (whether a section fills, so the height is measured), `skeletonSize(id)` (what a screen keeps for one list: the element id and the measured height), `checkSize(size)` (the size when it came from `skeletonSize` or is left out, else an error naming what it got) |
 
 Each of these files' header says what it exports and why.
 
@@ -2848,7 +2906,7 @@ in English.
   running) and catches up when shown.
 - A panel moving to another repository is noticed in `render`, which can't start
   anything: the move happens in a `cx.timer.after(0, …)` of that copy. Starting the
-  read from render throws at its `cx.notify()` and leaves the Log panel on `Loading…`.
+  read from render throws at its `cx.notify()` and leaves the Log panel loading.
 - After a popup menu over the Log panel closes, the panel focuses its Commit list itself
   (the `"focus"` command never comes without `"focusable": true`).
 - Commit details hides below 930px of panel width with the default columns. In a
@@ -3111,7 +3169,7 @@ Each line is one check: do what it says, see what follows.
 **Offline**
 
 1. Run `node layout.test.mjs` at the root, `node <file>` for every `*.test.mjs` in
-   `mods/git-tools` (56 files) and `node tools/gen-icon-theme.test.mjs`: each prints
+   `mods/git-tools` (58 files) and `node tools/gen-icon-theme.test.mjs`: each prints
    `ok` (the last one after `skip: …` unless `ICON_THEME_SOURCE` is set).
 2. Run `herdr-app check mods/git-tools`: it passes.
 
@@ -3306,7 +3364,7 @@ pre-push 20 s, reference-transaction 12 s, each made to fail when a check says s
     `HEAD is detached: a commit made here is on no branch. Create a branch to keep it.`
     above the message box; check out a branch and the line is gone.
 66. Check a file, move to a tab on another repository and come back: the file is still
-    checked and the list shows without `Loading…`.
+    checked and the list shows without the skeleton.
 67. Start the 60 s commit (step 56) with a file checked, move to another repository,
     wait for the commit to end, change that file again and go back: it is listed and
     not checked.
@@ -3574,7 +3632,7 @@ conflicting file, and an ignored folder `node_modules`)
      `Searched only the first 20,000 files in this folder`.
 139. Search for a text, then from a terminal create a file it matches: within about
      20 s the file is in the results, and meanwhile the results stay without blinking
-     to `Loading…`.
+     to the skeleton.
 
 **Windows** (not run yet: no Windows machine was at hand)
 

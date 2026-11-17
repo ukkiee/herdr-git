@@ -28,7 +28,7 @@ import { combineChanges, newestChange } from "./log-select.js";
 import { oneAtATime } from "./one-at-a-time.js";
 import { openDiff } from "./view-diff.js";
 import { openBranchNew } from "./view-branch-new.js";
-import { tip, ROW, ICON, icon, uiGlyph, fileGlyph, folderGlyph, darkLook, row, toolbar, spacer, iconButton, notice, broadcast, openMenu, WindowedList, runningText, workName } from "./ui.js";
+import { tip, ROW, ICON, icon, uiGlyph, fileGlyph, folderGlyph, darkLook, row, toolbar, spacer, iconButton, notice, skeleton, skeletonSize, broadcast, openMenu, WindowedList, runningText, workName } from "./ui.js";
 import { formatDateTime } from "./i18n.js";
 import { DETAILS_KEY, readDetailsOptions, toggleDetailsOption, detailsMenu } from "./log-options.js";
 import { appSetting, saveAppSetting } from "./app-files.js";
@@ -590,7 +590,7 @@ export default class LogDetails {
           else return;
           cx.stop_propagation();
         })
-        .child(loading ? notice(tr("ui.loading"), t, { busy: true })
+        .child(loading ? skeleton(t, undefined, this.listSize ??= skeletonSize("log-detail-wait"))
           : !n ? notice(this.info.ok ? tr("log.noChanges") : "", t)
             : this.list.render(n, (i) => this.fileRow(i, t), t)))
       .child(this.words(t));

@@ -21,6 +21,8 @@
 //                        language turns out different, followed by a redraw: call
 //                        this.t when drawing, and word again any text kept from before
 //                        in spoke(cx) (optional), called right after they are replaced.
+//   A screen never assigns these fields: its own state goes in fields of other names
+//   (screen-fields.test.mjs fails on `this.wait ??= …` and the like).
 //
 // The copy's language: props.lang when the opener gave one (dialogs and menus get the
 // opener's, ui.js openDialog/openMenu), else the language last read on this computer

@@ -30,6 +30,8 @@
 //                              hash, selects and reveals it; false when there is none,
 //                              null when the jump was dropped. Await it inside cx.spawn.
 //   host.reload(cx)            reads branches and commits again (after checkout, fetch, delete)
+//   host.redraw(cx)            a read that ends the loading skeleton landed: draws it, from
+//                              the panel's own timer as well (view-log.js redraw)
 //   host.busy                  null, or the work of this panel's git write running now
 //                              ({ key: "log.fetching" }); it may run on a repository the
 //                              panel no longer shows (the panel follows the focused pane)
@@ -69,7 +71,7 @@ import { formatTime } from "./i18n.js";
 import { layoutGraph, collapseLinear, reachableFrom, longEdges, graphWindow, indexSegments, segmentsIn, fitLabels } from "./graph.js";
 import { readArgs } from "./log-options.js";
 import { openCommitMenu } from "./log-details.js";
-import { tip, ROW, row, notice, strokePath, WindowedList, openMenu, uiGlyph } from "./ui.js";
+import { tip, ROW, row, notice, skeleton, skeletonSize, strokePath, WindowedList, openMenu, uiGlyph } from "./ui.js";
 import { relatives } from "./git-revision.js";
 
 const BATCH = 1000;
@@ -348,7 +350,7 @@ export default class LogList {
       this.add(r, true);
       this.previewed = true; this.read = true;
       if (moved) this.list.top = 0;
-      cx.notify();
+      host.redraw(cx);
     });
   }
 
@@ -391,7 +393,7 @@ export default class LogList {
         this.notPicked = null;
         this.readNotPicked(cx);
       }
-      cx.notify();
+      host.redraw(cx);
     });
   }
 
@@ -637,6 +639,16 @@ export default class LogList {
       .when(cols.hash, (el) => el.child(div().flex_none().w(HASH).truncate().text_size(12).text_color(muted).child(commit.hash.slice(0, 8))));
   }
 
+  // The rows while the commits are read (ui.js skeleton), as commitRow lays them out: one
+  // lane's dot, the subject, and the columns the width shows.
+  skeleton(width) {
+    const cols = this.columns(width);
+    return {
+      indent: [2, 0], lead: ["graph"], cols: [{ grow: true },
+        ...(cols.author ? [{ px: AUTHOR, bar: 56 }] : []), ...(cols.date ? [{ px: TIME, bar: 88 }] : []), ...(cols.hash ? [{ px: HASH, bar: 52 }] : [])],
+    };
+  }
+
   // A thin strip under the graph part while it has more than it shows: where the window is.
   scrollStrip(v, t) {
     const widest = v.room + v.max, thumb = Math.max(16, (v.room * v.room) / widest);
@@ -647,9 +659,9 @@ export default class LogList {
   render(cx) {
     const { host } = this, n = this.rows.length, t = theme(), tr = host.t;
     if (!host.repo) return div();
-    if (!this.read) return notice(tr("ui.loading"), t, { busy: true });
+    if (!this.read || (!n && this.loading)) return skeleton(t, this.skeleton(host.listWidth ?? 9999), this.listSize ??= skeletonSize("commit-list-wait"));
     // A read that failed says so in the panel's error strip, not "No commits yet".
-    if (!n) return notice(this.loading ? tr("ui.loading") : this.failed ? "" : this.filtered() ? tr("log.noMatchingCommits") : tr("log.noCommits"), t, { busy: this.loading });
+    if (!n) return notice(this.failed ? "" : this.filtered() ? tr("log.noMatchingCommits") : tr("log.noCommits"), t);
     // The next batch starts in a timer: nothing may start inside render.
     const scrolled = !this.stalled || this.stalled.top !== this.list.top;
     if (this.list.nearEnd(n, 60) && this.more && !this.loading && !this.later && scrolled) {

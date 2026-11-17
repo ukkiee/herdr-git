@@ -10,7 +10,7 @@
 import { div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { exec, theme } from "herdr";
-import { tip, ICON, fileGlyph, folderGlyph, darkLook, row, toolbar, spacer, iconButton, notice, errorStrip, WindowedList, panelFrame } from "./ui.js";
+import { tip, ICON, fileGlyph, folderGlyph, darkLook, row, toolbar, spacer, iconButton, notice, skeleton, skeletonSize, errorStrip, WindowedList, panelFrame } from "./ui.js";
 import { makeGit } from "./git.js";
 import { readTurns, pageAt } from "./read-turns.js";
 import { readCommit } from "./git-show.js";
@@ -25,6 +25,9 @@ const SHORT = 7;
 const short = (hash) => String(hash ?? "").slice(0, SHORT);
 const ROW_H = 24;
 const INDENT = 14;
+// The rows while they are read (ui.js skeleton), as commitRow and fileRow lay them out.
+const SKELETON_COMMITS = { indent: [10, 0], gap: 8, padRight: 10, cols: [{ fit: 52 }, { grow: true }, { fit: 72 }, { fit: 96 }] };
+const SKELETON_FILES = { indent: [6, INDENT], gap: 5, padRight: 10, depth: [0, 1, 1, 0, 1, 1, 1], lead: ["slot", "file"] };
 const PAGE = 1000;
 const FIRST_LOOK = 6000; // ms: the first read still unanswered then is made again once
 const KIND =[en["revision.historyTab"], ko["revision.historyTab"], en["revision.fileHistoryTab"], ko["revision.fileHistoryTab"]];
@@ -61,6 +64,7 @@ export default class HistoryTab {
     this.turn = 0; this.page = 0;
     this.list = new WindowedList("history-commits", { rowHeight: ROW_H });
     this.fileList = new WindowedList("history-commit-files");
+    this.waits = { commits: skeletonSize("history-commits-wait"), files: skeletonSize("history-commit-files-wait") };
     this.load(cx, false);
     // A tab opened in place of the one before (space-tabs.js) has been seen to get no answer
     // to its first read: once, a little later, it reads again beside it.
@@ -145,7 +149,7 @@ export default class HistoryTab {
   details(t) {
     const dark = darkLook(t.background), info = this.info;
     const body = !this.picked ? notice(this.t("revision.selectCommit"), t)
-      : !info ? notice(this.t("ui.loading"), t, { busy: true })
+      : !info ? skeleton(t, SKELETON_FILES, this.waits.files)
       : !info.ok ? notice(info.err || this.t("ui.gitFailed"), t)
       : v_flex().size_full().min_h(0)
         .child(div().flex_1().min_h(0).w_full().child(this.fileList.render(this.files.length, (i) => this.fileRow(i, t, dark), t)))
@@ -163,11 +167,11 @@ export default class HistoryTab {
       .child(spacer())
       .child(iconButton("history-refresh", "refresh", t, { title: this.t("compare.refresh"), busy: Boolean(this.reads.busy() && commits), onClick: (_e, cx) => { this.load(cx, false); cx.notify(); } }));
     const n = commits?.length ?? 0;
-    const body = !commits ? notice(this.t("ui.loading"), t, { busy: true })
-      : h_flex().flex_1().min_h(0).w_full()
-        .child(div().flex_1().min_w(0).h_full().child(!n ? notice(this.t("revision.empty"), t)
-          : this.list.render(n + (this.more ? 1 : 0), (i) => this.commitRow(i, t), t)))
-        .child(this.details(t));
+    const body = h_flex().flex_1().min_h(0).w_full()
+      .child(div().flex_1().min_w(0).h_full().child(!commits ? skeleton(t, SKELETON_COMMITS, this.waits.commits)
+        : !n ? notice(this.t("revision.empty"), t)
+        : this.list.render(n + (this.more ? 1 : 0), (i) => this.commitRow(i, t), t)))
+      .child(this.details(t));
     return panelFrame("history-tab", t)
       .child(bar)
       .child(body)

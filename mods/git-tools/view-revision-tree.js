@@ -9,7 +9,7 @@
 import { div } from "gpui-kit";
 import { v_flex, Editor, EditorState } from "gpui-base";
 import { exec, theme, settings } from "herdr";
-import { tip, ICON, uiGlyph, fileGlyph, folderGlyph, darkLook, row, toolbar, notice, errorStrip, WindowedList, panelFrame } from "./ui.js";
+import { tip, ICON, uiGlyph, fileGlyph, folderGlyph, darkLook, row, toolbar, notice, skeleton, skeletonSize, errorStrip, WindowedList, panelFrame } from "./ui.js";
 import { makeGit } from "./git.js";
 import { buildRows } from "./tree.js";
 import { openSpaceTab } from "./space-tabs.js";
@@ -155,13 +155,13 @@ export default class RevisionTree {
           .child(this.t("compare.cut", { n: PREVIEW_CHARS }))))
         .child(Editor.new(this.code).flex_1().min_h(0));
     }
-    return notice(this.note ? this.t(this.note) : this.t("ui.loading"), t, { busy: !this.note });
+    return this.note ? notice(this.t(this.note), t) : skeleton(t, undefined, this.previewSize ??= skeletonSize("revision-tree-preview-wait"));
   }
 
   render() {
     const t = theme(), dark = darkLook(t.background), file = this.file;
     const body = file ? this.preview(t)
-      : !this.files ? notice(this.t("ui.loading"), t, { busy: true })
+      : !this.files ? skeleton(t, undefined, this.listSize ??= skeletonSize("revision-tree-wait"))
       : !this.rows.length ? notice(this.t("revision.noFiles"), t)
       : this.list.render(this.rows.length, (i) => this.fileRow(i, t, dark), t);
     return panelFrame("revision-tree-tab", t).track_focus(this.handle)

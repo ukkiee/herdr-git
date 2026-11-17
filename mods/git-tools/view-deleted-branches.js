@@ -26,6 +26,7 @@ import { readDeletedBranches, restoreBranches } from "./git-branch.js";
 import { formatTime } from "./i18n.js";
 import { checkState } from "./tree.js";
 import { tip, openDialog, dialogFrame, button, checkbox, row, notice, skeleton, skeletonSize, errorStrip,scrollText, uiGlyph, darkLook, close, scriptedRepo, sentence, WindowedList, askOwner, serveRequest, writeBlock } from "./ui.js";
+import { spawnOrUndo } from "./later.js";
 
 const SHORT = 7; // a hash as the Branch tree's HEAD row shows it
 
@@ -100,7 +101,7 @@ export default class DeletedBranchesView {
     if (!this.root) return;
     if (this.loading) { this.again = true; return; }
     this.loading = true; this.again = false;
-    cx.spawn(async (cx) => {
+    spawnOrUndo(cx, () => { this.loading = false; }, async (cx) => {
       try {
         const [list, opted] = await Promise.all([readDeletedBranches(this.git, this.root), this.scripted || scriptedRepo(this.git, this.root)]);
         this.scripted = opted === true;

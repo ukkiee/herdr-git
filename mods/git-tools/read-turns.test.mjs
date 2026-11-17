@@ -151,7 +151,12 @@ const clock = () => { let t = 1000; return { now: () => t, pass: (ms) => { t += 
 {
   const POLL = 2000, UNANSWERED = 6000, OUTAGE = 600000;
   let now = 0, alarms = [];
-  const wait = (ms) => new Promise((go) => alarms.push({ at: now + ms, go }));
+  // The copy's clock (clock.js): ring() at now + ms unless the call takes it back first.
+  const wait = (ms, go) => {
+    const alarm = { at: now + ms, go };
+    alarms.push(alarm);
+    return () => { alarms = alarms.filter((a) => a !== alarm); };
+  };
   let state = "before", answering = false, calls = 0, waiting = 0, mostWaiting = 0;
   const exec = (_cmd, _args) => {
     calls++;
@@ -176,8 +181,8 @@ const clock = () => { let t = 1000; return { now: () => t, pass: (ms) => { t += 
     })();
   };
   const settle = async () => { for (let i = 0; i < 5; i++) await new Promise((go) => setImmediate(go)); };
-  // An alarm whose call is over (the answer came first) never matters; one that rings marks
-  // its unanswered call as given up on.
+  // A call answered first took its alarm back; one that rings marks its unanswered call as
+  // given up on.
   let next = POLL;
   const ring = async (until, done = () => false) => {
     while (!done()) {

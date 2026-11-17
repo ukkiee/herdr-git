@@ -18,6 +18,7 @@ import { makeGit } from "./git.js";
 import { readPullTargets, pullDefault, togglePullOption, PULL_OPTIONS } from "./git-remote.js";
 import { appSetting, saveAppSetting } from "./app-files.js";
 import { tip, openDialog, dialogFrame, button, close, askOwner, writeBlock, scrollText, sentence, openMenu, uiGlyph, darkLook, notice, skeleton } from "./ui.js";
+import { spawnOrUndo } from "./later.js";
 
 // App setting: { "<machine>\t<root>\t<branch>": "<remote>/<branch>" }.
 const MEMORY_KEY = "pull.branches";
@@ -103,7 +104,7 @@ export default class PullView {
     const pick = this.pick;
     if (this.waiting || !this.root || !pick?.remote || !pick?.branch || this.writing()) return;
     this.waiting = true; this.error = null;
-    cx.spawn(async (cx) => {
+    spawnOrUndo(cx, () => { this.waiting = false; }, async (cx) => {
       // Remembered for this branch when it isn't the tracked one; forgotten when it is.
       const up = this.targets?.upstream, tracked = up && up.remote === pick.remote && up.branch === pick.branch;
       const all = { ...((await appSetting(MEMORY_KEY, {})) ?? {}) }, key = memoryOf(this.on, this.root, this.targets?.branch);

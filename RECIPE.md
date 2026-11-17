@@ -621,7 +621,8 @@ dialog's own (`openDialog` in its file).
   Until the block's first read answers, one skeleton bar fills the block at the width
   the layout kept, with no icon or ▾, and the block isn't resized; outside a repository
   it then shrinks to 4px. Moving to another folder does the same until that folder's
-  first answer, except for the 8 folders it last left: those show what they showed
+  first answer (read once the folder has stayed the focused one 500 ms), except for the 8
+  folders it last left: those show what they showed
   (branch, ↓ ↑, operation) at once at their own width, and the read that follows
   changes only what moved since. When the kept width is that 4px (the last folder wasn't a
   repository), the bar doesn't show until the read answers: the block is resized once,
@@ -794,7 +795,9 @@ machine); back on a terminal, they follow its folder again.
 - **Reads**: when the folder changes on disk (this computer only; for a linked worktree
   also its own git folder: HEAD, the index, an operation's state files), every 10 s, on
   Refresh, when the focused folder changes, and when another screen reports a change to
-  this repository. A change on disk is read at once and again 1 s later: a terminal's
+  this repository. A folder moved to shows at once (as left, or the skeleton) and is read
+  once it has stayed the focused one 500 ms: switching spaces or tabs quickly reads none of
+  the folders passed through, and what would read meanwhile waits for that read. A change on disk is read at once and again 1 s later: a terminal's
   `git merge` or `checkout` writes many files, and the watch may wake at the first and
   miss the rest. A read asked for during a read, or while any screen writes to this
   repository, runs once that ends (when the write lets go of the repository, without
@@ -894,8 +897,10 @@ machine); back on a terminal, they follow its folder again.
   permission) is an error, not an empty folder: `<folder> can't be read: no permission.`
   in the states' place for the top folder, in the error strip for an unfolded one.
 - **Reads**: when the folder changes on disk (this computer only), every 10 s (also
-  while the panel is hidden), and when the focused folder changes. A read asked for
-  during a read runs once that ends. A folder unfolded while a read runs keeps what its
+  while the panel is hidden), and when the focused folder changes: once the folder has
+  stayed the focused one 500 ms, with its previewed file and a search still typed (a
+  folder passed through quickly is never read). A read asked for during a read runs once
+  that ends. A folder unfolded while a read runs keeps what its
   own read found: the read's result is merged with it, not put over it. Coming back to
   a folder shows its unfolded folders and its previewed file as they were left. For the
   8 folders last left the tree itself (its entries, git marks and place) shows at once too,
@@ -948,8 +953,10 @@ machine); back on a terminal, they follow its folder again.
   up when it shows again. After a commit, checkout, branch, delete, fetch or push it reads
   again without Refresh. While any screen writes to the repository it doesn't check; it
   catches up once the write lets go. Refresh and a move to another folder look for the
-  repository again at once, also while a search is still going (on any space: the
-  panel shows every space it follows).
+  repository again, also while a search is still going (on any space: the
+  panel shows every space it follows): Refresh at once, a move once the folder has stayed
+  the focused one 500 ms (it shows as left, or the skeleton, at once; a folder passed
+  through quickly is never read).
 - **Failed reads**: when finding the repository or reading the branches, commits or
   Commit details fails, what was shown stays, git's words show in the error strip, and
   the next 10 s check reads again without Refresh (Refresh does too); the strip goes once
@@ -1771,8 +1778,11 @@ the git ones run against real temporary repositories):
 
 | file | exports |
 |---|---|
-| `git.js` | `READ`, `makeGit(exec, on, { record, wait })` → `git(cwd, args, { timeout, env })` → `{ ok, code, out, err }` and `git.read` (with the screen's clock `wait`, a command whose answer hasn't come 5 s past its timeout is given up on: a read is asked once more, then it is `git did not answer in N s.`), `PARALLEL` (4: the git commands one runner keeps going at once; the rest wait their turn, and one Herdr refuses for too many execs at once is tried again after one of the runner's own ends, five runs at most), `repoRoot(git, folder)`, `chunks(paths, cost?)` (a path list split to fit one command each), `recordWith(fn)` (the recorder for runners made without one) |
+| `git.js` | `READ`, `makeGit(exec, on, { record, wait })` → `git(cwd, args, { timeout, env })` → `{ ok, code, out, err }` and `git.read` (with the screen's clock `wait(ms, ring) → stop`, a command whose answer hasn't come 5 s past its timeout is given up on: a read is asked once more, then it is `git did not answer in N s.`; an answer takes its ring back), `PARALLEL` (4: the git commands one runner keeps going at once; the rest wait their turn, and one Herdr refuses for too many execs at once is tried again after one of the runner's own ends, five runs at most), `repoRoot(git, folder)`, `chunks(paths, cost?)` (a path list split to fit one command each), `recordWith(fn)` (the recorder for runners made without one) |
 | `read-turns.js` | `readTurns({ stuck, now, most })` → `{ start, ask, again, busy, stuck, use, end, drop }` (a screen's repeated read: going only for `stuck` ms after it starts, a newer one may always start, up to `most` going at once through `ask`, the asks past it kept as one that `again` starts once a read ends; an answer is dropped only when a newer one was used), `pageAt(list, skip, page)` (the list with a page read from `skip` after it, or null when the list no longer ends there: a next page answered twice is placed once), `STUCK` (80 s) |
+| `clock.js` | `makeClock(arm, now?)` → `{ wait(ms, ring) → stop, close() }` (the copy's one clock for its git runners: one host timer, `arm` = `cx.timer.after`, set for the soonest deadline and cancelled once no call waits; `wait` throws when the host refuses the timer and none is set; `close` drops every deadline and the timer) |
+| `later.js` | `oneTimer()` → `{ after(cx, ms, fn), busy() }` (what render leaves to a timer, one at a time; a refused timer leaves nothing set), `DWELL` (500 ms), `dwell({ now })` → `{ moved, hold(cx, fn), late }` (a followed folder is read once it has stayed `DWELL` ms; `hold` sets one timer for the time left; `late` says a held read lost its timer and the time is up), `each(...fns)` (calls every fn, also past one whose task or timer the host refuses; the refusal is not thrown on, any other error is once all have run), `spawnOrUndo(cx, undo, body)` (`cx.spawn`; a refused task runs `undo` and is thrown on) |
+| `folder-watch.js` | `SETTLE` (1 s), `watchSettled(watchFolder, dir, { live, wakes, wake, failed, settle }, cx)` → `{ stop }` (wakes after each change and once more `settle` ms later; `stop` cancels the pending `watchFolder` call at once; a refused second look or a wake that throws keeps the watch going) |
 | `one-at-a-time.js` | `oneAtATime(run)` → `ask(arg)` (at most one `run` going; a newer ask replaces a waiting one, which resolves undefined without running: Commit details' branch walks while arrowing through the log) |
 | `let-go.js` | `letGo(screen)` (a closing copy empties its screen: each field that holds data gets an empty value of its kind, `""` for a string over 1,000 characters, `[]` for an array, a new Map or Set, and for a plain object a copy with its own fields emptied the same way, one level deep; the screen's parts, the objects whose `host` it is, are emptied the same way; numbers, flags, functions and objects of a class stay) |
 | `git-status.js` | `readStatus` |
@@ -2802,9 +2812,18 @@ in English.
   `walkRows`, `branch-order.js` `levelRows`, `files-tree.js` `walkOpen`, `view-vcs-ops.js`
   `openGroup`), never a closure that calls itself: that one keeps every row it made (with
   the Commit panel up, one pull that changed 9,000 files left 20 MB). `git.js`'s runner has
-  no `read` that closes over the runner, and its clock holds nothing of an answer
-  (`ringLater`): raced against the answer with `Promise.race`, the clock kept each answer
-  until it rang.
+  no `read` that closes over the runner, and its clock holds nothing of an answer (a call
+  takes its ring back once git answers): raced against the answer with `Promise.race`, the
+  clock kept each answer until it rang.
+- Herdr takes at most 1,024 unfinished host tasks for every mod together: past that,
+  `cx.sleep`, `cx.timer.after`, `exec` and `cx.spawn` throw at once ("… exceeded the
+  per-runtime outstanding host task limit of 1024"), and a pending `watchFolder` call
+  counts too. So each copy's git calls share one timer (`clock.js`; a timer, since a
+  cancelled one gives its place back and a `cx.sleep` can't be cancelled), a folder's watch
+  is cancelled when the screen leaves the folder (`folder-watch.js`), the panels read a folder
+  only once they have stayed on it 500 ms (`later.js` `dwell`), and what a screen set for a
+  timer or a task (a move to take up, `loading`, a write lock, the bus's pump) goes back when
+  Herdr refuses it, so the next render tries again instead of the screen staying stuck.
 - A closed screen stays as well (it and its handlers point at each other), so a closing
   copy empties it: `main.js` `close` calls `letGo(screen)` after the screen's own `close`.
   Closing a Log tab on a big repository gives back about 7 of its 11 MB. node frees
@@ -2950,7 +2969,9 @@ in English.
 - A copy behind another tab stays alive, timers and watch included. The Diff tab's watch
   and 10 s timer only mark such a tab stale: `render` sets `drawn`, a wake without it
   reads nothing, and the next `render` starts the read in a timer. Every read ends in
-  `cx.notify()`, so a tab on screen is drawn again and its next wake reads.
+  `cx.notify()`, so a tab on screen is drawn again and its next wake reads. The first
+  wake of a tab nobody draws also stops its watch (the pending `watchFolder` call is
+  cancelled); the read when it is drawn again starts the watch again.
 - A watch batch names absolute paths. One that isn't under the root as git spells it
   (the root itself, another spelling) can't be judged and counts as a change.
 - `localStorage` is per copy and kept across restarts; copies of the same mod with the
@@ -3204,7 +3225,7 @@ Each line is one check: do what it says, see what follows.
 **Offline**
 
 1. Run `node layout.test.mjs` at the root, `node <file>` for every `*.test.mjs` in
-   `mods/git-tools` (61 files) and `node tools/gen-icon-theme.test.mjs`: each prints
+   `mods/git-tools` (64 files) and `node tools/gen-icon-theme.test.mjs`: each prints
    `ok` (the last one after `skip: …` unless `ICON_THEME_SOURCE` is set).
 2. Run `herdr-app check mods/git-tools`: it passes.
 

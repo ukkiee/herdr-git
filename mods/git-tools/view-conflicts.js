@@ -22,6 +22,7 @@ import { readOperation } from "./git-operation.js";
 import { readVersions, remoteWriter } from "./git-conflict.js";
 import { heading, columns, sortFiles, controls, pick, editedSince, editedAmong, stoppedOnConflicts } from "./conflicts-model.js";
 import { tip, openDialog, dialogFrame, button, close, askOwner, writeBlock, scrollText, sentence, openMenu, uiGlyph, fileGlyph, darkLook, WindowedList, ROW, takeEscape } from "./ui.js";
+import { spawnOrUndo } from "./later.js";
 
 // The dialog's size; the Commit panel's "Resolve" link opens it the same size.
 const SIZE = { width: 760, height: 460 };
@@ -178,7 +179,7 @@ export default class ConflictsView {
     if (!this.can().accept) return;
     this.checking = true; this.error = null;
     cx.notify();
-    cx.spawn(async (cx) => {
+    spawnOrUndo(cx, () => { this.checking = false; }, async (cx) => {
       const v = await readVersions(this.git, this.root, path, { read: (p) => readTextFile(p, { on: this.on }) });
       this.checking = false;
       // The card takes the keyboard: Accept was a click, which may have taken it from the
@@ -201,7 +202,7 @@ export default class ConflictsView {
     const before = this.files.unresolved.length, paths = this.files.unresolved.map((f) => f.path);
     this.running = "simple"; this.checking = true;
     cx.notify();
-    cx.spawn(async (cx) => {
+    spawnOrUndo(cx, () => { this.running = null; this.checking = false; }, async (cx) => {
       const kept = await editedAmong(this.git, this.root, paths, readerOn(this.on));
       this.checking = false;
       this.ask("conflicts-resolve-simple", { paths }, cx, (r) => {

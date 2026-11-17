@@ -25,6 +25,7 @@ import { readStatus } from "./git-status.js";
 import { rollback, wordRollback, rollbackNotice } from "./git-rollback.js";
 import { buildRows, checkState, toggleIncluded, keepIncluded, folderKeys, parentIndex } from "./tree.js";
 import { openDialog, dialogFrame, button, iconButton, checkbox, row, notice, errorStrip, uiGlyph, ICON, fileGlyph, folderGlyph, darkLook, close, WindowedList, askOwner, serveRequest, writeBlock, sentence } from "./ui.js";
+import { spawnOrUndo } from "./later.js";
 
 // openRollback({ root, on, files, checked, owner, lang })
 //   Opens the Rollback dialog. Nothing is rolled back without it.
@@ -204,7 +205,7 @@ export default class RollbackView {
       this.error = sentence(this.t, r.msg, r.err) || this.t("ui.gitFailed");
       if (r.unheard) { this.running = false; return; }
       // Show what is left, so a second try doesn't work from a list that is no longer true.
-      cx.spawn(async (cx) => {
+      spawnOrUndo(cx, () => { this.running = false; }, async (cx) => {
         const status = await readStatus(makeGit(exec, this.on, { wait: this.wait }), this.root);
         if (status.ok) {
           this.files = status.changes;

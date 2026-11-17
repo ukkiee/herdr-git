@@ -26,6 +26,7 @@ import { h_flex } from "gpui-base";
 import { exec, theme } from "herdr";
 import { makeGit, repoRoot } from "./git.js";
 import { readTurns } from "./read-turns.js";
+import { oneTimer, dwell, each } from "./later.js";
 import { moveRecent } from "./recent.js";
 import { readStatus } from "./git-status.js";
 import { readGitDir, stateChanged } from "./git-log.js";
@@ -116,6 +117,9 @@ export default class CommitView {
     // context key → what the panel showed there when it left (see remember), newest last.
     this.seen = new Map();
     this.reads = readTurns(); // the reads of the folder shown (refresh)
+    this.moving = oneTimer(); // what render leaves to a timer, one at a time
+    this.stay = dwell(); // a folder moved to is read once it has stayed DWELL ms (refresh)
+    this.watching = null; // the watches of the shown root: { root, stops } (watch)
     this.list = new WindowedList("commit-files");
     this.handle = cx.focus_handle();
     this.form = new CommitForm();
@@ -248,7 +252,9 @@ export default class CommitView {
     if (context !== this.context) {
       this.reads.drop(); this.again = false;
       const left = this.context, kept = this.remember();
-      this.context = context; this.repo = null; this.watching = null; this.lost = false;
+      this.unwatch();
+      if (left !== undefined) this.stay.moved();
+      this.context = context; this.repo = null; this.lost = false;
       // A write's failure belongs to the repository it ran on, like a read's.
       this.error = null; this.writeError = null; this.note = null; this.notRepo = false; this.read = false;
       this.picked = new Set(); this.selected = null; this.last = null; this.op = null;
@@ -263,7 +269,10 @@ export default class CommitView {
     }
     if (this.readBlocked()) { this.waiting = true; return; }
     this.waiting = false;
-    if (!folder) return;
+    // A folder moved to is read once it has stayed DWELL ms: one passed through is never
+    // read. What it shows meanwhile is its remembered view or the skeleton, and settled()
+    // holds already, so a press writes to the repository shown, never to the one left.
+    if (!folder || this.stay.hold(cx, (cx) => this.refresh(cx))) return;
     const turn = this.reads.start();
     this.again = false;
     let held = false, used = false;
@@ -279,7 +288,7 @@ export default class CommitView {
           if (!top.ok) {
             used = this.reads.use(turn);
             if (!used) return;
-            this.repo = null; this.watching = null;
+            this.repo = null; this.unwatch();
             this.notRepo = top.notRepo; this.folder = folder;
             this.error = top.notRepo ? null : sentence(this.t, top.msg, top.err);
             if (top.notRepo) { this.op = null; this.apply({ hasHead: false, changes: [], unversioned: [] }); }
@@ -316,8 +325,9 @@ export default class CommitView {
           // Unread (git failed on the state files): the operation shown before stays, and
           // the commit module reads it again before committing anyway.
           if (op?.ok) this.op = op;
-          // Nothing in progress: what a stopped Smart left in the stash comes back now.
-          settleSmartMark(this, repo, op, cx);
+          // Nothing in progress: what a stopped Smart left in the stash comes back now. A task
+          // the host refuses for it costs this read nothing: the next read tries again.
+          each(() => settleSmartMark(this, repo, op, cx));
           this.apply(status);
           this.error = last && !last.ok ? sentence(this.t, last.msg, last.err) : op && !op.ok ? sentence(this.t, op.msg, op.err) : null;
         }
@@ -328,7 +338,8 @@ export default class CommitView {
         // Read once an answer shows, or the newest read is over; what waited for that runs.
         const newest = this.reads.end(turn);
         if ((newest || used) && !held) this.read = true;
-        if (newest && this.again) this.refresh(cx);
+        // The read that waited, refused, still leaves this one drawn: the next change or POLL reads.
+        if (newest && this.again) each(() => this.refresh(cx));
         cx.notify();
       }
     });
@@ -373,22 +384,35 @@ export default class CommitView {
   }
 
   // Only this computer's folders can be watched. Reads don't write under .git (git.js
-  // READ), so a refresh never wakes its own watch. One loop per root: a newer watch, or
-  // leaving the repository, ends the older loop the next time it wakes. The repository's
-  // git folder is watched too: a linked worktree's state (its HEAD, index, MERGE_HEAD)
-  // is not inside its root.
+  // READ), so a refresh never wakes its own watch. The watches of one root at a time: a
+  // newer root, or leaving the repository, stops them (unwatch), which cancels their
+  // pending calls at once. The repository's git folder is watched too: a linked worktree's
+  // state (its HEAD, index, MERGE_HEAD) is not inside its root.
   watch(cx) {
     const repo = this.repo;
     if (!repo || repo.on || this.watching?.root === repo.root) return;
-    const mine = this.watching = { root: repo.root };
+    this.unwatch();
+    const mine = this.watching = { root: repo.root, stops: [] };
     const live = () => this.watching === mine;
-    const failed = () => { this.watching = null; };
-    watchSettled(mine.root, { live, wake: (cx) => this.refresh(cx), failed }, cx);
-    cx.spawn(async (cx) => {
-      const where = await readGitDir(repo.git, repo.root, { own: true });
-      if (!where.ok || !live() || where.dir.startsWith(`${mine.root}/`)) return;
-      watchSettled(where.dir, { live, wakes: (paths) => stateChanged(where.dir, paths), wake: (cx) => this.refresh(cx) }, cx);
-    });
+    // Watched again by the next read: the root and its git folder go together.
+    const failed = () => { if (live()) this.unwatch(); };
+    mine.stops.push(watchSettled(mine.root, { live, wake: (cx) => this.refresh(cx), failed }, cx));
+    // A task the host refuses costs the watches only, not what refresh reads right after
+    // (the Stash tab): like a folder that can't be watched.
+    try {
+      cx.spawn(async (cx) => {
+        const where = await readGitDir(repo.git, repo.root, { own: true });
+        if (!where.ok || !live() || where.dir.startsWith(`${mine.root}/`)) return;
+        mine.stops.push(watchSettled(where.dir, { live, wakes: (paths) => stateChanged(where.dir, paths), wake: (cx) => this.refresh(cx) }, cx));
+      });
+    } catch { failed(); }
+  }
+
+  // The watches stop: their pending calls are cancelled now, not at the folder's next change.
+  unwatch() {
+    const mine = this.watching;
+    this.watching = null;
+    for (const watch of mine?.stops.splice(0) ?? []) watch.stop();
   }
 
   // ---- rows
@@ -685,17 +709,16 @@ export default class CommitView {
 
   render(cx) {
     // Another folder to follow: read in a timer, since nothing may start inside render
-    // (cx.notify throws there and cx.spawn runs its first part there).
-    if (this.contextKey() !== this.context && !this.moving) {
-      this.moving = true;
-      cx.timer.after(0, (cx) => { this.moving = false; if (this.contextKey() !== this.context) this.refresh(cx); });
+    // (cx.notify throws there and cx.spawn runs its first part there). A timer the host
+    // refuses leaves nothing set: the next render tries again (later.js).
+    if (this.contextKey() !== this.context || this.stay.late()) {
+      this.moving.after(cx, 0, (cx) => { if (this.contextKey() !== this.context || this.stay.late()) this.refresh(cx); });
     }
     // A read skipped while another copy wrote to this repository: the release redraws
     // every copy (shared state), so it is taken up here, even if that copy's "changed"
     // never comes (its write failed, or it closed).
-    else if (this.waiting && !this.readBlocked() && !this.moving) {
-      this.moving = true;
-      cx.timer.after(0, (cx) => { this.moving = false; if (this.waiting && !this.readBlocked()) this.refresh(cx); });
+    else if (this.waiting && !this.readBlocked()) {
+      this.moving.after(cx, 0, (cx) => { if (this.waiting && !this.readBlocked()) this.refresh(cx); });
     }
     const t = theme(), shown = logPanelShown(), r = this.current();
     const writing = this.repo ? this.writeBlock() : null;

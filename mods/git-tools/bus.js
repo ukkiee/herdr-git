@@ -173,11 +173,15 @@ export function makeCopy(io, { id = newId(), now = Date.now } = {}) {
       if (unanswered === undefined) return;
       for (const key of [...taken]) answer(key, unanswered);
     },
-    // Nothing may be started or redrawn from a render, hence the timer.
+    // Nothing may be started or redrawn from a render, hence the timer. One the host refuses
+    // (past its limit of outstanding tasks) leaves nothing scheduled: the next render tries
+    // again, instead of every later pump taking it for set.
     pump: (cx) => {
       if (stopped || scheduled || !restarted(io.read(), seen, from) && latest(io.read()) === seen) return;
-      scheduled = true;
-      cx.timer.after(0, () => { scheduled = false; deliver(); });
+      try {
+        cx.timer.after(0, () => { scheduled = false; deliver(); });
+        scheduled = true;
+      } catch { /* not scheduled */ }
     },
     wait: (key) => awaitAnswer(key),
     answer: (key, value) => answer(key, value),

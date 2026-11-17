@@ -29,6 +29,7 @@ import { writerOn, readerOn } from "./view-conflicts.js";
 import { decide, applyNonConflicting, resolveSimple, resultText, edit } from "./merge-chunks.js";
 import { paneTitles, openFile, layoutRows, chunkButtons, toolbar, countWords, seekConflict, nextFile, leftToDecide, saveQuestion, leaveQuestion, stageSave } from "./merge-revisions-model.js";
 import { tip, dialogFrame, button, iconButton, close, askOwner, writeBlock, scrollText, sentence, notice, skeleton, skeletonSize, WindowedList, takeEscape } from "./ui.js";
+import { spawnOrUndo } from "./later.js";
 
 // Where a local space's result is staged for the panel: the app's own git-tools folder
 // (app-files.js).
@@ -225,7 +226,7 @@ export default class MergeRevisionsView {
     // The footer buttons don't redraw on their own: without cx.notify() the question
     // would wait for some later redraw.
     cx.notify();
-    cx.spawn(async (cx) => {
+    spawnOrUndo(cx, () => { this.checking = false; }, async (cx) => {
       const now = await this.disk();
       this.checking = false;
       const kind = saveQuestion(state, { opened: this.opened, now, passed });
@@ -256,7 +257,7 @@ export default class MergeRevisionsView {
     if (anyway) { take(cx); return; }
     this.checking = true; this.error = null;
     cx.notify();
-    cx.spawn(async (cx) => {
+    spawnOrUndo(cx, () => { this.checking = false; }, async (cx) => {
       const v = await readVersions(this.git, this.root, this.path, { read: readerOn(this.on) });
       this.checking = false;
       if (v.ok && editedSince(v)) { this.confirm = { kind: "accept", column }; this.handle.focus(); cx.notify(); return; }
@@ -294,7 +295,7 @@ export default class MergeRevisionsView {
     if (text === null || text === this.startText) { this.shut(); return; }
     this.confirm = null; this.checking = true; this.error = null;
     cx.notify();
-    cx.spawn(async (cx) => {
+    spawnOrUndo(cx, () => { this.checking = false; }, async (cx) => {
       const now = await this.disk();
       this.checking = false;
       const kind = leaveQuestion({ opened: this.opened, now, passed });

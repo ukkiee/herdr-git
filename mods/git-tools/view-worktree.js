@@ -17,6 +17,7 @@ import { exec, theme, run, pickFolder } from "herdr";
 import { makeGit } from "./git.js";
 import { worktreeSources, worktreePath, createWorktree, sourceTaken } from "./git-worktree.js";
 import { openDialog, openMenu, dialogFrame, button, checkbox, iconButton, uiGlyph, close, askOwner, writeBlock, scrollText, sentence } from "./ui.js";
+import { spawnOrUndo } from "./later.js";
 
 // openNewWorktree(host, repo, source, who): New Worktree… from the VCS widget popup
 // (source null: the current branch) or a branch's menu (source { name, scope }). host:
@@ -120,7 +121,7 @@ export default class NewWorktree {
     if (this.waiting || this.listOpen || !this.sources?.length) return;
     this.listOpen = true;
     cx.notify();
-    cx.spawn(async (cx) => {
+    spawnOrUndo(cx, () => { this.listOpen = false; }, async (cx) => {
       const items = [];
       this.sources.forEach((b, i) => {
         items.push({ label: b.name, value: String(i), checked: b === this.source, rule: i > 0 && b.scope !== this.sources[i - 1].scope });

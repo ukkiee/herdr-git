@@ -15,8 +15,9 @@
 
 import { div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { exec, theme, settings, watchFolder } from "herdr";
-import { openTab, notice, skeleton, skeletonSize, iconButton, errorStrip, spacer, fileGlyph, darkLook, WindowedList, sentence } from "./ui.js";
+import { exec, theme, settings } from "herdr";
+import { openTab, watchSettled, notice, skeleton, skeletonSize, iconButton, errorStrip, spacer, fileGlyph, darkLook, WindowedList, sentence } from "./ui.js";
+import { oneTimer, spawnOrUndo } from "./later.js";
 import { makeGit } from "./git.js";
 import { readDiff, touchesDiff, MAX_ROWS, MAX_CHARS } from "./git-diff.js";
 
@@ -77,6 +78,8 @@ export default class DiffView {
     this.handle = cx.focus_handle();
     // drawn: render ran since the last wake. stale: a wake came while it hadn't.
     this.drawn = false; this.stale = false;
+    this.waking = oneTimer(); // render's read for a tab shown again, in a timer
+    this.watcher = null; // the folder watch while the tab is shown (watch)
     this.load(cx);
     this.follow(cx);
   }
@@ -89,7 +92,7 @@ export default class DiffView {
     // can change after it opens.
     if (!this.root || !this.path) { this.result = { ok: false }; this.error = { err: "This tab has no file to show.", msg: { key: "dialogs.diff.noFileTab", args: {} } }; return; }
     this.loading = true; this.again = false;
-    cx.spawn(async (cx) => {
+    spawnOrUndo(cx, () => { this.loading = false; }, async (cx) => {
       try {
         const r = await readDiff(makeGit(exec, this.on, { wait: this.wait }), this.root, { path: this.path, commit: this.commit, status: this.status, oldPath: this.oldPath });
         // A failed read keeps the diff that was read before; git's words go in the strip.
@@ -106,36 +109,47 @@ export default class DiffView {
     });
   }
 
-  // Keeps a working file's diff up to date. The timer and the watch go on while the tab
-  // is hidden (a copy stays alive behind another tab), so they only wake it.
+  // Keeps a working file's diff up to date. The timer goes on while the tab is hidden (a
+  // copy stays alive behind another tab), so it only wakes it.
   follow(cx) {
     if (this.commit || !this.root || !this.path) return;
     cx.timer.every(POLL, (cx) => this.wake(cx));
-    // Only this computer's folders can be watched. Reads don't write under .git (git.js
-    // READ), so reading the diff never wakes its own watch.
-    if (this.on) return;
-    cx.spawn(async (cx) => {
-      try {
-        while (!this.closed) {
-          const changed = await watchFolder(this.root);
-          if (!this.closed && touchesDiff(changed, this.root, this.path)) this.wake(cx);
-        }
-      } catch {
-        // The folder can't be watched (too large on Linux, gone): the timer still reads.
-      }
-    });
+    this.watch(cx);
+  }
+
+  // Only this computer's folders can be watched. Reads don't write under .git (git.js
+  // READ), so reading the diff never wakes its own watch. A tab nobody looks at doesn't
+  // watch: its first wake while hidden stops the watch (wake), and the read when it is
+  // drawn again starts it again.
+  watch(cx) {
+    if (this.on || this.commit || !this.root || !this.path || this.watcher || this.closed) return;
+    const mine = this.watcher = { handle: null };
+    mine.handle = watchSettled(this.root, {
+      live: () => !this.closed, settle: 0,
+      wakes: (changed) => touchesDiff(changed, this.root, this.path), wake: (cx) => this.wake(cx),
+      // The folder can't be watched (too large on Linux, gone, or the host refused it): the
+      // timer still reads, and the next read tries the watch again, as the Commit panel does.
+      failed: () => { if (this.watcher === mine) this.watcher = null; },
+    }, cx);
+  }
+
+  unwatch() {
+    const mine = this.watcher;
+    this.watcher = null;
+    mine?.handle?.stop();
   }
 
   // Reads again, but only a tab that was drawn since its last wake: every read ends in a
   // redraw, so a tab on screen is drawn again and the next wake reads; a tab nobody looks
   // at stays stale at no cost and reads when it is next drawn (render).
   wake(cx) {
-    if (!this.drawn) { this.stale = true; return; }
+    if (!this.drawn) { this.stale = true; this.unwatch(); return; }
     this.drawn = false; this.stale = false;
     this.load(cx);
+    this.watch(cx);
   }
 
-  close() { this.closed = true; }
+  close() { this.closed = true; this.unwatch(); }
 
   // Everything render needs is worked out here, once per read.
   apply(r) {
@@ -233,9 +247,8 @@ export default class DiffView {
   render(cx) {
     this.drawn = true;
     // Nothing may start inside render: the read a hidden tab skipped starts in a timer.
-    if (this.stale && !this.waking) {
-      this.waking = true;
-      cx.timer.after(0, (cx) => { this.waking = false; this.wake(cx); });
+    if (this.stale) {
+      this.waking.after(cx, 0, (cx) => this.wake(cx));
     }
     const t = theme(), r = this.result;
     const renamed = Boolean(this.commit && this.oldPath && this.oldPath !== this.path);

@@ -281,11 +281,16 @@ for (const value of [undefined, null, 0, "", false]) {
   assert.deepEqual([r.ok, r.code], [false, -1]);
 }
 
-// A clock the test rings by hand, as a screen hands one to its runners (main.js): wait(ms)
-// settles when the test rings it. `asked` lists the ms of each wait begun.
+// A clock the test rings by hand, as a screen hands one to its runners (main.js, clock.js):
+// wait(ms, ring) → stop; ring() comes when the test rings it, unless the call took it back
+// (stop). `asked` lists the ms of each wait still held.
 const handClock = () => {
   const alarms = [];
-  const wait = (ms) => new Promise((ring) => alarms.push({ ms, ring }));
+  const wait = (ms, ring) => {
+    const alarm = { ms, ring };
+    alarms.push(alarm);
+    return () => { const at = alarms.indexOf(alarm); if (at >= 0) alarms.splice(at, 1); };
+  };
   return { wait, asked: () => alarms.map((a) => a.ms), ring: () => alarms.shift().ring(), pending: () => alarms.length };
 };
 // An exec whose answer never comes (herdr's has been seen to lose one: no process, no
@@ -368,18 +373,19 @@ const settle = () => new Promise((go) => setImmediate(go));
   assert.deepEqual([r.ok, r.out], [true, "fine"]);
 }
 
-// An answer that comes in time is the answer, and the clock's later ring changes nothing.
+// An answer that comes in time is the answer, and the call takes its ring back from the
+// clock: the clock holds nothing of it any more.
 {
   const clock = handClock(), x = losing();
   const r = await makeGit(x.exec, null, { wait: clock.wait }).read(repo, ["works"]);
   assert.deepEqual([r.ok, r.out], [true, "fine"]);
-  clock.ring();
-  await settle();
+  assert.equal(clock.pending(), 0);
 }
 
-// A clock that can't be used (the copy that gave it closed: its context throws) counts as
-// none: the runner waits for exec as without a clock.
-for (const wait of [() => { throw new Error("stale context"); }, () => Promise.reject(new Error("closed"))]) {
+// A clock that can't be used (the host refused its timer, or the copy that gave it closed:
+// its context throws, or its timer never comes) counts as none: the runner waits for exec as
+// without a clock.
+for (const wait of [() => { throw new Error("stale context"); }, () => () => {}]) {
   const x = losing();
   const r = await makeGit(x.exec, null, { wait }).read(repo, ["works"]);
   assert.deepEqual([r.ok, r.out], [true, "fine"]);

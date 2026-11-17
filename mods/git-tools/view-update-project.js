@@ -26,6 +26,7 @@ import { openConflictsIfStopped } from "./view-conflicts.js";
 import { openUpdateInfo } from "./view-update-info.js";
 import { radio } from "./view-reset.js";
 import { openDialog, dialogFrame, button, close, askOwner, writeBlock, scrollText, sentence, broadcast, copyId } from "./ui.js";
+import { spawnOrUndo } from "./later.js";
 
 const COPY_KEY = "commit.copy";
 // App settings (app-files.js).
@@ -80,7 +81,7 @@ export function remoteWrite(host, repo, who, work, run, cx, { title = "remote.fa
     if (why) notify({ title: why, level: "info" });
     return;
   }
-  cx.spawn(async (cx) => {
+  spawnOrUndo(cx, () => host.setBusy(null, cx), async (cx) => {
     let r;
     try { r = await run(makeGit(exec, at.on, { wait: host.wait }), at.root); } catch (error) { r = { ok: false, err: String(error?.message ?? error), outcome: "failed" }; }
     host.setBusy(null, cx);
@@ -192,7 +193,7 @@ export default class UpdateProjectView {
     if (this.asking) { this.ask("remote-reset", {}, cx); return; }
     const method = this.method;
     this.waiting = true;
-    cx.spawn(async (cx) => {
+    spawnOrUndo(cx, () => { this.waiting = false; }, async (cx) => {
       // Saved before the request: the next Update Project starts on it whatever comes of this one.
       await saveAppSetting(METHOD_KEY, method);
       this.waiting = false;

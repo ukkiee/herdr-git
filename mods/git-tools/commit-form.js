@@ -55,6 +55,7 @@ import { openConflictsIfStopped } from "./view-conflicts.js";
 import { sameRepo } from "./lock.js";
 import { fixupInto, readMessages } from "./git-rewrite.js";
 import { tellRewrite } from "./log-rewrite.js";
+import { oneTimer, spawnOrUndo } from "./later.js";
 
 const SHORT = 8;
 
@@ -85,6 +86,7 @@ export default class CommitForm {
     this.typing = false;
     this.text = this.makeText("");
     this.handle = cx.focus_handle();
+    this.relabeling = oneTimer(); // a new message box for another language, made in a timer
   }
 
   // The message box. Its placeholder is fixed when it is made, so a panel whose language
@@ -295,7 +297,7 @@ export default class CommitForm {
     if (!host.setBusy({ key: target.squash ? "rewrite.squashingInto" : "rewrite.fixingUp" }, cx)) return;
     this.error = null;
     this.running = "rebase";
-    cx.spawn(async (cx) => {
+    spawnOrUndo(cx, () => { this.running = null; host.setBusy(null, cx); }, async (cx) => {
       let r;
       try { r = await fixupInto(repo.git, repo.root, { commit: target.commit, files, squash: target.squash, message }); }
       catch (error) { r = { ok: false, err: String(error?.message ?? error) }; }
@@ -369,7 +371,7 @@ export default class CommitForm {
     if (!host.setBusy({ key: going ? "ops.continuing" : amend ? "commit.amending" : "commit.committing" }, cx)) return;
     this.error = null;
     this.running = push ? "push" : "commit";
-    cx.spawn(async (cx) => {
+    spawnOrUndo(cx, () => { this.running = null; host.setBusy(null, cx); }, async (cx) => {
       let r;
       try { r = await commit(repo.git, repo.root, { files, message, amend }); }
       catch (error) { r = { ok: false, err: String(error?.message ?? error) }; }
@@ -470,10 +472,7 @@ export default class CommitForm {
     this.prefill();
     const t = theme(), host = this.host, op = this.inProgress();
     // A new message box can't be made while drawing; the next turn makes it.
-    if (this.textLang !== host.lang && !this.relabeling) {
-      this.relabeling = true;
-      cx.timer.after(0, (cx) => { this.relabeling = false; this.relabel(cx); });
-    }
+    if (this.textLang !== host.lang) this.relabeling.after(cx, 0, (cx) => this.relabel(cx));
     // This panel's commit on the shown repository shows as the spinner on the button that
     // started it. Every write that blocks this one (that commit too) is named by the
     // panel's progress strip under the form (view-commit.js).

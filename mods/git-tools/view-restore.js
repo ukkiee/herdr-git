@@ -29,6 +29,7 @@ import { formatTime } from "./i18n.js";
 import { buildRows, checkState, toggleIncluded } from "./tree.js";
 import { openDialog, dialogFrame, button, checkbox, row, notice, skeleton, skeletonSize, errorStrip, scrollText, uiGlyph, ICON, fileGlyph, folderGlyph, darkLook, close, scriptedRepo, sentence, WindowedList, askOwner, serveRequest, writeBlock } from "./ui.js";
 import { openDiff } from "./view-diff.js";
+import { spawnOrUndo } from "./later.js";
 
 // openRestore({ root, on, owner, select, chosen, lang })
 //   Opens the Restore dialog. root, on: the repository and its machine (null: this
@@ -112,7 +113,7 @@ export default class RestoreView {
     if (!this.root) return;
     if (this.loading) { this.again = true; return; }
     this.loading = true; this.again = false;
-    cx.spawn(async (cx) => {
+    spawnOrUndo(cx, () => { this.loading = false; }, async (cx) => {
       try {
         const [list, opted] = await Promise.all([listSnapshots(this.git, this.root), this.scripted || scriptedRepo(this.git, this.root)]);
         this.scripted = opted === true;

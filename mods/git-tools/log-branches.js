@@ -34,6 +34,7 @@ import { smartCheckout } from "./view-smart.js";
 import { readOperation } from "./git-operation.js";
 import { branchContext } from "./log-menus.js";
 import { folderKeys } from "./tree.js";
+import { oneTimer, each, spawnOrUndo } from "./later.js";
 import { openBranchNew, openBranchDelete } from "./view-branch-new.js";
 import { openDeletedBranches } from "./view-deleted-branches.js";
 import { tip, uiGlyph, darkLook, ICON, row, iconButton, notice, skeleton, skeletonSize, broadcast, openMenu, sentence, WindowedList } from "./ui.js";
@@ -91,6 +92,8 @@ export default class LogBranches {
     this.picked = null; // key of the row whose click set host.branch
     this.rows = treeRows(null);
     this.stale = true; // rows must be worked out again (see current)
+    // What render leaves to a timer, each one at a time: a new filter input, the rows.
+    this.relabeling = oneTimer(); this.building = oneTimer();
     this.list = new WindowedList("log-branch-rows");
     this.handle = cx.focus_handle();
     this.prefs = { favorite: [], unfavorite: [] }; // git-branch.js readFavorites
@@ -155,7 +158,8 @@ export default class LogBranches {
       const before = this.picked ? this.refOf(this.picked) : null;
       this.data = r;
       this.build();
-      this.follow(before, cx);
+      // Following a moved limit reads the list again: a refusal there still draws the tree.
+      each(() => this.follow(before, cx));
       host.redraw(cx);
     });
   }
@@ -425,7 +429,7 @@ export default class LogBranches {
   act(label, work, cx) {
     const { host } = this, repo = host.repo;
     if (!repo || !host.setBusy(label, cx)) return;
-    cx.spawn(async (cx) => {
+    spawnOrUndo(cx, () => host.setBusy(null, cx), async (cx) => {
       let r;
       try { r = await work(repo); } catch (error) { r = { ok: false, err: String(error?.message ?? error) }; }
       host.setBusy(null, cx);
@@ -631,15 +635,12 @@ export default class LogBranches {
   render(cx) {
     const { host } = this, t = theme(), tr = host.t;
     if (!host.repo) return div();
-    if (this.inputLang !== host.lang && !this.relabeling) {
-      // Not here: render may not make the redraw a new input needs.
-      this.relabeling = true;
-      cx.timer.after(1, (cx) => { this.relabeling = false; if (this.inputLang !== this.host.lang) { const typing = this.typing; this.makeInput(this.input.value()); if (typing) this.input.focus(); cx.notify(); } });
+    // Not here: render may not make the redraw a new input needs. A timer the host refuses
+    // leaves nothing set: the next render tries again (later.js).
+    if (this.inputLang !== host.lang) {
+      this.relabeling.after(cx, 1, (cx) => { if (this.inputLang !== this.host.lang) { const typing = this.typing; this.makeInput(this.input.value()); if (typing) this.input.focus(); cx.notify(); } });
     }
-    if ((this.stale || this.builtLang !== host.lang) && !this.building) {
-      this.building = true;
-      cx.timer.after(0, (cx) => { this.building = false; this.current(); cx.notify(); });
-    }
+    if (this.stale || this.builtLang !== host.lang) this.building.after(cx, 0, (cx) => { this.current(); cx.notify(); });
     if (this.hidden()) return h_flex().id("log-branch-tree").size_full().min_h(0).items_start().child(this.tools(t));
     const rows = this.rows, n = rows.length, limited = this.limitedKey();
     const noEmail = this.settings.mine && this.mine && !this.mine.email;

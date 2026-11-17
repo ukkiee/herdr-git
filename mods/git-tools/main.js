@@ -13,9 +13,9 @@
 //                        `openMenu` and `answerMenu` (never another copy's)
 //   this.locks           set before init: this copy's side of the repository write locks
 //                        (ui.js `takeWrite`, `writeBlock`)
-//   this.wait            set before init: this copy's clock, wait(ms) → a promise that
-//                        settles after ms; handed to makeGit (git.js `wait`) so a git call
-//                        whose answer never comes doesn't hold the screen
+//   this.wait            set before init: this copy's clock, wait(ms, ring) → stop (clock.js);
+//                        handed to makeGit (git.js `wait`) so a git call whose answer never
+//                        comes doesn't hold the screen
 //   this.lang, this.t    set before init: the copy's language ("en" | "ko") and its
 //                        t(key, args) (i18n.js). Both are replaced when the system's
 //                        language turns out different, followed by a redraw: call
@@ -50,6 +50,8 @@ import LogButton from "./view-log-button.js";
 import DeletedBranches from "./view-deleted-branches.js";
 import Files from "./view-files.js";
 import { recordWith } from "./git.js";
+import { makeClock } from "./clock.js";
+import { oneTimer } from "./later.js";
 import { recordGit } from "./app-files.js";
 import Console from "./view-console.js";
 import CompareFiles, { FileDiff, FileView } from "./view-compare-files.js";
@@ -159,15 +161,20 @@ class Unknown {
 export default class GitTools extends View {
   init(_props, cx) {
     const p = props() ?? {};
+    // What render leaves to a timer, one at a time (later.js).
+    this.turning = oneTimer();
+    this.claiming = oneTimer();
     // Made here, per copy: the modules may be shared by every copy (ui.js).
     this.events = subscribe();
     this.locks = lockSide(this.events.id);
     this.screen = new (VIEWS[p.view] ?? (p.view === undefined && p.overlay ? OpenCommitPanel : Unknown))();
     this.screen.bus = this.events;
     this.screen.locks = this.locks;
-    // init's cx is the copy's async context: valid across awaits while the copy lives, and
-    // it throws once the copy closes (the runner then waits without a limit).
-    this.screen.wait = (ms) => cx.sleep(ms);
+    // One timer for all the copy's git calls (clock.js). init's cx is the copy's async
+    // context: valid across awaits while the copy lives, and it throws once the copy closes
+    // (the runner then waits without a limit).
+    this.clock = makeClock((ms, fire) => cx.timer.after(ms, fire));
+    this.screen.wait = this.clock.wait;
     const fixed = fixedLang(p);
     this.fixed = Boolean(fixed);
     this.speak(fixed ?? rememberedLang() ?? "en");
@@ -188,12 +195,16 @@ export default class GitTools extends View {
     // A lock this copy holds stays alive only while it beats (lock.js STALE). Writes
     // nothing while the copy holds none.
     cx.timer.every(LOCK_BEAT, () => this.locks.beat());
+    // In both loops one command or event that throws (a task or timer the host refused, past
+    // its limit) ends neither loop: the copy would never hear another.
     cx.spawn(async (cx) => {
       for (;;) {
         const name = await nextCommand();
-        // cmd-shift-v reaches every shown copy; the Log or Commit panel opens the popup.
-        if (name === "vcs-ops") this.say(() => vcsOpsCommand(this.screen, p.view, cx, { folder: p.folder ?? null }));
-        else this.say(() => this.screen.command?.(name, cx));
+        try {
+          // cmd-shift-v reaches every shown copy; the Log or Commit panel opens the popup.
+          if (name === "vcs-ops") this.say(() => vcsOpsCommand(this.screen, p.view, cx, { folder: p.folder ?? null }));
+          else this.say(() => this.screen.command?.(name, cx));
+        } catch { /* this command is lost; the next one comes */ }
         cx.notify();
       }
     });
@@ -201,10 +212,14 @@ export default class GitTools extends View {
       for (;;) {
         const e = await this.events.next();
         if (!e) return;
-        if (e.type === "request") {
-          // Answered either way, so the dialog never waits for a screen that can't run it.
-          if (!this.say(() => this.screen.serve?.(e, cx))) this.events.answer(e.key, { ok: false, err: this.t("ui.cantServe"), msg: { key: "ui.cantServe" } });
-        } else this.say(() => this.screen.event?.(e, cx));
+        let served = false;
+        try {
+          if (e.type === "request") served = this.say(() => this.screen.serve?.(e, cx));
+          else this.say(() => this.screen.event?.(e, cx));
+        } catch { /* this event is lost; the next one comes */ }
+        // Answered either way, so the dialog never waits for a screen that can't run it (an
+        // answer already given stands).
+        if (e.type === "request" && !served) this.events.answer(e.key, { ok: false, err: this.t("ui.cantServe"), msg: { key: "ui.cantServe" } });
         cx.notify();
       }
     });
@@ -249,22 +264,15 @@ export default class GitTools extends View {
     this.events.pump(cx);
     // The remembered language changed (another copy read the system's): this copy follows.
     // In a timer: nothing may be redrawn from inside render.
-    if (!this.fixed && !this.turning && (rememberedLang() ?? this.lang) !== this.lang) {
-      this.turning = true;
-      cx.timer.after(0, (cx) => { this.turning = false; this.turnTo(rememberedLang(), cx); });
-    }
+    if (!this.fixed && (rememberedLang() ?? this.lang) !== this.lang) this.turning.after(cx, 0, (cx) => this.turnTo(rememberedLang(), cx));
     if (isTabScreen(this.props) && !tabRecorded(this.tabPane)) this.claimTab(cx);
     return this.say(() => this.screen.render(cx));
   }
 
   // In a timer: the shared value can't be set from inside render.
   claimTab(cx) {
-    if (this.claiming || !isTabScreen(this.props)) return;
-    this.claiming = true;
-    cx.timer.after(0, () => {
-      this.claiming = false;
-      this.tabPane = claimTab(this.props) ?? this.tabPane;
-    });
+    if (!isTabScreen(this.props)) return;
+    this.claiming.after(cx, 0, () => { this.tabPane = claimTab(this.props) ?? this.tabPane; });
   }
 
   async close(cx) {
@@ -274,6 +282,8 @@ export default class GitTools extends View {
     // First and synchronous: the 250 ms may run out in the screen's own close.
     this.locks.releaseAll();
     releaseTab(this.tabPane);
+    // The calls still waiting let go of their deadlines, and the clock's timer goes.
+    this.clock.close();
     // The screen's own close first (it answers a menu, releases an editor), then what the
     // screen held: closed, it is never freed, so its data goes now (let-go.js).
     try { await this.say(() => this.screen.close?.(cx)); }

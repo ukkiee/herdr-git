@@ -371,4 +371,18 @@ for (const [before, after] of [[1, 0], [2, 1], [1, 1], [1, 3], [2, 0]]) {
   assert.equal(await settled(later.reply), "pending", "a stopped copy never took it");
 }
 
+// The host refuses the pump's timer (past its limit of outstanding tasks): nothing counts as
+// scheduled, and the next render's pump delivers. Taken for scheduled, the copy would never
+// hear another event (Herdr refuses a task past 1024 outstanding for every mod together).
+{
+  const slot = sharedSlot();
+  const panel = makeCopy(slot), cx = fakeCx();
+  const next = panel.next();
+  post(slot, changed("/repo/a"));
+  const refusing = { timer: { after: () => { throw new Error("cx.timer.after(ms, fn) exceeded the per-runtime outstanding host task limit of 1024"); } } };
+  assert.doesNotThrow(() => panel.pump(refusing), "a render that pumps doesn't fail");
+  panel.pump(cx); await cx.run();
+  assert.deepEqual(await settled(next), { value: { type: "changed", root: "/repo/a" } });
+}
+
 console.log("ok");

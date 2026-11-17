@@ -404,12 +404,12 @@ export default class LogBranches {
   toggle(id, cx) { this.useSettings(toggleTreeSetting(this.settings, id), cx); }
 
   // The ⋮ Branches Pane Settings popup: a group name nothing can pick, then the choices
-  // with a check mark before what is on.
+  // with a tick in the menu's check slot before what is on.
   openSettings(cx) {
     const { host } = this, tr = host.t;
     const rows = treeSettingsMenu(this.settings).map((it) => (it.header
       ? { label: tr(it.key), value: null, disabled: true }
-      : { label: `${it.checked ? "✓" : " "}  ${tr(it.key)}`, value: it.id, rule: Boolean(it.rule) }));
+      : { label: tr(it.key), value: it.id, checked: Boolean(it.checked), rule: Boolean(it.rule) }));
     cx.spawn(async (cx) => {
       const id = await openMenu(host.bus, rows, { width: 260, lang: host.lang });
       this.handle.focus();

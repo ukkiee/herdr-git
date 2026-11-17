@@ -93,7 +93,7 @@ export default class ResetHeadView {
     this.typeOpen = true;
     cx.notify();
     cx.spawn(async (cx) => {
-      const items = TYPES.map((m) => ({ label: this.t(m.key), value: m.mode, hint: m.mode === this.mode ? "✓" : "", title: this.t(m.hint) }));
+      const items = TYPES.map((m) => ({ label: this.t(m.key), value: m.mode, checked: m.mode === this.mode, title: this.t(m.hint) }));
       const picked = await openMenu(this.bus, items, { width: 180, at, lang: this.lang });
       this.typeOpen = false;
       if (!this.waiting && TYPES.some((m) => m.mode === picked)) this.mode = picked;

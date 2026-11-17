@@ -179,11 +179,11 @@ const ACTIONS = {
 const OPTIONS_EVENT = "log-options";
 
 // A log-options.js popup item as an openMenu item: group names are dim lines nothing
-// can pick, a check mark goes before what is on, "▸" after an item that opens a list.
-// The unchecked label starts with a space as wide as the mark, so names line up.
+// can pick, a tick in the menu's check slot before what is on, "▸" after an item that
+// opens a list.
 const menuItem = (it, t, first) => (it.header
   ? { label: t(it.key), value: null, disabled: true, rule: !first }
-  : { label: `${it.checked ? "✓" : " "}  ${t(it.key)}`, value: it.id, disabled: Boolean(it.disabled), hint: it.more ? "▸" : undefined });
+  : { label: t(it.key), value: it.id, checked: Boolean(it.checked), disabled: Boolean(it.disabled), hint: it.more ? "▸" : undefined });
 const popupItems = (items, t) => items.map((it, i) => menuItem(it, t, i === 0));
 const handled = (id) => Object.prototype.hasOwnProperty.call(ACTIONS, id);
 

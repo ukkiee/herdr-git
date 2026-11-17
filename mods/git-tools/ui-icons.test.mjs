@@ -50,7 +50,7 @@ function walk(dir, out = []) {
 }
 
 // A filter button's dropdown arrow is colored in the reference screen, a tree arrow is gray:
-// the same file under two names. A menu's check mark follows the item's text color.
+// the same file under two names. The Conflicts dialog's resolved mark follows the text color.
 {
   assert.deepEqual(iconDraw("dropdown"), { path: `${UI}/icons/expui/general/chevronDown.svg`, tint: false });
   assert.deepEqual(iconDraw("chevron-down"), { path: `${UI}/icons/expui/general/chevronDown.svg`, tint: true });
@@ -59,13 +59,20 @@ function walk(dir, out = []) {
 }
 
 // Screens draw a named icon through uiGlyph or iconButton, which pick colors, the dark file and
-// the gray of a turned-off icon. svg(icon(…)) is left only for the mod's own tinted marks.
+// the gray of a turned-off icon. svg(icon(…)) is left only for the mod's own tinted marks: the
+// spinner anywhere, the checkbox marks in the commit panel's checkbox (ui.js) and the check
+// slots of popup menus (view-menu.js) and the Log filter popups (log-filters.js), which draw
+// the same tick without the box.
 {
   const direct = [];
+  const TICK_FILES = new Set(["ui.js", "view-menu.js", "log-filters.js"]);
   for (const f of readdirSync(here).filter((f) => f.endsWith(".js") && f !== "ui-icons.js")) {
     const src = readFileSync(join(here, f), "utf8");
     for (const m of src.matchAll(/\bsvg\(\s*icon\(([^)]*)\)/g)) {
-      if (!/^"(spinner|checkbox-all|checkbox-some)"$/.test(m[1].trim()) && !/"checkbox-all"\s*:\s*"checkbox-some"/.test(m[1])) direct.push(`${f}: ${m[1]}`);
+      const arg = m[1].trim();
+      if (arg === '"spinner"') continue;
+      const tick = /^"(checkbox-all|checkbox-some)"$/.test(arg) || /"checkbox-all"\s*:\s*"checkbox-some"/.test(arg);
+      if (!(tick && TICK_FILES.has(f))) direct.push(`${f}: ${m[1]}`);
     }
   }
   assert.deepEqual(direct, []);

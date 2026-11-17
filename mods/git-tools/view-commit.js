@@ -545,7 +545,7 @@ export default class CommitView {
 
   viewOptions(cx) {
     cx.spawn(async (cx) => {
-      const picked = await openMenu(this.bus, [{ label: this.t("commit.groupByDirectory"), value: "group", hint: this.grouped ? "✓" : "" }], { lang: this.lang });
+      const picked = await openMenu(this.bus, [{ label: this.t("commit.groupByDirectory"), value: "group", checked: Boolean(this.grouped) }], { lang: this.lang });
       if (picked === "group") this.setGrouped(!this.grouped);
       cx.notify();
     });

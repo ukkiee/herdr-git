@@ -12,7 +12,7 @@ import { makeLocks, BEAT, sameRepo, repoName } from "./lock.js";
 import { LANGS, translator, systemLang, sentence } from "./i18n.js";
 import { fileIcon, folderIcon, darkColor } from "./icon-theme.js";
 import { iconShape, iconDraw } from "./ui-icons.js";
-import { menuWidth, dialogFills, dialogRoom } from "./ui-size.js";
+import { menuWidth, dialogFills, dialogRoom, MENU_CHECK, MENU_GAP } from "./ui-size.js";
 import { skeletonRows, skeletonCount, skeletonFills, skeletonSize, checkSize, HEIGHT as SKELETON_HEIGHT } from "./skeleton.js";
 import { whereFocused, newPanes, rememberTab, registerTab, forgetTab } from "./focus-repo.js";
 import { en as consoleEn, ko as consoleKo } from "./messages-console.js";
@@ -465,8 +465,10 @@ export function newTab(name, props) {
 const MENU_ROW = 28, MENU_PAD = 5, MENU_RULE = 9;
 
 // A popup menu. Resolves with the chosen item's `value`, or null when it's dismissed.
-// items: [{ label, value, disabled?, hint?, title?, rule? }] (`hint`: dim text on the
-// right, `title`: a tooltip, `rule`: a line above the item). Items go through overlay
+// items: [{ label, value, disabled?, hint?, title?, rule?, checked? }] (`hint`: dim text on
+// the right, `title`: a tooltip, `rule`: a line above the item, `checked`: true or false
+// for an item that can be on; the menu then keeps a check slot before such items' labels
+// and ticks the ones that are true, see view-menu.js). Items go through overlay
 // props, so they are plain JSON: no functions. `bus` is the opening copy's (`this.bus` on
 // a screen, `host.bus` in a part of the Log panel). Await it inside cx.spawn:
 //   cx.spawn(async (cx) => { const v = await openMenu(this.bus, items); if (v) …; cx.notify(); });
@@ -508,7 +510,8 @@ export function answerMenu(bus, key, value) {
   bus.answer(key, value);
 }
 
-export const menuMetrics = { row: MENU_ROW, pad: MENU_PAD, rule: MENU_RULE };
+// check: the check slot's width, gap: the row's gap; ui-size.js menuWidth counts the same.
+export const menuMetrics = { row: MENU_ROW, pad: MENU_PAD, rule: MENU_RULE, check: MENU_CHECK, gap: MENU_GAP };
 
 // The menus openMenu has open, by key. Module state, so shared by every copy of this
 // source: while any is open, no screen draws a tooltip. The pointer is still resting on

@@ -447,7 +447,7 @@ export default class CommitForm {
     else if (name === "commit-message") this.text.focus();
   }
 
-  render(cx) {
+  render(cx, { waiting = false } = {}) {
     this.follow();
     this.prefill();
     const t = theme(), host = this.host, op = this.inProgress();
@@ -464,7 +464,11 @@ export default class CommitForm {
     if (target) return this.renderTarget(target, t, { spinning });
     const canAmend = Boolean(host.hasHead) && !writing && !op;
     const why = this.blocked(), amending = this.amending();
-    const whyNoAmend = canAmend ? null : !host.hasHead ? host.t("commit.noCommitsToAmend") : op ? host.t("ops.noAmend") : writing;
+    // waiting: no repository found yet (view-commit.js fades the form). Why a control is
+    // off would be told of a folder not yet read, so no tooltips, and an error from the
+    // repository before stays hidden.
+    const whyNoAmend = canAmend || waiting ? null : !host.hasHead ? host.t("commit.noCommitsToAmend") : op ? host.t("ops.noAmend") : writing;
+    const said = (title) => (waiting ? undefined : title);
     const amendRow = h_flex().id("commit-amend").flex_none().gap(6).items_center()
       .child(checkbox("commit-amend-check", this.amending(), t, { disabled: !canAmend, onClick: (_e, cx) => this.toggleAmend(cx) }))
       .child(div().text_color(canAmend ? t.foreground : t.dim).child(host.t("commit.amend")));
@@ -502,14 +506,14 @@ export default class CommitForm {
         // first instead of running over it.
         .child(h_flex().w_full().min_w(0).flex_wrap().gap(8).items_center()
           .child(button("commit-run", host.t(amending ? "commit.amendCommit" : "commit.commit"), t, {
-            kind: "primary", disabled: Boolean(why), busy: spinning === "commit", title: why ?? (op ? host.t("ops.continueTitle") : host.t(amending ? "commit.amendCommitTitle" : "commit.commitTitle")),
+            kind: "primary", disabled: Boolean(why), busy: spinning === "commit", title: said(why ?? (op ? host.t("ops.continueTitle") : host.t(amending ? "commit.amendCommitTitle" : "commit.commitTitle"))),
             onClick: (_e, cx) => this.run(false, cx),
           }))
           .child(button("commit-run-push", host.t(amending ? "commit.amendCommitAndPush" : "commit.commitAndPush"), t, {
-            disabled: Boolean(why), busy: spinning === "push", title: why ?? host.t(amending ? "commit.amendCommitAndPushTitle" : "commit.commitAndPushTitle"),
+            disabled: Boolean(why), busy: spinning === "push", title: said(why ?? host.t(amending ? "commit.amendCommitAndPushTitle" : "commit.commitAndPushTitle")),
             onClick: (_e, cx) => this.run(true, cx),
           }))))
-      .when(Boolean(this.error), (el) => el.child(
+      .when(Boolean(this.error) && !waiting, (el) => el.child(
         errorStrip("commit-form-error", this.error ?? "", t, (_e, cx) => { this.error = null; cx.notify(); })));
   }
 }

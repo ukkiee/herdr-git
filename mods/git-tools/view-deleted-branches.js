@@ -25,7 +25,7 @@ import { makeGit } from "./git.js";
 import { readDeletedBranches, restoreBranches } from "./git-branch.js";
 import { formatTime } from "./i18n.js";
 import { checkState } from "./tree.js";
-import { tip, openDialog, dialogFrame, button, checkbox, row, notice, errorStrip,scrollText, uiGlyph, darkLook, close, scriptedRepo, sentence, WindowedList, askOwner, serveRequest, writeBlock } from "./ui.js";
+import { tip, openDialog, dialogFrame, button, checkbox, row, notice, skeleton, skeletonSize, errorStrip,scrollText, uiGlyph, darkLook, close, scriptedRepo, sentence, WindowedList, askOwner, serveRequest, writeBlock } from "./ui.js";
 
 const SHORT = 7; // a hash as the Branch tree's HEAD row shows it
 
@@ -70,6 +70,9 @@ export function serveDeletedBranches(panel, e, cx) {
 }
 
 const key = (b) => `${b.name}\0${b.hash}`;
+// The rows while the branches are read (ui.js skeleton), as branchRow lays them out:
+// check, branch icon, name, hash, subject, time.
+const SKELETON = { indent: [8, 0], gap: 8, lead: ["check", "icon"], cols: [{ name: true }, { fit: 52 }, { grow: true }, { fit: 64 }] };
 
 export default class DeletedBranchesView {
   init(p, cx) {
@@ -209,17 +212,18 @@ export default class DeletedBranchesView {
   body(t) {
     if (!this.root) return notice(this.t("ui.noRepository"), t);
     if (this.listError && !this.branches) return div().id("deleted-branches-list-error").p(12).text_color(t.ansi1).child(this.listError);
-    if (!this.branches) return notice(this.t("ui.loading"), t, { busy: true });
-    const all = this.open().map(key), checked = this.chosen().length;
-    const listed = this.branches.length
+    // The check-all line stands while the branches are read; only the list waits.
+    const reading = !this.branches, all = this.open().map(key), checked = this.chosen().length;
+    const listed = reading || this.branches.length
       ? v_flex().size_full().min_h(0)
         .child(h_flex().id("deleted-branches-all").h(28).flex_none().px(8).gap(8).items_center().border_b(1).border_color(t.border)
           .child(checkbox("deleted-branches-all-check", checkState(all, this.picked), t, {
             disabled: this.running || !all.length, onClick: (_e, cx) => { this.toggleAll(); cx.notify(); },
           }))
           .child(div().flex_1().min_w(0).truncate().text_size(12).text_color(t.dim)
-            .child(checked ? this.t("branches.checked", { n: checked }) : this.t("branches.noneChecked"))))
-        .child(div().flex_1().min_h(0).child(this.list.render(this.branches.length, (i) => this.branchRow(i, t), t)))
+            .child(reading ? "" : checked ? this.t("branches.checked", { n: checked }) : this.t("branches.noneChecked"))))
+        .child(div().flex_1().min_h(0).child(reading ? skeleton(t, SKELETON, this.listSize ??= skeletonSize("deleted-branches-wait"))
+          : this.list.render(this.branches.length, (i) => this.branchRow(i, t), t)))
       : notice(this.t("branches.noneKept"), t);
     const result = this.result;
     return v_flex().size_full().min_h(0)

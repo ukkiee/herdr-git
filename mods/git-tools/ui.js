@@ -1,6 +1,6 @@
 // Shared parts for every git-tools screen: the copy's language, where the repository is,
-// rows, icon buttons, checkboxes, the windowed list, popup menus, dialogs, the error
-// strip and the note bar, stroked lines, and the bus the screens talk to each other on.
+// rows, icon buttons, checkboxes, the windowed list, the loading skeleton, popup menus,
+// dialogs, the error strip and the note bar, stroked lines, and the bus the screens talk to each other on.
 // Screens import from here and don't edit it; a part only one screen needs stays in that
 // screen's file.
 
@@ -13,6 +13,7 @@ import { LANGS, translator, systemLang, sentence } from "./i18n.js";
 import { fileIcon, folderIcon, darkColor } from "./icon-theme.js";
 import { iconShape, iconDraw } from "./ui-icons.js";
 import { menuWidth, dialogFills, dialogRoom } from "./ui-size.js";
+import { skeletonRows, skeletonCount, skeletonFills, skeletonSize, checkSize, HEIGHT as SKELETON_HEIGHT } from "./skeleton.js";
 import { whereFocused, newPanes, rememberTab, registerTab, forgetTab } from "./focus-repo.js";
 import { en as consoleEn, ko as consoleKo } from "./messages-console.js";
 
@@ -675,6 +676,47 @@ export function notice(text, t, { busy = false } = {}) {
   return h_flex().size_full().min_h(0).items_center().justify_center().gap(8).p(16).text_color(t.dim)
     .when(busy, (el) => el.child(svg(icon("spinner")).size(14).flex_none().spin(900)))
     .child(div().min_w(0).child(shown));
+}
+
+// skeleton(t, specs, size) → faint rows in place of a list still being read: the screen's
+// description of its rows (skeleton.js), or none for the plain shape.
+// size: a skeletonSize(id) the screen keeps, one per list, where the list remembers its
+// column's measured height, so it draws just the rows the column shows; the list redraws
+// only when a new height changes the row count. Keep it in a field of the screen's own,
+// never one main.js sets (this.wait is the copy's clock): anything else is an error here.
+// Left out for a list of fixed rows (nothing to measure): a size watch makes its element
+// a press target, which on the VCS widget's block would stop the window drag.
+// The whole list pulses as one element, natively (no redraws), in the theme's muted text
+// color kept faint, which shows on light and dark surfaces alike.
+export { skeletonSize };
+const PULSE = 1200;
+export function skeleton(t, specs, size) {
+  checkSize(size);
+  const measured = Boolean(size) && skeletonFills(specs);
+  return v_flex().size_full().min_w(0).min_h(0).overflow_hidden()
+    .when(measured, (el) => el.id(size.id).on_size_change((box, cx) => {
+      const before = skeletonCount(specs, size.height ?? SKELETON_HEIGHT);
+      size.height = box.height;
+      if (skeletonCount(specs, box.height) !== before) cx.notify();
+    }))
+    .loop("opacity", { from: 0.22, to: 0.45, period: PULSE })
+    .children(skeletonRows(specs, { height: (measured && size.height) || SKELETON_HEIGHT })
+      .map((r) => h_flex().flex_none().w_full().min_w(0).h(r.height).items_center().gap(r.gap).pl(r.left).pr(r.right)
+        .children(r.pieces.map((p) => skeletonPiece(p, t)))));
+}
+
+function skeletonPiece(p, t) {
+  let cell = div().flex().items_center().overflow_hidden()
+    .map((el) => (p.grow ? el.flex_1().min_w(0) : p.shrink ? el.w(p.width).min_w(0) : el.w(p.width).flex_none()))
+    .when(Boolean(p.room), (el) => el.pr(p.room))
+    .when(p.center, (el) => el.justify_center());
+  if (!p.shape) return cell;
+  const s = p.shape, round = s.kind === "dot" ? s.width / 2 : s.kind === "box" ? 3 : s.height / 2;
+  // A fixed-width bar longer than its cell is cut at the cell's content edge (max_w_full),
+  // so a long bar keeps its room empty: overflow_hidden alone cuts at the padding's outer
+  // edge, and the bar would run through the room into what follows.
+  const shape = s.width === null ? div().w_full() : div().flex_none().w(s.width).max_w_full();
+  return cell.child(shape.h(s.height).rounded(round).bg(t.muted));
 }
 
 // tr: a t (i18n.js), for a call outside the screen's own (see speakAs).

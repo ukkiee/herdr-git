@@ -35,7 +35,7 @@ import { readOperation, continueOperation, abortOperation, skipOperation, operat
 import { checkout, deleteBranch } from "./git-branch.js";
 import { pressSpot, widgetBlockWidth } from "./ui-size.js";
 import { openConflicts, openConflictsIfStopped } from "./view-conflicts.js";
-import { location, watchSettled, uiGlyph, iconButton, darkLook, broadcast, openCommitPanel, openMenu, takeWrite, releaseWrite, writeBlock, readBlocked, sentence } from "./ui.js";
+import { location, watchSettled, uiGlyph, iconButton, darkLook, skeleton, broadcast, openCommitPanel, openMenu, takeWrite, releaseWrite, writeBlock, readBlocked, sentence } from "./ui.js";
 import { openPush, servePush } from "./view-push.js";
 import { openBranchNew, openBranchDelete, serveBranch } from "./view-branch-new.js";
 import { serveAction } from "./serve-actions.js";
@@ -47,6 +47,8 @@ const PAD = 2; // the block's padding each side of the widget
 // The layout block install.sh gives the widget (the git-tools layout on macOS), sized to the widget.
 const BLOCK_ID = "git-vcs-widget";
 const WIDGET_MAX = 360; // px: a longer branch name is cut rather than widen the block further
+// The block before the first answer (ui.js skeleton): one bar where the widget's text goes.
+const WAITING = { rows: 1, rowHeight: 26, indent: [8, 0], cols: [{ fill: true }] };
 const stop = (_e, cx) => cx.stop_propagation();
 
 export class VcsWidget {
@@ -58,6 +60,7 @@ export class VcsWidget {
     this.repo = null; // { git, root, on } once the followed folder is a repository
     this.heads = null; // readHeads' result
     this.op = null; // readOperation's result, null when not read
+    this.read = false; // a read has answered once (a repository or not), or there is no folder
     this.context = null;
     this.reads = readTurns();
     this.watching = null; // the repository its git folder watch belongs to (watch)
@@ -73,7 +76,7 @@ export class VcsWidget {
     // folder doesn't wait, nor does anything once the read in flight is stuck (read-turns.js).
     if (context === this.context && this.reads.busy()) { this.again = true; return; }
     if (context !== this.context) { this.context = context; this.repo = null; this.heads = null; this.op = null; this.reads.drop(); this.again = false; }
-    if (!folder) return;
+    if (!folder) { this.read = true; return; }
     // A write running there would be seen half done: read once it ends (catchUp).
     if (this.repo && readBlocked(this.host, this.repo)) { this.waiting = true; return; }
     this.waiting = false;
@@ -85,13 +88,14 @@ export class VcsWidget {
           const git = makeGit(exec, on, { wait: this.host.wait });
           const top = await repoRoot(git, folder);
           if (context !== this.context) return;
-          if (!top.ok) { if (this.reads.use(turn)) { this.heads = null; this.op = null; } return; }
+          if (!top.ok) { if (this.reads.use(turn)) { this.heads = null; this.op = null; this.read = true; } return; }
           repo = { git, root: top.root, on };
         }
         const [heads, op] = await Promise.all([readHeads(repo.git, repo.root), readOperation(repo.git, repo.root)]);
         if (context !== this.context || !this.reads.use(turn)) return;
         this.repo = repo;
         this.heads = heads;
+        this.read = true;
         this.op = op.ok ? op : null;
         this.watch(repo, cx);
       } finally {
@@ -252,7 +256,7 @@ export class VcsWidget {
     cx.spawn(async (cx) => {
       // The answer arrives in this copy's own call (ui.js), so what the pick starts is
       // this copy's work and outlives the popup.
-      const pick = await openVcsPopup(host.bus, { root: repo.root, on: repo.on, lang: host.lang, at, side: host.popupSide?.() });
+      const pick = await openVcsPopup(host.bus, { root: repo.root, on: repo.on, lang: host.lang, at, side: host.popupSide?.(), op: this.op });
       if (!pick) return;
       // A branch menu's item comes with its branch; the popup's own actions with the pick.
       if (popupHandles(pick.id)) POPUP_ACTIONS[pick.id](this, pick.target ?? pick, cx);
@@ -357,7 +361,15 @@ export default class VcsWidgetBlock {
     // no empty space is left by the Git button; a long name is cut at WIDGET_MAX.
     // Like the tab bar's own root the strip has no id: a press on its padding is the block's
     // window_drag (layout.mjs) and moves the window. Only the widget stops the press.
-    return h_flex().size_full().min_w(0).px(PAD).items_center().overflow_hidden().bg(t.chrome).border_b(1).border_color(t.border)
+    const strip = h_flex().size_full().min_w(0).px(PAD).items_center().overflow_hidden().bg(t.chrome).border_b(1).border_color(t.border);
+    // Until the first answer one bar fills the block at the width the layout kept from the
+    // last fit, and nothing is measured: the block keeps its width instead of shrinking to
+    // nothing and growing back. The bar takes no presses, so the window drag still works.
+    if (!this.widget.read) {
+      this.widget.catchUp(cx);
+      return strip.child(div().flex_1().min_w(0).h(26).child(skeleton(t, WAITING)));
+    }
+    return strip
       .child(h_flex().id("vcs-widget-fit").flex_none().max_w(WIDGET_MAX).min_w(0).items_center()
         .on_size_change((size) => this.fit(size.width))
         .child(this.widget.render(cx, { background: t.chrome })));

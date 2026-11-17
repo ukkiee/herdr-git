@@ -27,7 +27,7 @@
 import { div } from "gpui-kit";
 import { h_flex, v_flex, TextareaState } from "gpui-base";
 import { theme, exec, notify } from "herdr";
-import { tip, openDialog, dialogFrame, button, close, askOwner, writeBlock, scrollText, sentence, textBox, row, spacer, notice, WindowedList, fileGlyph, darkLook, strokePath, openMenu, ROW, takeEscape } from "./ui.js";
+import { tip, openDialog, dialogFrame, button, close, askOwner, writeBlock, scrollText, sentence, textBox, row, spacer, notice, skeleton, skeletonSize, WindowedList, fileGlyph, darkLook, strokePath, openMenu, ROW, takeEscape } from "./ui.js";
 import { makeGit } from "./git.js";
 import { readCommit } from "./git-show.js";
 import { readEditFacts, readRebaseCommits, interactiveRebase } from "./git-rewrite.js";
@@ -482,7 +482,7 @@ export default class InteractiveRebaseView {
     const read = hash ? this.files.get(hash) : undefined, c = hash ? this.byHash.get(hash) : null;
     const files = read?.ok ? read.files : [];
     const filesPane = !hash ? notice(this.t("interactive.selectCommit"), t)
-      : read === null || read === undefined ? notice("Loading…", t, { busy: true })
+      : read === null || read === undefined ? skeleton(t, undefined, this.listSize ??= skeletonSize("ir-files-wait"))
       : !read.ok ? notice(read.err || this.t("ui.gitFailed"), t)
       : !files.length ? notice(this.t("interactive.noFiles"), t)
       : this.fileList.render(files.length, (i) => this.fileRow(i, files, t), t);

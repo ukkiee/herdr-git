@@ -21,7 +21,7 @@ import { listStashes, stashFiles } from "./git-stash.js";
 import { readTurns } from "./read-turns.js";
 import { buildRows, folderKeys } from "./tree.js";
 import { formatDateTime } from "./i18n.js";
-import { tip, uiGlyph, ICON, fileGlyph, folderGlyph, darkLook, panelFrame, toolbar, spacer, iconButton, button, row, notice, errorStrip, WindowedList, openMenu, broadcast, sentence, progressBar, writeName } from "./ui.js";
+import { tip, uiGlyph, ICON, fileGlyph, folderGlyph, darkLook, panelFrame, toolbar, spacer, iconButton, button, row, notice, skeleton, skeletonSize, errorStrip, WindowedList, openMenu, broadcast, sentence, progressBar, writeName } from "./ui.js";
 import { sameRepo } from "./lock.js";
 import { openDiff } from "./view-diff.js";
 import { openStash, openStashConfirm } from "./view-stash.js";
@@ -306,7 +306,7 @@ export default class StashTab {
     const tr = this.host.t, s = this.current(), blocked = this.blocked();
     const files = this.selected ? this.files.get(this.selected) : undefined;
     const filesBody = !s ? notice(tr("stash.pickOne"), t)
-      : files === null || files === undefined ? notice(tr("ui.loading"), t, { busy: true })
+      : files === null || files === undefined ? skeleton(t, undefined, this.listSize ??= skeletonSize("stash-files-wait"))
       : !files.ok ? notice(sentence(tr, files.msg, files.err), t)
       : !this.rows.length ? notice(tr("stash.noFiles"), t)
       : this.fileList.render(this.rows.length, (i) => this.fileRow(i, t), t);

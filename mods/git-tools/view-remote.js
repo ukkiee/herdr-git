@@ -16,7 +16,7 @@ import { exec, theme, notify } from "herdr";
 import { makeGit } from "./git.js";
 import { readRemote, defineRemote, removeRemote } from "./git-refs.js";
 import { remoteFailure } from "./git-remote.js";
-import { openDialog, dialogFrame, button, checkbox, close, askOwner, writeBlock, scrollText, sentence, notice } from "./ui.js";
+import { openDialog, dialogFrame, button, checkbox, close, askOwner, writeBlock, scrollText, sentence, skeleton } from "./ui.js";
 
 // openRemoteEdit({ root, on, name, owner, lang }) / openRemoteRemove(…): name: the remote.
 export function openRemoteEdit({ root, on = null, name, owner = null, lang } = {}) {
@@ -121,13 +121,17 @@ export default class RemoteView {
 
   shut() { if (!this.waiting) close(this.overlay); }
 
-  field(id, label, input, t) {
+  // input: null while the remote is read; the box then holds a bar where its value goes,
+  // and nothing typed there could be lost to the value arriving.
+  field(id, label, input, t, bar) {
+    const box = div().id(id).flex_1().min_w(0).h(30).px(9).flex().items_center().rounded(6).border_1()
+      .border_color(t.input).bg(t.background);
     return h_flex().w_full().min_w(0).gap(8).items_center()
       .child(div().w(52).flex_none().text_size(12.5).child(label))
-      .child(div().id(id).flex_1().min_w(0).h(30).px(9).flex().items_center().rounded(6).border_1()
-        .border_color(t.input).bg(t.background).cursor_text()
-        .on_mouse_down("left", (_e, cx) => { input.focus(); cx.stop_propagation(); })
-        .child(Input.new(input).w_full().h_full().text_size(13).text_color(t.foreground)));
+      .child(!input ? box.child(div().w_full().h_full().child(skeleton(t, { rows: 1, rowHeight: 28, indent: [0, 0], padRight: 0, cols: [{ fit: bar }] })))
+        : box.cursor_text()
+          .on_mouse_down("left", (_e, cx) => { input.focus(); cx.stop_propagation(); })
+          .child(Input.new(input).w_full().h_full().text_size(13).text_color(t.foreground)));
   }
 
   renderRemove(t, said) {
@@ -156,14 +160,14 @@ export default class RemoteView {
     const t = theme(), said = this.error ?? this.writing();
     if (this.removing) return this.renderRemove(t, said);
     const toggle = (_e, cx) => { this.fetch = !this.fetch; cx.notify(); };
-    const body = !this.read ? notice(this.t("ui.loading"), t, { busy: true })
-      : v_flex().size_full().min_h(0).px(14).py(12).gap(8)
-        .child(this.field("remote-name", this.t("refs.remoteName"), this.nameInput, t))
-        .child(this.field("remote-url", this.t("refs.remoteUrl"), this.urlInput, t))
-        .child(h_flex().id("remote-fetch-row").flex_none().gap(7).items_center().cursor_pointer().on_click(toggle)
-          .child(checkbox("remote-fetch", this.fetch, t, { onClick: toggle }))
-          .child(this.t("refs.fetchRemote")))
-        .when(Boolean(said), (el) => el.child(scrollText("remote-edit-error", said ?? "", t, { maxHeight: 40, color: this.error ? t.ansi1 : t.muted })));
+    const read = this.read;
+    const body = v_flex().size_full().min_h(0).px(14).py(12).gap(8)
+      .child(this.field("remote-name", this.t("refs.remoteName"), read ? this.nameInput : null, t, 56))
+      .child(this.field("remote-url", this.t("refs.remoteUrl"), read ? this.urlInput : null, t, 220))
+      .child(h_flex().id("remote-fetch-row").flex_none().gap(7).items_center().cursor_pointer().on_click(toggle)
+        .child(checkbox("remote-fetch", this.fetch, t, { onClick: toggle }))
+        .child(this.t("refs.fetchRemote")))
+      .when(Boolean(said), (el) => el.child(scrollText("remote-edit-error", said ?? "", t, { maxHeight: 40, color: this.error ? t.ansi1 : t.muted })));
     return this.frame("remote-edit", this.t("refs.remoteTitle"), t, body, this.t("refs.ok"));
   }
 }

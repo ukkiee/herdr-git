@@ -15,7 +15,7 @@ import { exec, theme } from "herdr";
 import { makeGit } from "./git.js";
 import { readRemotes, readRemote } from "./git-refs.js";
 import { openRemoteAdd, openRemoteEdit, openRemoteRemove } from "./view-remote.js";
-import { openDialog, dialogFrame, button, iconButton, row, notice, errorStrip, close, WindowedList, writeBlock, sentence } from "./ui.js";
+import { openDialog, dialogFrame, button, iconButton, row, notice, skeleton, skeletonSize, errorStrip, close, WindowedList, writeBlock, sentence } from "./ui.js";
 
 // openRemotes(panel, repo): Manage Remotes… in the panel's copy.
 export function openRemotes(panel, repo) {
@@ -24,6 +24,8 @@ export function openRemotes(panel, repo) {
 }
 
 const NAME_WIDTH = 140;
+// The rows while the remotes are read (ui.js skeleton), as renderRow lays them out.
+const SKELETON = { indent: [8, 0], cols: [{ px: NAME_WIDTH, bar: 56 }, { grow: true }] };
 
 export default class RemotesView {
   init(p, cx) {
@@ -111,7 +113,7 @@ export default class RemotesView {
     const head = h_flex().h(26).flex_none().px(10).gap(8).items_center().border_b(1).border_color(t.border).text_size(12).text_color(t.muted)
       .child(div().w(NAME_WIDTH).flex_none().child(this.t("patch.remoteName")))
       .child(div().flex_1().min_w(0).child(this.t("patch.remoteUrl")));
-    const rows = !this.read ? notice(this.t("ui.loading"), t, { busy: true })
+    const rows = !this.read ? skeleton(t, SKELETON, this.listSize ??= skeletonSize("remotes-wait"))
       : this.remotes.length ? this.list.render(this.remotes.length, (i) => this.renderRow(i, t), t)
         : notice(this.t("patch.noRemotes"), t);
     const body = v_flex().size_full().min_h(0)

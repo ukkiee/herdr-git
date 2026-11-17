@@ -62,6 +62,16 @@
   누름이 옛 팝업을 닫고 새 팝업을 열 때도 새 팝업의 첫 호출이 똑같이 풀리지 않았다. Esc로 닫은 뒤 새로 연 팝업은
   답했다. [실험] 시계도 같은 틈에서 울리지 않아 위의 상한이 닿지 않는다. 그래서 열리자마자 읽는 화면은 몇 초
   뒤에도 끝나지 않은 첫 읽기를 한 번 다시 한다(`FIRST_LOOK`).
+- **다시 불러온 직후, 작업 안의 `cx.notify()`가 그리지 않을 때가 있다.** mod 파일을 저장해 다시 불러온 직후의
+  Log panel 사본에서, `init`이 띄운 작업이 git의 답을 받고 그 안에서 다시 띄운 작업(Branch tree·Commit list
+  읽기)이 부른 `cx.notify()`는 `render`를 부르지 않았다. 그 작업이 건 `cx.timer.after`는 불렸지만 그 안의
+  notify도, 1초 뒤 같은 작업의 notify도 그리지 않았다. `init`에서 건 타이머 안의 notify는 4~9 ms 만에 그렸고,
+  `init`이 띄운 작업 자신의 notify도 그렸다. 다른 일로 창이 다시 그려지면(블록 폭을 바꾼 `layout.resize`, mod
+  명령) 그 화면이 그려졌고, 그 전까지는 100초 넘게 그대로였다. 다시 불러올 때마다 VCS widget 블록이 4 px로
+  줄었다 넓어지던 동안은 그 다시 그리기에 가려 보이지 않았다. [실험: herdr-app 0.1.16, macOS] `AsyncContext`의
+  notify는 작업을 깨운 쪽과 상관없이 작업의 주인을 다시 그린다는 설명과 다르다. [문서] 왜 그런지(작업의 주인이
+  다른 사본으로 잡히는지 등)는 가르지 않았다. 앱을 새로 켠 직후에는 창이 계속 다시 그려져 이 일이 보이지 않았다.
+  [관찰]
 - `readTextFile`(1 MiB, 원격 가능), `writeTextFile`(로컬 전용). [문서]
 - `watchFolder(dir)`: 로컬 전용. macOS에서는 `.git` 아래 변경도 온다. 읽기 명령이 인덱스를 건드리면 새로고침이 다음 새로고침을 부르므로 `--no-optional-locks -c core.fsmonitor=false -c diff.autoRefreshIndex=false`를 붙인다. [코드: 내장 `changes`]
 - 타이머: `cx.timer.every` / `cx.timer.after`. `setTimeout` 없음. [문서]

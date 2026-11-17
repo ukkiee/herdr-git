@@ -19,7 +19,7 @@ import { readTurns, STUCK } from "./read-turns.js";
 import { readRefsState, readGitDir, refsChanged, resolveCommit } from "./git-log.js";
 import { fetchAll, restoreBranch, trackedBranch } from "./git-branch.js";
 import { remoteFailure } from "./git-remote.js";
-import { location, watchSettled, panelFrame, toolbar, spacer, iconButton, notice, notRepository, errorStrip, noteBar, sentence, toggleLogPanel, logPanelShown, broadcast, scriptedRepo, takeWrite, releaseWrite, writeBlock, writeName, writingOn, readBlocked, fromRepo, gitButtonPlaced, openMenu, progressBar } from "./ui.js";
+import { location, watchSettled, panelFrame, toolbar, spacer, iconButton, notice, skeleton, skeletonSize, notRepository, errorStrip, noteBar, sentence, toggleLogPanel, logPanelShown, broadcast, scriptedRepo, takeWrite, releaseWrite, writeBlock, writeName, writingOn, readBlocked, fromRepo, gitButtonPlaced, openMenu, progressBar } from "./ui.js";
 import { sameRepo } from "./lock.js";
 import { serveBranch } from "./view-branch-new.js";
 import { serveDeletedBranches } from "./view-deleted-branches.js";
@@ -66,6 +66,7 @@ const LIST_MIN = 360, SPLIT = 5;
 const FILTERS_MIN = 420, TOOLBAR_REST = 100;
 const SHORT = 7; // a hash as Commit details and the Branch tree's HEAD row show it
 const FIRST_LOOK = 6000; // ms after the panel starts: what is still unread then is read again once
+const FIRST_DRAW = 100; // ms between the looks of the panel's own timer at what landed (redraw)
 
 const stored = (column) => {
   try { const n = Number(localStorage.getItem(column.key)); return n >= column.min ? n : column.width; }
@@ -243,6 +244,9 @@ export default class LogView {
     // A Log tab just opened has been seen to get no answer to its first reads: once, a
     // little later, what is still unread is read again.
     cx.timer.after(FIRST_LOOK, (cx) => this.firstLook(cx));
+    // What the first reads bring is drawn by a timer of the panel's own (redraw).
+    const since = Date.now();
+    this.firstDraws = cx.timer.every(FIRST_DRAW, (cx) => this.drawLanded(cx, since));
     // The watch below covers this computer; this covers other machines and a watch that
     // could not start. Cheap: one for-each-ref, and only while the panel shows.
     cx.timer.every(10000, (cx) => this.poll(cx));
@@ -252,6 +256,25 @@ export default class LogView {
     if (!this.shown() || this.readBlocked()) return;
     if (!this.read) this.refresh(cx);
     else if (this.repo && (!this.list.read || !this.branches.read)) this.reload(cx);
+  }
+
+  // A read that ends the loading skeleton (the repository, the Branch tree, the Commit
+  // list) landed: draw it. Just after the mod is reloaded, a cx.notify() made in a task
+  // once git answered, or in a timer such a task set, has been seen to draw nothing until
+  // something else redrew the window, while one made in a timer the panel set in init drew
+  // (docs/herdr-mod-platform.md). So drawLanded, on such a timer, draws what landed too,
+  // until the first reads are drawn or FIRST_LOOK has passed.
+  redraw(cx) {
+    this.landed = true;
+    cx.notify();
+  }
+
+  drawLanded(cx, since) {
+    if (this.landed) { this.landed = false; cx.notify(); }
+    const drawn = this.read && (this.notRepo || !this.repo || (this.list.read && this.branches.read && !this.list.loading));
+    if (!drawn && Date.now() - since < FIRST_LOOK) return;
+    this.firstDraws?.cancel();
+    this.firstDraws = null;
   }
 
   where() { return this.fixed ?? location(); }
@@ -590,7 +613,7 @@ export default class LogView {
       } finally {
         const newest = this.finding.end(turn);
         if (newest || used) this.read = true;
-        cx.notify();
+        this.redraw(cx);
       }
     });
   }
@@ -826,7 +849,7 @@ export default class LogView {
           .child(spacer())
           .child(iconButton("log-refresh", "refresh", t, { title: this.t("log.refresh"), busy: this.finding.busy() && this.read, onClick: (_e, cx) => this.refresh(cx) }))
           .when(!this.fixed, (el) => el.child(iconButton("log-hide", "x", t, { title: this.t("log.hide"), onClick: () => toggleLogPanel() }))))
-        .child(div().flex_1().min_h(0).child(this.notRepo ? notice(notRepository(this.folder, this.t), t) : !this.read ? notice(this.t("ui.loading"), t, { busy: true }) : notice("", t)));
+        .child(div().flex_1().min_h(0).child(this.notRepo ? notice(notRepository(this.folder, this.t), t) : !this.read ? skeleton(t, undefined, this.listSize ??= skeletonSize("log-panel-wait")) : notice("", t)));
     const gone = this.deleted && sameRepo(this.deleted.repo, this.repo) ? this.deleted : null;
     // Any write on this repository (or this panel's elsewhere): its name over a moving bar.
     const writing = this.repo ? this.writeBlock() : null;

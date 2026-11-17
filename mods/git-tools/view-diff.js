@@ -16,7 +16,7 @@
 import { div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { exec, theme, settings, watchFolder } from "herdr";
-import { openTab, notice, iconButton, errorStrip, spacer, fileGlyph, darkLook, WindowedList, sentence } from "./ui.js";
+import { openTab, notice, skeleton, skeletonSize, iconButton, errorStrip, spacer, fileGlyph, darkLook, WindowedList, sentence } from "./ui.js";
 import { makeGit } from "./git.js";
 import { readDiff, touchesDiff, MAX_ROWS, MAX_CHARS } from "./git-diff.js";
 
@@ -241,7 +241,7 @@ export default class DiffView {
     const renamed = Boolean(this.commit && this.oldPath && this.oldPath !== this.path);
     const parts = this.path.split("/"), name = parts.pop(), folder = parts.join("/");
     const look = { gutter: this.gutter(), columns: this.columns(), addBg: tint(t.ansi2, "24"), delBg: tint(t.ansi1, "24") };
-    const body = !r ? notice(this.t("ui.loading"), t, { busy: true })
+    const body = !r ? skeleton(t, undefined, this.listSize ??= skeletonSize("diff-wait"))
       : !r.ok ? notice(this.t("dialogs.diff.cantShow"), t)
       : r.binary ? notice(this.t("dialogs.diff.binary"), t)
       : !this.rows.length ? notice(this.t(renamed ? "dialogs.diff.renamedOnly" : r.from ? "dialogs.diff.identical" : "dialogs.diff.empty"), t)

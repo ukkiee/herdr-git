@@ -21,7 +21,7 @@ import { readStatus } from "./git-status.js";
 import { changesCommit } from "./git-patch.js";
 import { openPatch } from "./view-patch.js";
 import { buildRows, checkState, toggleIncluded, folderKeys, parentIndex } from "./tree.js";
-import { openDialog, dialogFrame, button, iconButton, checkbox, row, notice, errorStrip, uiGlyph, ICON, fileGlyph, folderGlyph, darkLook, close, WindowedList, askOwner, writeBlock, sentence, textBox } from "./ui.js";
+import { openDialog, dialogFrame, button, iconButton, checkbox, row, notice, skeleton, skeletonSize, errorStrip, uiGlyph, ICON, fileGlyph, folderGlyph, darkLook, close, WindowedList, askOwner, writeBlock, sentence, textBox } from "./ui.js";
 
 const strings = (value) => (Array.isArray(value) ? value.filter((v) => typeof v === "string" && v) : []);
 const text = (value) => (typeof value === "string" ? value : "");
@@ -59,6 +59,10 @@ export async function runPatchLocal(git, root, args, panel) {
 export function statusColor(status, t) {
   return { modified: t.ansi4, added: t.ansi2, unversioned: t.ansi1, renamed: t.ansi4, deleted: t.muted, conflict: t.ansi9 ?? t.ansi1 }[status] ?? t.foreground;
 }
+
+// CheckedFiles' rows while the files are read (ui.js skeleton), as renderRow lays them
+// out: the arrow's place, the check, the icon, the name.
+export const CHECKED_SKELETON = { indent: [8, 16], depth: [0, 1, 1, 0, 1, 1, 1], lead: ["slot", "check", "file"] };
 
 // files: [{ path, status, … }]; picked: the checked paths. Rows are built when the files
 // or the folding change, never in render. Keep one per dialog, made in init.
@@ -227,7 +231,7 @@ export default class CreatePatchView {
   render() {
     const t = theme(), writing = this.writing(), chosen = this.tree.chosen();
     const focus = () => this.handle.focus();
-    const list = !this.read ? notice(this.t("ui.loading"), t, { busy: true })
+    const list = !this.read ? skeleton(t, CHECKED_SKELETON, this.listSize ??= skeletonSize("create-patch-wait"))
       : this.tree.render(t, this.t, { disabled: this.running, empty: this.t("patch.noChanges"), focus });
     const body = v_flex().size_full().min_h(0)
       .child(this.tree.toolbar(t, this.t, focus))

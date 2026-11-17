@@ -28,7 +28,7 @@ import { columns, editedSince } from "./conflicts-model.js";
 import { writerOn, readerOn } from "./view-conflicts.js";
 import { decide, applyNonConflicting, resolveSimple, resultText, edit } from "./merge-chunks.js";
 import { paneTitles, openFile, layoutRows, chunkButtons, toolbar, countWords, seekConflict, nextFile, leftToDecide, saveQuestion, leaveQuestion, stageSave } from "./merge-revisions-model.js";
-import { tip, dialogFrame, button, iconButton, close, askOwner, writeBlock, scrollText, sentence, notice, WindowedList, takeEscape } from "./ui.js";
+import { tip, dialogFrame, button, iconButton, close, askOwner, writeBlock, scrollText, sentence, notice, skeleton, skeletonSize, WindowedList, takeEscape } from "./ui.js";
 
 // Where a local space's result is staged for the panel: the app's own git-tools folder
 // (app-files.js).
@@ -58,6 +58,9 @@ const SIZE = 12;
 // Width of a line number, and of the gutter between two panes (its buttons).
 const NUMBER = 40;
 const GUTTER = 46;
+// A pane's lines while the file is read (ui.js skeleton), as pane() lays them out: the
+// number ending 6px before the text, then the line.
+const SKELETON = { rowHeight: LINE, indent: [NUMBER - 6 - 16, 0], gap: 6, padRight: 0, cols: [{ fit: 16 }, { grow: true }] };
 // The characters of a line handed to the drawing: a very long line costs the same as
 // one that fills the pane.
 const COLUMNS = 400;
@@ -100,6 +103,7 @@ export default class MergeRevisionsView {
     this.list = new WindowedList("merge-revisions-lines", { rowHeight: LINE });
     this.leftList = new WindowedList("merge-revisions-left", { rowHeight: LINE });
     this.rightList = new WindowedList("merge-revisions-right", { rowHeight: LINE });
+    this.waits = { left: skeletonSize("mr-left-wait"), result: skeletonSize("mr-result-wait"), right: skeletonSize("mr-right-wait") };
     this.load(cx);
   }
 
@@ -358,7 +362,8 @@ export default class MergeRevisionsView {
   }
 
   renderToolbar(t) {
-    const bar = toolbar(this.file.state);
+    // Before the file is read every button is off.
+    const bar = this.file ? toolbar(this.file.state) : {};
     const on = this.free() && !this.editor;
     const glyphButton = (id, text, title, enabled, onClick) => div().id(id).h(24).px(6).flex_none().flex().items_center().justify_center().rounded(5)
       .text_color(enabled ? t.muted : t.dim).map((el) => tip(el, title, id))
@@ -366,7 +371,7 @@ export default class MergeRevisionsView {
         .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
         .on_click((_e, cx) => { cx.stop_propagation(); onClick(); cx.notify(); }))
       .child(text);
-    const count = countWords(this.file.state).map((w) => this.word(w)).join(", ");
+    const count = this.file ? countWords(this.file.state).map((w) => this.word(w)).join(", ") : "";
     return h_flex().w_full().flex_none().px(14).py(6).gap(4).items_center().border_b(1).border_color(t.border)
       .child(glyphButton("mr-prev", "↑", this.t("conflicts.mrPrevConflict"), on && bar.conflicts > 0, () => this.seek(-1)))
       .child(glyphButton("mr-next", "↓", this.t("conflicts.mrNextConflict"), on && bar.conflicts > 0, () => this.seek(1)))
@@ -377,7 +382,7 @@ export default class MergeRevisionsView {
       .child(glyphButton("mr-apply-right", "≪", this.t("conflicts.mrApplyRight"), on && bar.applyRight, () => this.applyNonConflicting("theirs")))
       .child(iconButton("mr-resolve-simple", "magic-resolve", t, { title: this.t("conflicts.mrResolveSimple"), disabled: !(on && bar.resolveSimple), onClick: (_e, cx) => { this.resolveSimple(); cx.notify(); } }))
       .child(div().w(8).flex_none())
-      .child(button("mr-edit", this.t("conflicts.mrEditResult"), t, { kind: this.editor ? "primary" : "plain", disabled: this.waiting, onClick: (_e, cx) => { this.toggleEdit(); cx.notify(); } }))
+      .child(button("mr-edit", this.t("conflicts.mrEditResult"), t, { kind: this.editor ? "primary" : "plain", disabled: this.waiting || !this.file, onClick: (_e, cx) => { this.toggleEdit(); cx.notify(); } }))
       .child(div().flex_1().min_w(0))
       .child(div().flex_none().text_size(12).text_color(t.muted).child(count));
   }
@@ -392,7 +397,14 @@ export default class MergeRevisionsView {
       .child(div().w(GUTTER).flex_none())
       .child(head(this.word(this.titles.right)));
     const font = (el) => el.font_family(settings().font_family ?? "JetBrains Mono").text_size(SIZE);
-    const lines = this.editor
+    const lines = !this.file
+      ? h_flex().flex_1().min_h(0).w_full()
+        .child(div().flex_1().min_w(0).h_full().child(skeleton(t, SKELETON, this.waits.left)))
+        .child(div().w(GUTTER).flex_none())
+        .child(div().flex_1().min_w(0).h_full().child(skeleton(t, SKELETON, this.waits.result)))
+        .child(div().w(GUTTER).flex_none())
+        .child(div().flex_1().min_w(0).h_full().child(skeleton(t, SKELETON, this.waits.right)))
+      : this.editor
       ? h_flex().flex_1().min_h(0).w_full()
         .child(font(div().flex_1().min_w(0).h_full()).child(this.leftList.render(this.rows.length, (i) => this.renderRow(i, t, look, "left"), t)))
         .child(div().w(GUTTER).flex_none())
@@ -473,8 +485,9 @@ export default class MergeRevisionsView {
     const text = this.file?.mode === "text";
     const busy = this.waiting || this.checking || Boolean(this.writing());
     let body;
-    if (!this.file) body = this.error ? notice("", t) : notice(this.t("ui.loading"), t, { busy: true });
-    else if (!text) body = notice(this.t(this.file.mode === "binary" ? "conflicts.mrBinary" : "conflicts.mrDeleted", { path: this.path }), t);
+    // While the file is read the toolbar and the three panes stand, each pane waiting.
+    if (!this.file && this.error) body = notice("", t);
+    else if (this.file && !text) body = notice(this.t(this.file.mode === "binary" ? "conflicts.mrBinary" : "conflicts.mrDeleted", { path: this.path }), t);
     else body = v_flex().size_full().min_h(0).child(this.renderToolbar(t)).child(this.renderPanes(t));
     const frame = v_flex().size_full().min_h(0)
       .child(div().flex_1().min_h(0).child(body))
@@ -489,7 +502,8 @@ export default class MergeRevisionsView {
         button("mr-accept-left", this.t("conflicts.mrAcceptLeft"), t, { disabled: !loaded, onClick: (_e, cx) => this.acceptAll("yours", cx) }),
         button("mr-accept-right", this.t("conflicts.mrAcceptRight"), t, { disabled: !loaded, onClick: (_e, cx) => this.acceptAll("theirs", cx) }),
         div().w(12).flex_none(),
-        ...(text ? [
+        // Standing (dimmed) while the file is read too, so the row doesn't shift when it lands.
+        ...(text || !this.file ? [
           button("mr-save-close", this.t("conflicts.mrSaveClose"), t, { disabled: !loaded, busy: this.waiting, onClick: (_e, cx) => this.save("close", cx) }),
           button("mr-apply", this.t("conflicts.mrApply"), t, { kind: "primary", disabled: !loaded, onClick: (_e, cx) => this.save("apply", cx) }),
         ] : []),

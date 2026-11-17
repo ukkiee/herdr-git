@@ -9,7 +9,7 @@
 import { div } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input } from "gpui-base";
 import { exec, theme } from "herdr";
-import { tip, ICON, fileGlyph, folderGlyph, darkLook, row, toolbar, spacer, iconButton, notice, errorStrip, WindowedList, panelFrame } from "./ui.js";
+import { tip, ICON, fileGlyph, folderGlyph, darkLook, row, toolbar, spacer, iconButton, notice, skeleton, skeletonSize, errorStrip, WindowedList, panelFrame } from "./ui.js";
 import { makeGit } from "./git.js";
 import { readCommit } from "./git-show.js";
 import { buildRows } from "./tree.js";
@@ -25,6 +25,9 @@ const SHORT = 7;
 const short = (hash) => String(hash ?? "").slice(0, SHORT);
 const ROW_H = 24;
 const INDENT = 14;
+// The rows while they are read (ui.js skeleton), as commitRow and fileRow lay them out.
+const SKELETON_COMMITS = { indent: [10, 0], gap: 8, padRight: 10, cols: [{ grow: true }, { fit: 72 }, { fit: 96 }] };
+const SKELETON_FILES = { indent: [6, INDENT], gap: 5, padRight: 10, depth: [0, 1, 1, 0, 1, 1, 1], lead: ["slot", "file"] };
 const KIND = [en["compare.branchesTab"], ko["compare.branchesTab"]];
 
 // t: the opener's t (its language names the tab).
@@ -72,6 +75,7 @@ export default class CompareBranches {
     this.listA = new WindowedList("compare-only-a", { rowHeight: ROW_H });
     this.listB = new WindowedList("compare-only-b", { rowHeight: ROW_H });
     this.fileList = new WindowedList("compare-commit-files");
+    this.waits = { a: skeletonSize("compare-only-a-wait"), b: skeletonSize("compare-only-b-wait"), files: skeletonSize("compare-commit-files-wait") };
     // Each list's filter: User, Date (from), Path; Enter in a box applies that list's.
     this.inputs = { a: this.filterInputs("a"), b: this.filterInputs("b") };
     this.filters = { a: [], b: [] }; // git-log-filter.js filterArgs for each list
@@ -168,8 +172,10 @@ export default class CompareBranches {
       .child(div().flex_none().text_size(12).text_color(t.dim).child(formatDateTime(c.time, this.lang)));
   }
 
+  // commits: null while the lists are read; the header and filters stand meanwhile.
   half(side, commits, list, a, b, t) {
-    const body = !commits.length ? notice(this.t("compare.noCommits"), t) : list.render(commits.length, (i) => this.commitRow(side, commits[i], i, t), t);
+    const body = !commits ? skeleton(t, SKELETON_COMMITS, this.waits[side])
+      : !commits.length ? notice(this.t("compare.noCommits"), t) : list.render(commits.length, (i) => this.commitRow(side, commits[i], i, t), t);
     const box = (state, width) => h_flex().w(width).flex_none().h(22).px(6).items_center().rounded(4).border_1().border_color(t.input).bg(t.background)
       .child(Input.new(state).flex_1().min_w(0).h_full().text_size(12).text_color(t.foreground));
     const inputs = this.inputs[side];
@@ -195,7 +201,7 @@ export default class CompareBranches {
   details(t) {
     const dark = darkLook(t.background), info = this.info;
     const body = !this.picked ? notice(this.t("compare.selectCommit"), t)
-      : !info ? notice(this.t("ui.loading"), t, { busy: true })
+      : !info ? skeleton(t, SKELETON_FILES, this.waits.files)
       : !info.ok ? notice(info.err || this.t("ui.gitFailed"), t)
       : v_flex().size_full().min_h(0)
         .child(div().flex_1().min_h(0).w_full().child(this.fileList.render(this.files.length, (i) => this.fileRow(i, t, dark), t)))
@@ -211,13 +217,12 @@ export default class CompareBranches {
       .child(div().pl(4).min_w(0).truncate().text_color(t.dim).child(this.t("compare.branchesTab", { a: this.aName, b: this.bName })))
       .child(spacer())
       .child(iconButton("compare-branches-refresh", "refresh", t, { title: this.t("compare.refresh"), busy: Boolean(this.loading && lists), onClick: (_e, cx) => { this.load(cx); cx.notify(); } }));
-    const body = !lists ? notice(this.t("ui.loading"), t, { busy: true })
-      : h_flex().flex_1().min_h(0).w_full()
-        .child(v_flex().flex_1().min_w(0).h_full()
-          .child(this.half("a", lists.onlyA, this.listA, this.aName, this.bName, t))
-          .child(div().flex_none().h(1).w_full().bg(t.border))
-          .child(this.half("b", lists.onlyB, this.listB, this.bName, this.aName, t)))
-        .child(this.details(t));
+    const body = h_flex().flex_1().min_h(0).w_full()
+      .child(v_flex().flex_1().min_w(0).h_full()
+        .child(this.half("a", lists?.onlyA ?? null, this.listA, this.aName, this.bName, t))
+        .child(div().flex_none().h(1).w_full().bg(t.border))
+        .child(this.half("b", lists?.onlyB ?? null, this.listB, this.bName, this.aName, t)))
+      .child(this.details(t));
     return panelFrame("compare-branches-tab", t)
       .child(bar)
       .child(body)

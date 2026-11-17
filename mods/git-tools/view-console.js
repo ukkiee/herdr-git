@@ -8,7 +8,7 @@
 
 import { div } from "gpui-kit";
 import { theme, settings, spaces, panes, run } from "herdr";
-import { panelFrame, toolbar, spacer, button, notice, WindowedList, MOD, CONSOLE_END } from "./ui.js";
+import { panelFrame, toolbar, spacer, button, notice, skeleton, skeletonSize, WindowedList, MOD, CONSOLE_END } from "./ui.js";
 import { readConsole, CONSOLE_EVENT } from "./app-files.js";
 import { consoleRows } from "./git-console.js";
 import { en, ko } from "./messages-console.js";
@@ -89,7 +89,7 @@ export default class Console {
 
   render() {
     const t = theme();
-    const body = !this.loaded ? notice(this.t("ui.loading"), t, { busy: true })
+    const body = !this.loaded ? skeleton(t, undefined, this.listSize ??= skeletonSize("console-wait"))
       : this.error ? notice(this.t("console.readFailed", { err: this.error }), t)
       : !this.rows.length ? notice(this.t("console.empty"), t)
       : div().flex_1().min_h(0).w_full().font_family(settings().font_family ?? "JetBrains Mono").text_size(12)

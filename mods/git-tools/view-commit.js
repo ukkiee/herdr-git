@@ -31,7 +31,7 @@ import { readGitDir, stateChanged } from "./git-log.js";
 import { readOperation } from "./git-operation.js";
 import { readLastCommit } from "./git-show.js";
 import { buildRows, checkState, toggleIncluded, keepIncluded, folderKeys, parentIndex } from "./tree.js";
-import { tip, location, watchSettled, uiGlyph, ICON, fileGlyph, folderGlyph, darkLook, panelFrame, toolbar, spacer, iconButton, checkbox, row, notice, notRepository, errorStrip, noteBar, WindowedList, logPanelShown, toggleLogPanel, gitButtonPlaced, openMenu, openDialog, takeWrite, releaseWrite, writeBlock, writeName, readBlocked, sentence, copyId, progressBar, activeSpaceId } from "./ui.js";
+import { tip, location, watchSettled, uiGlyph, ICON, fileGlyph, folderGlyph, darkLook, panelFrame, toolbar, spacer, iconButton, checkbox, row, notice, skeleton, skeletonSize, notRepository, errorStrip, noteBar, WindowedList, logPanelShown, toggleLogPanel, gitButtonPlaced, openMenu, openDialog, takeWrite, releaseWrite, writeBlock, writeName, readBlocked, sentence, copyId, progressBar, activeSpaceId } from "./ui.js";
 import { sameRepo } from "./lock.js";
 import CommitForm from "./commit-form.js";
 import { openRollback, serveRollback } from "./view-rollback.js";
@@ -59,6 +59,14 @@ const GROUPED_KEY = "commit.grouped";
 const COPY_KEY = "commit.copy";
 
 const stop = (_e, cx) => cx.stop_propagation();
+
+// The list's rows while the first read runs (ui.js skeleton), as renderRow lays them out:
+// a group (arrow, checkbox, name, count), its folders (and their icon) and their files.
+const SKELETON = {
+  indent: [8, 16], depth: [0, 1, 2, 2, 1, 2, 2, 2],
+  lead: ["slot", "check", "file"], cols: [{ name: true }, { fit: 40 }],
+  at: { 0: { lead: ["slot", "check"] }, 2: { cols: [{ name: true }] } },
+};
 
 // A commit, 14px: a ring on a line. Drawn here because the mod has no commit icon.
 function commitGlyph(t) {
@@ -689,8 +697,9 @@ export default class CommitView {
     if (this.stashTab.showing()) return this.stashTab.render(cx, t);
     this.dark = darkLook();
     const note = this.note && sameRepo(this.note.repo, this.repo) ? this.note : null;
+    const loading = !this.read && !this.notRepo;
     const body = this.notRepo ? notice(notRepository(this.folder, this.t), t)
-      : !this.read ? notice(this.t("ui.loading"), t, { busy: true })
+      : loading ? skeleton(t, SKELETON, this.listSize ??= skeletonSize("commit-changes-wait"))
       : !this.rows.length ? notice(this.repo ? this.t("commit.noChanges") : "", t)
       : this.list.render(this.rows.length, (i) => this.renderRow(i, t), t);
     const redraw = (fn) => (_e, cx) => { fn(cx); cx.notify(); };
@@ -723,6 +732,11 @@ export default class CommitView {
         })
         .child(body))
       .when(Boolean(this.repo), (el) => el.child(this.form.render(cx)))
+      // The form stands from the start, faded and taking no presses until the first read
+      // has found the repository it would commit to.
+      .when(!this.repo && loading, (el) => el.child(div().relative().w_full().flex_none()
+        .child(this.form.render(cx, { waiting: true }).opacity(0.5))
+        .child(div().id("commit-form-wait").absolute().inset_0().on_mouse_down("left", stop).on_mouse_down("right", stop))))
       // Any write on this repository (or this panel's elsewhere): its name over a moving bar.
       .when(Boolean(writing), (el) => el.child(progressBar("commit-progress", t, { label: writeName(this, this.repo), title: writing, state: this.progress })))
       .when(Boolean(note), (el) => el.child(noteBar("commit-note", this.t("restore.rolledBack", { n: note?.n ?? 0 }), t, {

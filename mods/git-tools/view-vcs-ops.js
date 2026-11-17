@@ -84,7 +84,9 @@ export const VCS_ACTIONS = {
 
 // Branches…: the VCS widget's popup on the panel's repository. The Log panel's own widget
 // when it follows that repository; otherwise one made for this pick, which reads the
-// branches itself while the popup opens (its picks run in this panel's copy).
+// branches itself while the popup opens (its picks run in this panel's copy). That one
+// starts from the operation the Commit panel has read, until its own read answers, so the
+// popup's in-progress items stand from the start.
 function openBranches(panel, cx, how) {
   const r = repoOf(panel);
   if (!r) return;
@@ -94,6 +96,7 @@ function openBranches(panel, cx, how) {
     w.init(panel, { who: WHO[how.kind] });
     w.refresh(cx);
     w.repo = r;
+    w.op = panel.operation?.() ?? null;
   }
   w.open(null, cx);
 }

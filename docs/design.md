@@ -57,6 +57,30 @@
 - **Progress bar**: 그 저장소에서 git 쓰기가 도는 동안 Commit panel(Stash tab 포함)과 Log panel 아래 띠에
   동작 이름과 좌우로 오가는 막대를 그린다(`ui.js`의 `progressBar`). 얼마나 걸릴지 모르는 fetch·pull이
   많아서 남은 양을 보이지 않는다.
+- **로딩은 데이터 자리만 스켈레톤**: 읽는 동안에도 도구 줄, 검색 칸, 필터 줄, 칸 틀과 머리, 단추,
+  커밋 양식, 팝업의 늘 있는 동작 줄은 진짜로 그리고, 읽어 올 데이터가 들어갈 자리에만 흐린 행을
+  그린다. 그리는 도구는 `ui.js`의 `skeleton` 하나이고, 화면은 자기 진짜 행이 쓰는 수치(행 높이,
+  깊이당 들여쓰기, 체크박스·아이콘 자리, 고정 폭 칸)로 행 모양만 설명한다(`skeleton.js`). 설명이
+  없으면 이름 막대 하나의 기본 모양이다. 다 읽어도 칸이 움직이지 않게 하려는 것이라, 행의 칸을
+  바꾸면 그 화면의 설명도 같이 고친다. 칸이 나뉜 화면(Log panel, Push dialog, 비교·History·Update
+  Info 탭, Restore dialog, Merge Revisions dialog)은 칸 틀과 필터를 먼저 세우고, 로딩·오류·빈 결과를
+  칸마다 그 안에서만 가른다. 목록은 칸 높이를 재어(`on_size_change`) 보이는 행 수에 한 줄을 더한
+  만큼만 그린다. 재기 전 첫 그림은 720px만큼이고, 다시 그리기는 잰 높이가 행 수를 바꿀 때만
+  부른다. 정해진 고정 높이 칸 하나를 채우던 방식은 큰 칸 아래를 비우고 작은 칸에도 요소를 수백 개
+  만들었다. 잰 높이는 화면이 목록마다 하나씩 `skeletonSize(id)`로 만들어 자기 필드에 둔다.
+  `main.js`가 init 전에 화면에 넣는 필드(`bus`, `locks`, `wait`, `t`, `lang`)에는 두지 않는다.
+  `this.wait ??= …`는 이미 있는 시계 함수를 그대로 두어 화면 전체가 그려지지 않는다. 그래서
+  `skeleton`은 `skeletonSize`로 만든 것이 아니면 오류를 내고, `screen-fields.test.mjs`가 그 필드에
+  쓰는 줄과 겹치는 id를 잡는다. 긴 막대는 칸의 안쪽 폭에서 잘려(`max_w_full`) 끝의 24px를 비운다. 크기 감시를 단 요소는 누름 대상이 되므로, 행 수가 정해진 스켈레톤(VCS widget 블록의
+  막대, 양식 칸의 값 막대)은 재지 않는다. 위젯 블록에서 재면 창 끌기를 막는다. 내용 높이로 그리는
+  양식(Pull, Edit Remote)은 진짜 칸을 그리고 값 자리에만 한 줄 막대를 넣어, 다 읽어도 창 높이가
+  그대로다. 막대 색은 테마의 `muted`(글자색)를 22~45% 투명도로 깜빡여, 어두운·밝은 테마 모두에서
+  바탕과 대비가 같은 비율로 남는다. 깜빡임은 목록 전체에 건 Herdr의 `.loop("opacity", …)` 하나라
+  다시 그리기가 없다.
+  읽기 전에 그리는 동작이 저장소 없이 돌 수 있으면 흐리게 두고 누름을 받지 않는다(Commit panel의
+  양식). 그 양식은 툴팁과 오류 띠도 그리지 않는다. 아직 읽지 않은 폴더를 두고 "저장소가 아님",
+  "수정할 커밋이 없음"이라 하거나 지난 저장소의 커밋 오류를 보일 수 있기 때문이다. 써 둔 메시지는
+  남는다. VCS widget 팝업의 동작 줄은 위젯이 자기 저장소로 돌리므로 바로 누를 수 있다.
 - **space 탭**: 비교 탭 (`view-compare-files.js`의 작업 트리·로컬·버전 세 모드,
   `view-compare-branches.js`), 비교 탭이 여는 파일 diff와 읽기 전용 파일 (`compare-diff`,
   `compare-file`), 리비전의 저장소 (`view-revision-tree.js`), 여기까지의 기록 (`view-history-tab.js`),
@@ -77,12 +101,12 @@
 | 묶음 | 파일 | 책임 |
 |---|---|---|
 | 길잡이 | `main.js` | 사본을 만들고 화면에 버스·잠금·언어·시계를 넘긴 뒤 `props.view`로 화면을 고른다(`VIEWS` 표) |
-| 공용 부품 | `ui.js` | 저장소 찾기, 행·버튼·체크박스, 보이는 행만 그리는 `WindowedList`, 창과 메뉴 열기, 툴팁(`tip`), Progress bar, `uiGlyph`·`iconButton`, 쓰기 잠금과 창 요청의 화면 쪽, git-tools 탭의 저장소 기록, 실패 띠의 "콘솔에서 보기" |
+| 공용 부품 | `ui.js` | 저장소 찾기, 행·버튼·체크박스, 보이는 행만 그리는 `WindowedList`, 창과 메뉴 열기, 툴팁(`tip`), Progress bar, 로딩 스켈레톤(`skeleton`), `uiGlyph`·`iconButton`, 쓰기 잠금과 창 요청의 화면 쪽, git-tools 탭의 저장소 기록, 실패 띠의 "콘솔에서 보기" |
 | 화면 쪽 등록과 파일 | `serve-actions.js`, `app-files.js`, `space-tabs.js`, `log-pick.js`, `log-rewrite.js` | 창이 패널에 요청하는 쓰기의 표(`SERVE_ACTIONS`), 앱 홈 `git-tools` 폴더의 기록·설정 파일, 종류마다 하나인 space 탭, Log panel 쪽의 Cherry-Pick·Revert와 히스토리 편집 처리 |
 | 화면 | `view-*.js`, `commit-form.js`, `commit-stash-tab.js`, `log-branches.js`, `log-list.js`, `log-details.js`, `log-filters.js` | 그리기와 사람의 입력 |
 | git | `git.js`, `git-status.js`, `git-commit.js`, `git-rollback.js`, `git-snapshot.js`, `git-diff.js`, `git-push.js`, `git-log.js`, `git-log-filter.js`, `git-branch.js`, `git-show.js`(`readLastCommit` 포함), `files-data.js` | git과 폴더 읽기 명령을 부르고 결과를 해석한다 |
 | git 동작 | `git-operation.js`, `git-conflict.js`, `git-smart.js`, `git-stash.js`, `git-reset.js`, `git-rewrite.js`, `git-changes.js`, `git-remote.js`, `git-refs.js`, `git-compare.js`, `git-revision.js`, `git-worktree.js`, `git-heads.js`, `git-patch.js` | Operation in progress 읽기와 merge·rebase·cherry-pick·revert의 실행·판정, 충돌 파일 쓰기, Smart operation, stash, reset과 하드 전 기록, 히스토리 다시 쓰기, 파일 단위 되돌리기·체리픽, pull·업데이트, 태그·이름 변경·원격, 비교·패치·가져오기, 리비전의 파일과 하위 커밋, 새 워크트리, VCS widget이 보일 브랜치, 로컬 변경의 패치와 패치 적용 |
-| 순수 계산 | `graph.js`, `tree.js`, `bus.js`, `lock.js`, `read-turns.js`, `i18n.js`, `icon-theme.js`, `files-tree.js`, `editor-language.js`, `merge-chunks.js`, `conflicts-model.js`, `merge-revisions-model.js`, `rebase-plan.js`, `log-menus.js`, `log-select.js`, `log-options.js`, `branch-order.js`, `vcs-ops.js`, `git-console.js`, `ui-icons.js`, `pick-notes.js`, `ui-size.js`, `focus-repo.js`, `let-go.js` | 그래프 배치, 경로 트리와 3상태 체크, 버스와 잠금 값, 되풀이하는 읽기의 차례, 언어와 문장, 아이콘 고르기, Files panel의 줄·표시·찾기 순위·키, 미리보기의 구문 색, 병합 덩어리, 두 충돌 창이 보일 것과 켜질 것, 리베이스 계획과 편집 판정, Log panel의 메뉴·툴바 표, 여러 커밋 고르기, 그래프·표시 옵션 값, 브랜치 순서와 즐겨찾기, VCS Operations popup의 항목, 콘솔 기록의 꼴과 자격 증명 가림, UI icon 대응, Cherry-Pick·Revert 결과의 알림, 메뉴 너비·팝업 자리·창이 자리를 채우는지·위젯 블록 폭, 패널이 따를 저장소와 탭 기록, 닫히는 화면이 쥔 데이터 비우기 |
+| 순수 계산 | `graph.js`, `tree.js`, `bus.js`, `lock.js`, `read-turns.js`, `i18n.js`, `icon-theme.js`, `files-tree.js`, `editor-language.js`, `merge-chunks.js`, `conflicts-model.js`, `merge-revisions-model.js`, `rebase-plan.js`, `log-menus.js`, `log-select.js`, `log-options.js`, `branch-order.js`, `vcs-ops.js`, `git-console.js`, `ui-icons.js`, `pick-notes.js`, `ui-size.js`, `focus-repo.js`, `let-go.js`, `skeleton.js` | 그래프 배치, 경로 트리와 3상태 체크, 버스와 잠금 값, 되풀이하는 읽기의 차례, 언어와 문장, 아이콘 고르기, Files panel의 줄·표시·찾기 순위·키, 미리보기의 구문 색, 병합 덩어리, 두 충돌 창이 보일 것과 켜질 것, 리베이스 계획과 편집 판정, Log panel의 메뉴·툴바 표, 여러 커밋 고르기, 그래프·표시 옵션 값, 브랜치 순서와 즐겨찾기, VCS Operations popup의 항목, 콘솔 기록의 꼴과 자격 증명 가림, UI icon 대응, Cherry-Pick·Revert 결과의 알림, 메뉴 너비·팝업 자리·창이 자리를 채우는지·위젯 블록 폭, 패널이 따를 저장소와 탭 기록, 닫히는 화면이 쥔 데이터 비우기, 로딩 스켈레톤의 행과 조각 자리 |
 | 데이터 | `messages-*.js`, `icon-theme-data.js`, `icons/theme/`, `icons/ui/`(그 밖의 `icons/` 파일 포함) | 문구 표, 생성한 아이콘 규칙, 아이콘 파일 |
 
 저장소 루트에는 레이아웃 변환 `layout.mjs`, 설치 `install.sh`, 키 `keys.json`, 아이콘 생성기
@@ -228,7 +252,10 @@ Herdr의 내장 `main` 레이아웃은 구조 변경을 받지 않는다. 그래
 - **위젯 블록은 위젯 너비에 맞춘다.** 위젯이 자기 내용의 너비를 재어, 값이 바뀔 때만
   `layout.resize {id: "git-vcs-widget", px}`로 블록을 그 너비(양쪽 여백 2px씩 포함)로 바꾼다
   (`ui-size.js`의 `widgetBlockWidth`). 위젯은 블록 왼쪽, Changes 버튼 바로 옆에 붙고 Git 버튼과의
-  사이에 빈칸이 없다. 긴 브랜치 이름은 위젯 360px에서 줄인다. 두 블록은 창의 오른쪽 위 모서리라서 탭 바의 `window_drag`를 따른다(둘레를 끌면 창이
+  사이에 빈칸이 없다. 긴 브랜치 이름은 위젯 360px에서 줄인다. 처음 읽기가 답하기 전에는 재지
+  않고(재면 빈 위젯이라 4px로 줄었다가 다시 넓어진다) 레이아웃에 남은 지난 너비를 막대 하나로 채운다. 지난 너비가 4px(지난 폴더가 저장소 아님)이면
+  읽는 동안 막대가 보이지 않는다. 막대를 보이려고 넓혔다가 답에 맞춰 다시 바꾸는 대신 블록 폭을 답이
+  올 때 한 번만 바꾼다. 두 블록은 창의 오른쪽 위 모서리라서 탭 바의 `window_drag`를 따른다(둘레를 끌면 창이
   움직인다). macOS에서만 넣는다. 다른 OS에서는 탭 바의 오른쪽 끝에 창 버튼(최소화, 최대화,
   닫기)이 있어서 블록이 그 바깥에 놓이기 때문이다. 그런 OS에서는 Log panel이 Commit list 툴바
   왼쪽 끝에 같은 위젯을 그린다.
@@ -1006,6 +1033,11 @@ Herdr는 mod를 QuickJS로 돌린다. JIT가 없고, 한 호출이 너무 오래
   그 안에서 `cx.notify()`는 예외를 던지고 `cx.spawn`은 첫 부분을 그 자리에서 돈다. 그래서 읽기
   시작, 저장소 이동 처리, 입력 상자를 다시 만드는 일은 `cx.timer.after`로 미룬다. 파싱, 트리,
   그래프, 라벨 맞추기는 데이터가 올 때 한 번 계산해 둔다.
+- **Log panel의 첫 답은 패널 자신의 타이머로도 그린다.** 다시 불러온 직후, 읽기 작업 안의 `cx.notify()`가
+  창을 다시 그리지 않아 Log panel이 로딩 스켈레톤에 남은 적이 있다([플랫폼](herdr-mod-platform.md)). `init`에서
+  건 타이머 안의 notify는 그렸다. 그래서 스켈레톤을 끝내는 읽기(저장소 찾기, Branch tree, Commit list와 그
+  미리보기)는 답이 왔다고 표시만 하고(`view-log.js` `redraw`), `init`에서 건 100 ms 타이머(`drawLanded`)가 그
+  답을 그린다. 이 타이머는 첫 읽기가 다 그려지거나 `FIRST_LOOK`이 지나면 멈춘다.
 - **`render` 한 번의 시간 한도.** Herdr는 50 ms 남짓 걸린 `render`를 끊고 마지막으로 그린 화면 위에
   "This view could not be re-rendered … interrupted" 띠를 보인다([플랫폼](herdr-mod-platform.md)).
   QuickJS에서는 작은 객체 3만 개를 만드는 데만 그만큼 걸린다. 그래서 `render`가 하는 일은 저장소
@@ -1109,7 +1141,7 @@ Herdr는 mod를 QuickJS로 돌린다. JIT가 없고, 한 호출이 너무 오래
   바꿀 때마다 사람이 다시 본다. 확인 절차는 RECIPE의 "Done when"에 있다.
 
 **전체 오프라인 검사:** `node tools/check.mjs`가 한 번에 돌린다. 루트의 `node layout.test.mjs`,
-`mods/git-tools`의 `*.test.mjs` 56개 각각, `node tools/gen-icon-theme.test.mjs`가 모두 `ok`를 찍고,
+`mods/git-tools`의 `*.test.mjs` 57개 각각, `node tools/gen-icon-theme.test.mjs`가 모두 `ok`를 찍고,
 `herdr-app check mods/git-tools`가 통과한다. 테스트는 node 내장 모듈(`node:assert/strict` 등)만 쓴다.
 
 **느린 엔진의 예산:** `icon-theme.test.mjs`가 JIT를 끈 node로 규칙을 꽂는 시간을 재서, 규칙을
@@ -1132,6 +1164,9 @@ Herdr는 mod를 QuickJS로 돌린다. JIT가 없고, 한 호출이 너무 오래
   위젯을 다시 누르면 그 누름이 팝업을 닫으며 새 팝업을 여는데, 이 새 팝업의 첫 읽기도 같은 틈에 걸려
   답과 시계가 오지 않았다. 팝업도 6초 뒤 아직 한 번도 읽지 못했으면 한 번 다시 읽으므로, 그때는 6초쯤
   "로드 중"이다.
+- 다시 불러온 직후 읽기 작업 안의 `cx.notify()`가 그리지 않는 일은 Log panel에서만 보았고 Log panel만
+  자기 타이머로 첫 답을 그린다(5절). Commit panel, VCS widget, 탭과 팝업은 아직 작업 안에서만 notify하므로,
+  같은 일이 나면 다른 일로 창이 다시 그려질 때까지 스켈레톤에 남을 수 있다.
 
 - 다시 불러오기와 닫힌 화면의 껍데기는 힙을 돌려주지 않는다(5절). 다시 불러올 때는 옛 사본의 `close`가
   불리지 않아 비울 기회가 없다. 메뉴나 창의 답을 기다리던 사본이 닫히면 그 기다림이 붙잡은 것도 남는다

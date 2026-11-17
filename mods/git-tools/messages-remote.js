@@ -36,7 +36,6 @@ export const en = {
   "remote.optNoCommit": "Merge without committing the result",
   "remote.optNoVerify": "Bypass pre-merge and commit message hooks",
   "remote.noRemotes": "This repository has no remote branches. Fetch first, or add a remote.",
-  "remote.reading": "Reading the remotes…",
 
   // Update Project dialog
   "remote.updateTitle": "Update Project",
@@ -82,7 +81,6 @@ export const ko = {
   "remote.optNoCommit": "병합하고 결과는 커밋 안 함",
   "remote.optNoVerify": "사전 병합 및 커밋 메시지 후크 우회",
   "remote.noRemotes": "이 저장소에는 원격 브랜치가 없습니다. 먼저 페치하거나 원격을 추가하세요.",
-  "remote.reading": "원격을 읽는 중…",
 
   "remote.updateTitle": "프로젝트 업데이트",
   "remote.methodMerge": "후속 변경 내용을 현재 브랜치로 병합",

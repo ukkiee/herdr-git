@@ -27,7 +27,7 @@ import { makeGit } from "./git.js";
 import { listSnapshots, restore, wordRestore } from "./git-snapshot.js";
 import { formatTime } from "./i18n.js";
 import { buildRows, checkState, toggleIncluded } from "./tree.js";
-import { openDialog, dialogFrame, button, checkbox, row, notice, errorStrip, scrollText, uiGlyph, ICON, fileGlyph, folderGlyph, darkLook, close, scriptedRepo, sentence, WindowedList, askOwner, serveRequest, writeBlock } from "./ui.js";
+import { openDialog, dialogFrame, button, checkbox, row, notice, skeleton, skeletonSize, errorStrip, scrollText, uiGlyph, ICON, fileGlyph, folderGlyph, darkLook, close, scriptedRepo, sentence, WindowedList, askOwner, serveRequest, writeBlock } from "./ui.js";
 import { openDiff } from "./view-diff.js";
 
 // openRestore({ root, on, owner, select, chosen, lang })
@@ -63,6 +63,10 @@ export function serveRestore(panel, e, cx) {
 }
 
 const stop = (_e, cx) => cx.stop_propagation();
+// The two columns' rows while the snapshots are read (ui.js skeleton), as snapshotRow and
+// fileRow lay them out: icon, action, time, file count; the arrow's place, check, icon, name.
+const SKELETON_SNAPSHOTS = { indent: [8, 0], lead: ["icon"], cols: [{ fit: 56 }, { grow: true }, { fit: 44 }] };
+const SKELETON_FILES = { indent: [8, 16], depth: [0, 1, 1, 0, 1, 1, 1], lead: ["slot", "check", "file"] };
 
 // A restore that went through but left some paths, or their staging, as they were: shown
 // as its result line (each path and why), not as an error. The *Failed ones end with
@@ -96,6 +100,7 @@ export default class RestoreView {
     this.error = null; // why the last Restore failed
     this.snapList = new WindowedList("restore-snapshots");
     this.fileList = new WindowedList("restore-files");
+    this.waits = { snapshots: skeletonSize("restore-snapshots-wait"), files: skeletonSize("restore-files-wait") };
     this.handle = cx.focus_handle();
     this.handle.focus();
     this.load(cx);
@@ -287,20 +292,25 @@ export default class RestoreView {
 
   body(t) {
     if (!this.root) return notice(this.t("ui.noRepository"), t);
-    if (this.listError && !this.snapshots) return div().id("restore-list-error").p(12).text_color(t.ansi1).child(this.listError);
-    if (!this.snapshots) return notice(this.t("ui.loading"), t, { busy: true });
-    if (!this.snapshots.length) return notice(this.t("restore.none"), t);
-    const all = this.allPaths();
+    // Both columns stand from the start; the left one waits for the snapshots, the right
+    // one for a picked snapshot's files.
+    const snapshots = this.snapshots, all = this.allPaths();
     const left = v_flex().w(250).flex_none().min_h(0)
-      .child(div().flex_1().min_h(0).child(this.snapList.render(this.snapshots.length, (i) => this.snapshotRow(i, t), t)));
+      .child(div().flex_1().min_h(0).child(
+        this.listError && !snapshots ? div().id("restore-list-error").p(12).text_color(t.ansi1).child(this.listError)
+          : !snapshots ? skeleton(t, SKELETON_SNAPSHOTS, this.waits.snapshots)
+          : !snapshots.length ? notice(this.t("restore.none"), t)
+          : this.snapList.render(snapshots.length, (i) => this.snapshotRow(i, t), t)));
+    const reading = !snapshots && !this.listError;
     const right = v_flex().flex_1().min_w(0).min_h(0).border_l(1).border_color(t.border)
       .child(h_flex().id("restore-all").h(28).flex_none().px(10).gap(8).items_center()
         .child(checkbox("restore-all-check", checkState(all, this.picked), t, {
           disabled: this.running || !all.length || Boolean(this.current()?.threeWay), onClick: (_e, cx) => { this.toggleCheck(all); cx.notify(); },
         }))
         .child(div().flex_1().min_w(0).truncate().text_size(12).text_color(t.dim)
-          .child(this.chosen().length ? this.t("restore.files", { n: all.length }) : this.t("restore.noFiles"))))
-      .child(div().flex_1().min_h(0).child(this.fileList.render(this.fileRows.length, (i) => this.fileRow(i, t), t)));
+          .child(reading ? "" : this.chosen().length ? this.t("restore.files", { n: all.length }) : this.t("restore.noFiles"))))
+      .child(div().flex_1().min_h(0).child(reading ? skeleton(t, SKELETON_FILES, this.waits.files)
+        : this.fileList.render(this.fileRows.length, (i) => this.fileRow(i, t), t)));
     const result = this.result;
     return v_flex().size_full().min_h(0)
       .child(h_flex().flex_1().min_h(0).items_start().child(left.h_full()).child(right.h_full()))

@@ -38,7 +38,7 @@ import { checkoutRefFrom } from "./view-checkout-ref.js";
 import { compareWithCurrent, diffWithWorkingTree } from "./view-compare-branches.js";
 import { menuItems, branchContext } from "./log-menus.js";
 import { menuWidth, sideOf } from "./ui-size.js";
-import { MOD, openDialog, answerMenu, dialogFrame, button, uiGlyph, iconButton, darkLook, notice, writeBlock, menuMetrics, WindowedList, takeEscape } from "./ui.js";
+import { MOD, openDialog, answerMenu, dialogFrame, button, uiGlyph, iconButton, darkLook, notice, skeleton, skeletonSize, writeBlock, menuMetrics, WindowedList, takeEscape } from "./ui.js";
 
 export const POPUP_ACTIONS = {
   "vcs.commit": (w) => w.openCommit(),
@@ -110,21 +110,33 @@ export function branchMenuRows(b, { head, writing = null, tr }) {
 // and below), the search row and the gap under it.
 const WIDTH = 380, HEIGHT = 520, ROW_H = 26, PAD = 5, SEARCH_H = 32, GAP = 4;
 const LIST_H = HEIGHT - 2 * PAD - SEARCH_H - GAP;
+// The branch groups while they are read (ui.js skeleton), as rowFor lays them out: a group
+// head (the arrow's place, its name), its branches (26px in: icon, name, ›), a remote's
+// branches further in (44px).
+const SKELETON = {
+  rowHeight: ROW_H, indent: [8, 18], padRight: 4, depth: [0, 1, 1, 0, 1, 1, 1, 0, 1, 2, 2, 0],
+  lead: ["icon"], cols: [{ grow: true }], trail: ["mark"],
+  at: { 0: { lead: ["slot"], cols: [{ fit: 40 }], trail: [] } },
+};
 const FIRST_LOOK = 6000; // ms after the popup opens: a first read still unanswered then is made again once
 const newKey = (what) => `${what}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
 export const POPUP_WIDTH = WIDTH;
 
-// openVcsPopup(bus, { root, on, lang, at, side }) → resolves in the opener's copy with the
+// openVcsPopup(bus, { root, on, lang, at, side, op }) → resolves in the opener's copy with the
 // pick ({ id, run? }, or { id, target } from a branch's menu), or null when the popup
 // closes without one. bus: the opener's (`this.bus`); at: where the popup's top left
 // goes, window coordinates; side: where a branch's menu opens, "right" or "left" (the
-// popup sits at the window's right edge).
-export function openVcsPopup(bus, { root, on = null, lang, at, side } = {}) {
+// popup sits at the window's right edge). op: the operation in progress as the opener
+// read it (readOperation's), or null: its rows stand from the start, so the rows under
+// them don't move down once the popup's own read answers.
+export function openVcsPopup(bus, { root, on = null, lang, at, side, op = null } = {}) {
   const key = newKey("vcs-popup");
   const answer = bus.wait(key);
   const spot = at && Number.isFinite(at.x) && Number.isFinite(at.y) ? { at: { x: at.x, y: at.y } } : {};
-  openOverlay({ mod: MOD, kind: "popup", width: WIDTH, height: HEIGHT, ...spot, props: { view: "vcs-popup", key, root, on, lang, side: sideOf(side) } });
+  // Only what popupRows reads of it goes in the props.
+  const ongoing = op?.kind ? { kind: op.kind, canSkip: Boolean(op.canSkip), conflicts: op.conflicts ?? [] } : null;
+  openOverlay({ mod: MOD, kind: "popup", width: WIDTH, height: HEIGHT, ...spot, props: { view: "vcs-popup", key, root, on, lang, side: sideOf(side), op: ongoing } });
   return answer;
 }
 
@@ -154,7 +166,10 @@ export default class VcsPopup {
     this.repo = p.root ? { git: makeGit(exec, p.on ?? null, { wait: this.wait }), root: p.root, on: p.on ?? null } : null;
     this.heads = null;
     this.prefs = { favorite: [], unfavorite: [] };
-    this.op = null;
+    // The opener's operation until this popup's read answers, then the read's. Its rows
+    // may be picked at once: the pick runs on the widget's own operation (POPUP_ACTIONS),
+    // as the widget's ≫ and ■ do, and does nothing once that operation is over.
+    this.op = p.op?.kind ? p.op : null;
     this.read = false;
     this.err = null;
     this.folded = new Set(["remote", "tags"]);
@@ -380,10 +395,17 @@ export default class VcsPopup {
       this.relabeling = true;
       cx.timer.after(1, (cx) => { this.relabeling = false; this.makeInput(this.input.value()); this.input.focus(); cx.notify(); });
     }
-    const rows = this.read ? this.rows() : [], n = rows.length;
+    // Before the answer, popupRows has no branches to give: the actions that are always
+    // there and the opener's in-progress items, which the widget runs with its own
+    // repository (POPUP_ACTIONS), so they can be picked at once. The branch groups wait as
+    // a skeleton.
+    const rows = this.rows(), n = rows.length;
     // A reload or a fold moved the rows: a menu open on a row that is now another closes.
     if (this.sub && (rows[this.sub.row]?.kind !== "branch" || rows[this.sub.row].name !== this.sub.rowName)) this.sub = null;
-    const body = !this.read ? notice(this.t("ui.loading"), t, { busy: true })
+    const body = !this.read ? v_flex().size_full().min_h(0).overflow_hidden()
+      .children(rows.map((r, i) => this.rowFor(r, i, t)))
+      .when(n > 0, (el) => el.child(this.rowFor({ kind: "rule" }, n, t)))
+      .child(div().flex_1().min_h(0).w_full().child(skeleton(t, SKELETON, this.listSize ??= skeletonSize("vcs-popup-wait"))))
       : this.err ? notice(this.err, t)
         : !n ? notice(this.t("vcs.nothing"), t)
           : this.list.render(n, (i) => this.rowFor(rows[i], i, t), t);

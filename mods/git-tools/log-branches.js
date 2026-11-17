@@ -36,10 +36,21 @@ import { branchContext } from "./log-menus.js";
 import { folderKeys } from "./tree.js";
 import { openBranchNew, openBranchDelete } from "./view-branch-new.js";
 import { openDeletedBranches } from "./view-deleted-branches.js";
-import { tip, uiGlyph, darkLook, ICON, row, iconButton, notice, broadcast, openMenu, sentence, WindowedList } from "./ui.js";
+import { tip, uiGlyph, darkLook, ICON, row, iconButton, notice, skeleton, skeletonSize, broadcast, openMenu, sentence, WindowedList } from "./ui.js";
 
 const GROUPS = [["local", "log.local"], ["remote", "log.remote"]];
-const INDENT = 12;
+// One level is the fold arrow's place and the gap after it, so a child's arrow sits under
+// its parent's icon and its icon under the parent's name. Every row keeps the arrow's
+// place (branches and tags leave it empty), so siblings' icons line up.
+const GAP = 5;
+const INDENT = ICON + GAP;
+// The tree's rows while the branches are read (ui.js skeleton): HEAD and the groups at
+// depth 0 (the arrow's place and a name), branches and folders below (the arrow's place,
+// the icon, a name).
+const SKELETON = {
+  indent: [6, INDENT], gap: GAP, padRight: 10, depth: [0, 0, 1, 1, 2, 2, 2, 1, 2],
+  lead: ["slot", "icon"], at: { 0: { lead: ["slot"] } },
+};
 const FILTER_COMMAND = "branches-filter:";
 const SETTINGS_KEY = "branchTree";
 // The vertical toolbar's width: all that shows of the column while it is hidden.
@@ -135,7 +146,7 @@ export default class LogBranches {
       }
       if (turn !== this.turn) return;
       this.read = true;
-      if (!r.ok) { this.failed = r.err; host.fail(r.err, cx); cx.notify(); return; }
+      if (!r.ok) { this.failed = r.err; host.fail(r.err, cx); host.redraw(cx); return; }
       this.mine = my?.ok ? { email: my.email, refs: new Set(my.mine) } : null;
       if (my && !my.ok) host.fail(my.err, cx);
       // The read works again: its own old error goes, anyone else's stays.
@@ -145,7 +156,7 @@ export default class LogBranches {
       this.data = r;
       this.build();
       this.follow(before, cx);
-      cx.notify();
+      host.redraw(cx);
     });
   }
 
@@ -529,7 +540,7 @@ export default class LogBranches {
 
   treeRow(i, t, limited) {
     const m = this.rows.row(i), cursor = this.cursor === m.key && limited !== m.key;
-    let el = row(`log-branch-${i}`, t, { selected: limited === m.key }).pl(6 + m.depth * INDENT).pr(10).gap(5)
+    let el = row(`log-branch-${i}`, t, { selected: limited === m.key }).pl(6 + m.depth * INDENT).pr(10).gap(GAP)
       .when(cursor, (el) => el.bg(t.hover))
       .on_click((_e, cx) => { this.handle.focus(); this.activate(m, cx); })
       .on_mouse_down("right", (_e, cx) => { this.handle.focus(); this.cursor = m.key; this.menu(m, cx); cx.notify(); });
@@ -550,7 +561,7 @@ export default class LogBranches {
     const dark = darkLook(t.background);
     if (m.kind === "tag") {
       if (this.menuRow !== m.key) el = tip(el, m.branch.name);
-      return el.child(uiGlyph("tag", { dark })).child(div().flex_1().min_w(0).truncate().child(m.label));
+      return el.child(div().size(ICON).flex_none()).child(uiGlyph("tag", { dark })).child(div().flex_1().min_w(0).truncate().child(m.label));
     }
     const b = m.branch, here = m.scope === "local" && b.current;
     const favorite = isFavorite(fullRef(m.scope, b.name), this.prefs);
@@ -571,6 +582,7 @@ export default class LogBranches {
     // No tooltip while this row's menu is open.
     if (this.menuRow !== m.key) el = tip(el, m.scope === "local" && trackedBranch(b) ? `${b.name} → ${trackedBranch(b)}` : b.name);
     return el
+      .child(div().size(ICON).flex_none())
       .child(star)
       .child(div().flex_1().min_w(0).truncate().when(here, (el) => el.font_semibold()).child(m.label))
       // Commits not pushed yet (ahead) and not pulled yet (behind), against its upstream.
@@ -611,7 +623,7 @@ export default class LogBranches {
     if (this.hidden()) return h_flex().id("log-branch-tree").size_full().min_h(0).items_start().child(this.tools(t));
     const rows = this.rows, n = rows.length, limited = this.limitedKey();
     const noEmail = this.settings.mine && this.mine && !this.mine.email;
-    const body = !this.read ? notice(tr("ui.loading"), t, { busy: true })
+    const body = !this.read ? skeleton(t, SKELETON, this.listSize ??= skeletonSize("branch-tree-wait"))
       : noEmail ? notice(tr("branch-tree.noEmail"), t)
         : !n ? notice(this.words() ? tr("log.noBranchesMatch") : "", t)
           : this.list.render(n, (i) => this.treeRow(i, t, limited), t);

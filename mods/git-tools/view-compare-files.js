@@ -22,7 +22,7 @@
 import { div } from "gpui-kit";
 import { h_flex, v_flex, Editor, EditorState } from "gpui-base";
 import { exec, theme, settings, readTextFile } from "herdr";
-import { tip, ROW, ICON, uiGlyph, fileGlyph, folderGlyph, darkLook, row, toolbar,spacer, iconButton, notice, errorStrip, openMenu, openTab, broadcast, takeWrite, releaseWrite, writeBlock, copyId, sentence, WindowedList, panelFrame } from "./ui.js";
+import { tip, ROW, ICON, uiGlyph, fileGlyph, folderGlyph, darkLook, row, toolbar,spacer, iconButton, notice, skeleton, skeletonSize, errorStrip, openMenu, openTab, broadcast, takeWrite, releaseWrite, writeBlock, copyId, sentence, WindowedList, panelFrame } from "./ui.js";
 import { makeGit } from "./git.js";
 import { buildRows } from "./tree.js";
 import DiffView from "./view-diff.js";
@@ -351,7 +351,7 @@ export default class CompareFiles {
         .child(div().id("compare-swap").flex_none().text_color(t.accent).cursor_pointer().hover((s) => s.underline())
           .on_click((_e, cx) => this.swap(cx)).child(this.t("compare.swapBranches")))
       : null;
-    const body = !this.files ? notice(this.t("ui.loading"), t, { busy: true })
+    const body = !this.files ? skeleton(t, undefined, this.listSize ??= skeletonSize("compare-files-wait"))
       : !this.rows.length ? notice(this.t("compare.noDifferences"), t)
       : this.list.render(this.rows.length, (i) => this.fileRow(i, t, dark), t);
     return panelFrame("compare-files-tab", t)
@@ -450,7 +450,7 @@ export class FileView {
   render() {
     const t = theme();
     const parts = this.path.split("/"), name = parts.pop(), folder = parts.join("/");
-    const body = !this.loaded ? notice(this.t("ui.loading"), t, { busy: true })
+    const body = !this.loaded ? div().flex_1().min_h(0).w_full().child(skeleton(t, undefined, this.fileSize ??= skeletonSize("compare-file-wait")))
       : !this.code ? notice(this.t(this.note ?? "compare.unreadable"), t)
       : Editor.new(this.code).flex_1().min_h(0);
     return v_flex().id("compare-file-tab").size_full().min_w(0).min_h(0).bg(t.background).text_color(t.foreground).text_size(13)

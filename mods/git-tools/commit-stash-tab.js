@@ -13,7 +13,7 @@
 // conflict opens the Conflicts dialog and the stash stays.
 //
 // host: the Commit panel screen (repo, bus, lang, t, setBusy, writeFailed, writeBlock,
-// refresh, writeError).
+// refresh, writeError, settled).
 
 import { div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
@@ -160,6 +160,10 @@ export default class StashTab {
   unstash(pop, cx, s = this.current()) {
     const repo = this.repo;
     if (!s || !repo || this.blocked()) return;
+    // Right after the focused pane moved, the tab on screen is the repository left: until
+    // the panel takes the move up (host.settled()), and after, until this tab reads the new
+    // one. A press then writes nothing; the panel reads where it is now.
+    if (!this.host.settled() || !sameRepo(repo, this.host.repo)) { this.host.refresh(cx); cx.notify(); return; }
     if (!this.host.setBusy({ key: pop ? "stash.popping" : "stash.applying" }, cx, repo)) return;
     cx.spawn(async (cx) => {
       let r;

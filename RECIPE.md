@@ -804,6 +804,10 @@ machine); back on a terminal, they follow its folder again.
 - **Moving to another repository** (the focused pane's folder changes) shows that
   repository at once, also while this panel's own write still runs on the one before:
   the write goes on there, and the write error strip of the repository before goes away.
+  A press that writes at once (Commit, Commit and Push…, cmd-enter, Commit and Rebase…,
+  Skip, Abort before its question, the Stash tab's Apply and Pop) in the moment after a move, while the panel still
+  draws the repository before, writes nothing: the panel reads where it is now and draws
+  that, and the next press writes there.
 - **Coming back to a folder** shown before: its files, checks, folding and place in the
   list show at once as they were left, without the skeleton, and the read that follows
   puts them right (files gone since then leave the checks). A commit that succeeds
@@ -3200,7 +3204,7 @@ Each line is one check: do what it says, see what follows.
 **Offline**
 
 1. Run `node layout.test.mjs` at the root, `node <file>` for every `*.test.mjs` in
-   `mods/git-tools` (60 files) and `node tools/gen-icon-theme.test.mjs`: each prints
+   `mods/git-tools` (61 files) and `node tools/gen-icon-theme.test.mjs`: each prints
    `ok` (the last one after `skip: …` unless `ICON_THEME_SOURCE` is set).
 2. Run `herdr-app check mods/git-tools`: it passes.
 

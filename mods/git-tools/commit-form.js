@@ -5,6 +5,8 @@
 // every render. `host` is the panel:
 //   host.t, host.lang        the panel's words and language (main.js)
 //   host.repo                { git, root, on, folder }, or null outside a repository
+//   host.settled()           the panel has taken up where the focused pane is: until then
+//                            host.repo is the repository left (behind)
 //   host.hasHead             false while the repository has no commit (nothing to amend)
 //   host.detached            HEAD is on no branch: the form says so above the message
 //   host.included()          [{ path, status }]: the files checked for the next commit
@@ -128,6 +130,20 @@ export default class CommitForm {
     this.text.set_value(this.drafts.get(where) ?? "");
     // The message put in for the last repository's operation isn't this one's.
     this.filledKey = ""; this.filled = null;
+  }
+
+  // behind(cx): a press that writes at once lands on what was last drawn, which may not be
+  // host.repo for a moment after the focused pane moves: before the panel takes the move up
+  // (host.settled(), still the repository left) and right after, before the next render
+  // (host.repo is the new one, the buttons the old one's; this.where, set by render's
+  // follow(), is still the old one). Then nothing is written: the panel reads where it is
+  // now and draws again, and true is returned. Outside a repository it changes nothing.
+  behind(cx) {
+    const host = this.host, repo = host.repo;
+    if (!repo || (host.settled() && place(repo) === this.where)) return false;
+    host.refresh(cx);
+    cx.notify();
+    return true;
   }
 
   // The operation in progress on the shown repository, or null.
@@ -271,6 +287,7 @@ export default class CommitForm {
   // Commit and Rebase…: the checked files go into the target commit (git-rewrite.js
   // fixupInto). The target stays for another try when it fails before anything ran.
   rebase(cx) {
+    if (this.behind(cx)) return;
     const host = this.host, repo = host.repo, target = this.aimed();
     const files = host.included();
     if (!target || this.targetBlocked(files.length)) return;
@@ -339,8 +356,9 @@ export default class CommitForm {
 
   // Commit, and for Commit and Push… open the Push dialog once the commit is made.
   run(push, cx) {
+    // Past this the message box, Amend and Included are host.repo's, as drawn.
+    if (this.behind(cx)) return;
     const host = this.host, repo = host.repo;
-    this.follow();
     // With a target, Cmd+Enter is Commit and Rebase….
     if (this.aimed()) { if (!push) this.rebase(cx); return; }
     const files = host.included();
@@ -413,7 +431,7 @@ export default class CommitForm {
   // VCS widget's ■ does (view-vcs-popup.js askAbort): it throws away the resolution work.
   operate(type, cx) {
     const host = this.host, repo = host.repo, op = this.inProgress();
-    if (!repo || !op || host.writeBlock()) return;
+    if (!repo || !op || host.writeBlock() || this.behind(cx)) return;
     cx.spawn(async (cx) => {
       if (type === "abort" && !(await askAbort(host.bus, op.kind, host.lang))) return;
       if (!sameRepo(repo, host.repo) || !host.setBusy({ key: type === "abort" ? "ops.aborting" : "ops.skipping" }, cx)) return;

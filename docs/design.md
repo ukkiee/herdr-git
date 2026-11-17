@@ -225,6 +225,14 @@ git 모듈과 순수 계산 모듈은 `herdr`를 import하지 않는다. 그래�
   - **꺼낸 그 자리에서 다시 그리기를 요청한다**(`cx.notify()`, Log panel은 `redraw`). 상태만 바꾸고
     읽기가 끝날 때 그리면, 창은 그때까지 떠난 폴더의 그림을 둔다. 폴더를 옮기는 `refresh`는 `render`가 건
     타이머에서 돌므로 그 안에서 요청해도 된다.
+  - **옮긴 직후 누른 쓰기는 쓰지 않고 다시 읽는다**(Commit panel). 그래도 옮긴 뒤 한 그림 동안은
+    떠난 폴더의 양식이 화면에 있다: `render`가 옮김을 알아채 타이머로 넘기기 전에는 `host.repo`가 아직
+    떠난 저장소이고, 넘긴 뒤 다음 그림 전에는 `host.repo`는 새 저장소인데 단추는 옛 그림이다. 그래서
+    한 번 눌러 바로 쓰는 입구(`commit-form.js` `run`·`rebase`·`operate`(Skip, 그리고 묻기 전의 Abort), `commit-stash-tab.js`
+    `unstash`)는 패널이 위치를 따라왔는지(`settled()`)와, 양식이 마지막으로 그려진 저장소(`render`의
+    `follow()`가 맞추는 `where`. Stash 탭은 자기 `repo`)가 `host.repo`인지 보고, 아니면 쓰지 않고
+    `refresh`만 한다. 그 밖에 대화상자를 거치는 쓰기(Rollback, Restore, Stash…, Push)는 대화상자가 저장소를 보이고 그 root로 쓰므로 그대로다.
+    `commit-press.test.mjs`가 소스에서 그 확인이 잠금(`setBusy`)과 git 쓰기보다 먼저인지 본다.
   - **상한**: 지금 보이는 폴더 말고 최근에 떠난 폴더를 Log panel은 4개, 나머지는 8개 둔다. 큰 저장소
     폴더 하나의 Log 기억이 약 2.1 MB라(행까지 두면 4.1 MB) 모든 mod가 함께 쓰는 힙(256 MB)을
     아낀다. 지금 보이는 폴더는 Map이 아니라 화면이 쥔다. 다시 불러오기 뒤 옛 사본의 기억도 함께 남으므로

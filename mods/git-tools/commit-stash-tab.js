@@ -19,6 +19,7 @@ import { div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { listStashes, stashFiles } from "./git-stash.js";
 import { readTurns } from "./read-turns.js";
+import { spawnOrUndo } from "./later.js";
 import { buildRows, folderKeys } from "./tree.js";
 import { formatDateTime } from "./i18n.js";
 import { tip, uiGlyph, ICON, fileGlyph, folderGlyph, darkLook, panelFrame, toolbar, spacer, iconButton, button, row, notice, skeleton, skeletonSize, errorStrip, WindowedList, openMenu, broadcast, sentence, progressBar, writeName } from "./ui.js";
@@ -165,7 +166,7 @@ export default class StashTab {
     // one. A press then writes nothing; the panel reads where it is now.
     if (!this.host.settled() || !sameRepo(repo, this.host.repo)) { this.host.refresh(cx); cx.notify(); return; }
     if (!this.host.setBusy({ key: pop ? "stash.popping" : "stash.applying" }, cx, repo)) return;
-    cx.spawn(async (cx) => {
+    spawnOrUndo(cx, () => this.host.setBusy(null, cx), async (cx) => {
       let r;
       try { r = await runUnstash(repo.git, repo.root, { hash: s.hash, ref: s.ref, pop, on: repo.on }, this.host); }
       catch (error) { r = { ok: false, err: String(error?.message ?? error) }; }

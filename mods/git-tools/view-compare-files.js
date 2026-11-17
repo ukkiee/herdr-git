@@ -31,6 +31,7 @@ import { openSpaceTab } from "./space-tabs.js";
 import { workingTreeFiles, versionFiles, swapState, getFromRevision, fileParent, fileParents, parentDiffs, readFileDiff, readRevisionFile } from "./git-compare.js";
 import { editorLanguage } from "./editor-language.js";
 import { en, ko } from "./messages-compare.js";
+import { spawnOrUndo } from "./later.js";
 
 const SHORT = 7;
 const short = (hash) => String(hash ?? "").slice(0, SHORT);
@@ -160,7 +161,7 @@ export function repositoryVersion(host, m) {
 export function getFromCommit(host, m, cx) {
   if (!usable(host, m) || !host.setBusy(GETTING, cx)) return;
   const repo = host.repo, rev = commitOf(host, m);
-  cx.spawn(async (cx) => {
+  spawnOrUndo(cx, () => host.setBusy(null, cx), async (cx) => {
     let r;
     try { r = await getFromRevision(repo.git, repo.root, { rev, paths: [m.path], copy: copyId(COPY_KEY) }); }
     catch (error) { r = { ok: false, err: String(error?.message ?? error) }; }
@@ -391,7 +392,7 @@ export class FileDiff extends DiffView {
     if (this.loading) { this.again = true; return; }
     if (!this.root || !this.path || !this.from) { this.result = { ok: false }; this.error = { err: "This tab has no file to show.", msg: { key: "dialogs.diff.noFileTab", args: {} } }; return; }
     this.loading = true; this.again = false;
-    cx.spawn(async (cx) => {
+    spawnOrUndo(cx, () => { this.loading = false; }, async (cx) => {
       try {
         const r = await readFileDiff(makeGit(exec, this.on, { wait: this.wait }), this.root, { from: this.from, to: this.commit, path: this.path, oldPath: this.oldPath, reverse: this.reverse });
         if (r.ok || !this.result?.ok) this.apply(r);

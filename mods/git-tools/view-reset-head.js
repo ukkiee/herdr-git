@@ -17,6 +17,7 @@ import { exec, theme } from "herdr";
 import { makeGit } from "./git.js";
 import { checkCommit, currentBranch } from "./git-reset.js";
 import { tip, openDialog, openMenu, dialogFrame, button, close, askOwner, writeBlock, scrollText, sentence, uiGlyph } from "./ui.js";
+import { spawnOrUndo } from "./later.js";
 
 const TYPES = [
   { mode: "soft", key: "reset.soft", hint: "reset.softHint" },
@@ -92,7 +93,7 @@ export default class ResetHeadView {
     if (this.waiting || this.typeOpen) return;
     this.typeOpen = true;
     cx.notify();
-    cx.spawn(async (cx) => {
+    spawnOrUndo(cx, () => { this.typeOpen = false; }, async (cx) => {
       const items = TYPES.map((m) => ({ label: this.t(m.key), value: m.mode, checked: m.mode === this.mode, title: this.t(m.hint) }));
       const picked = await openMenu(this.bus, items, { width: 180, at, lang: this.lang });
       this.typeOpen = false;

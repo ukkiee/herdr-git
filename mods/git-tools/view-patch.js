@@ -14,6 +14,7 @@ import { exec, theme, notify, pickFolder } from "herdr";
 import { makeGit } from "./git.js";
 import { createPatch, patchFileName } from "./git-revision.js";
 import { openDialog, dialogFrame, button, checkbox, iconButton, close, askOwner, writeBlock, scrollText, sentence } from "./ui.js";
+import { spawnOrUndo } from "./later.js";
 
 const strings = (value) => (Array.isArray(value) ? value.filter((v) => typeof v === "string" && v) : []);
 
@@ -81,7 +82,7 @@ export default class PatchView {
   copy(cx) {
     this.waiting = true; this.error = null;
     cx.notify();
-    cx.spawn(async (cx) => {
+    spawnOrUndo(cx, () => { this.waiting = false; }, async (cx) => {
       let r;
       try { r = await createPatch(makeGit(exec, this.on, { wait: this.wait }), this.root, this.options()); }
       catch (error) { r = { ok: false, err: String(error?.message ?? error) }; }

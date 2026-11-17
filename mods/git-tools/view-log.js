@@ -16,6 +16,7 @@ import { v_flex } from "gpui-base";
 import { exec, theme } from "herdr";
 import { makeGit, repoRoot } from "./git.js";
 import { readTurns, STUCK } from "./read-turns.js";
+import { oneTimer, dwell, spawnOrUndo } from "./later.js";
 import { moveRecent } from "./recent.js";
 import { readRefsState, readGitDir, refsChanged, resolveCommit } from "./git-log.js";
 import { fetchAll, restoreBranch, trackedBranch } from "./git-branch.js";
@@ -230,6 +231,9 @@ export default class LogView {
     this.lost = false; // finding the repository failed (not "not a repository"): the poll asks again
     this.finding = readTurns(); // the searches for the shown folder's repository (refresh)
     this.polls = readTurns(); // the poll's look at the refs
+    this.catching = oneTimer(); // render's catchUp, one timer at a time
+    this.stay = dwell(); // a folder moved to is read once it has stayed DWELL ms (refresh)
+    this.watching = null; this.watcher = null; // the git folder's watch: its record and handle (watch)
     this.reloadAt = 0; // when the branches and the list were last asked for (reload)
     this.jumpTurn = 0; // one per hash jump; a search, a filter or a pick makes older ones void
     // The graph and display options (log-options.js): the defaults until the settings
@@ -537,7 +541,7 @@ export default class LogView {
   restoreDeleted(cx) {
     const repo = this.repo, gone = this.deleted;
     if (!repo || !gone || !sameRepo(gone.repo, repo) || !this.setBusy({ key: "log.restoring" }, cx)) return;
-    cx.spawn(async (cx) => {
+    spawnOrUndo(cx, () => this.setBusy(null, cx), async (cx) => {
       let r;
       try { r = await restoreBranch(repo.git, repo.root, gone); } catch (error) { r = { ok: false, err: String(error?.message ?? error) }; }
       this.setBusy(null, cx);
@@ -570,7 +574,7 @@ export default class LogView {
   fetch(cx) {
     const repo = this.repo;
     if (!repo || !this.setBusy({ key: "log.fetching" }, cx)) return;
-    cx.spawn(async (cx) => {
+    spawnOrUndo(cx, () => this.setBusy(null, cx), async (cx) => {
       let r;
       try { r = await fetchAll(repo.git, repo.root); } catch (error) { r = { ok: false, err: String(error?.message ?? error) }; }
       this.setBusy(null, cx);
@@ -585,7 +589,9 @@ export default class LogView {
   // Finds the repository of the folder shown and reads everything again. This is the
   // Refresh button; changes in the repository come through poll(). Never from render.
   // It never waits for a search still going: one whose answer never comes would keep the
-  // panel on "Loading…" for every space it shows (read-turns.js).
+  // panel on "Loading…" for every space it shows (read-turns.js). A folder moved to shows at
+  // once (its remembered view or the skeleton) and is read once it has stayed DWELL ms
+  // (later.js): switching spaces quickly reads none of the folders passed through.
   refresh(cx) {
     const { folder, on } = this.where(), context = this.contextKey();
     if (context !== this.context) {
@@ -594,9 +600,10 @@ export default class LogView {
       this.lost = false; this.lostMark = null; this.jumpTurn++;
       this.finding.drop();
       this.setRepo(null, cx);
-      if (this.recall(moveRecent(this.seen, left, kept, context, SEEN), cx)) this.redraw(cx);
+      if (this.recall(moveRecent(this.seen, left, kept, context, SEEN))) this.redraw(cx);
+      if (left !== undefined) this.stay.moved();
     }
-    if (!folder) return;
+    if (!folder || this.stay.hold(cx, (cx) => this.refresh(cx))) return;
     const turn = this.finding.start();
     let used = false;
     cx.spawn(async (cx) => {
@@ -617,6 +624,8 @@ export default class LogView {
         this.notRepo = !top.ok;
         if (!top.ok) { this.setRepo(null, cx); this.error = null; this.deleted = null; return; }
         if (top.root !== this.repo?.root || on !== this.repo?.on) this.setRepo({ git, root: top.root, on, folder }, cx);
+        // The same repository (recalled, or found again): its watch, if none goes yet.
+        else this.watch(this.repo, cx);
         this.reload(cx);
         this.note(cx);
       } finally {
@@ -642,22 +651,22 @@ export default class LogView {
   // Back on a folder seen before: its Branch tree and Commit list as they were left, rows
   // laid out again here (a timer: refresh never runs in render). → true when there was one.
   // setRepo(null) ran just before, so a tree not kept shows its skeleton, not the last one.
-  recall(was, cx) {
+  // Nothing is read here, the watch included: the folder may only be passed through, and
+  // refresh starts the watch once it reads (DWELL).
+  recall(was) {
     if (!was) return false;
-    // A new record, not the one kept: a watch loop still waiting from the visit before
-    // checks `this.repo === repo`, so it ends instead of running beside the one below.
-    const repo = { ...was.repo };
-    this.repo = repo; this.folder = was.folder; this.me = was.me;
+    // A new record, not the one kept: the watch belongs to the record it was started for
+    // (`this.watching`), so the one below starts afresh.
+    this.repo = { ...was.repo }; this.folder = was.folder; this.me = was.me;
     this.read = true;
     this.branches.restore(was.branches);
     this.list.restore(was.list);
-    // refresh calls setRepo (which starts the watch) only for another root.
-    this.watch(repo, cx);
     return true;
   }
 
   // Another repository (or none): the branch limit and the selection belonged to the old one.
   setRepo(repo, cx) {
+    this.unwatch();
     this.repo = repo;
     // Kept while no repository is known yet (a move to another folder passes null first);
     // it shows only on its own repository.
@@ -680,14 +689,26 @@ export default class LogView {
     });
   }
 
-  // On this computer: wake when a ref or HEAD moves (commit, checkout, fetch).
+  // On this computer: wake when a ref or HEAD moves (commit, checkout, fetch). One watch, for
+  // the repository record shown (`this.watching`); another record or none stops it (unwatch).
   watch(repo, cx) {
-    if (repo.on) return;
-    cx.spawn(async (cx) => {
+    if (repo.on || this.watching === repo) return;
+    this.unwatch();
+    this.watching = repo;
+    const live = () => this.watching === repo && this.repo === repo;
+    spawnOrUndo(cx, () => { this.watching = null; }, async (cx) => {
       const where = await readGitDir(repo.git, repo.root);
-      if (!where.ok || this.repo !== repo) return;
-      watchSettled(where.dir, { live: () => this.repo === repo, wakes: (paths) => refsChanged(where.dir, paths), wake: (cx) => this.poll(cx) }, cx);
+      if (!where.ok || !live()) { if (this.watching === repo) this.watching = null; return; }
+      // A folder that can't be watched is not tried again for this record: the poll reads.
+      this.watcher = watchSettled(where.dir, { live, wakes: (paths) => refsChanged(where.dir, paths), wake: (cx) => this.poll(cx) }, cx);
     });
+  }
+
+  // The watch stops: its pending call is cancelled now, not at the folder's next change.
+  unwatch() {
+    this.watching = null;
+    this.watcher?.stop();
+    this.watcher = null;
   }
 
   // Remembers the refs' state without reading the list (a reload just did).
@@ -706,6 +727,10 @@ export default class LogView {
   // failed is read again, and so are branches or a list whose first read never answered.
   poll(cx) {
     if (this.drawsWidget() && this.shown()) this.widget.refresh(cx);
+    // A folder moved to is read once it has stayed DWELL ms (refresh): nothing of it before
+    // then, and a read that lost its timer to the host's limit is made now.
+    if (this.stay.late()) { this.refresh(cx); return; }
+    if (this.stay.hold(cx, (cx) => this.refresh(cx))) return;
     const repo = this.repo, lost = this.lost || this.finding.stuck();
     if (this.readBlocked() || !this.shown()) { this.stale = Boolean(repo) || lost; return; }
     // Not beside a search still going: on a slow machine the checks would pile them up.
@@ -861,18 +886,17 @@ export default class LogView {
   }
 
   // Another folder to follow, changes that arrived while the panel was hidden, or a search
-  // for the repository whose answer never came: taken up in a timer, one at a time.
+  // for the repository whose answer never came: taken up in a timer, one at a time. A timer
+  // the host refuses leaves nothing set: the next render tries again (later.js).
   catchUp(cx) {
-    if (this.catching) return;
+    if (this.catching.busy()) return;
     // A poll skipped while a write ran is taken up once the lock is released (the release
     // redraws every copy), even if the writer's "changed" never comes.
-    const moved = this.contextKey() !== this.context || (this.finding.stuck() && this.shown());
+    const moved = this.contextKey() !== this.context || (this.finding.stuck() && this.shown()) || this.stay.late();
     const waiting = this.stale && this.shown() && !this.readBlocked();
     if (!moved && !waiting) return;
-    this.catching = true;
-    cx.timer.after(0, (cx) => {
-      this.catching = false;
-      if (this.contextKey() !== this.context || this.finding.stuck()) this.refresh(cx);
+    this.catching.after(cx, 0, (cx) => {
+      if (this.contextKey() !== this.context || this.finding.stuck() || this.stay.late()) this.refresh(cx);
       else if (this.stale && this.shown()) this.poll(cx);
     });
   }

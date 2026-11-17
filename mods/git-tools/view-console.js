@@ -12,6 +12,7 @@ import { panelFrame, toolbar, spacer, button, notice, skeleton, skeletonSize, Wi
 import { readConsole, CONSOLE_EVENT } from "./app-files.js";
 import { consoleRows } from "./git-console.js";
 import { en, ko } from "./messages-console.js";
+import { spawnOrUndo } from "./later.js";
 
 const VIEW = "console";
 const ROW_H = 20;
@@ -48,7 +49,7 @@ export default class Console {
   load(cx) {
     if (this.loading) { this.again = true; return; }
     this.loading = true;
-    cx.spawn(async (cx) => {
+    spawnOrUndo(cx, () => { this.loading = false; }, async (cx) => {
       const r = await readConsole();
       this.loading = false;
       const follow = this.atEnd() || this.toEndNext;

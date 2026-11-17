@@ -25,10 +25,11 @@
 
 import { div, svg } from "gpui-kit";
 import { h_flex, v_flex, Editor, EditorState, InputState, Input } from "gpui-base";
-import { exec, theme, settings, watchFolder, readTextFile, window as hostWindow } from "herdr";
+import { exec, theme, settings, readTextFile, window as hostWindow } from "herdr";
 import { readFolder, readMarks, readSearchList, roomFor, PER_FOLDER, TOTAL, SEARCH_LIMIT } from "./files-data.js";
 import { markLookup, visibleRows, keepPressed, pressLands, stripFailure, pressFailure, failureKey, rankSearch, moveKey, SEARCH_SHOWN } from "./files-tree.js";
-import { tip, location, ICON, icon, uiGlyph, fileGlyph, folderGlyph, darkLook, panelFrame, toolbar, iconButton, row, notice, skeleton, skeletonSize, errorStrip, WindowedList, openMenu } from "./ui.js";
+import { tip, location, watchSettled, ICON, icon, uiGlyph, fileGlyph, folderGlyph, darkLook, panelFrame, toolbar, iconButton, row, notice, skeleton, skeletonSize, errorStrip, WindowedList, openMenu } from "./ui.js";
+import { oneTimer, dwell, spawnOrUndo } from "./later.js";
 import { openDiff } from "./view-diff.js";
 import { moveRecent } from "./recent.js";
 import { editorLanguage } from "./editor-language.js";
@@ -60,6 +61,10 @@ export default class FilesView {
     // context key → what the tree showed there when it left, the SEEN newest (see remember).
     this.seen = new Map();
     this.context = null;
+    // What render leaves to a timer, each one at a time: a move, a new search input.
+    this.moving = oneTimer(); this.relabeling = oneTimer();
+    this.stay = dwell(); // a folder moved to is read once it has stayed DWELL ms (refresh)
+    this.watching = null;
     this.reset();
     this.list = new WindowedList("files-tree");
     this.found = new WindowedList("files-found");
@@ -92,7 +97,7 @@ export default class FilesView {
     // The folder read failure in the error strip, if that is what it shows, and the ones
     // closed by hand (stripFailure).
     this.errorFailure = null; this.closedFailures = new Set();
-    this.watching = null;
+    this.unwatch();
     this.release();
     this.file = null; this.fileNote = null; this.cut = false;
     // The search: readSearchList's answer for this folder, whether it is being read, and
@@ -141,9 +146,11 @@ export default class FilesView {
     if (this.list) this.list.top = 0;
     this.recall(moveRecent(this.seen, left, kept, key, SEEN));
     if (this.found) this.found.top = 0;
-    if (was?.file) this.show(was.file, cx);
-    // A search still typed searches the new folder.
-    if (this.searching()) this.readList(cx);
+    // The previewed file and a search still typed are read with the folder, once it has
+    // stayed DWELL ms (refresh): a folder passed through reads nothing.
+    if (was?.file) this.show(was.file);
+    this.arrived = true;
+    if (left !== undefined) this.stay.moved();
   }
 
   // What the tree shows of the folder left, so coming back draws it at once instead of the
@@ -167,7 +174,13 @@ export default class FilesView {
   refresh(cx) {
     this.enter(cx);
     const context = this.context, root = this.root, on = this.on;
-    if (!root) return;
+    if (!root || this.stay.hold(cx, (cx) => this.refresh(cx))) return;
+    if (this.arrived) {
+      this.arrived = false;
+      if (this.file) this.readPreview(cx);
+      // A search still typed searches the new folder.
+      if (this.searching()) this.readList(cx);
+    }
     // A preview drawn since its last read follows the file: a hidden panel reads none.
     if (this.file && this.previewDrawn) { this.previewDrawn = false; this.readPreview(cx); }
     // A search under way follows the folder too, but reads its list at most once per POLL:
@@ -178,7 +191,7 @@ export default class FilesView {
     if (this.loading) { this.again = true; return; }
     this.loading = true; this.again = false;
     const platform = hostWindow()?.platform ?? null;
-    cx.spawn(async (cx) => {
+    spawnOrUndo(cx, () => { this.loading = false; }, async (cx) => {
       try {
         const read = new Map(), loaded = new Map(), failures = [];
         for (const path of ["", ...this.open]) {
@@ -217,22 +230,23 @@ export default class FilesView {
   }
 
   // Only this computer's folders can be watched. Reads write nothing under .git, so a
-  // refresh never wakes its own watch. One loop per root: a newer watch, or leaving the
-  // folder, ends the older loop the next time it wakes.
+  // refresh never wakes its own watch. One watch, the shown root's: leaving the folder stops
+  // it (reset), which cancels its pending call at once.
   watch(cx) {
     if (this.on || !this.root || this.watching?.root === this.root) return;
-    const mine = this.watching = { root: this.root };
-    cx.spawn(async (cx) => {
-      try {
-        while (this.watching === mine) {
-          await watchFolder(mine.root);
-          if (this.watching === mine) this.refresh(cx);
-        }
-      } catch {
-        // The folder can't be watched (too large on Linux, gone): the timer still reads.
-        if (this.watching === mine) this.watching = null;
-      }
-    });
+    this.unwatch();
+    const mine = this.watching = { root: this.root, handle: null };
+    const live = () => this.watching === mine;
+    // The folder can't be watched (too large on Linux, gone): the timer still reads, and
+    // the next read tries again.
+    const failed = () => { if (live()) this.unwatch(); };
+    mine.handle = watchSettled(mine.root, { live, settle: 0, wake: (cx) => this.refresh(cx), failed }, cx);
+  }
+
+  unwatch() {
+    const mine = this.watching;
+    this.watching = null;
+    mine?.handle?.stop();
   }
 
   // Opens a closed folder (reading it if it isn't yet) or closes an open one. Closing
@@ -251,7 +265,7 @@ export default class FilesView {
     if (this.folders.has(path) || this.pending.has(path)) return;
     const context = this.context, root = this.root, on = this.on;
     this.pending.add(path);
-    cx.spawn(async (cx) => {
+    spawnOrUndo(cx, () => this.pending.delete(path), async (cx) => {
       try {
         const r = await readFolder(exec, `${root}/${path}`, { on, platform: hostWindow()?.platform ?? null, room: roomFor(this.entries, path) });
         if (this.context !== context || !pressLands(this.folders, this.open, path)) return;
@@ -283,7 +297,7 @@ export default class FilesView {
     if (!this.root || this.listing || (this.listed?.ok && !again)) return;
     const context = this.context, root = this.root, on = this.on;
     this.listing = true;
-    cx.spawn(async (cx) => {
+    spawnOrUndo(cx, () => { this.listing = false; }, async (cx) => {
       try {
         const r = await readSearchList(exec, root, { on, platform: hostWindow()?.platform ?? null });
         if (this.context !== context) return;
@@ -451,7 +465,7 @@ export default class FilesView {
     if (!path || (this.previewing?.path === path && this.previewing.context === context)) return;
     const read = this.previewing = { path, context };
     const mine = () => this.file === path && this.context === context;
-    cx.spawn(async (cx) => {
+    spawnOrUndo(cx, () => { if (this.previewing === read) this.previewing = null; }, async (cx) => {
       try {
         const text = await readTextFile(`${root}/${path}`, { on });
         if (!mine()) return;
@@ -594,16 +608,14 @@ export default class FilesView {
 
   render(cx) {
     // Another folder to follow: read in a timer, since nothing may start inside render
-    // (cx.notify throws there and cx.spawn runs its first part there).
-    if (this.contextKey() !== this.context?.key && !this.moving) {
-      this.moving = true;
-      cx.timer.after(0, (cx) => { this.moving = false; if (this.contextKey() !== this.context?.key) { this.refresh(cx); cx.notify(); } });
+    // (cx.notify throws there and cx.spawn runs its first part there). A timer the host
+    // refuses leaves nothing set: the next render tries again (later.js).
+    if (this.contextKey() !== this.context?.key || this.stay.late()) {
+      this.moving.after(cx, 0, (cx) => { if (this.contextKey() !== this.context?.key || this.stay.late()) { this.refresh(cx); cx.notify(); } });
     }
-    if (this.inputLang !== this.lang && !this.relabeling) {
-      // Not here: render may not make the redraw a new input needs.
-      this.relabeling = true;
-      cx.timer.after(1, (cx) => {
-        this.relabeling = false;
+    // Not here: render may not make the redraw a new input needs.
+    if (this.inputLang !== this.lang) {
+      this.relabeling.after(cx, 1, (cx) => {
         if (this.inputLang === this.lang) return;
         const typing = this.typing;
         this.makeInput(this.query.value());

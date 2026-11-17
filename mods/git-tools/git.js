@@ -43,14 +43,6 @@ const EXEC_TIMEOUT = 30000;
 const LATE = 5000;
 const UNANSWERED = Symbol("unanswered");
 
-// The clock's only hold on a call is `call.ring`, which the call clears once exec answers.
-// A clock outlives most answers (a read's runs 35 s, and one whose copy closed may never
-// settle), and what a pending promise's handlers reach stays alive: handed the answer's
-// own promise (Promise.race), it kept every answer until it rang. A big repository's ref
-// list is megabytes, and all mods share one heap. A function of its own, so its handler
-// shares no scope with the answer.
-const ringLater = (clock, call) => { clock.then(() => call.ring?.(), () => {}); };
-
 // makeGit(exec, on, { record?, wait? }) → git(cwd, args, { timeout?, env? }) → { ok, code, out, err }.
 // Never throws: a program that can't start, a machine that can't be reached or an answer
 // that never came is { ok: false, code: -1 }. `out` is stdout exactly as git wrote it (-z
@@ -62,9 +54,10 @@ const ringLater = (clock, call) => { clock.then(() => call.ring?.(), () => {}); 
 // record(call): gets every command that may write once it ended, { at (ms), cwd, on,
 // args (git's, without env), code, stdout, stderr }, and is awaited so one copy's records
 // land in order. Default: the installed one (recordWith). Its failure never fails git.
-// wait(ms): the screen's clock, a promise that settles after `ms` (main.js gives each
-// screen one). Without it, or when it throws or rejects (its copy closed), the runner waits
-// for exec's answer however long it takes.
+// wait(ms, ring) → stop: the screen's clock (clock.js; main.js gives each screen one), which
+// calls ring() about `ms` from now unless stop() comes first. Without it, when it throws (the
+// host refused its timer, or its copy closed) or when it never rings (its copy closed), the
+// runner waits for exec's answer however long it takes.
 export function makeGit(exec, on, { record, wait } = {}) {
   const note = async (call) => {
     const fn = record ?? installed;
@@ -81,20 +74,19 @@ export function makeGit(exec, on, { record, wait } = {}) {
     if (flying === 0) for (const go of refused.splice(0)) go(ran);
     else if (ran) refused.shift()?.(true);
   };
-  // The exec's answer, or UNANSWERED once the clock rings first. A clock that rejects (its
-  // copy closed) never rings: the call waits for exec, as without a clock.
+  // The exec's answer, or UNANSWERED once the clock rings first. The clock's only hold on
+  // the call is the ring it was handed, and the call takes it back (stop) once exec answers:
+  // a ring still held reaches the call's promise and so the answer, and a big repository's
+  // ref list is megabytes in the heap every mod shares. Not Promise.race with a timer's
+  // promise: the app's engine kept the winner's value until the loser settled.
   const answer = (running, ms) => {
-    let clock;
-    try { clock = wait ? Promise.resolve(wait(ms)) : null; }
-    catch { clock = null; }
-    if (!clock) return running;
-    const call = { ring: null };
-    ringLater(clock, call);
+    if (!wait) return running;
     return new Promise((resolve, reject) => {
-      call.ring = () => resolve(UNANSWERED);
+      let stop = null;
+      try { stop = wait(ms, () => resolve(UNANSWERED)); } catch { stop = null; }
       Promise.resolve(running).then(
-        (r) => { call.ring = null; resolve(r); },
-        (error) => { call.ring = null; reject(error); },
+        (r) => { stop?.(); resolve(r); },
+        (error) => { stop?.(); reject(error); },
       );
     });
   };

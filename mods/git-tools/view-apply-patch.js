@@ -20,6 +20,7 @@ import { stageText, dropStaged, isStaged } from "./git-conflict.js";
 import { openConflicts } from "./view-conflicts.js";
 import { CheckedFiles, CHECKED_SKELETON } from "./view-create-patch.js";
 import { openDialog, dialogFrame, button, iconButton, skeleton, skeletonSize, errorStrip, close, askOwner, writeBlock, sentence } from "./ui.js";
+import { spawnOrUndo } from "./later.js";
 
 const strings = (value) => (Array.isArray(value) ? value.filter((v) => typeof v === "string" && v) : []);
 // Typing the path reads the file once the typing stops this long.
@@ -116,7 +117,7 @@ export default class ApplyPatchView {
     if (!this.pathInput?.value().trim()) { this.text = null; this.problem = null; this.tree.set([]); cx.notify(); return; }
     this.reading = true;
     cx.notify();
-    cx.spawn(async (cx) => {
+    spawnOrUndo(cx, () => { this.reading = false; }, async (cx) => {
       const file = await this.path();
       let text = null, why = null;
       try { text = await readTextFile(file, { on: this.on }); } catch (error) { why = String(error?.message ?? error); }
@@ -152,7 +153,7 @@ export default class ApplyPatchView {
     const args = { root: this.root, on: this.on, paths: chosen.map((f) => f.path), who: this.who };
     this.running = true; this.error = null;
     cx.notify();
-    cx.spawn(async (cx) => {
+    spawnOrUndo(cx, () => { this.running = false; }, async (cx) => {
       if (this.clipboard) {
         const staged = await stageText(exec, this.on, this.text, { dir: this.on ? null : `${appHome()}/${STAGE_DIR}` });
         if (!staged.ok) { this.running = false; this.error = staged.err || this.t("ui.gitFailed"); cx.notify(); return; }

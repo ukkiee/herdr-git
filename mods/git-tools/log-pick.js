@@ -17,6 +17,7 @@ import { broadcast, sentence } from "./ui.js";
 import { openConflictsIfStopped } from "./view-conflicts.js";
 import { offerSmart } from "./view-smart.js";
 import { pickNotes, noteText } from "./pick-notes.js";
+import { spawnOrUndo } from "./later.js";
 
 const SHORT = 8; // a hash as the notifications show it
 const short = (hash) => String(hash ?? "").slice(0, SHORT);
@@ -26,7 +27,7 @@ const where = (host, repo) => ({ root: repo.root, on: repo.on ?? null, owner: ho
 // Runs write() as this panel's work on repo; then(r) says how it ended.
 function runHere(host, repo, work, write, then, cx) {
   if (!host.setBusy(work, cx, repo)) return;
-  cx.spawn(async (cx) => {
+  spawnOrUndo(cx, () => host.setBusy(null, cx), async (cx) => {
     let r;
     try { r = await write(); } catch (error) { r = { ok: false, outcome: "failed", err: String(error?.message ?? error) }; }
     // Released first: the panel skips reads while a write runs.

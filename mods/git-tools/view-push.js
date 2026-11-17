@@ -38,6 +38,7 @@ import { remoteFailure } from "./git-remote.js";
 import { formatTime } from "./i18n.js";
 import { buildRows } from "./tree.js";
 import { tip, openDialog, openMenu, dialogFrame, button, notice, skeleton, skeletonSize, errorStrip, row,icon, uiGlyph, ICON, fileGlyph, folderGlyph, darkLook, close, scriptedRepo, WindowedList, askOwner, serveRequest, writeBlock, sentence, broadcast, clip } from "./ui.js";
+import { spawnOrUndo } from "./later.js";
 
 // openPush({ root, on, owner, lang })
 //   Opens the Push dialog for the repository's current branch. commit-form.js calls it
@@ -329,7 +330,7 @@ export default class PushView {
     const why = this.forceBlocked();
     // While it is open the ▾ shows no tooltip: it would cover the menu's first item.
     this.menuOpen = true;
-    cx.spawn(async (cx) => {
+    spawnOrUndo(cx, () => { this.menuOpen = false; }, async (cx) => {
       const picked = await openMenu(this.bus, [{
         label: this.t("dialogs.push.force"), value: "force", disabled: Boolean(why), title: why ?? this.t("dialogs.push.forceHelp"),
         hint: this.plan.protected ? this.t("dialogs.push.protectedHint") : "",

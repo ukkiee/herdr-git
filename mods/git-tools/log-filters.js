@@ -28,6 +28,7 @@ import { resolveCommit } from "./git-log.js";
 import { filterArgs, isHash, isDate, readMe, userOf, readBranchNames, readAuthors, matchAuthors, DATE_PRESETS, datePreset, dateText } from "./git-log-filter.js";
 import { tip as tipOn, uiGlyph, darkLook, icon, iconButton, sentence, WindowedList } from "./ui.js";
 import { MENU_CHECK } from "./ui-size.js";
+import { oneTimer } from "./later.js";
 
 const EMPTY = { text: "", regex: false, matchCase: false, users: [], since: "", until: "", dateLabel: "", path: "" };
 const POPUP_W = 260, ITEM = 26, BRANCH_ROWS = 10, USER_ROWS = 10;
@@ -44,6 +45,7 @@ const sameUserItem = (a, b) => a.kind === b.kind && (a.kind === "me" || (a.kind 
 export default class LogFilters {
   init(host, _cx) {
     this.host = host;
+    this.relabeling = oneTimer(); // new inputs for another language, made in a timer
     this.values = { ...EMPTY, users: [] };
     this.open = null; // which filter's popup shows
     this.focused = null; // which input has the keyboard
@@ -661,11 +663,9 @@ export default class LogFilters {
     const { host } = this, t = theme(), v = this.values, tr = host.t;
     if (!host.repo) return div();
     this.follow(cx);
-    if (this.inputsLang !== host.lang && !this.relabeling) {
-      // Not here: render may not make the redraw new inputs need.
-      this.relabeling = true;
-      cx.timer.after(1, (cx) => { this.relabeling = false; if (this.inputsLang !== this.host.lang) { this.makeInputs(); cx.notify(); } });
-    }
+    // Not here: render may not make the redraw new inputs need. A timer the host refuses
+    // leaves nothing set: the next render tries again (later.js).
+    if (this.inputsLang !== host.lang) this.relabeling.after(cx, 1, (cx) => { if (this.inputsLang !== this.host.lang) { this.makeInputs(); cx.notify(); } });
     const narrow = (host.listWidth ?? 9999) < 760;
     return h_flex().id("log-filters").size_full().min_w(0).gap(4).items_center().overflow_hidden()
       .child(h_flex().id("log-search").flex_1().min_w(96).max_w(300).h(24).pl(6).pr(2).gap(4).items_center().rounded(5).border_1()

@@ -39,6 +39,7 @@ import { compareWithCurrent, diffWithWorkingTree } from "./view-compare-branches
 import { menuItems, branchContext } from "./log-menus.js";
 import { menuWidth, sideOf } from "./ui-size.js";
 import { MOD, openDialog, answerMenu, dialogFrame, button, uiGlyph, iconButton, darkLook, notice, skeleton, skeletonSize, writeBlock, menuMetrics, WindowedList, takeEscape } from "./ui.js";
+import { oneTimer, spawnOrUndo } from "./later.js";
 
 export const POPUP_ACTIONS = {
   "vcs.commit": (w) => w.openCommit(),
@@ -158,6 +159,7 @@ const ABORT = {
 
 export default class VcsPopup {
   init(p, cx) {
+    this.relabeling = oneTimer(); // a new search input for another language, made in a timer
     this.key = p.key;
     this.overlay = p.overlay;
     this.mode = p.mode === "abort" ? "abort" : "popup";
@@ -206,7 +208,7 @@ export default class VcsPopup {
     const repo = this.repo;
     if (!repo) { this.read = true; return; }
     this.loading = true;
-    cx.spawn(async (cx) => {
+    spawnOrUndo(cx, () => { this.loading = false; }, async (cx) => {
       const top = await repoRoot(repo.git, repo.root);
       const [heads, op, prefs] = top.ok
         ? await Promise.all([readHeads(repo.git, top.root), readOperation(repo.git, top.root), readFavorites(repo.git, top.root)])
@@ -391,10 +393,8 @@ export default class VcsPopup {
   render(cx) {
     const t = theme();
     if (this.mode === "abort") return this.renderAbort(t);
-    if (this.inputLang !== this.lang && !this.relabeling) {
-      this.relabeling = true;
-      cx.timer.after(1, (cx) => { this.relabeling = false; this.makeInput(this.input.value()); this.input.focus(); cx.notify(); });
-    }
+    // A timer the host refuses leaves nothing set: the next render tries again (later.js).
+    if (this.inputLang !== this.lang) this.relabeling.after(cx, 1, (cx) => { this.makeInput(this.input.value()); this.input.focus(); cx.notify(); });
     // Before the answer, popupRows has no branches to give: the actions that are always
     // there and the opener's in-progress items, which the widget runs with its own
     // repository (POPUP_ACTIONS), so they can be picked at once. The branch groups wait as

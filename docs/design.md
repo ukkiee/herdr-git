@@ -106,7 +106,7 @@
 | 화면 | `view-*.js`, `commit-form.js`, `commit-stash-tab.js`, `log-branches.js`, `log-list.js`, `log-details.js`, `log-filters.js` | 그리기와 사람의 입력 |
 | git | `git.js`, `git-status.js`, `git-commit.js`, `git-rollback.js`, `git-snapshot.js`, `git-diff.js`, `git-push.js`, `git-log.js`, `git-log-filter.js`, `git-branch.js`, `git-show.js`(`readLastCommit` 포함), `files-data.js` | git과 폴더 읽기 명령을 부르고 결과를 해석한다 |
 | git 동작 | `git-operation.js`, `git-conflict.js`, `git-smart.js`, `git-stash.js`, `git-reset.js`, `git-rewrite.js`, `git-changes.js`, `git-remote.js`, `git-refs.js`, `git-compare.js`, `git-revision.js`, `git-worktree.js`, `git-heads.js`, `git-patch.js` | Operation in progress 읽기와 merge·rebase·cherry-pick·revert의 실행·판정, 충돌 파일 쓰기, Smart operation, stash, reset과 하드 전 기록, 히스토리 다시 쓰기, 파일 단위 되돌리기·체리픽, pull·업데이트, 태그·이름 변경·원격, 비교·패치·가져오기, 리비전의 파일과 하위 커밋, 새 워크트리, VCS widget이 보일 브랜치, 로컬 변경의 패치와 패치 적용 |
-| 순수 계산 | `graph.js`, `tree.js`, `bus.js`, `lock.js`, `read-turns.js`, `i18n.js`, `icon-theme.js`, `files-tree.js`, `editor-language.js`, `merge-chunks.js`, `conflicts-model.js`, `merge-revisions-model.js`, `rebase-plan.js`, `log-menus.js`, `log-select.js`, `log-options.js`, `branch-order.js`, `vcs-ops.js`, `git-console.js`, `ui-icons.js`, `pick-notes.js`, `ui-size.js`, `focus-repo.js`, `let-go.js`, `skeleton.js`, `recent.js` | 그래프 배치, 경로 트리와 3상태 체크, 버스와 잠금 값, 되풀이하는 읽기의 차례, 언어와 문장, 아이콘 고르기, Files panel의 줄·표시·찾기 순위·키, 미리보기의 구문 색, 병합 덩어리, 두 충돌 창이 보일 것과 켜질 것, 리베이스 계획과 편집 판정, Log panel의 메뉴·툴바 표, 여러 커밋 고르기, 그래프·표시 옵션 값, 브랜치 순서와 즐겨찾기, VCS Operations popup의 항목, 콘솔 기록의 꼴과 자격 증명 가림, UI icon 대응, Cherry-Pick·Revert 결과의 알림, 메뉴 너비·팝업 자리·창이 자리를 채우는지·위젯 블록 폭, 패널이 따를 저장소와 탭 기록, 닫히는 화면이 쥔 데이터 비우기, 로딩 스켈레톤의 행과 조각 자리, 떠난 폴더의 기억(최근 N개)과 Commit list의 첫 묶음 |
+| 순수 계산 | `graph.js`, `tree.js`, `bus.js`, `lock.js`, `read-turns.js`, `clock.js`, `later.js`, `folder-watch.js`, `i18n.js`, `icon-theme.js`, `files-tree.js`, `editor-language.js`, `merge-chunks.js`, `conflicts-model.js`, `merge-revisions-model.js`, `rebase-plan.js`, `log-menus.js`, `log-select.js`, `log-options.js`, `branch-order.js`, `vcs-ops.js`, `git-console.js`, `ui-icons.js`, `pick-notes.js`, `ui-size.js`, `focus-repo.js`, `let-go.js`, `skeleton.js`, `recent.js` | 그래프 배치, 경로 트리와 3상태 체크, 버스와 잠금 값, 되풀이하는 읽기의 차례, 사본의 git 시계, 타이머·작업으로 미룬 일과 머문 폴더 판정, 폴더 감시와 그 취소, 언어와 문장, 아이콘 고르기, Files panel의 줄·표시·찾기 순위·키, 미리보기의 구문 색, 병합 덩어리, 두 충돌 창이 보일 것과 켜질 것, 리베이스 계획과 편집 판정, Log panel의 메뉴·툴바 표, 여러 커밋 고르기, 그래프·표시 옵션 값, 브랜치 순서와 즐겨찾기, VCS Operations popup의 항목, 콘솔 기록의 꼴과 자격 증명 가림, UI icon 대응, Cherry-Pick·Revert 결과의 알림, 메뉴 너비·팝업 자리·창이 자리를 채우는지·위젯 블록 폭, 패널이 따를 저장소와 탭 기록, 닫히는 화면이 쥔 데이터 비우기, 로딩 스켈레톤의 행과 조각 자리, 떠난 폴더의 기억(최근 N개)과 Commit list의 첫 묶음 |
 | 데이터 | `messages-*.js`, `icon-theme-data.js`, `icons/theme/`, `icons/ui/`(그 밖의 `icons/` 파일 포함) | 문구 표, 생성한 아이콘 규칙, 아이콘 파일 |
 
 저장소 루트에는 레이아웃 변환 `layout.mjs`, 설치 `install.sh`, 키 `keys.json`, 아이콘 생성기
@@ -129,14 +129,22 @@ git 모듈과 순수 계산 모듈은 `herdr`를 import하지 않는다. 그래�
 - **답하지 않는 git 호출은 실패로 끝난다.** Herdr의 `exec`는 timeout(주지 않으면 30초)에 거절하지만, 답이
   아예 사라진 것으로 보이는 때가 있다: 도는 프로세스는 없는데 화면이 그 답을 몇 분씩 기다렸다
   ([플랫폼](herdr-mod-platform.md)). 그러면 그 답을 기다리는 화면이 "로드 중"에 멈추고 실행기 자리
-  하나를 영원히 쥔다. 그래서 `main.js`가 사본마다 시계 `wait(ms)`(`init`이 받은 async context의 `sleep`)를 화면에
+  하나를 영원히 쥔다. 그래서 `main.js`가 사본마다 시계 `wait(ms, ring) → stop`(`clock.js`)을 화면에
   넘기고, 화면은 그것을 `makeGit(exec, on, { wait })`에 준다. 시계를 받은 실행기는 명령의 timeout보다 5초 더
   기다려도 답이 없으면 자리를 비우고 `git did not answer in N s.` 실패로 답한다. 읽기는 아무것도 바꾸지 않으므로
   그 전에 한 번 더 묻는다. 쓸 수 있는 명령은 이미 일을 했을 수 있어 다시 돌리지 않는다. 사본이 닫혀 시계가 던지면
   시계가 없는 것처럼 답을 기다린다. 시계는 사본의 것이라 한 사본의 기다림이 다른 사본 안에서 풀리지 않는다.
-  시계는 답을 쥐지 않는다: 시계가 호출에 닿는 길은 답이 오면 비워지는 `ring` 하나뿐이다(`ringLater`).
-  답과 시계를 `Promise.race`로 묶으면 QuickJS에서는 시계가 끝날 때까지(읽기는 35초) 답이 풀리지 않고,
-  큰 저장소의 ref 목록은 한 번에 2 MB다.
+- **시계는 사본마다 타이머 하나다**(`clock.js`). 기다리는 타이머는 Herdr가 세는 호스트 작업이고, 모든 mod를
+  합쳐 1,024개를 넘으면 Herdr가 거절한다([플랫폼](herdr-mod-platform.md)). 대부분의 git 호출은 몇 ms 만에
+  답하는데 읽기의 마감은 35초 뒤라, 호출마다 시계를 걸면 지난 35초의 git 호출 수만큼 작업을 쥔다(space를 빠르게
+  옮기면 한도에 닿는다). 그래서 한 사본의 호출들은 가장 이른 마감에 맞춘 `cx.timer.after` 하나를 함께 쓰고,
+  답이 오면 호출이 자기 마감을 거둬 가며, 기다리는 호출이 없으면 타이머를 취소한다. 더 이른 마감이 오면 새 타이머를
+  건 뒤 옛것을 취소한다. `cx.sleep`이 아닌 것은 취소할 수 없어 끝날 때까지 작업을 쥐기 때문이다(취소한
+  `cx.timer.after`는 그 자리를 곧바로 돌려준다). Herdr가 타이머를 거절하면, 이미 걸린 타이머가 있으면 그 호출은
+  그 타이머를 기다리고(늦게라도 울린다) 없으면 시계 없이 답을 기다린다.
+  시계는 답을 쥐지 않는다: 시계가 호출에 닿는 길은 호출이 넘긴 `ring` 하나뿐이고, 답이 오면 호출이 그것을
+  거둬 간다(`stop`). 답과 시계를 `Promise.race`로 묶으면 QuickJS에서는 시계가 끝날 때까지(읽기는 35초) 답이
+  풀리지 않고, 큰 저장소의 ref 목록은 한 번에 2 MB다.
 - **"읽는 중"은 다음 읽기를 영원히 막지 않는다**(`read-turns.js`). 화면이 되풀이하는 읽기(패널의 저장소 찾기,
   창의 계획, 탭의 커밋)는 차례 번호로 센다. 새로고침과 다른 저장소·폴더로 옮기기는 앞 읽기가 끝나기를 기다리지
   않고 새로 읽는다. 주기 읽기와 "바뀜"이 앞 읽기를 기다릴 때도, 시작한 지 `STUCK`(80초, 시계를 받은 실행기가
@@ -213,11 +221,26 @@ git 모듈과 순수 계산 모듈은 `herdr`를 import하지 않는다. 그래�
     없는 쪽은 스켈레톤으로 시작한다. VCS widget은 `reads.drop()`, Files panel은 방문마다 새
     `context` 객체로 같은 일을 한다. 루트가 달라졌으면 이어지는 저장소 찾기가 모두 비운다(Log panel의
     `setRepo`, VCS widget은 꺼낸 뒤 첫 읽기에서 저장소를 다시 묻는다).
-  - **꺼낸 저장소 기록(`repo`)은 새 객체다**(`{ ...was.repo }`). 감시 고리가 기록의 같음으로 살아
-    있는지 보기 때문이다. Log panel의 고리는 `this.repo === repo`를 보므로 같은 객체를 되돌리면 앞
-    방문의 고리가 되살아나 감시가 둘이 되고, VCS widget은 `this.watching === repo`면 새 고리를
-    시작하지 않아 앞 고리가 이미 끝났으면 감시가 0이 된다. Log panel은 루트가 같으면 `setRepo`를
-    거치지 않으므로 `recall`이 감시를 직접 시작한다.
+  - **꺼낸 저장소 기록(`repo`)은 새 객체다**(`{ ...was.repo }`). Log panel과 VCS widget의 감시는 그것을
+    시작한 기록(`this.watching`)의 것이고 같은 기록에는 새 감시를 걸지 않으므로, 앞 방문의 기록을 그대로
+    되돌리면 감시가 0이 될 수 있다. 꺼내기는 아무것도 읽지 않는다: 감시도 그 폴더를 읽는 첫 `refresh`가
+    건다(Log panel은 루트가 같아 `setRepo`를 거치지 않을 때도 `watch`를 부른다). 지나가기만 하는 폴더에는
+    감시를 걸지 않기 위해서다(아래 "머문 폴더만 읽는다").
+  - **떠난 폴더의 감시는 떠날 때 멈춘다.** `watchSettled`(`folder-watch.js`)가 돌려준 손잡이를 쥐고, 폴더나
+    저장소를 떠나면(`unwatch`) `stop()`이 기다리던 `watchFolder` 호출을 그 자리에서 취소한다. 감시는 그 폴더가
+    다음에 바뀔 때에야 끝나므로, 취소하지 않으면 조용한 저장소에서는 그 감시와 그것을 기다리는 작업이 앱을 다시
+    켤 때까지 남는다(방문할 때마다 하나씩, 5절 "호스트 작업 한도"). Diff tab은 폴더를 떠나지 않는 대신 보이지 않는
+    동안 감시하지 않는다: 숨은 탭에 처음 온 깨움이 감시를 멈추고, 다시 그려져 읽을 때 다시 건다. 사본이 닫힐
+    때는 Herdr가 기다리던 호출을 취소한다.
+  - **머문 폴더만 읽는다**(`later.js` `dwell`, `DWELL` 500 ms). 포커스된 폴더를 따르는 Log panel, Commit
+    panel, VCS widget, Files panel은 폴더가 바뀌면 그 폴더의 기억(없으면 스켈레톤)을 곧바로 보이고, 그
+    폴더가 500 ms 그대로였을 때 읽는다(저장소 찾기, 상태, 감시, Files의 미리보기와 찾기 목록까지). space와
+    탭을 빠르게 지나가면 지나간 폴더는 하나도 읽지 않는다. 기다리는 동안의 새로고침·주기 읽기·`changed`도
+    모두 그 끝으로 미뤄지고, 끝을 알리는 타이머는 하나다(더 머물러야 하면 남은 시간으로 다시 건다). 처음
+    여는 화면과 `props.folder`로 연 탭은 기다리지 않는다. 기다리는 동안에도 `settled()`는 참이고
+    `host.repo`는 옮긴 폴더의 기억한 저장소(없으면 null)라, Commit panel의 단추는 떠난 저장소에 쓰지
+    않는다(아래 "옮긴 직후 누른 쓰기"). 그 타이머를 Herdr가 거절하면 `late()`가 참이 되어 다음
+    `render`나 주기 읽기가 그 읽기를 한다.
   - **재료만 기억하고, 그린 행은 꺼낼 때 다시 만든다**(타이머 안: `refresh`는 `render`에서 돌지 않는다).
     Log panel은 Branch tree의 읽은 것과 Commit list의 앞 1,000개(`BATCH`)만 둔다. `refs`, 행,
     선택과 Commit details는 두지 않는다(옮기면 선택이 풀리는 것은 전과 같다). VCS widget은 얼굴의
@@ -840,7 +863,7 @@ Rollback은 Rollback dialog의 버튼으로만 실행되고, 쓰기 전에 버�
   동작의 상태 파일·index가 바뀔 때(이 컴퓨터만, `git-log.js`의 `stateChanged`), 보이는 동안 10초마다 읽는다.
   터미널의 `git merge`·`checkout`은 파일을 여럿 쓰는데 감시는 첫 파일에 깨어나고, 다음 감시를 걸기 전에
   쓰인 나머지는 놓칠 수 있다. 그래서 감시로 깬 화면(Commit panel, Log panel, 위젯)은 곧바로 읽고 1초 뒤에
-  한 번 더 읽는다(`ui.js`의 `watchSettled`)
+  한 번 더 읽는다(`folder-watch.js`의 `watchSettled`)
   (`git-heads.js`의 `widgetFace`가 무엇을 보일지 정한다). 최근 브랜치는 HEAD reflog의
   `checkout: moving from X to Y`에서 최대 5개, 지금 있는 로컬 브랜치만이다. 팝업은 380×520 고정이고
   거르면 항목만 준다.
@@ -1079,6 +1102,21 @@ Herdr는 mod를 QuickJS로 돌린다. JIT가 없고, 한 호출이 너무 오래
   큰 저장소의 Log 탭 하나를 닫으면 그 탭이 쓰던 11 MB 가운데 7 MB쯤이 돌아오고, 화면의 껍데기와
   클로저가 붙잡은 것은 남는다. node는 순환을 거두므로 이 두 규칙은 node 테스트로 지킬 수 없고
   QuickJS에서 잰다.
+- **호스트 작업 한도.** Herdr는 끝나지 않은 호스트 작업을 runtime 하나(모든 mod 공용)에 1,024개까지 받고,
+  넘으면 `cx.sleep`, `cx.timer.after`, `exec`, `cx.spawn`이 곧바로 던진다([플랫폼](herdr-mod-platform.md)).
+  기다리는 `watchFolder` 호출과 그것을 기다리는 작업도 하나씩이다. 그래서 쥐는 작업의 수는 사본마다 상수로 둔다:
+  - git 호출의 시계는 사본마다 타이머 하나다(3절 "시계는 사본마다 타이머 하나다").
+  - 폴더 감시는 그 폴더를 보일 때만 걸고, 떠나면 취소한다(3절 "떠난 폴더의 감시는 떠날 때 멈춘다").
+  - 지나가기만 하는 폴더는 읽지 않는다(3절 "머문 폴더만 읽는다").
+  그래도 다른 mod가 한도를 채울 수 있으므로, 거절이 화면을 영영 굳히지 않게 한다: 타이머나 작업을 위해 켠
+  표시(`render`가 타이머에 넘긴 "옮김 처리 중", `loading`, 쓰기 잠금, 메뉴가 열림)는 거절되면 되돌린다.
+  `render`가 타이머에 넘기는 일은 `later.js`의 `oneTimer`가 한 번에 하나씩 걸고, 거절된 타이머는 아무것도
+  걸리지 않은 것으로 남겨 다음 `render`가 다시 건다(`render` 안에서 던지지도 않는다). 표시를 켠 뒤 띄우는 작업은
+  `spawnOrUndo`로 띄워, 거절되면 표시를 되돌린 뒤 그 거절을 그대로 던진다. 버스의 `pump`도 거절된 타이머를
+  걸린 것으로 치지 않는다: 치면 그 사본은 다시는 사건을 받지 못한다. `main.js`의 명령·사건 고리는 사건 하나가
+  던져도 끝나지 않는다(요청이면 처리하지 못했다고 답한다). 감시 고리는 깨움의 읽기가 던지거나 두 번째 보기의
+  타이머가 거절되어도 이어 간다. `later.test.mjs`가 소스에서 표시를 켜거나 쓰기 잠금을 잡은 바로 뒤에 맨
+  `cx.timer.after`·`cx.spawn`이 오는 자리를 찾는다.
 - **`render` 안에서 하지 않는 일.** `render`는 Herdr 데이터가 바뀔 때마다 창 전체로 다시 돈다.
   그 안에서 `cx.notify()`는 예외를 던지고 `cx.spawn`은 첫 부분을 그 자리에서 돈다. 그래서 읽기
   시작, 저장소 이동 처리, 입력 상자를 다시 만드는 일은 `cx.timer.after`로 미룬다. 파싱, 트리,
@@ -1186,12 +1224,23 @@ Herdr는 mod를 QuickJS로 돌린다. JIT가 없고, 한 호출이 너무 오래
   잡는 실패: 레인이 끊기거나 엉킴, 폴더 체크가 자식과 어긋남, 구조가 다른 `main`을 조용히 통과함,
   틀린 아이콘이나 없는 아이콘 파일, 두 언어의 키가 어긋남, 덩어리와 결과 글이 틀리거나 줄 끝이 바뀜,
   편집 판정이 켜지면 안 될 때 켜짐, 할 일 목록이 틀림, 정렬·선택이 틀림.
+- **호스트 작업 한도.** 가짜 호스트의 타이머·감시·작업을 세어 본다. `clock.test.mjs`는 git 호출 수와 상관없이
+  사본의 시계가 타이머를 많아야 하나 쥐고 답이 다 오면 0인지, 답 없는 읽기·쓰기가 여전히 35초·605초에 포기되는지,
+  거절된 타이머와 닫힌 사본에서 어떻게 되는지 본다. `folder-watch.test.mjs`는 멈춘 감시가 기다리던 호출을 곧바로
+  취소하는지, 50개 폴더를 지나도 감시가 하나인지, 깨움과 두 번째 보기를 보고, 소스에서 `watchFolder`를 직접
+  부르거나 감시 손잡이를 버리는 화면을 찾는다. `later.test.mjs`는 `oneTimer`·`dwell`·`spawnOrUndo`가 거절 뒤
+  아무것도 걸린 채 남기지 않는지 보고, 소스의 표시·잠금 뒤 맨 호출과 `main.js` 고리의 `try`를 본다.
+  `bus.test.mjs`는 거절된 `pump` 뒤에도 사건이 오는지 본다.
+  잡는 실패: git 호출마다 타이머가 남음, 떠난 폴더의 감시가 남음, 한 번의 거절로 패널이 폴더를 따라가지 않거나
+  쓰기 잠금·"로드 중"이 풀리지 않음, 사본이 사건을 다시 받지 못함.
+  화면 전체(main.js로 만든 Log·Commit·VCS widget·Files 사본)를 빠르게 옮기며 남은 작업을 세는 일은 QuickJS
+  고리(로컬 도구)로 잰다. 화면 모듈은 `gpui-kit`을 import해서 node가 불러오지 못하기 때문이다.
 - **앱에서 눈으로만 볼 수 있는 것.** 그려진 모양과 색, 클릭·키·창의 동작, 창과 패널 사이의 요청,
   원격 space, 큰 저장소의 체감 속도, 한국어 문장이 자연스러운지. 화면에는 자동 테스트가 없어서
   바꿀 때마다 사람이 다시 본다. 확인 절차는 RECIPE의 "Done when"에 있다.
 
 **전체 오프라인 검사:** `node tools/check.mjs`가 한 번에 돌린다. 루트의 `node layout.test.mjs`,
-`mods/git-tools`의 `*.test.mjs` 57개 각각, `node tools/gen-icon-theme.test.mjs`가 모두 `ok`를 찍고,
+`mods/git-tools`의 `*.test.mjs` 64개 각각, `node tools/gen-icon-theme.test.mjs`가 모두 `ok`를 찍고,
 `herdr-app check mods/git-tools`가 통과한다. 테스트는 node 내장 모듈(`node:assert/strict` 등)만 쓴다.
 
 **느린 엔진의 예산:** `icon-theme.test.mjs`가 JIT를 끈 node로 규칙을 꽂는 시간을 재서, 규칙을
@@ -1227,6 +1276,19 @@ Herdr는 mod를 QuickJS로 돌린다. JIT가 없고, 한 호출이 너무 오래
 - 다시 불러온 직후 읽기 작업 안의 `cx.notify()`가 그리지 않는 일은 Log panel에서만 보았고 Log panel만
   자기 타이머로 첫 답을 그린다(5절). Commit panel, VCS widget, 탭과 팝업은 아직 작업 안에서만 notify하므로,
   같은 일이 나면 다른 일로 창이 다시 그려질 때까지 스켈레톤에 남을 수 있다.
+- 호스트 작업 한도(5절)에 닿아 읽기 차례(`readTurns`)를 연 뒤의 작업이 거절되면, 그 읽기는 `STUCK`(80초,
+  Conflicts dialog는 6초)이 지날 때까지 "읽는 중"으로 남고 그동안의 새로고침은 그 끝을 기다린다. Log panel의
+  저장소 찾기와 주기 읽기, Commit panel, VCS widget, Stash tab, 비교·기록·리비전·Update Info 탭, Push dialog가
+  그렇다. 표시를 되돌리지 않고 남긴 것은 그 시간이 지나면 풀리기 때문이다. 대화상자는 거절된 요청을 "결과는
+  패널에 보인다"로 끝낸다(`askOwner`): 패널이 그 요청을 받았는지는 대화상자가 알 수 없다.
+- 숨은 패널(Log panel, 다른 쪽이 보이는 Commit panel·Files panel)은 보이던 폴더의 감시를 그대로 쥔다. 사본마다
+  하나라 늘지 않아서다. 폴더를 떠날 때만 멈춘다.
+- 머문 지 500 ms가 지난 폴더에서 시작한 읽기는 그 폴더를 떠나도 끝까지 돈다. 실행기의 줄에서 아직 시작하지 않은
+  읽기도 버리지 않는다: 실행기는 쓰기와 함께 쓰이고(쓰기는 떠나도 해야 한다) 꺼낸 기억이 같은 실행기를 다시 쓰므로,
+  버리려면 줄에 읽기·쓰기를 가르고 버린 답을 모든 부품이 실패가 아닌 "지난 것"으로 받아야 한다.
+- 폴더를 옮긴 뒤 500 ms 동안은 기억한 화면(또는 스켈레톤)만 보이고 새로고침도 그 끝까지 미뤄진다. 기억한
+  화면의 Commit panel에서 그사이 누른 커밋은 기억한 목록과 Included로 그 폴더의 저장소에 쓴다(옮긴 직후의
+  읽기가 끝나기 전에 누를 때와 같다).
 
 - 다시 불러오기와 닫힌 화면의 껍데기는 힙을 돌려주지 않는다(5절). 다시 불러올 때는 옛 사본의 `close`가
   불리지 않아 비울 기회가 없다. 메뉴나 창의 답을 기다리던 사본이 닫히면 그 기다림이 붙잡은 것도 남는다

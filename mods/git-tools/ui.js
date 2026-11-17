@@ -15,6 +15,8 @@ import { iconShape, iconDraw } from "./ui-icons.js";
 import { menuWidth, dialogFills, dialogRoom, MENU_CHECK, MENU_GAP } from "./ui-size.js";
 import { skeletonRows, skeletonCount, skeletonFills, skeletonSize, checkSize, HEIGHT as SKELETON_HEIGHT } from "./skeleton.js";
 import { whereFocused, newPanes, rememberTab, registerTab, forgetTab } from "./focus-repo.js";
+import { watchSettled as watchFolderSettled } from "./folder-watch.js";
+import { spawnOrUndo } from "./later.js";
 import { en as consoleEn, ko as consoleKo } from "./messages-console.js";
 
 export const MOD = "git-tools";
@@ -104,33 +106,10 @@ export function location() {
 
 // ---- watching a folder (this computer only)
 
-// A git command in a terminal (a merge, a checkout) writes a burst of files, and a watch
-// wakes at the first. What lands before the next watchFolder call listens can go unseen,
-// so a wake is read at once and once more this long after.
-const SETTLE = 1000;
-
-// watchSettled(dir, { live, wakes, wake, failed }, cx): calls wake(cx) after each change
-// under `dir` for which wakes(paths) holds (default: any), then once more SETTLE ms later,
-// for as long as live() holds. failed() runs when the folder can't be watched (too large
-// on Linux, gone): the caller's timer still reads.
-export function watchSettled(dir, { live, wakes = () => true, wake, failed = () => {} }, cx) {
-  cx.spawn(async (cx) => {
-    let settling = false;
-    try {
-      while (live()) {
-        const paths = await watchFolder(dir);
-        if (!live()) return;
-        if (!wakes(paths)) continue;
-        wake(cx);
-        if (settling) continue;
-        settling = true;
-        cx.timer.after(SETTLE, (cx) => { settling = false; if (live()) wake(cx); });
-      }
-    } catch {
-      if (live()) failed();
-    }
-  });
-}
+// watchSettled(dir, { live, wakes, wake, failed, settle }, cx) → { stop() }: folder-watch.js
+// on herdr's watchFolder. Keep what it returns and stop it when the screen stops showing the
+// folder: the pending call is cancelled then, not at the folder's next change.
+export const watchSettled = (dir, options, cx) => watchFolderSettled(watchFolder, dir, options, cx);
 
 // ---- the git-tools layout's nodes
 
@@ -350,14 +329,19 @@ export function askOwner(screen, action, args, who, cx, done) {
   if (!screen.owner) { done({ ok: false, err: notTaken, unheard: true }, cx); return; }
   const { key, reply } = screen.bus.request(screen.owner, action, args, ASK_WITHIN);
   let gaveUp = false;
+  // The host refused the timer or the task below (past its limit of outstanding tasks): the
+  // dialog stops waiting, told that what the panel does with the request shows there.
+  const lost = () => { screen.bus.drop(key); done({ ok: false, err: tr("ui.lostShownThere", { who: panel }) }, cx); };
   // A little after the panel's own deadline, so a request it took right at the end
   // shows up as taken here.
-  cx.timer.after(ASK_WITHIN + 250, () => {
-    if (screen.bus.acked(key)) return;
-    gaveUp = true;
-    screen.bus.drop(key);
-  });
-  cx.spawn(async (cx) => {
+  try {
+    cx.timer.after(ASK_WITHIN + 250, () => {
+      if (screen.bus.acked(key)) return;
+      gaveUp = true;
+      screen.bus.drop(key);
+    });
+  } catch (error) { lost(); throw error; }
+  spawnOrUndo(cx, lost, async (cx) => {
     const r = await reply;
     if (r?.unknown) done({ ok: false, err: gone }, cx);
     else done(r ?? (gaveUp ? { ok: false, err: notTaken, unheard: true } : { ok: false, err: tr("ui.lostShownThere", { who: panel }) }), cx);
@@ -386,7 +370,9 @@ export function serveRequest(screen, e, label, work, cx) {
     answer({ ok: false, err: screen.busy ? runningText(workName(screen.busy, tr), tr) : why ?? runningText("…", tr) });
     return;
   }
-  cx.spawn(async (cx) => {
+  // A task the host refuses (past its limit of outstanding tasks) gives the lock back:
+  // nothing ran, and main.js answers the dialog that this copy couldn't serve it.
+  spawnOrUndo(cx, () => screen.setBusy(null, cx), async (cx) => {
     let r;
     try { r = await work(repo); } catch (error) { r = { ok: false, err: String(error?.message ?? error) }; }
     r = r ?? { ok: false, err: "" };

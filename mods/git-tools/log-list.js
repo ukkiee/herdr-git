@@ -74,6 +74,7 @@ import { openCommitMenu } from "./log-details.js";
 import { tip, ROW, row, notice, skeleton, skeletonSize, strokePath, WindowedList, openMenu, uiGlyph } from "./ui.js";
 import { relatives } from "./git-revision.js";
 import { firstBatch } from "./recent.js";
+import { oneTimer } from "./later.js";
 
 const BATCH = 1000;
 const LANE = 14, PAD = 5, MID = ROW / 2;
@@ -142,6 +143,7 @@ const LONE = { lane: 0, color: 0, cols: 1, lines: [] };
 export default class LogList {
   init(host, cx) {
     this.host = host;
+    this.later = oneTimer(); // render's start of the next batch, one timer at a time
     this.list = new WindowedList("log-commits");
     // At the end of the rows read, scrolling down can't move the list, so a next batch
     // that failed there is read again on the wheel itself: once per input, never while a
@@ -697,10 +699,8 @@ export default class LogList {
     if (!n) return notice(this.failed ? "" : this.filtered() ? tr("log.noMatchingCommits") : tr("log.noCommits"), t);
     // The next batch starts in a timer: nothing may start inside render.
     const scrolled = !this.stalled || this.stalled.top !== this.list.top;
-    if (this.list.nearEnd(n, 60) && this.more && !this.loading && !this.later && scrolled) {
-      this.later = true;
-      cx.timer.after(0, (cx) => { this.later = false; this.loadMore(cx); });
-    }
+    // A timer the host refuses leaves nothing set: the next render tries again (later.js).
+    if (this.list.nearEnd(n, 60) && this.more && !this.loading && scrolled) this.later.after(cx, 0, (cx) => this.loadMore(cx));
     const palette = lanePalette(t), width = host.listWidth ?? 9999;
     const v = this.graphView(width), cols = this.columns(width);
     const labelSpace = {

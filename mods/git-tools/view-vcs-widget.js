@@ -19,7 +19,7 @@
 // Delete Branch (view-branch-new.js serveBranch) and Push (view-push.js servePush).
 //
 // The widget reads (readHeads, readOperation) when it starts, when the folder it follows
-// changes, on "changed" for its repository, when its git folder changes (this computer
+// changes (once it has stayed DWELL ms, later.js), on "changed" for its repository, when its git folder changes (this computer
 // only), and every POLL while shown. Its writes
 // (Abort, Continue, Skip, Checkout, Delete) run as the host copy's own work under the
 // repository's lock; their failures and stops show as notifications.
@@ -29,6 +29,7 @@ import { h_flex } from "gpui-base";
 import { exec, theme, notify, run } from "herdr";
 import { makeGit, repoRoot } from "./git.js";
 import { readTurns } from "./read-turns.js";
+import { oneTimer, dwell, spawnOrUndo } from "./later.js";
 import { readHeads, widgetFace, faceOf } from "./git-heads.js";
 import { moveRecent } from "./recent.js";
 import { readGitDir, stateChanged } from "./git-log.js";
@@ -66,6 +67,9 @@ export class VcsWidget {
     this.context = null;
     this.reads = readTurns();
     this.watching = null; // the repository its git folder watch belongs to (watch)
+    this.watcher = null; // that watch, stopped when the widget leaves the folder or the repository
+    this.catching = oneTimer(); // render's catchUp, one timer at a time
+    this.stay = dwell(); // a folder moved to is read once it has stayed DWELL ms (refresh)
     // context key → what the widget showed there when it left (see remember), newest last.
     this.seen = new Map();
     this.recalled = false; // what shows was recalled, and no read has answered since
@@ -83,6 +87,8 @@ export class VcsWidget {
     if (context !== this.context) {
       const left = this.context, kept = this.remember();
       this.context = context; this.repo = null; this.heads = null; this.op = null; this.reads.drop(); this.again = false;
+      this.unwatch();
+      if (left !== null) this.stay.moved();
       // A folder seen before shows what it showed at once. Another one shows the block's
       // waiting bar until its first answer, at the width the block has, instead of an empty
       // widget that shrinks the block to nothing and grows it back.
@@ -93,6 +99,8 @@ export class VcsWidget {
       cx.notify();
     }
     if (!folder) { this.read = true; return; }
+    // A folder moved to is read once it has stayed DWELL ms: one passed through is never read.
+    if (this.stay.hold(cx, (cx) => this.refresh(cx))) return;
     // A write running there would be seen half done: read once it ends (catchUp).
     if (this.repo && readBlocked(this.host, this.repo)) { this.waiting = true; return; }
     this.waiting = false;
@@ -151,17 +159,26 @@ export class VcsWidget {
   }
 
   // On this computer: read again when a terminal's git moves a ref or HEAD, starts or
-  // ends an operation, or resolves a conflict. One loop per repository followed: another
-  // folder ends it the next time it wakes. The reads write nothing there (git.js READ).
+  // ends an operation, or resolves a conflict. One watch, for the repository record followed
+  // (`this.watching`): another folder or repository stops it (unwatch), which cancels its
+  // pending call at once. The reads write nothing there (git.js READ).
   watch(repo, cx) {
     if (repo.on || this.watching === repo) return;
+    this.unwatch();
     this.watching = repo;
-    cx.spawn(async (cx) => {
+    const live = () => this.watching === repo && this.repo === repo;
+    spawnOrUndo(cx, () => { this.watching = null; }, async (cx) => {
       const where = await readGitDir(repo.git, repo.root);
-      const live = () => this.watching === repo && this.repo === repo;
       if (!where.ok || !live()) return;
-      watchSettled(where.dir, { live, wakes: (paths) => stateChanged(where.dir, paths), wake: (cx) => this.refresh(cx) }, cx);
+      this.watcher = watchSettled(where.dir, { live, wakes: (paths) => stateChanged(where.dir, paths), wake: (cx) => this.refresh(cx) }, cx);
     });
+  }
+
+  // The watch stops: its pending call is cancelled now, not at the folder's next change.
+  unwatch() {
+    this.watching = null;
+    this.watcher?.stop();
+    this.watcher = null;
   }
 
   event(e, cx) {
@@ -171,12 +188,12 @@ export class VcsWidget {
   // From render: another folder to follow, or a read held back by a write that has ended,
   // taken up in a timer (render may not start work).
   catchUp(cx) {
-    if (this.catching) return;
-    const moved = this.contextKey() !== this.context;
+    if (this.catching.busy()) return;
+    const moved = this.contextKey() !== this.context || this.stay.late();
     const waiting = this.waiting && !(this.repo && readBlocked(this.host, this.repo));
     if (!moved && !waiting) return;
-    this.catching = true;
-    cx.timer.after(0, (cx) => { this.catching = false; this.refresh(cx); });
+    // A timer the host refuses leaves nothing set: the next render tries again (later.js).
+    this.catching.after(cx, 0, (cx) => this.refresh(cx));
   }
 
   // ---- writes
@@ -191,7 +208,7 @@ export class VcsWidget {
       if (why) notify({ title: why, level: "info" });
       return;
     }
-    cx.spawn(async (cx) => {
+    spawnOrUndo(cx, () => host.setBusy(null, cx), async (cx) => {
       let r;
       try { r = await run(repo); } catch (error) { r = { ok: false, err: String(error?.message ?? error) }; }
       host.setBusy(null, cx);

@@ -26,6 +26,7 @@ import { buildRows, folderKeys } from "./tree.js";
 import { pickNotes, commitsOf, noteText } from "./pick-notes.js";
 import { openConflicts } from "./view-conflicts.js";
 import { openDialog, dialogFrame, button, iconButton, row, notice, errorStrip, uiGlyph, ICON, fileGlyph, folderGlyph, darkLook, close, WindowedList, askOwner, writeBlock, sentence, broadcast, copyId } from "./ui.js";
+import { spawnOrUndo } from "./later.js";
 
 const stop = (_e, cx) => cx.stop_propagation();
 const str = (value) => (typeof value === "string" ? value : "");
@@ -150,7 +151,7 @@ export async function runSmartRequest(git, root, args, panel) {
 export function settleSmartMark(panel, repo, op, cx) {
   if (!repo || !op?.ok || op.kind || op.conflicts.length || panel.smartSettling) return;
   panel.smartSettling = true;
-  cx.spawn(async (cx) => {
+  spawnOrUndo(cx, () => { panel.smartSettling = false; }, async (cx) => {
     try {
       const mark = await readSmartMark(repo.git, repo.root);
       if (!mark.ok || !mark.hash || writeBlock(panel, repo)) return;

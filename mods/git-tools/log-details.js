@@ -32,6 +32,7 @@ import { tip, ROW, ICON, icon, uiGlyph, fileGlyph, folderGlyph, darkLook, row, t
 import { formatDateTime } from "./i18n.js";
 import { DETAILS_KEY, readDetailsOptions, toggleDetailsOption, detailsMenu } from "./log-options.js";
 import { appSetting, saveAppSetting } from "./app-files.js";
+import { spawnOrUndo } from "./later.js";
 
 // What a panel broadcasts after saving Commit details' View Options.
 export const DETAILS_EVENT = "log-details-options";
@@ -88,7 +89,7 @@ export function copyRevision(commits, cx) {
 export function checkoutCommit(host, commit, cx) {
   const repo = host.repo, part = host.details;
   if (!repo || !commit?.hash || !host.setBusy({ key: "log.checkingOut" }, cx)) return;
-  cx.spawn(async (cx) => {
+  spawnOrUndo(cx, () => host.setBusy(null, cx), async (cx) => {
     let r;
     try { r = await smartCheckoutRevision(repo, commit.hash, { owner: host.bus.id, lang: host.lang, who: "ui.logPanel" }); } catch (error) { r = { ok: false, err: String(error?.message ?? error) }; }
     // Released first: the panel skips reads while a write runs.

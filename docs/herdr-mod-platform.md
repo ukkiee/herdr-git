@@ -50,11 +50,23 @@
 
 - `exec(command, args?, { cwd?, on?, timeout? })`: stdin·스트리밍·env 옵션이 없다. 출력 8 MiB, timeout 기본 30초·최대 10분. `on`으로 원격 머신에서 실행. [문서] 따라서 자격 증명·GPG 프롬프트를 받을 수 없고, 환경 변수는 `env VAR=… git …`로 넘긴다.
 - **동시에 도는 `exec`에는 한도가 있다.** 넘으면 아무것도 실행하지 않고 곧바로 `'herdr.exec': 16 execs are running already`로 거절한다. 문구는 herdr-core(`hc`)의 exec 처리에서 나온다. 앱을 다시 켠 직후 원격 space를 보는 창에서 패널들이 한꺼번에 읽을 때 한 번 보였고, 다음 새로고침에는 사라졌다. [관찰] 한도가 머신마다인지, 앱 연결마다인지, mod마다인지는 가르지 않았다.
+- **끝나지 않은 호스트 작업은 runtime 하나에 1,024개까지다.** `herdr-app check`로 `init`에서 각각 1,100번 부르면
+  `cx.sleep`, `cx.timer.after`, `exec`, `cx.spawn` 모두 1,024번까지 받고 1,025번째부터 곧바로 던졌다. 문구는 차례로
+  `cx.sleep(ms) exceeded the per-runtime outstanding host task limit of 1024`, `cx.timer.after(ms, fn) exceeded …`,
+  `a HostModule's async function exceeded …`(exec), `cx.spawn(fn) exceeded …`다. 한도는 runtime 하나라 모든 mod가
+  함께 쓴다. 기다리는 `watchFolder` 호출도 하나로 센다(1,024번 받은 뒤 `cx.timer.after`가 던졌다).
+  `cx.timer.after`가 돌려준 작업의 `cancel()`은 그 자리를 곧바로 돌려줬다(1,024개를 걸고 모두 취소한 뒤 다시
+  1,024개를 받았다). 몸이 곧바로 끝나는 `cx.spawn`도 곧바로 돌려줬다. `watchFolder`의 `cancel()`은 같은 호출
+  안에서는 자리를 돌려주지 않았다(취소한 뒤 `cx.timer.after`가 0번 받았다): 돌려받은 약속이 풀리는 다음
+  차례에 돌려주는 것으로 보이나 `herdr-app check`는 비동기 이어짐을 돌리지 않아 재지 못했다. [실험: herdr-app
+  0.1.16, macOS] `cx.sleep`은 취소할 수 없어 끝날 때까지 자리를 쥔다. [문서] `cx.timer.every`가 자리를 쥐는지는
+  재지 않았다. [미확인] 그래서 git-tools는 사본마다 git 시계 타이머를 하나만 쥐고, 떠난 폴더의 감시를 취소하고,
+  거절되어도 화면이 굳지 않게 한다(design.md 5절 "호스트 작업 한도").
 - **`exec`의 답이 오지 않을 때가 있다.** 화면이 git 호출 하나의 답을 timeout(30초)을 훨씬 넘겨 몇 분씩 기다렸는데,
   그동안 그 명령의 프로세스는 이 컴퓨터에도 대상 머신에도 없었다. 다른 머신의 space를 새로 만든 직후 처음 열 때,
   그리고 창·탭이 열리자마자 한 첫 읽기에서 보였고 늘 재현되지는 않는다. [관찰] 이 경우들에서 약속이 풀리지 않은
   것인지, 그 약속을 기다리던 작업이 버려진 것인지는 가르지 않았다. 그래서 git-tools는 사본의 시계로 기다림에 상한을
-  두고(`cx.sleep`), "읽는 중" 표시가 다음 읽기를 영원히 막지 않게 한다(design.md).
+  두고(`cx.timer.after`), "읽는 중" 표시가 다음 읽기를 영원히 막지 않게 한다(design.md).
 - **다른 레이아웃에서 돌아온 사본의 첫 호출은 풀리지 않는다.** `layout.switch`로 돌아와 새로 시작한 사본에서,
   `init`이 시작한 작업이 첫 그리기 전에(마이크로태스크 하나 뒤) 부른 `exec`와 `cx.sleep`은 답도 거절도 없었다.
   약속에 직접 단 `.then`도 불리지 않았고 그 작업은 계속 돌았다. `init` 안에서 곧바로 부른 호출과 타이머에서 부른
@@ -77,7 +89,7 @@
   다른 사본으로 잡히는지 등)는 가르지 않았다. 앱을 새로 켠 직후에는 창이 계속 다시 그려져 이 일이 보이지 않았다.
   [관찰]
 - `readTextFile`(1 MiB, 원격 가능), `writeTextFile`(로컬 전용). [문서]
-- `watchFolder(dir)`: 로컬 전용. macOS에서는 `.git` 아래 변경도 온다. 읽기 명령이 인덱스를 건드리면 새로고침이 다음 새로고침을 부르므로 `--no-optional-locks -c core.fsmonitor=false -c diff.autoRefreshIndex=false`를 붙인다. [코드: 내장 `changes`]
+- `watchFolder(dir)`: 로컬 전용. macOS에서는 `.git` 아래 변경도 온다. 읽기 명령이 인덱스를 건드리면 새로고침이 다음 새로고침을 부르므로 `--no-optional-locks -c core.fsmonitor=false -c diff.autoRefreshIndex=false`를 붙인다. [코드: 내장 `changes`] 돌려받은 약속은 그 폴더가 다음에 바뀔 때 풀리고, 그 폴더를 더는 보이지 않으면 `cancel()`로 끝낸다(`[]`로 풀린다). 사본이 닫히면 Herdr가 취소한다. 모든 mod를 합쳐 동시에 기다릴 수 있는 폴더는 64개이고, 넘으면 거절한다(쉬는 감시를 거둘 수 있어 감시를 시작할 때 한 번 읽는다). [문서]
 - 타이머: `cx.timer.every` / `cx.timer.after`. `setTimeout` 없음. [문서]
 - 상태: `localStorage`(mod 복사본별), `shared`/`setShared`(모든 mod 공유, 설정하면 창 전체 재렌더). [문서] 공유 값은 앱의 `shared.json`에 저장되어 남는다. 그래서 큰 글(병합 결과 파일 전체 등)을 실으면 다음 값으로 바뀔 때까지 저장된 상태가 무거워진다. 큰 글은 임시 파일로 넘기고 공유 값에는 경로만 싣는다. [관측] `setShared`는 `render` 안에서 부를 수 없어 timer에서 부른다. 사본이 닫힐 때(`close`) 부른 `setShared`가 앱 종료 때도 실행되는지는 [미확인].
 - mod 명령: `<mod>.<command>`는 문자열만 전달되고 **보이는 복사본에만** 간다. [문서] 키는 `keys.json`의 `global` 또는 `mod:<name>`.

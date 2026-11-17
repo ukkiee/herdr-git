@@ -29,7 +29,8 @@ import { h_flex } from "gpui-base";
 import { exec, theme, notify, run } from "herdr";
 import { makeGit, repoRoot } from "./git.js";
 import { readTurns } from "./read-turns.js";
-import { readHeads, widgetFace } from "./git-heads.js";
+import { readHeads, widgetFace, faceOf } from "./git-heads.js";
+import { moveRecent } from "./recent.js";
 import { readGitDir, stateChanged } from "./git-log.js";
 import { readOperation, continueOperation, abortOperation, skipOperation, operationName } from "./git-operation.js";
 import { checkout, deleteBranch } from "./git-branch.js";
@@ -47,6 +48,7 @@ const PAD = 2; // the block's padding each side of the widget
 // The layout block install.sh gives the widget (the git-tools layout on macOS), sized to the widget.
 const BLOCK_ID = "git-vcs-widget";
 const WIDGET_MAX = 360; // px: a longer branch name is cut rather than widen the block further
+const SEEN = 8; // how many folders besides the one shown the widget keeps the last face of (see remember)
 // The block before the first answer (ui.js skeleton): one bar where the widget's text goes.
 const WAITING = { rows: 1, rowHeight: 26, indent: [8, 0], cols: [{ fill: true }] };
 const stop = (_e, cx) => cx.stop_propagation();
@@ -64,6 +66,9 @@ export class VcsWidget {
     this.context = null;
     this.reads = readTurns();
     this.watching = null; // the repository its git folder watch belongs to (watch)
+    // context key → what the widget showed there when it left (see remember), newest last.
+    this.seen = new Map();
+    this.recalled = false; // what shows was recalled, and no read has answered since
   }
 
   contextKey() { const { folder, on } = this.host.where(); return JSON.stringify([folder, on]); }
@@ -75,7 +80,18 @@ export class VcsWidget {
     // A change that lands while this folder is read is read once that read ends. Another
     // folder doesn't wait, nor does anything once the read in flight is stuck (read-turns.js).
     if (context === this.context && this.reads.busy()) { this.again = true; return; }
-    if (context !== this.context) { this.context = context; this.repo = null; this.heads = null; this.op = null; this.reads.drop(); this.again = false; }
+    if (context !== this.context) {
+      const left = this.context, kept = this.remember();
+      this.context = context; this.repo = null; this.heads = null; this.op = null; this.reads.drop(); this.again = false;
+      // A folder seen before shows what it showed at once. Another one shows the block's
+      // waiting bar until its first answer, at the width the block has, instead of an empty
+      // widget that shrinks the block to nothing and grows it back.
+      this.recalled = this.recall(moveRecent(this.seen, left, kept, context, SEEN));
+      this.read = this.recalled;
+      // Drawn now, not when the read ends: the window would keep the folder left on screen
+      // until then. Never called from render (catchUp takes a move up in a timer).
+      cx.notify();
+    }
     if (!folder) { this.read = true; return; }
     // A write running there would be seen half done: read once it ends (catchUp).
     if (this.repo && readBlocked(this.host, this.repo)) { this.waiting = true; return; }
@@ -83,19 +99,21 @@ export class VcsWidget {
     const turn = this.reads.start();
     cx.spawn(async (cx) => {
       try {
-        let repo = this.repo;
+        // A recalled folder is asked for its repository again: it may hold another one now.
+        let repo = this.recalled ? null : this.repo;
         if (!repo) {
           const git = makeGit(exec, on, { wait: this.host.wait });
           const top = await repoRoot(git, folder);
           if (context !== this.context) return;
-          if (!top.ok) { if (this.reads.use(turn)) { this.heads = null; this.op = null; this.read = true; } return; }
-          repo = { git, root: top.root, on };
+          if (!top.ok) { if (this.reads.use(turn)) { this.repo = null; this.heads = null; this.op = null; this.read = true; this.recalled = false; } return; }
+          repo = this.repo?.root === top.root ? this.repo : { git, root: top.root, on };
         }
         const [heads, op] = await Promise.all([readHeads(repo.git, repo.root), readOperation(repo.git, repo.root)]);
         if (context !== this.context || !this.reads.use(turn)) return;
         this.repo = repo;
         this.heads = heads;
         this.read = true;
+        this.recalled = false;
         this.op = op.ok ? op : null;
         this.watch(repo, cx);
       } finally {
@@ -103,6 +121,23 @@ export class VcsWidget {
         cx.notify();
       }
     });
+  }
+
+  // Leaving a folder: what the widget shows of it is kept (git-heads.js faceOf, not the
+  // branch and tag lists), so coming back draws it at once at its own width (recall).
+  // → what to keep (refresh puts it in `seen`, recent.js moveRecent), or null.
+  remember() {
+    if (!this.context || !this.repo || !this.heads?.ok) return null;
+    return { repo: this.repo, heads: faceOf(this.heads), op: this.op };
+  }
+
+  // Back on a folder seen before: its face until the read that follows lands. A new
+  // repository record, not the one kept: watch starts a loop only for a record it isn't
+  // watching yet, and the loop from the visit before may have ended already.
+  recall(was) {
+    if (!was) return false;
+    this.repo = { ...was.repo }; this.heads = was.heads; this.op = was.op;
+    return true;
   }
 
   // The block's first read, started as it opens, has been seen to get no answer at all when

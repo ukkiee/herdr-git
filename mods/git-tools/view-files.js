@@ -30,9 +30,13 @@ import { readFolder, readMarks, readSearchList, roomFor, PER_FOLDER, TOTAL, SEAR
 import { markLookup, visibleRows, keepPressed, pressLands, stripFailure, pressFailure, failureKey, rankSearch, moveKey, SEARCH_SHOWN } from "./files-tree.js";
 import { tip, location, ICON, icon, uiGlyph, fileGlyph, folderGlyph, darkLook, panelFrame, toolbar, iconButton, row, notice, skeleton, skeletonSize, errorStrip, WindowedList, openMenu } from "./ui.js";
 import { openDiff } from "./view-diff.js";
+import { moveRecent } from "./recent.js";
 import { editorLanguage } from "./editor-language.js";
 
 const POLL = 10000;
+// How many folders besides the one shown the tree is kept for, to show at once on coming
+// back (see remember).
+const SEEN = 8;
 // The preview shows at most this many characters; readTextFile itself stops at 1 MiB.
 const PREVIEW_CHARS = 400000;
 const LETTER = { modified: "M", added: "A", deleted: "D", conflict: "U" };
@@ -53,6 +57,8 @@ export default class FilesView {
   init(_p, cx) {
     // context key → { open, file } the panel left there (see enter).
     this.saved = new Map();
+    // context key → what the tree showed there when it left, the SEEN newest (see remember).
+    this.seen = new Map();
     this.context = null;
     this.reset();
     this.list = new WindowedList("files-tree");
@@ -120,11 +126,12 @@ export default class FilesView {
   // ---- reading
 
   // A folder change is taken up first: the open folders and the previewed file of the
-  // folder left are kept for coming back.
+  // folder left are kept for coming back, and what its tree showed too (remember).
   enter(cx) {
     const key = this.contextKey();
     if (key === this.context?.key) return;
     if (this.context) this.saved.set(this.context.key, { open: this.open, file: this.file });
+    const left = this.context?.key, kept = this.remember();
     const { folder, on } = this.where();
     this.reset();
     this.context = { key };
@@ -132,10 +139,29 @@ export default class FilesView {
     const was = this.saved.get(key);
     if (was) this.open = new Set(was.open);
     if (this.list) this.list.top = 0;
+    this.recall(moveRecent(this.seen, left, kept, key, SEEN));
     if (this.found) this.found.top = 0;
     if (was?.file) this.show(was.file, cx);
     // A search still typed searches the new folder.
     if (this.searching()) this.readList(cx);
+  }
+
+  // What the tree shows of the folder left, so coming back draws it at once instead of the
+  // loading skeleton; the read that follows puts it right. Only the SEEN newest folders:
+  // the open folders and the previewed file of every folder stay in `saved`. → what to keep
+  // (enter puts it in `seen`, recent.js moveRecent), or null.
+  remember() {
+    if (!this.context || !this.read || !this.root || this.gone || this.rootError || !this.folders.size) return null;
+    return { folders: this.folders, marks: this.marks, prefix: this.prefix, repoRoot: this.repoRoot, top: this.list.top };
+  }
+
+  // Back on a folder kept by remember, with its open folders already back (enter).
+  recall(was) {
+    if (!was) return;
+    this.folders = was.folders; this.marks = was.marks; this.prefix = was.prefix; this.repoRoot = was.repoRoot;
+    this.rebuild();
+    this.read = true;
+    if (this.list) this.list.top = was.top;
   }
 
   refresh(cx) {

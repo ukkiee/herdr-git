@@ -106,7 +106,7 @@
 | 화면 | `view-*.js`, `commit-form.js`, `commit-stash-tab.js`, `log-branches.js`, `log-list.js`, `log-details.js`, `log-filters.js` | 그리기와 사람의 입력 |
 | git | `git.js`, `git-status.js`, `git-commit.js`, `git-rollback.js`, `git-snapshot.js`, `git-diff.js`, `git-push.js`, `git-log.js`, `git-log-filter.js`, `git-branch.js`, `git-show.js`(`readLastCommit` 포함), `files-data.js` | git과 폴더 읽기 명령을 부르고 결과를 해석한다 |
 | git 동작 | `git-operation.js`, `git-conflict.js`, `git-smart.js`, `git-stash.js`, `git-reset.js`, `git-rewrite.js`, `git-changes.js`, `git-remote.js`, `git-refs.js`, `git-compare.js`, `git-revision.js`, `git-worktree.js`, `git-heads.js`, `git-patch.js` | Operation in progress 읽기와 merge·rebase·cherry-pick·revert의 실행·판정, 충돌 파일 쓰기, Smart operation, stash, reset과 하드 전 기록, 히스토리 다시 쓰기, 파일 단위 되돌리기·체리픽, pull·업데이트, 태그·이름 변경·원격, 비교·패치·가져오기, 리비전의 파일과 하위 커밋, 새 워크트리, VCS widget이 보일 브랜치, 로컬 변경의 패치와 패치 적용 |
-| 순수 계산 | `graph.js`, `tree.js`, `bus.js`, `lock.js`, `read-turns.js`, `i18n.js`, `icon-theme.js`, `files-tree.js`, `editor-language.js`, `merge-chunks.js`, `conflicts-model.js`, `merge-revisions-model.js`, `rebase-plan.js`, `log-menus.js`, `log-select.js`, `log-options.js`, `branch-order.js`, `vcs-ops.js`, `git-console.js`, `ui-icons.js`, `pick-notes.js`, `ui-size.js`, `focus-repo.js`, `let-go.js`, `skeleton.js` | 그래프 배치, 경로 트리와 3상태 체크, 버스와 잠금 값, 되풀이하는 읽기의 차례, 언어와 문장, 아이콘 고르기, Files panel의 줄·표시·찾기 순위·키, 미리보기의 구문 색, 병합 덩어리, 두 충돌 창이 보일 것과 켜질 것, 리베이스 계획과 편집 판정, Log panel의 메뉴·툴바 표, 여러 커밋 고르기, 그래프·표시 옵션 값, 브랜치 순서와 즐겨찾기, VCS Operations popup의 항목, 콘솔 기록의 꼴과 자격 증명 가림, UI icon 대응, Cherry-Pick·Revert 결과의 알림, 메뉴 너비·팝업 자리·창이 자리를 채우는지·위젯 블록 폭, 패널이 따를 저장소와 탭 기록, 닫히는 화면이 쥔 데이터 비우기, 로딩 스켈레톤의 행과 조각 자리 |
+| 순수 계산 | `graph.js`, `tree.js`, `bus.js`, `lock.js`, `read-turns.js`, `i18n.js`, `icon-theme.js`, `files-tree.js`, `editor-language.js`, `merge-chunks.js`, `conflicts-model.js`, `merge-revisions-model.js`, `rebase-plan.js`, `log-menus.js`, `log-select.js`, `log-options.js`, `branch-order.js`, `vcs-ops.js`, `git-console.js`, `ui-icons.js`, `pick-notes.js`, `ui-size.js`, `focus-repo.js`, `let-go.js`, `skeleton.js`, `recent.js` | 그래프 배치, 경로 트리와 3상태 체크, 버스와 잠금 값, 되풀이하는 읽기의 차례, 언어와 문장, 아이콘 고르기, Files panel의 줄·표시·찾기 순위·키, 미리보기의 구문 색, 병합 덩어리, 두 충돌 창이 보일 것과 켜질 것, 리베이스 계획과 편집 판정, Log panel의 메뉴·툴바 표, 여러 커밋 고르기, 그래프·표시 옵션 값, 브랜치 순서와 즐겨찾기, VCS Operations popup의 항목, 콘솔 기록의 꼴과 자격 증명 가림, UI icon 대응, Cherry-Pick·Revert 결과의 알림, 메뉴 너비·팝업 자리·창이 자리를 채우는지·위젯 블록 폭, 패널이 따를 저장소와 탭 기록, 닫히는 화면이 쥔 데이터 비우기, 로딩 스켈레톤의 행과 조각 자리, 떠난 폴더의 기억(최근 N개)과 Commit list의 첫 묶음 |
 | 데이터 | `messages-*.js`, `icon-theme-data.js`, `icons/theme/`, `icons/ui/`(그 밖의 `icons/` 파일 포함) | 문구 표, 생성한 아이콘 규칙, 아이콘 파일 |
 
 저장소 루트에는 레이아웃 변환 `layout.mjs`, 설치 `install.sh`, 키 `keys.json`, 아이콘 생성기
@@ -198,6 +198,41 @@ git 모듈과 순수 계산 모듈은 `herdr`를 import하지 않는다. 그래�
     `panes()`를 견주어 먼저 기록해 본다.
   - 대화상자·메뉴(overlay)와 root가 없는 화면(Git console, 레이아웃 블록)은 기록하지 않는다. 콘솔
     탭에 포커스가 있으면 패널은 space 폴더를 따른다. 닫힌 창의 기록은 다음 기록 때 함께 지운다.
+- **떠난 폴더의 화면 기억**: Commit panel, Log panel, VCS widget, Files panel은 다른 폴더로 옮길 때
+  떠나는 폴더에서 보이던 것을 기억하고, 다시 오면 그것을 스켈레톤 없이 바로 보인 뒤 이어지는 읽기로
+  바로잡는다. 스켈레톤은 처음 가는 폴더(또는 기억에서 밀려난 폴더)에서만 보인다. 규칙:
+  - **사본 필드의 Map에 둔다**(`seen`, 키는 그 화면의 `contextKey()`). 모듈 상태로 두면 닫히는 사본의
+    `letGo`가 비우지 못한다(5절 "닫히는 화면은 쥔 것을 놓는다"). 옮길 때는 `recent.js` `moveRecent`
+    하나로 **돌아온 폴더를 먼저 꺼내고, 그다음 떠난 폴더를 넣는다**(떠나는 화면의 재료는 화면을 비우기
+    전에 `remember()`로 잡아 둔다). 넣기를 먼저 하면 Map이 찬 채 가장 오래된 폴더로 돌아올 때 그
+    폴더가 막 밀려난 뒤 찾게 되어, 상한보다 하나 많은 폴더를 차례로 돌면 한 번도 꺼내지 못한다.
+  - **꺼낼 때 Map에서 지운다.** 화면이 쥔 것과 Map이 같은 데이터를 둘 다 붙잡지 않는다. 꺼내는 키는 옮겨
+    간 곳의 `contextKey()`뿐이라, 보이는 것은 늘 그 폴더에서 마지막으로 본 그 폴더의 저장소다. 떠난
+    폴더의 늦은 읽기도 그 위에 내려앉지 못한다: Log panel은 꺼내기 전에 `setRepo(null)`이 Commit
+    list와 Branch tree를 둘 다 새 순번으로 비우므로 앞 폴더의 읽기는 순번 검사에서 버려지고, 기억에
+    없는 쪽은 스켈레톤으로 시작한다. VCS widget은 `reads.drop()`, Files panel은 방문마다 새
+    `context` 객체로 같은 일을 한다. 루트가 달라졌으면 이어지는 저장소 찾기가 모두 비운다(Log panel의
+    `setRepo`, VCS widget은 꺼낸 뒤 첫 읽기에서 저장소를 다시 묻는다).
+  - **꺼낸 저장소 기록(`repo`)은 새 객체다**(`{ ...was.repo }`). 감시 고리가 기록의 같음으로 살아
+    있는지 보기 때문이다. Log panel의 고리는 `this.repo === repo`를 보므로 같은 객체를 되돌리면 앞
+    방문의 고리가 되살아나 감시가 둘이 되고, VCS widget은 `this.watching === repo`면 새 고리를
+    시작하지 않아 앞 고리가 이미 끝났으면 감시가 0이 된다. Log panel은 루트가 같으면 `setRepo`를
+    거치지 않으므로 `recall`이 감시를 직접 시작한다.
+  - **재료만 기억하고, 그린 행은 꺼낼 때 다시 만든다**(타이머 안: `refresh`는 `render`에서 돌지 않는다).
+    Log panel은 Branch tree의 읽은 것과 Commit list의 앞 1,000개(`BATCH`)만 둔다. `refs`, 행,
+    선택과 Commit details는 두지 않는다(옮기면 선택이 풀리는 것은 전과 같다). VCS widget은 얼굴의
+    재료(`git-heads.js` `faceOf`)만 두고 브랜치·태그 목록은 두지 않는다.
+  - **꺼낸 그 자리에서 다시 그리기를 요청한다**(`cx.notify()`, Log panel은 `redraw`). 상태만 바꾸고
+    읽기가 끝날 때 그리면, 창은 그때까지 떠난 폴더의 그림을 둔다. 폴더를 옮기는 `refresh`는 `render`가 건
+    타이머에서 돌므로 그 안에서 요청해도 된다.
+  - **상한**: 지금 보이는 폴더 말고 최근에 떠난 폴더를 Log panel은 4개, 나머지는 8개 둔다. 큰 저장소
+    폴더 하나의 Log 기억이 약 2.1 MB라(행까지 두면 4.1 MB) 모든 mod가 함께 쓰는 힙(256 MB)을
+    아낀다. 지금 보이는 폴더는 Map이 아니라 화면이 쥔다. 다시 불러오기 뒤 옛 사본의 기억도 함께 남으므로
+    최악은 상한만큼 더 묶인다. Files panel은 펼친 폴더와 미리보기 파일(`saved`)은 지금처럼 모든
+    폴더에 남기고, 트리의 데이터만 8개로 자른다.
+  - Commit list는 기억한 보기(브랜치 제한·필터·그래프 옵션)가 지금 보기와 다르면 꺼내지 않는다. No
+    Merges로 첫 묶음보다 더 읽었고 병합이 실제로 빠진 목록도 꺼내지 않는다: 빠진 병합 커밋의 자리를 모르므로 앞 1,000개가
+    git 순서의 어디서 끝나는지 알 수 없고, 다음 묶음을 틀린 자리부터 읽게 된다(`firstBatch`).
 - **앱 홈의 파일**: 앱 전체의 값은 앱 홈의 `git-tools` 폴더에 둔다(`app-files.js`).
   `console.jsonl`은 Git console의 기록이고, `settings.json`은 JSON 객체 하나다(키
   `updateProject.method`, `pull.branches`, `rewrite.dropDontAsk`,

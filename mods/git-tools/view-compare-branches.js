@@ -11,6 +11,7 @@ import { h_flex, v_flex, InputState, Input } from "gpui-base";
 import { exec, theme } from "herdr";
 import { tip, ICON, fileGlyph, folderGlyph, darkLook, row, toolbar, spacer, iconButton, notice, skeleton, skeletonSize, errorStrip, WindowedList, panelFrame } from "./ui.js";
 import { makeGit } from "./git.js";
+import { readTurns } from "./read-turns.js";
 import { readCommit } from "./git-show.js";
 import { buildRows } from "./tree.js";
 import { formatDateTime } from "./i18n.js";
@@ -28,6 +29,7 @@ const INDENT = 14;
 // The rows while they are read (ui.js skeleton), as commitRow and fileRow lay them out.
 const SKELETON_COMMITS = { indent: [10, 0], gap: 8, padRight: 10, cols: [{ grow: true }, { fit: 72 }, { fit: 96 }] };
 const SKELETON_FILES = { indent: [6, INDENT], gap: 5, padRight: 10, depth: [0, 1, 1, 0, 1, 1, 1], lead: ["slot", "file"] };
+const FIRST_LOOK = 6000; // ms: the first read still unanswered then is made again once
 const KIND = [en["compare.branchesTab"], ko["compare.branchesTab"]];
 
 // t: the opener's t (its language names the tab).
@@ -68,6 +70,7 @@ export default class CompareBranches {
     this.a = p.a ?? null; this.b = p.b ?? null;
     this.aName = p.aName ?? this.a; this.bName = p.bName ?? this.b;
     this.lists = null; // { onlyA, onlyB }
+    this.reads = readTurns();
     this.error = null;
     this.picked = null; // { side, hash }
     this.info = null; this.files = []; this.cursor = null;
@@ -79,7 +82,11 @@ export default class CompareBranches {
     // Each list's filter: User, Date (from), Path; Enter in a box applies that list's.
     this.inputs = { a: this.filterInputs("a"), b: this.filterInputs("b") };
     this.filters = { a: [], b: [] }; // git-log-filter.js filterArgs for each list
-    this.load(cx);
+    // A tab opened in place of the one before (space-tabs.js) gets no answer to a read init
+    // starts directly (docs/herdr-mod-platform.md); one started from a timer answers. And
+    // should the first read still get none, once, a little later, it reads again beside it.
+    cx.timer.after(0, (cx) => { this.load(cx); cx.notify(); });
+    cx.timer.after(FIRST_LOOK, (cx) => { if (this.lists === null) this.load(cx); });
   }
 
   git() { return makeGit(exec, this.repo?.on ?? null, { wait: this.wait }); }
@@ -113,24 +120,26 @@ export default class CompareBranches {
     cx.notify();
   }
 
+  // Always reads, also while a read is going: an answer that never comes must not keep the
+  // tab on "Loading…" nor Refresh from reading (read-turns.js). An answer older than one
+  // shown already is dropped.
   load(cx) {
     if (!this.repo || !this.a || !this.b) { this.lists = { onlyA: [], onlyB: [] }; this.error = this.t("dialogs.diff.noFileTab"); return; }
-    if (this.loading) { this.again = true; return; }
-    this.loading = true; this.again = false;
+    const turn = this.reads.start();
     const { a, b } = this, git = this.git(), root = this.repo.root, fa = this.filters.a, fb = this.filters.b;
     cx.spawn(async (cx) => {
       try {
         // One read when both lists are filtered alike, else one per list.
         const ra = await branchCommits(git, root, { a, b, filterArgs: fa });
         const rb = JSON.stringify(fa) === JSON.stringify(fb) ? ra : await branchCommits(git, root, { a, b, filterArgs: fb });
+        if (!this.reads.use(turn)) return;
         const failed = !ra.ok ? ra : !rb.ok ? rb : null;
         if (!failed) { this.lists = { onlyA: ra.onlyA, onlyB: rb.onlyB }; this.error = null; }
         else { this.lists ??= { onlyA: [], onlyB: [] }; this.error = failed.err || this.t("ui.gitFailed"); }
       } catch (error) {
-        this.lists ??= { onlyA: [], onlyB: [] }; this.error = String(error?.message ?? error);
+        if (this.reads.use(turn)) { this.lists ??= { onlyA: [], onlyB: [] }; this.error = String(error?.message ?? error); }
       } finally {
-        this.loading = false;
-        if (this.again) this.load(cx);
+        this.reads.end(turn);
         cx.notify();
       }
     });
@@ -216,7 +225,7 @@ export default class CompareBranches {
     const bar = toolbar(t)
       .child(div().pl(4).min_w(0).truncate().text_color(t.dim).child(this.t("compare.branchesTab", { a: this.aName, b: this.bName })))
       .child(spacer())
-      .child(iconButton("compare-branches-refresh", "refresh", t, { title: this.t("compare.refresh"), busy: Boolean(this.loading && lists), onClick: (_e, cx) => { this.load(cx); cx.notify(); } }));
+      .child(iconButton("compare-branches-refresh", "refresh", t, { title: this.t("compare.refresh"), busy: Boolean(this.reads.busy() && lists), onClick: (_e, cx) => { this.load(cx); cx.notify(); } }));
     const body = h_flex().flex_1().min_h(0).w_full()
       .child(v_flex().flex_1().min_w(0).h_full()
         .child(this.half("a", lists?.onlyA ?? null, this.listA, this.aName, this.bName, t))

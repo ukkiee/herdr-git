@@ -713,9 +713,13 @@ dialog's own (`openDialog` in its file).
 - **Space tabs**, one per kind (opening the kind again replaces it): `Compare: <a> and
   <b>`, `Changes Between <ref> and Current Working Tree`, `Changes Between <rev> and Local
   Version`, `Changes Between <a> and <b>`, `<folder> at <rev>`, `History up to <rev>`,
-  `Update Info`, `Console`. The `History up to <rev>` and `Update Info` tabs read again
-  from the top on Refresh even while a read is going, and a first read still unanswered
-  after 6 s is made again once. Their `Show more` asked again while its read went
+  `Update Info`, `Console`. All but `Console` read as they open, also a tab opened in
+  place of the one before, and a first read still unanswered after 6 s is made again
+  once. Those with Refresh (`Compare: <a> and <b>`, `Changes Between <rev> and Local
+  Version`, `History up to <rev>`, `Update Info`) read again from the top on Refresh even
+  while a read is going; an answer older than one shown already is dropped. `<folder> at
+  <rev>` keeps the first tree it shows, so folders opened in it stay open. The
+  `History up to <rev>` and `Update Info` tabs' `Show more` asked again while its read went
   unanswered adds that page once, whichever answer lands first, and the next page starts
   after the last commit shown.
 
@@ -3169,7 +3173,7 @@ Each line is one check: do what it says, see what follows.
 **Offline**
 
 1. Run `node layout.test.mjs` at the root, `node <file>` for every `*.test.mjs` in
-   `mods/git-tools` (58 files) and `node tools/gen-icon-theme.test.mjs`: each prints
+   `mods/git-tools` (59 files) and `node tools/gen-icon-theme.test.mjs`: each prints
    `ok` (the last one after `skip: …` unless `ICON_THEME_SOURCE` is set).
 2. Run `herdr-app check mods/git-tools`: it passes.
 

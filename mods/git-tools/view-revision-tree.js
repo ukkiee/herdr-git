@@ -11,6 +11,7 @@ import { v_flex, Editor, EditorState } from "gpui-base";
 import { exec, theme, settings } from "herdr";
 import { tip, ICON, uiGlyph, fileGlyph, folderGlyph, darkLook, row, toolbar, notice, skeleton, skeletonSize, errorStrip, WindowedList, panelFrame } from "./ui.js";
 import { makeGit } from "./git.js";
+import { readTurns } from "./read-turns.js";
 import { buildRows } from "./tree.js";
 import { openSpaceTab } from "./space-tabs.js";
 import { readRevisionFile } from "./git-compare.js";
@@ -22,6 +23,7 @@ const SHORT = 7;
 const short = (hash) => String(hash ?? "").slice(0, SHORT);
 const INDENT = 14;
 const PREVIEW_CHARS = 400000;
+const FIRST_LOOK = 6000; // ms: the first read still unanswered then is made again once
 const KIND = [en["revision.repositoryTab"], ko["revision.repositoryTab"]];
 
 const folderName = (root) => String(root ?? "").replace(/[\\/]+$/, "").split(/[\\/]/).pop() || String(root ?? "");
@@ -43,29 +45,41 @@ export default class RevisionTree {
     this.repo = p.root ? { root: p.root, on: p.on ?? null } : null;
     this.rev = p.rev ?? null; this.folder = p.folder ?? folderName(p.root);
     this.files = null; this.rows = []; this.collapsed = new Set();
+    this.reads = readTurns();
     this.error = null; this.cursor = null;
     this.file = null; // the file shown in place of the tree: its tree row's item
     this.code = null; this.note = null; this.cut = false; this.turn = 0;
     this.list = new WindowedList("revision-tree-files");
     this.handle = cx.focus_handle();
-    this.load(cx);
+    // A tab opened in place of the one before (space-tabs.js) gets no answer to a read init
+    // starts directly (docs/herdr-mod-platform.md); one started from a timer answers. And
+    // should the first read still get none, once, a little later, it reads again beside it.
+    cx.timer.after(0, (cx) => { this.load(cx); cx.notify(); });
+    cx.timer.after(FIRST_LOOK, (cx) => { if (this.files === null) this.load(cx); });
   }
 
   git() { return makeGit(exec, this.repo?.on ?? null, { wait: this.wait }); }
 
+  // The first read and the one made again beside it may both answer. Once a tree is shown,
+  // later answers are dropped: the revision never changes, and taking one would fold again
+  // the folders the person opened and build the rows of a possibly huge list again. Until
+  // then answers go by readTurns, so an error shown first gives way to a newer read's tree.
   load(cx) {
     if (!this.repo || !this.rev) { this.files = []; this.error = this.t("ui.gitFailed"); return; }
+    const turn = this.reads.start();
     cx.spawn(async (cx) => {
-      try {
-        const r = await revisionTree(this.git(), this.repo.root, this.rev);
+      let r;
+      try { r = await revisionTree(this.git(), this.repo.root, this.rev); }
+      catch (error) { r = { ok: false, files: [], err: String(error?.message ?? error) }; }
+      const shown = this.files !== null && this.error === null;
+      if (!shown && this.reads.use(turn)) {
         this.files = r.files;
         this.error = r.ok ? null : r.err || this.t("ui.gitFailed");
         // Folded to the top level at first: a whole repository is too long a list to open on.
         this.collapsed = new Set(buildRows(r.files, { grouped: true }).filter((m) => m.folder).map((m) => m.key));
         this.build();
-      } catch (error) {
-        this.files = []; this.error = String(error?.message ?? error);
       }
+      this.reads.end(turn);
       cx.notify();
     });
   }

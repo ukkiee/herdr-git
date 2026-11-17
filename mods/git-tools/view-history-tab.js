@@ -65,9 +65,10 @@ export default class HistoryTab {
     this.list = new WindowedList("history-commits", { rowHeight: ROW_H });
     this.fileList = new WindowedList("history-commit-files");
     this.waits = { commits: skeletonSize("history-commits-wait"), files: skeletonSize("history-commit-files-wait") };
-    this.load(cx, false);
-    // A tab opened in place of the one before (space-tabs.js) has been seen to get no answer
-    // to its first read: once, a little later, it reads again beside it.
+    // A tab opened in place of the one before (space-tabs.js) gets no answer to a read init
+    // starts directly (docs/herdr-mod-platform.md); one started from a timer answers. And
+    // should the first read still get none, once, a little later, it reads again beside it.
+    cx.timer.after(0, (cx) => { this.load(cx, false); cx.notify(); });
     cx.timer.after(FIRST_LOOK, (cx) => { if (this.commits === null) this.load(cx, false); });
   }
 

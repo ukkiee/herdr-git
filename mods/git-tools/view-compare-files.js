@@ -24,6 +24,7 @@ import { h_flex, v_flex, Editor, EditorState } from "gpui-base";
 import { exec, theme, settings, readTextFile } from "herdr";
 import { tip, ROW, ICON, uiGlyph, fileGlyph, folderGlyph, darkLook, row, toolbar,spacer, iconButton, notice, skeleton, skeletonSize, errorStrip, openMenu, openTab, broadcast, takeWrite, releaseWrite, writeBlock, copyId, sentence, WindowedList, panelFrame } from "./ui.js";
 import { makeGit } from "./git.js";
+import { readTurns } from "./read-turns.js";
 import { buildRows } from "./tree.js";
 import DiffView from "./view-diff.js";
 import { openSpaceTab } from "./space-tabs.js";
@@ -35,6 +36,7 @@ const SHORT = 7;
 const short = (hash) => String(hash ?? "").slice(0, SHORT);
 const INDENT = 14;
 const POLL = 10000;
+const FIRST_LOOK = 6000; // ms: the first read still unanswered then is made again once
 // The scratch index of the Rollback snapshots this copy records before a Get (ui.js copyId).
 const COPY_KEY = "compare.copy";
 const PREVIEW_CHARS = 400000;
@@ -186,6 +188,7 @@ export default class CompareFiles {
     this.ref = p.ref ?? null; this.refName = p.refName ?? short(p.ref); this.current = p.current ?? "HEAD";
     this.from = p.from ?? null; this.to = p.to ?? null;
     this.files = null; this.rows = [];
+    this.reads = readTurns();
     this.grouped = true; this.swapped = false;
     this.collapsed = new Set(); this.cursor = null;
     this.error = null;
@@ -193,21 +196,29 @@ export default class CompareFiles {
     this.list = new WindowedList("compare-files");
     this.handle = cx.focus_handle();
     this.drawn = false;
-    this.load(cx);
-    // A commit pair never changes; the working tree does.
-    if (this.mode !== "versions") cx.timer.every(POLL, (cx) => { if (this.drawn) { this.drawn = false; this.load(cx); } });
+    // A tab opened in place of the one before (space-tabs.js) gets no answer to a read init
+    // starts directly (docs/herdr-mod-platform.md); one started from a timer answers. And
+    // should the first read still get none, once, a little later, it reads again beside it.
+    cx.timer.after(0, (cx) => { this.load(cx); cx.notify(); });
+    cx.timer.after(FIRST_LOOK, (cx) => { if (this.files === null) this.load(cx); });
+    // A commit pair never changes; the working tree does. The poll waits for a read going:
+    // reads that go unanswered must not pile up (read-turns.js).
+    if (this.mode !== "versions") cx.timer.every(POLL, (cx) => { if (this.drawn && !this.reads.busy()) { this.drawn = false; this.load(cx); } });
   }
 
   git() { return makeGit(exec, this.repo?.on ?? null, { wait: this.wait }); }
 
+  // Always reads, also while a read is going: an answer that never comes must not keep the
+  // tab on "Loading…" nor Refresh from reading (read-turns.js). An answer older than one
+  // shown already is dropped.
   load(cx) {
     if (!this.repo) { this.files = []; this.error = this.t("dialogs.diff.noFileTab"); return; }
-    if (this.loading) { this.again = true; return; }
-    this.loading = true; this.again = false;
+    const turn = this.reads.start();
     const { root } = this.repo;
     cx.spawn(async (cx) => {
       try {
         const r = this.mode === "versions" ? await versionFiles(this.git(), root, this.from, this.to) : await workingTreeFiles(this.git(), root, this.ref);
+        if (!this.reads.use(turn)) return;
         if (r.ok) {
           this.files = r.files; this.error = null;
           // The head line names what the working tree is on now, not what it was on when
@@ -217,10 +228,9 @@ export default class CompareFiles {
         }
         else { this.files ??= []; this.error = r.err || this.t("ui.gitFailed"); }
       } catch (error) {
-        this.files ??= []; this.error = String(error?.message ?? error);
+        if (this.reads.use(turn)) { this.files ??= []; this.error = String(error?.message ?? error); }
       } finally {
-        this.loading = false;
-        if (this.again) this.load(cx);
+        this.reads.end(turn);
         cx.notify();
       }
     });
@@ -339,7 +349,7 @@ export default class CompareFiles {
     const writing = writeBlock(this, this.repo);
     const getName = this.mode === "working" ? "compare.getFromBranch" : "compare.get";
     let bar = toolbar(t);
-    if (this.mode === "local") bar = bar.child(iconButton("compare-refresh", "refresh", t, { title: this.t("compare.refresh"), busy: Boolean(this.loading && this.files), onClick: (_e, cx) => { this.load(cx); cx.notify(); } }));
+    if (this.mode === "local") bar = bar.child(iconButton("compare-refresh", "refresh", t, { title: this.t("compare.refresh"), busy: Boolean(this.reads.busy() && this.files), onClick: (_e, cx) => { this.load(cx); cx.notify(); } }));
     bar = bar.child(iconButton("compare-diff", "show-diff", t, { title: this.t("compare.showDiff"), disabled: !m || m.folder, onClick: () => this.showDiff(this.cursorRow()) }));
     if (this.mode !== "versions") {
       bar = bar.child(iconButton("compare-get", "update", t, { title: writing ?? this.t(getName), disabled: !m || Boolean(writing), busy: Boolean(this.busy), onClick: (_e, cx) => this.get(cx) }));

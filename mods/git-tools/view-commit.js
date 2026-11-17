@@ -146,7 +146,12 @@ export default class CommitView {
   // ---- what the commit form (and anything else hosted here) may use
 
   // repo: { git, root, on, folder }, or null outside a repository.
-  // included() → [{ path, status }]: the files checked for the next commit, both groups,
+  // settled(): the panel shows where the focused pane is. A move render notices is taken
+  // up only in a timer (render), so until then repo is still the repository left, and a
+  // press that writes would write there.
+  settled() { return this.contextKey() === this.context; }
+
+  // included() →[{ path, status }]: the files checked for the next commit, both groups,
   // the operation's staged files with them.
   included() {
     return [...this.changes, ...this.unversioned].filter((file) => this.picked.has(file.path) || this.locked.has(file.path));

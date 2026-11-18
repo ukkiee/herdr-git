@@ -208,9 +208,9 @@ Herdr. git's own messages are shown as git writes them.
   `defaults read -g AppleLanguages` (macOS), `sh -c 'printf …'` printing `LC_ALL`,
   `LC_MESSAGES` and `LANG` (Linux) or `powershell -NoProfile -Command
   "(Get-UICulture).Name"` (Windows). Saving a merge result and applying a patch from the
-  clipboard run `sh` where the space runs (`mktemp`, `printf`, `cp -p`, `mv`, `rm`); on
-  this computer, saving a merge result also reads it back with `cat`. Apply Patch with a
-  `~` path in a space on another machine runs `printenv HOME` there.
+  clipboard run `sh` where the space runs (`mkdir -p`, `mktemp`, `printf`, `cp -p`, `mv`,
+  `rm`), and saving a merge result also reads it with `cat` there. Apply Patch with a `~`
+  path in a space on another machine runs `printenv HOME` there.
 - **Network**: `git fetch` when you press Fetch, Pull, Update Project, Update or
   Checkout and Update, or save a remote with Fetch from the remote on; `git pull` for
   Pull and the branch menus' Pull into; `git push` when you press Push, Force Push or
@@ -279,10 +279,10 @@ Herdr. git's own messages are shown as git writes them.
   go on (the VCS widget or the Commit panel) instead of offering Continue and Abort.
 - F2 belongs to Herdr (renaming a tab) before the Branch tree sees it: rename a branch
   from its right-click menu.
-- Menus have no submenus. In the Branch tree, a current branch's Tracked Branch opens a
-  second menu; in the VCS widget popup, a tag's Push Tag opens a second menu of remotes.
-  Only the VCS widget popup draws a branch's menu beside its row, and only it has a tag
-  menu.
+- The Branch tree's and the Commit list's menus have no submenus: a current branch's
+  Tracked Branch opens a second menu. In the VCS widget popup a branch's menu opens
+  beside its row, and a tag's Push Tag opens a second menu of remotes; the Branch tree's
+  tags have no menu.
 - The VCS widget popup's stars only show favorites; mark them in the Branch tree. The
   widget cuts a branch name that would make it wider than 360px.
 - Commit details hides when the Log panel is narrower than about 930px.

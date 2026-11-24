@@ -20,6 +20,7 @@ import { openTab, watchSettled, notice, skeleton, skeletonSize, iconButton, erro
 import { oneTimer, spawnOrUndo } from "./later.js";
 import { makeGit } from "./git.js";
 import { readDiff, touchesDiff, MAX_ROWS, MAX_CHARS } from "./git-diff.js";
+import { rowColor } from "./diff-colors.js";
 
 // openDiff({ root, on, path, commit?, status?, oldPath? })
 //   Opens a Diff tab in the shown space, titled with the file's name.
@@ -57,8 +58,11 @@ function expandTabs(text) {
   return out;
 }
 
-// "#rrggbb" plus an alpha byte: a tint of a theme color that works in light and dark.
-const tint = (color, alpha) => (/^#[0-9a-f]{6}$/i.test(color ?? "") ? color + alpha : color);
+// Added lines are blue and deleted lines red: red-green color blindness can't tell red and
+// green rows apart. Blue here means added only; file lists keep blue for modified. The rows
+// are deep shades of these hues (diff-colors.js), the signs and numbers the colors themselves.
+const ADD = "ansi4";
+const DEL = "ansi1";
 
 // 5000 → "5,000". Written out: toLocaleString doesn't group digits in the app's runtime.
 const count = (n) => String(n).replace(/\B(?=(\d{3})+$)/g, ",");
@@ -220,7 +224,8 @@ export default class DiffView {
       return h_flex().h(LINE).w_full().flex_none().items_center().px(10).bg(t.raised).text_color(t.dim)
         .child(div().min_w(0).whitespace_nowrap().overflow_hidden().child(r.text));
     }
-    const number = (n) => div().w(look.gutter).flex_none().pr(6).text_right().text_color(t.dim).child(n === null ? "" : String(n));
+    const mark = r.kind === "add" ? t[ADD] : r.kind === "del" ? t[DEL] : t.dim;
+    const number = (n) => div().w(look.gutter).flex_none().pr(6).text_right().text_color(mark).child(n === null ? "" : String(n));
     // Only the columns in view are handed over: a 100,000-character line costs the same
     // as a short one, and sideways scrolling is a different slice.
     const text = this.left ? r.text.slice(this.left, this.left + look.columns + 8) : r.text.slice(0, look.columns + 8);
@@ -229,7 +234,7 @@ export default class DiffView {
       .when(r.kind === "del", (el) => el.bg(look.delBg))
       .when(this.olds, (el) => el.child(number(r.old)))
       .when(this.news, (el) => el.child(number(r.new)))
-      .child(div().w(18).flex_none().pl(6).text_color(r.kind === "add" ? t.ansi2 : r.kind === "del" ? t.ansi1 : t.dim)
+      .child(div().w(18).flex_none().pl(6).text_color(mark)
         .child(r.kind === "add" ? "+" : r.kind === "del" ? "-" : ""))
       .child(div().flex_1().min_w(0).whitespace_nowrap().overflow_hidden()
         .text_color(r.kind === "note" ? t.dim : t.foreground)
@@ -253,7 +258,8 @@ export default class DiffView {
     const t = theme(), r = this.result;
     const renamed = Boolean(this.commit && this.oldPath && this.oldPath !== this.path);
     const parts = this.path.split("/"), name = parts.pop(), folder = parts.join("/");
-    const look = { gutter: this.gutter(), columns: this.columns(), addBg: tint(t.ansi2, "24"), delBg: tint(t.ansi1, "24") };
+    const dark = darkLook(t.background);
+    const look = { gutter: this.gutter(), columns: this.columns(), addBg: rowColor(t[ADD], dark) ?? t.raised, delBg: rowColor(t[DEL], dark) ?? t.raised };
     const body = !r ? skeleton(t, undefined, this.listSize ??= skeletonSize("diff-wait"))
       : !r.ok ? notice(this.t("dialogs.diff.cantShow"), t)
       : r.binary ? notice(this.t("dialogs.diff.binary"), t)
@@ -281,8 +287,8 @@ export default class DiffView {
         .when(renamed, (el) => el.child(div().min_w(0).truncate().text_size(12).text_color(t.dim).child(this.t("dialogs.diff.renamedFrom", { from: this.oldPath }))))
         .child(div().flex_none().text_size(12).text_color(t.muted).child(this.compared()))
         .child(spacer())
-        .when(Boolean(r?.ok && this.adds), (el) => el.child(div().flex_none().text_size(12).text_color(t.ansi2).child(`+${count(this.adds)}`)))
-        .when(Boolean(r?.ok && this.dels), (el) => el.child(div().flex_none().text_size(12).text_color(t.ansi1).child(`−${count(this.dels)}`)))
+        .when(Boolean(r?.ok && this.adds), (el) => el.child(div().flex_none().text_size(12).text_color(t[ADD]).child(`+${count(this.adds)}`)))
+        .when(Boolean(r?.ok && this.dels), (el) => el.child(div().flex_none().text_size(12).text_color(t[DEL]).child(`−${count(this.dels)}`)))
         .child(iconButton("diff-refresh", "refresh", t, { title: this.t("dialogs.diff.refresh"), busy: Boolean(this.loading && r), onClick: (_e, cx) => { this.load(cx); cx.notify(); } })))
       .when(Boolean(cut), (el) => el.child(div().flex_none().w_full().px(10).py(5).border_b(1).border_color(t.border).bg(t.raised).text_size(12).text_color(t.ansi3).child(cut ?? "")))
       .child(div().id("diff-body").flex_1().min_h(0).min_w(0).overflow_hidden()

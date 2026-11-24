@@ -271,8 +271,7 @@ Herdr. git's own messages are shown as git writes them.
 - The panels follow a git-tools tab's repository only once that tab has recorded itself
   (when it opens, or when it gets the focus); until then they follow the space's folder.
 - Coming back from another layout, the Log panel, the Commit panel and the VCS widget can
-  stay empty for about 6 seconds. Clicking the VCS widget again while its popup is open
-  can leave the new popup loading for about 6 seconds.
+  stay empty for about 6 seconds.
 - No menu bar menu: the Git menu is the VCS Operations popup (`cmd-shift-v`), and it
   opens only while the Commit panel or the Log panel shows.
 - A notification carries one button at most, so a rebase stopped to edit says where to

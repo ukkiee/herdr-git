@@ -627,11 +627,14 @@ dialog's own (`openDialog` in its file).
   changes only what moved since. When the kept width is that 4px (the last folder wasn't a
   repository), the bar doesn't show until the read answers: the block is resized once,
   to the answer, rather than widened for the bar and again for the widget.
-  Click: a 380×520 popup 2px below the widget, kept inside the block's right end: the
+  Click: a 380×520 popup 2px below the widget (a click while it is open only closes it),
+  kept inside the block's right end: the
   search box `Search for branches and actions` with Refresh; Update Project…, Commit…,
   Push…; the in-progress items; New Branch…, New Worktree…, Checkout Tag or Revision…;
   then Recent (up to 5), Local, Remote and Tags trees, each branch row with a › opening
-  the same menu as the Branch tree beside it. While the popup reads, the six actions and
+  the same menu as the Branch tree beside it. The list the widget last read shows at once
+  and the popup's own read replaces it, the keyboard and an open branch menu staying on
+  their rows. Before the widget has read anything, while the popup reads, the six actions and
   a line show at once and can be picked (the widget runs them on its own repository);
   the groups' place is a skeleton in their rows' shape (26px rows: a group's name, then
   branches 26px in and a remote's 44px in, each with an icon, a name bar and ›). The
@@ -1819,6 +1822,8 @@ the git ones run against real temporary repositories):
 | `ui-size.js`, `focus-repo.js` | `textWidth`, `menuWidth`, `menuChecks`, `MENU_TEXT`, `HINT_TEXT`, `MENU_GAP`, `MENU_CHECK`, `belowSpot`, `pressSpot`, `sideOf`, `dialogFills`, `dialogRoom`, `ERROR_BOX`, `ERROR_ROOM`, `widgetBlockWidth`; `whereFocused`, `newPanes`, `rememberTab`, `isTabScreen`, `registerTab`, `forgetTab` |
 | `recent.js` | `keepRecent(map, key, value, limit)` (the newest last; past `limit` the oldest go: what a panel keeps of the folders it left), `takeRecent(map, key)` (taken out as it is used), `moveRecent(map, from, kept, to, limit)` (a move: the folder come back to is taken out before the one left goes in, so `limit` folders are kept besides the one shown), `firstBatch({ commits, seen, through }, batch)` → the Commit list's first `batch` commits, or null under No Merges with merges left out past one batch (where they end in git's order is lost) |
 | `skeleton.js` | `HEIGHT` (720: the height a list fills before its column is measured), `ROOM` (24: the empty end of a bar that takes a row's rest), `LEAD` (the fixed places `slot`, `check`, `icon`, `file`, `mark`, `dot`: their width and what stands in for them), `skeletonRows(specs, { height })` → `[{ height, left, right, gap, pieces }]` (a skeleton list's rows from a screen's description of its real rows, as many as the height shows plus one; `ui.js` `skeleton` draws them), `skeletonCount(specs, height)` (that many rows without the pieces: a new height redraws only when it changes), `skeletonFills(specs)` (whether a section fills, so the height is measured), `skeletonSize(id)` (what a screen keeps for one list: the element id and the measured height), `checkSize(size)` (the size when it came from `skeletonSize` or is left out, else an error naming what it got) |
+| `popup-press.js` | `SAME_PRESS` (200 ms: a press this soon after the popup's answer is the press that closed it), `popupPress({ now })` → `{ opened, closed(shown), opens }` (whether a press on the control that opened a popup opens it or only closes it; a popup whose answer never comes costs one press) |
+| `hand-over.js` | `handOver(key, value)`, `takeOver(key)` (what an opener has read, handed to the popup it opens without copying it; one slot, emptied when taken) |
 
 Each of these files' header says what it exports and why.
 
@@ -3225,7 +3230,7 @@ Each line is one check: do what it says, see what follows.
 **Offline**
 
 1. Run `node layout.test.mjs` at the root, `node <file>` for every `*.test.mjs` in
-   `mods/git-tools` (64 files) and `node tools/gen-icon-theme.test.mjs`: each prints
+   `mods/git-tools` (66 files) and `node tools/gen-icon-theme.test.mjs`: each prints
    `ok` (the last one after `skip: …` unless `ICON_THEME_SOURCE` is set).
 2. Run `herdr-app check mods/git-tools`: it passes.
 

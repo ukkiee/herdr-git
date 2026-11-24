@@ -39,7 +39,9 @@
 - **VCS widget** (`view-vcs-widget.js`, 팝업은 `view-vcs-popup.js`): 현재 브랜치와 받을·보낼 커밋 수,
   분리된 HEAD의 해시, Operation in progress를 보인다. macOS에서는 Git 버튼 왼쪽 블록
   `git-vcs-widget`, 다른 OS에서는 Commit list 툴바 왼쪽 끝에 그린다. 누르면 위젯 바로 아래에
-  팝업(검색, 맨 위 동작, 최근·로컬·원격·태그 트리와 브랜치별 메뉴)이 열린다. 브랜치 줄의 메뉴는
+  팝업(검색, 맨 위 동작, 최근·로컬·원격·태그 트리와 브랜치별 메뉴)이 열리고, 열린 채 다시 누르면
+  닫히기만 한다(`popup-press.js`). 위젯이 마지막으로 읽은 목록을 바로 보이고 팝업이 뒤에서 다시 읽어
+  바꾼다(`hand-over.js`). 브랜치 줄의 메뉴는
   팝업이 자기 안에 그 줄 옆으로 그린다.
 - **VCS Operations popup** (`view-vcs-ops.js`, 판단은 `vcs-ops.js`): `cmd-shift-v`가 여는, git 동작에
   1~0 번호를 단 팝업.
@@ -106,7 +108,7 @@
 | 화면 | `view-*.js`, `commit-form.js`, `commit-stash-tab.js`, `log-branches.js`, `log-list.js`, `log-details.js`, `log-filters.js` | 그리기와 사람의 입력 |
 | git | `git.js`, `git-status.js`, `git-commit.js`, `git-rollback.js`, `git-snapshot.js`, `git-diff.js`, `git-push.js`, `git-log.js`, `git-log-filter.js`, `git-branch.js`, `git-show.js`(`readLastCommit` 포함), `files-data.js` | git과 폴더 읽기 명령을 부르고 결과를 해석한다 |
 | git 동작 | `git-operation.js`, `git-conflict.js`, `git-smart.js`, `git-stash.js`, `git-reset.js`, `git-rewrite.js`, `git-changes.js`, `git-remote.js`, `git-refs.js`, `git-compare.js`, `git-revision.js`, `git-worktree.js`, `git-heads.js`, `git-patch.js` | Operation in progress 읽기와 merge·rebase·cherry-pick·revert의 실행·판정, 충돌 파일 쓰기, Smart operation, stash, reset과 하드 전 기록, 히스토리 다시 쓰기, 파일 단위 되돌리기·체리픽, pull·업데이트, 태그·이름 변경·원격, 비교·패치·가져오기, 리비전의 파일과 하위 커밋, 새 워크트리, VCS widget이 보일 브랜치, 로컬 변경의 패치와 패치 적용 |
-| 순수 계산 | `graph.js`, `tree.js`, `bus.js`, `lock.js`, `read-turns.js`, `clock.js`, `later.js`, `folder-watch.js`, `i18n.js`, `icon-theme.js`, `files-tree.js`, `editor-language.js`, `merge-chunks.js`, `conflicts-model.js`, `merge-revisions-model.js`, `rebase-plan.js`, `log-menus.js`, `log-select.js`, `log-options.js`, `branch-order.js`, `vcs-ops.js`, `git-console.js`, `ui-icons.js`, `pick-notes.js`, `ui-size.js`, `focus-repo.js`, `let-go.js`, `skeleton.js`, `recent.js` | 그래프 배치, 경로 트리와 3상태 체크, 버스와 잠금 값, 되풀이하는 읽기의 차례, 사본의 git 시계, 타이머·작업으로 미룬 일과 머문 폴더 판정, 폴더 감시와 그 취소, 언어와 문장, 아이콘 고르기, Files panel의 줄·표시·찾기 순위·키, 미리보기의 구문 색, 병합 덩어리, 두 충돌 창이 보일 것과 켜질 것, 리베이스 계획과 편집 판정, Log panel의 메뉴·툴바 표, 여러 커밋 고르기, 그래프·표시 옵션 값, 브랜치 순서와 즐겨찾기, VCS Operations popup의 항목, 콘솔 기록의 꼴과 자격 증명 가림, UI icon 대응, Cherry-Pick·Revert 결과의 알림, 메뉴 너비·팝업 자리·창이 자리를 채우는지·위젯 블록 폭, 패널이 따를 저장소와 탭 기록, 닫히는 화면이 쥔 데이터 비우기, 로딩 스켈레톤의 행과 조각 자리, 떠난 폴더의 기억(최근 N개)과 Commit list의 첫 묶음 |
+| 순수 계산 | `graph.js`, `tree.js`, `bus.js`, `lock.js`, `read-turns.js`, `clock.js`, `later.js`, `folder-watch.js`, `i18n.js`, `icon-theme.js`, `files-tree.js`, `editor-language.js`, `merge-chunks.js`, `conflicts-model.js`, `merge-revisions-model.js`, `rebase-plan.js`, `log-menus.js`, `log-select.js`, `log-options.js`, `branch-order.js`, `vcs-ops.js`, `git-console.js`, `ui-icons.js`, `pick-notes.js`, `ui-size.js`, `focus-repo.js`, `let-go.js`, `skeleton.js`, `recent.js`, `popup-press.js`, `hand-over.js` | 그래프 배치, 경로 트리와 3상태 체크, 버스와 잠금 값, 되풀이하는 읽기의 차례, 사본의 git 시계, 타이머·작업으로 미룬 일과 머문 폴더 판정, 폴더 감시와 그 취소, 언어와 문장, 아이콘 고르기, Files panel의 줄·표시·찾기 순위·키, 미리보기의 구문 색, 병합 덩어리, 두 충돌 창이 보일 것과 켜질 것, 리베이스 계획과 편집 판정, Log panel의 메뉴·툴바 표, 여러 커밋 고르기, 그래프·표시 옵션 값, 브랜치 순서와 즐겨찾기, VCS Operations popup의 항목, 콘솔 기록의 꼴과 자격 증명 가림, UI icon 대응, Cherry-Pick·Revert 결과의 알림, 메뉴 너비·팝업 자리·창이 자리를 채우는지·위젯 블록 폭, 패널이 따를 저장소와 탭 기록, 닫히는 화면이 쥔 데이터 비우기, 로딩 스켈레톤의 행과 조각 자리, 떠난 폴더의 기억(최근 N개)과 Commit list의 첫 묶음 |
 | 데이터 | `messages-*.js`, `icon-theme-data.js`, `icons/theme/`, `icons/ui/`(그 밖의 `icons/` 파일 포함) | 문구 표, 생성한 아이콘 규칙, 아이콘 파일 |
 
 저장소 루트에는 레이아웃 변환 `layout.mjs`, 설치 `install.sh`, 키 `keys.json`, 아이콘 생성기
@@ -1251,7 +1253,7 @@ Herdr는 mod를 QuickJS로 돌린다. JIT가 없고, 한 호출이 너무 오래
   바꿀 때마다 사람이 다시 본다. 확인 절차는 RECIPE의 "Done when"에 있다.
 
 **전체 오프라인 검사:** `node tools/check.mjs`가 한 번에 돌린다. 루트의 `node layout.test.mjs`,
-`mods/git-tools`의 `*.test.mjs` 64개 각각, `node tools/gen-icon-theme.test.mjs`가 모두 `ok`를 찍고,
+`mods/git-tools`의 `*.test.mjs` 66개 각각, `node tools/gen-icon-theme.test.mjs`가 모두 `ok`를 찍고,
 `herdr-app check mods/git-tools`가 통과한다. 테스트는 node 내장 모듈(`node:assert/strict` 등)만 쓴다.
 
 **느린 엔진의 예산:** `icon-theme.test.mjs`가 JIT를 끈 node로 규칙을 꽂는 시간을 재서, 규칙을
@@ -1270,10 +1272,11 @@ Herdr는 mod를 QuickJS로 돌린다. JIT가 없고, 한 호출이 너무 오래
   호출을 끝없이 기다린다. 답이 왜 사라지는지(약속이 안 풀리는지, 기다리던 작업이 버려지는지)는 가르지 않았다.
   다른 레이아웃에서 돌아온 사본이 첫 그리기 전에 부른 호출은 시계도 울리지 않아 이 상한이 닿지 않는다
   ([플랫폼](herdr-mod-platform.md)). 열리자마자 읽는 Log panel, Commit panel, VCS widget 블록은 6초(`FIRST_LOOK`)
-  뒤에도 끝나지 않은 첫 읽기를 한 번 다시 하므로, 그런 왕복 뒤 6초쯤 비어 있다. VCS widget 팝업이 열린 채
-  위젯을 다시 누르면 그 누름이 팝업을 닫으며 새 팝업을 여는데, 이 새 팝업의 첫 읽기도 같은 틈에 걸려
-  답과 시계가 오지 않았다. 팝업도 6초 뒤 아직 한 번도 읽지 못했으면 한 번 다시 읽으므로, 그때는 6초쯤
-  "로드 중"이다.
+  뒤에도 끝나지 않은 첫 읽기를 한 번 다시 하므로, 그런 왕복 뒤 6초쯤 비어 있다. 한 누름이 다른 팝업을
+  닫으며 VCS widget 팝업을 여는 경우도 같은 틈이라, 이 팝업은 첫 읽기를 타이머(`cx.timer.after(0)`)에서
+  시작하고 6초 뒤에도 한 번도 읽지 못했으면 한 번 다시 읽는다. 자기 팝업이 열린 채 위젯을 누르면 팝업을
+  닫기만 하고 새로 열지 않는다(`popup-press.js`). 팝업의 답이 그 누름보다 먼저 위젯에 닿을 수 있어, 답이
+  온 뒤 200ms(`SAME_PRESS`) 안의 누름도 닫는 누름으로 본다.
 - `openSpaceTab`으로 여는 탭(Compare tab들, 리비전의 저장소, History, Update Info tab)은 같은 종류의 옛 탭을
   닫으며 열려, `init`이 곧바로 띄운 첫 읽기가 같은 틈에 걸린다([플랫폼](herdr-mod-platform.md)). 그래서 이
   화면들은 첫 읽기를 타이머(`cx.timer.after(0)`)에서 시작하고, 6초 뒤에도 한 번도 읽지 못했으면 한 번 다시

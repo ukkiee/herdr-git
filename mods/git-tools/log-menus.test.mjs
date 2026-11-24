@@ -286,4 +286,36 @@ const all = (name, ctx = {}, t = ko) => look(menuItems(name, everything, ctx), t
   assert.deepEqual(items.filter((id) => !log.has(id)), ["tag.push"]);
 }
 
+// A menu opens before the edit facts are read (ctx.editPending): what depends on them waits,
+// off with nothing to say, and the rest of the menu can be picked at once.
+{
+  const off = (menu, ctx) => menuItems(menu, everything, ctx).filter((it) => it.disabled).map((it) => it.id).sort();
+  const waits = ["commit.cherryPick", "commit.drop", "commit.editMessage", "commit.fixup", "commit.interactiveRebase", "commit.rebaseOnto", "commit.revert", "commit.squashInto", "commit.undo"];
+  assert.deepEqual(off("commit", { count: 1, current: "main", editPending: true }), waits);
+  assert.deepEqual(off("commit", { count: 1, current: "main" }), [], "without facts and not waiting: the item checks when picked");
+  const waiting = menuItems("commit", everything, { count: 1, current: "main", editPending: true }).find((it) => it.id === "commit.undo");
+  assert.deepEqual(waiting.why, { text: "" });
+  // The number picked is known at once, so its reason shows at once.
+  const two = menuItems("commit", everything, { count: 2, current: "main", editPending: true }).find((it) => it.id === "commit.editMessage");
+  assert.equal(two.why.key, "log.selectOneCommit");
+
+  // All but the local changes answered: only what needs those still waits.
+  const commit = { hash: "a".repeat(40), parents: 1, onBranch: false, pushedProtected: false };
+  const facts = { ok: true, head: "b".repeat(40), branch: "main", operation: null, protected: null, mergeAbove: false, commits: [commit] };
+  const partly = off("commit", { count: 1, current: "main", editPending: true, edit: facts });
+  assert.ok(partly.includes("commit.fixup") && partly.includes("commit.squashInto"));
+  assert.ok(!partly.includes("commit.cherryPick") && !partly.includes("commit.revert"), "cherry-pick and revert need no local changes");
+  const here = { ...facts, commits: [{ ...commit, onBranch: true }], head: commit.hash, localChanges: true };
+  assert.deepEqual(off("commit", { count: 1, current: "main", edit: here }), ["commit.cherryPick", "commit.rebaseOnto"]);
+
+  // Commit details' file menu waits the same way.
+  const files = { picked: 1, total: 3 };
+  assert.deepEqual(off("file", { count: 1, files, editPending: true }), ["file.dropSelected", "file.extractSelected"]);
+  assert.deepEqual(off("file", { count: 1, files }), []);
+
+  // Nothing is read before the menu opens.
+  const details = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "log-details.js"), "utf8");
+  assert.doesNotMatch(details, /const facts = [^;\n]*\?\s*await readEditFacts/, "a right-click waits for git before its menu opens");
+}
+
 console.log("ok");

@@ -58,7 +58,7 @@ back.
 Switch to `main` first, then delete `mods/git-tools/`, `git-tools/` and
 `layouts/git-tools.json` in the app home, and the `layout:git-tools` section of
 `keys.json`. Herdr may also have left `layouts/.state/git-tools.json` and the
-`git-tools.bus`, `git-tools.lock`, `git-tools.lang`, `git-tools.menus` and
+`git-tools.bus`, `git-tools.lock`, `git-tools.lang`, `git-tools.menu-rows`, `git-tools.menus` and
 `git-tools.tabs` keys in `shared.json`; all are safe to delete.
 
 Rollback and deleted-branch records stay in each repository until git expires them;
@@ -249,10 +249,11 @@ Herdr. git's own messages are shown as git writes them.
   writes back its `branch.<name>.remote` and `.merge` config.
 - **Files in Herdr's app home** (`~/.config/herdr-app`, or `$HERDR_APP_HOME`):
   `install.sh` writes `mods/git-tools/` and `layouts/git-tools.json`, and adds three
-  keys to `keys.json`. The mod keeps five small values in `shared.json`: `git-tools.bus`
+  keys to `keys.json`. The mod keeps six small values in `shared.json`: `git-tools.bus`
   (how its screens tell each other the repository changed), `git-tools.lock` (which
   repository a git-tools write is running on), `git-tools.lang` (the system language
-  last read, `"en"` or `"ko"`), `git-tools.menus` (how many of its menus are open, so no
+  last read, `"en"` or `"ko"`), `git-tools.menu-rows` (the items of an open menu that
+  settled after it opened), `git-tools.menus` (how many of its menus are open, so no
   tooltip covers them) and `git-tools.tabs` (its open tabs and the repository each was
   opened on). In a `git-tools` folder there it keeps `console.jsonl` (the Git console,
   at most 512 KiB) and `settings.json` (Update Project's method, the Pull dialog's

@@ -38,6 +38,19 @@ const MENU_SIDES = 2 * 5 + 2 * 8 + 12;
 // an item without it (a group name) starts at the row's left edge.
 export const menuChecks = (items) => (items ?? []).some((it) => typeof it?.checked === "boolean");
 
+// menuStates(items, states, at) → { items, at }: the menu's rows with each row's on or off
+// and tooltip from `states` ([{ disabled, title }], one per row; another number of rows
+// changes nothing). at: the row the keyboard is on, moved to the first row that is on when
+// it went off (-1: none is).
+export function menuStates(items, states, at) {
+  if (states?.length !== items.length) return { items, at };
+  const next = items.map((it, i) => {
+    const { title: _title, ...rest } = it;
+    return { ...rest, disabled: Boolean(states[i].disabled), ...(states[i].title ? { title: states[i].title } : {}) };
+  });
+  return { items: next, at: next[at] && !next[at].disabled ? at : next.findIndex((it) => !it.disabled) };
+}
+
 // menuWidth(items, { min, max }) → the menu's width in whole px: the longest row's need
 // ([{ label, hint?, checked? }]), at least `min` and at most `max` (past it the label is cut).
 export function menuWidth(items, { min = 220, max = 560 } = {}) {

@@ -32,7 +32,7 @@ import { tip, ROW, ICON, icon, uiGlyph, fileGlyph, folderGlyph, darkLook, row, t
 import { formatDateTime } from "./i18n.js";
 import { DETAILS_KEY, readDetailsOptions, toggleDetailsOption, detailsMenu } from "./log-options.js";
 import { appSetting, saveAppSetting } from "./app-files.js";
-import { spawnOrUndo } from "./later.js";
+import { spawnOrUndo, each } from "./later.js";
 
 // What a panel broadcasts after saving Commit details' View Options.
 export const DETAILS_EVENT = "log-details-options";
@@ -125,48 +125,68 @@ function writingWords(host) {
 // Opens a menu of the model's items (host.items) and runs the one picked. The answer
 // settles in this panel's own call (ui.js openMenu), so what the pick starts is the panel's
 // work and outlives the popup.
-function openItems(host, items, target, cx, { width, hint, after }) {
+// repo: the repository the menu is about; a pick does nothing once the panel has left it.
+// live(show, cx): openMenu's, with show(items) taking the model's items.
+function openItems(host, items, target, cx, { width, hint, after, repo, live }) {
   if (!items.length) return;
   const tr = host.t;
-  const rows = items.map((it) => ({
+  const rowsOf = (list) => list.map((it) => ({
     label: tr(it.key, it.args), value: it.id, rule: it.rule, disabled: it.disabled,
     title: it.why?.text || (it.why?.key ? tr(it.why.key, it.why.args) : undefined),
     hint: hint?.[it.id] ?? it.hint ?? undefined,
   }));
   cx.spawn(async (cx) => {
-    const pick = await openMenu(host.bus, rows, { width, lang: host.lang });
+    const pick = await openMenu(host.bus, rowsOf(items), { width, lang: host.lang, live: live && ((update) => live((list) => update(rowsOf(list)), cx)) });
     after?.();
-    if (pick) host.run(pick, target, cx);
+    if (pick && (!repo || host.shows(repo))) host.run(pick, target, cx);
     cx.notify();
   });
+}
+
+// How long a menu's history edits wait for facts that don't answer (ms). After that they are
+// on and check when picked, as when the facts can't be read.
+const FACTS_WAIT = 3000;
+
+// Opens the menu `menu` at once. The items that depend on the edit facts of `hashes` wait,
+// and settle as the facts answer. No hashes: nothing is read, and those items check when
+// picked. ctx: the model's, without the facts.
+function openWithFacts(host, menu, hashes, target, cx, { ctx, ...how }) {
+  const repo = host.repo;
+  const items = (more) => host.items(menu, { writing: writingWords(host), ...ctx, ...more });
+  if (!repo || !hashes.length) { openItems(host, items({}), target, cx, { ...how, repo }); return; }
+  openItems(host, items({ editPending: true }), target, cx, { ...how, repo, live: (show, cx) => {
+    let heard = false;
+    const tell = (more) => { heard = true; show(items(more)); };
+    each(() => cx.timer.after(FACTS_WAIT, () => { if (!heard) show(items({})); }));
+    try {
+      cx.spawn(async () => {
+        const facts = await readEditFacts(repo.git, repo.root, hashes, { first: (f) => tell({ edit: f, editPending: true }) });
+        tell(facts.ok ? { edit: facts } : {});
+      });
+    } catch { show(items({})); }
+  } });
 }
 
 // openCommitMenu(host, commits, cx)
 //   The Commit list calls this on a right-click of a commit row: the commit menu's items
 //   (log-menus.js) this panel does, for the commits picked. host: the Log panel; commits:
 //   a commit or the commits picked, newest first, as git-log.js returns them.
-//   The edit facts of the commits (git-rewrite.js readEditFacts) are read first, so the
-//   history edits show on or off with their reason (ctx.edit). Facts that can't be read,
-//   or more commits than EDIT_FACTS_MAX, leave ctx.edit out: those items then check when
-//   picked. A menu whose repository the panel left while reading doesn't open.
+//   The menu opens at once and the edit facts of the commits (git-rewrite.js readEditFacts)
+//   are read behind it, so the history edits come on or stay off with their reason
+//   (ctx.edit). Facts that can't be read, or more commits than EDIT_FACTS_MAX, leave ctx.edit
+//   out: those items then check when picked.
 //   The Commit list gets the keyboard back when the menu goes.
 export function openCommitMenu(host, commits, cx) {
   const list = (Array.isArray(commits) ? commits : [commits]).filter((c) => c?.hash);
-  const repo = host?.repo;
-  if (!repo || !list.length) return;
-  cx.spawn(async (cx) => {
-    const facts = list.length <= EDIT_FACTS_MAX ? await readEditFacts(repo.git, repo.root, list.map((c) => c.hash)) : null;
-    if (!host.shows(repo)) return;
-    const head = host.branches.data?.head;
-    const items = host.items("commit", { count: list.length, current: head?.branch ?? "HEAD", writing: writingWords(host), ...(facts?.ok ? { edit: facts } : {}) });
-    const hint = list.length === 1 ? { "commit.copyRevision": short(list[0].hash) } : null;
-    openItems(host, items, list, cx, { width: 300, hint, after: () => host.list.handle.focus() });
-    cx.notify();
-  });
+  if (!host?.repo || !list.length) return;
+  const head = host.branches.data?.head;
+  const hint = list.length === 1 ? { "commit.copyRevision": short(list[0].hash) } : null;
+  const hashes = list.length <= EDIT_FACTS_MAX ? list.map((c) => c.hash) : [];
+  openWithFacts(host, "commit", hashes, list, cx, { ctx: { count: list.length, current: head?.branch ?? "HEAD" }, width: 300, hint, after: () => host.list.handle.focus() });
+  cx.notify();
 }
 
-// The most commits whose edit facts a right-click reads before the menu opens: each one
-// costs git calls.
+// The most commits whose edit facts a right-click reads: each one costs git calls.
 const EDIT_FACTS_MAX = 50;
 
 // ---- the column
@@ -448,25 +468,19 @@ export default class LogDetails {
     cx.notify();
   }
 
-  // The edit facts of the commit shown are read first, so Extract and Drop Selected Changes
-  // show on or off with their reason (ctx.edit, ctx.files: one file of the commit's).
+  // Opens at once; the edit facts of the commit shown are read behind it, so Extract and Drop
+  // Selected Changes come on or stay off with their reason (ctx.edit, ctx.files: one file of
+  // the commit's).
   menu(m, cx) {
     if (!m || m.folder) return;
-    const { host } = this, repo = host.repo, info = this.info;
+    const { host } = this, info = this.info;
     const one = info?.ok && !info.many && info.hash ? info.hash : null;
-    cx.spawn(async (cx) => {
-      const facts = repo && one ? await readEditFacts(repo.git, repo.root, [one]) : null;
-      if (repo && !host.shows(repo)) return;
-      const items = host.items("file", {
-        writing: writingWords(host), count: info?.many ? Math.max(2, host.pickedCommits().length) : 1,
-        files: { picked: 1, total: info?.files?.length ?? 0 }, ...(facts?.ok ? { edit: facts } : {}),
-      });
-      if (!items.length) return;
-      // While the menu is open its row shows no tooltip: it would cover the menu's item.
-      this.menuRow = m.key;
-      openItems(host, items, m, cx, { width: 300, after: () => { if (this.menuRow === m.key) this.menuRow = null; this.handle.focus(); } });
-      cx.notify();
-    });
+    const ctx = { count: info?.many ? Math.max(2, host.pickedCommits().length) : 1, files: { picked: 1, total: info?.files?.length ?? 0 } };
+    if (!host.items("file", ctx).length) return;
+    // While the menu is open its row shows no tooltip: it would cover the menu's item.
+    this.menuRow = m.key;
+    openWithFacts(host, "file", one ? [one] : [], m, cx, { ctx, width: 300, after: () => { if (this.menuRow === m.key) this.menuRow = null; this.handle.focus(); } });
+    cx.notify();
   }
 
   // `git-tools.details-…` for keys and scripts:

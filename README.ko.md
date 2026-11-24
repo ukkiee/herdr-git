@@ -53,7 +53,7 @@ Changes·Files 패널은 그대로 둡니다. mod가 실행하고 쓰는 것은
 
 먼저 `main`으로 바꾼 뒤, 앱 홈에서 `mods/git-tools/`, `git-tools/`, `layouts/git-tools.json`을
 지우고 `keys.json`의 `layout:git-tools` 절을 지우세요. Herdr가 `layouts/.state/git-tools.json`과
-`shared.json`의 `git-tools.bus`, `git-tools.lock`, `git-tools.lang`, `git-tools.menus`,
+`shared.json`의 `git-tools.bus`, `git-tools.lock`, `git-tools.lang`, `git-tools.menu-rows`, `git-tools.menus`,
 `git-tools.tabs` 키를 남겨 두었을 수 있는데, 모두 지워도 됩니다.
 
 롤백 기록과 지운 브랜치 기록은 git이 정리할 때까지 각 저장소에 남습니다. 그 저장소에서
@@ -226,9 +226,10 @@ Changes·Files 패널은 그대로 둡니다. mod가 실행하고 쓰는 것은
   되돌립니다.
 - **Herdr 앱 홈의 파일**(`~/.config/herdr-app` 또는 `$HERDR_APP_HOME`): `install.sh`가
   `mods/git-tools/`와 `layouts/git-tools.json`을 쓰고 `keys.json`에 키 세 개를 더합니다.
-  mod는 `shared.json`에 작은 값 다섯 개를 둡니다. `git-tools.bus`는 화면끼리 저장소가
+  mod는 `shared.json`에 작은 값 여섯 개를 둡니다. `git-tools.bus`는 화면끼리 저장소가
   바뀌었다고 알리는 데, `git-tools.lock`은 어느 저장소에서 git-tools의 쓰기가 돌고 있는지
   적는 데, `git-tools.lang`은 마지막으로 읽은 시스템 언어(`"en"` 또는 `"ko"`)를 적는 데,
+  `git-tools.menu-rows`는 열린 메뉴에서 뒤늦게 정해진 항목의 상태를 적는 데,
   `git-tools.menus`는 열린 메뉴 수를 적어 툴팁이 메뉴를 가리지 않게 하는 데,
   `git-tools.tabs`는 열린 git-tools 탭과 각 탭을 연 저장소를 적는 데 씁니다. 그곳의
   `git-tools` 폴더에는 `console.jsonl`(Git 콘솔, 최대 512 KiB)과 `settings.json`(프로젝트

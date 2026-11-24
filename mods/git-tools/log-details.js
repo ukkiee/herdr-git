@@ -23,6 +23,7 @@ import { theme } from "herdr";
 import { readCommit, readContaining } from "./git-show.js";
 import { smartCheckoutRevision } from "./view-smart.js";
 import { readEditFacts } from "./git-rewrite.js";
+import { factsKey, menuFacts } from "./facts-cache.js";
 import { buildRows, folderKeys, parentIndex } from "./tree.js";
 import { combineChanges, newestChange } from "./log-select.js";
 import { oneAtATime } from "./one-at-a-time.js";
@@ -32,7 +33,7 @@ import { tip, ROW, ICON, icon, uiGlyph, fileGlyph, folderGlyph, darkLook, row, t
 import { formatDateTime } from "./i18n.js";
 import { DETAILS_KEY, readDetailsOptions, toggleDetailsOption, detailsMenu } from "./log-options.js";
 import { appSetting, saveAppSetting } from "./app-files.js";
-import { spawnOrUndo, each } from "./later.js";
+import { spawnOrUndo, each, oneTimer } from "./later.js";
 
 // What a panel broadcasts after saving Commit details' View Options.
 export const DETAILS_EVENT = "log-details-options";
@@ -146,25 +147,49 @@ function openItems(host, items, target, cx, { width, hint, after, repo, live }) 
 // How long a menu's history edits wait for facts that don't answer (ms). After that they are
 // on and check when picked, as when the facts can't be read.
 const FACTS_WAIT = 3000;
+// How long a right-click whose commits have no facts kept holds the menu back for them (ms):
+// a local repository's facts come in well under it, and the menu then opens settled instead
+// of turning its items on one by one. Past it the menu opens and the items settle in it.
+const QUICK_WAIT = 250;
 
-// Opens the menu `menu` at once. The items that depend on the edit facts of `hashes` wait,
-// and settle as the facts answer. No hashes: nothing is read, and those items check when
-// picked. ctx: the model's, without the facts.
+// Opens the menu `menu` with the items that depend on the edit facts of `hashes` settled.
+// Facts kept for these commits at the refs' present state (host.facts, facts-cache.js) open
+// it at once; without them it waits up to QUICK_WAIT, then opens with those items waiting.
+// Either way the facts are read again behind it, kept, and change the menu only where they
+// differ. No hashes: nothing is read, and those items check when picked. ctx: the model's,
+// without the facts.
 function openWithFacts(host, menu, hashes, target, cx, { ctx, ...how }) {
   const repo = host.repo;
   const items = (more) => host.items(menu, { writing: writingWords(host), ...ctx, ...more });
   if (!repo || !hashes.length) { openItems(host, items({}), target, cx, { ...how, repo }); return; }
-  openItems(host, items({ editPending: true }), target, cx, { ...how, repo, live: (show, cx) => {
-    let heard = false;
-    const tell = (more) => { heard = true; show(items(more)); };
-    each(() => cx.timer.after(FACTS_WAIT, () => { if (!heard) show(items({})); }));
-    try {
-      cx.spawn(async () => {
-        const facts = await readEditFacts(repo.git, repo.root, hashes, { first: (f) => tell({ edit: f, editPending: true }) });
-        tell(facts.ok ? { edit: facts } : {});
-      });
-    } catch { show(items({})); }
-  } });
+  const key = factsKey(repo, hashes), refs = host.refs;
+  const kept = host.facts?.get(key, refs) ?? null;
+  const flow = menuFacts(kept);
+  // shown: what the menu was opened or last updated with; show: its update, once the menu is
+  // open (live). Until then a change waits for live to catch up.
+  let shown = null, show = null;
+  const tell = (now) => { if (show && now !== shown) { shown = now; show(items(now)); } };
+  try {
+    cx.spawn(async (cx) => {
+      const open = () => {
+        if (shown) return;
+        shown = flow.now();
+        openItems(host, items(shown), target, cx, { ...how, repo, live: (update) => {
+          show = update;
+          if (flow.now() !== shown) { shown = flow.now(); update(items(shown)); }
+        } });
+      };
+      if (kept) open();
+      else {
+        each(() => cx.timer.after(QUICK_WAIT, () => open()));
+        each(() => cx.timer.after(FACTS_WAIT, () => tell(flow.late())));
+      }
+      const facts = await readEditFacts(repo.git, repo.root, hashes, { first: (f) => tell(flow.first(f)) });
+      if (facts.ok) host.facts?.put(key, refs, facts);
+      tell(flow.done(facts));
+      open();
+    });
+  } catch { openItems(host, items(flow.now()), target, cx, { ...how, repo }); }
 }
 
 // openCommitMenu(host, commits, cx)
@@ -188,6 +213,10 @@ export function openCommitMenu(host, commits, cx) {
 
 // The most commits whose edit facts a right-click reads: each one costs git calls.
 const EDIT_FACTS_MAX = 50;
+// Reading ahead (LogDetails warm): how long the selection stays before its facts are read
+// (ms), so moving through the list reads nothing, and the most commits read ahead.
+const WARM_WAIT = 300;
+const WARM_MAX = 10;
 
 // ---- the column
 
@@ -212,6 +241,7 @@ export default class LogDetails {
     this.list = new WindowedList("log-detail-files");
     this.handle = cx.focus_handle();
     this.checkoutError = null; // the error strip text checkoutCommit put there last
+    this.warming = oneTimer(); // reading the picked commits' edit facts ahead (warm)
   }
 
   // ---- reading
@@ -229,6 +259,7 @@ export default class LogDetails {
     this.describe();
     cx.notify();
     if (!this.commit) return;
+    this.warmSoon(cx);
     const { hash } = this.commit;
     cx.spawn(async (cx) => {
       const r = await readCommit(repo.git, repo.root, hash);
@@ -261,6 +292,7 @@ export default class LogDetails {
     this.describe();
     cx.notify();
     if (!repo) return;
+    this.warmSoon(cx);
     cx.spawn(async (cx) => {
       const read = [];
       // A few at a time: a Shift range can pick hundreds.
@@ -293,10 +325,31 @@ export default class LogDetails {
   // What failed for the commit shown (its files and message, or the branches that
   // contain it) is read again; what was read stays.
   retry(cx) {
+    this.warmSoon(cx);
     if (this.many) { if (this.info && !this.info.ok) this.showMany(this.many, cx); return; }
     if (!this.commit || !this.host.repo) return;
     if (this.info && !this.info.ok) this.show(this.commit, cx);
     else if (this.branches === false) this.readBranches(cx);
+  }
+
+  // The edit facts of the commits picked, read ahead of a right-click (openWithFacts) once
+  // the selection has stayed WARM_WAIT, and again on a poll after a ref moved: the menu then
+  // opens with its items settled. Facts already kept at the refs' present state cost no git
+  // call; more than WARM_MAX commits aren't read ahead.
+  warmSoon(cx) { if (this.host.facts) this.warming.after(cx, WARM_WAIT, (cx) => this.warm(cx)); }
+
+  warm(cx) {
+    const host = this.host, repo = host.repo, refs = host.refs;
+    const hashes = (this.many ?? (this.commit ? [this.commit] : [])).map((c) => c.hash);
+    if (!repo || refs == null || !hashes.length || hashes.length > WARM_MAX) return;
+    const key = factsKey(repo, hashes);
+    if (host.facts.get(key, refs)) return;
+    try {
+      cx.spawn(async () => {
+        const facts = await readEditFacts(repo.git, repo.root, hashes);
+        if (repo === host.repo) host.facts.put(key, refs, facts);
+      });
+    } catch { /* the host refused the read: the right-click reads them */ }
   }
 
   // Apart from readCommit, so a slow walk doesn't hold the rest back, and one walk at a time:

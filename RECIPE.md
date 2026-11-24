@@ -381,15 +381,19 @@ A tab in the shown space, titled with the file name, `background`:
   360px), its folder in `dim`, for a file its commit renamed `renamed from <old path>` at
   12px `dim`, what is compared at 12px `muted` (`HEAD → Working Tree`,
   `9d3f6d7 → b7aabca`, or only the right side when there is no left one), then on the
-  right `+N` in `ansi2` and `−N` in `ansi1` (12px) and Refresh.
+  right `+N` in `ansi4` and `−N` in `ansi1` (12px) and Refresh.
 - When cut short, a band under the header: `raised`, 12px `ansi3`,
   `This diff is too large to show in full: it stops after 5,000 lines.` (or
   `400,000 characters.`).
 - Lines, 20px rows, 12px in the terminal font (`settings().font_family`, else JetBrains
-  Mono): an old and a new line-number column (right-aligned `dim`; a side that has no
-  lines at all gets no column), an 18px sign column (`+` `ansi2`, `-` `ansi1`), the text
-  with tabs as 4 spaces. Added rows have `ansi2` at alpha `0x24` behind them, deleted
-  rows `ansi1` at `0x24`. Hunk headers (`@@ … @@`) on `raised` in `dim`. Git's own
+  Mono): an old and a new line-number column (right-aligned; a side that has no lines at
+  all gets no column), an 18px sign column, the text with tabs as 4 spaces. Added rows are
+  blue: behind them `ansi4`'s hue at full saturation and lightness 0.12 on a dark
+  background or 0.92 on a light one (`diff-colors.js` `rowColor`; graphite gives `#001a3d`,
+  paper `#d6e6ff`), their numbers and `+` in `ansi4`. Deleted rows are red the same way
+  from `ansi1` (graphite `#3d0007`, paper `#ffd6d6`). Other rows' numbers are `dim`. (Blue,
+  not green: red and green rows can't be told apart with red-green color blindness.)
+  Hunk headers (`@@ … @@`) on `raised` in `dim`. Git's own
   `\ No newline at end of file` in `dim`. No syntax colors, no side-by-side view.
 - States: the skeleton, `Binary file`, `Contents are identical`, `Empty file`,
   `Can't show this diff.`, and git's words in an error strip.
@@ -1824,6 +1828,7 @@ the git ones run against real temporary repositories):
 | `git-console.js`, `log-menus.js`, `log-select.js`, `log-options.js`, `branch-order.js`, `vcs-ops.js`, `ui-icons.js` | console records, with a URL's credentials hidden; the Log panel's menus; picking commits; graph and view options; branch order and favorites (the widget popup's favorites first) and the Branch tree's rows (`treeRows`, a tag's row made when asked for); the VCS Operations popup's items; UI icons |
 | `ui-size.js`, `focus-repo.js` | `textWidth`, `menuWidth`, `menuChecks`, `menuStates`, `MENU_TEXT`, `HINT_TEXT`, `MENU_GAP`, `MENU_CHECK`, `belowSpot`, `pressSpot`, `sideOf`, `dialogFills`, `dialogRoom`, `ERROR_BOX`, `ERROR_ROOM`, `widgetBlockWidth`; `whereFocused`, `newPanes`, `rememberTab`, `isTabScreen`, `registerTab`, `forgetTab` |
 | `recent.js` | `keepRecent(map, key, value, limit)` (the newest last; past `limit` the oldest go: what a panel keeps of the folders it left), `takeRecent(map, key)` (taken out as it is used), `moveRecent(map, from, kept, to, limit)` (a move: the folder come back to is taken out before the one left goes in, so `limit` folders are kept besides the one shown), `firstBatch({ commits, seen, through }, batch)` → the Commit list's first `batch` commits, or null under No Merges with merges left out past one batch (where they end in git's order is lost) |
+| `diff-colors.js` | `DARK_ROW` (0.12: a row's lightness on a dark background), `LIGHT_ROW` (0.92: on a light one), `rowColor(color, dark)` → `#rrggbb` (a Diff tab row: `color`'s hue at full saturation and that lightness; a gray stays gray; null for what isn't `#rgb`, `#rrggbb`, `#rrggbbaa` or `rgb(…)`) |
 | `skeleton.js` | `HEIGHT` (720: the height a list fills before its column is measured), `ROOM` (24: the empty end of a bar that takes a row's rest), `LEAD` (the fixed places `slot`, `check`, `icon`, `file`, `mark`, `dot`: their width and what stands in for them), `skeletonRows(specs, { height })` → `[{ height, left, right, gap, pieces }]` (a skeleton list's rows from a screen's description of its real rows, as many as the height shows plus one; `ui.js` `skeleton` draws them), `skeletonCount(specs, height)` (that many rows without the pieces: a new height redraws only when it changes), `skeletonFills(specs)` (whether a section fills, so the height is measured), `skeletonSize(id)` (what a screen keeps for one list: the element id and the measured height), `checkSize(size)` (the size when it came from `skeletonSize` or is left out, else an error naming what it got) |
 | `popup-press.js` | `SAME_PRESS` (200 ms: a press this soon after the popup's answer is the press that closed it), `popupPress({ now })` → `{ opened, closed(shown), opens }` (whether a press on the control that opened a popup opens it or only closes it; a popup whose answer never comes costs one press) |
 | `hand-over.js` | `handOver(key, value)`, `takeOver(key)` (what an opener has read, handed to the popup it opens without copying it; one slot, emptied when taken) |
@@ -3234,7 +3239,7 @@ Each line is one check: do what it says, see what follows.
 **Offline**
 
 1. Run `node layout.test.mjs` at the root, `node <file>` for every `*.test.mjs` in
-   `mods/git-tools` (66 files) and `node tools/gen-icon-theme.test.mjs`: each prints
+   `mods/git-tools` (67 files) and `node tools/gen-icon-theme.test.mjs`: each prints
    `ok` (the last one after `skip: …` unless `ICON_THEME_SOURCE` is set).
 2. Run `herdr-app check mods/git-tools`: it passes.
 
@@ -3258,7 +3263,7 @@ Each line is one check: do what it says, see what follows.
    modified in `ansi4` under Changes, the new one in `ansi1` under Unversioned Files.
 7. Check one modified file and the new file: the group checkboxes show "some".
 8. Select a file, press Show Diff: a tab named after the file opens with
-   `HEAD → Working Tree`, red and green rows and line numbers.
+   `HEAD → Working Tree`, red and blue rows and line numbers.
 9. Type a message, press Commit: `git show --stat HEAD` lists exactly the two checked
    files; the other modified file is still modified; the message and checks clear.
 10. The Log panel (`cmd-shift-g`) shows the new commit on top with a ring on its dot,

@@ -97,6 +97,22 @@ export function toMainGit(main, { button = true } = {}) {
   return { ok: true, layout };
 }
 
+// carryOver(layout, old) → `layout` with what the git-tools.json it replaces holds that
+// isn't built from `main`:
+//   - `cloned_from`, the note Herdr's clone left, unless `layout` has its own.
+//   - `link_handlers`, the mods that take Ctrl/Cmd-clicks on terminal links, in order.
+//     Herdr adds a mod with link rules to a layout's list once and then remembers it did,
+//     so a list lost here would never come back. The old list wins over one `main`
+//     carries: the person may have reordered it or taken mods out.
+// `old`: the parsed old file, or null. Neither argument is modified.
+export function carryOver(layout, old) {
+  const out = { ...layout };
+  if (old?.cloned_from && !out.cloned_from) out.cloned_from = old.cloned_from;
+  const handlers = old?.link_handlers;
+  if (Array.isArray(handlers) && handlers.every((id) => typeof id === "string")) out.link_handlers = handlers;
+  return out;
+}
+
 // writeWhole(fs, path, text): replaces the file whole or not at all. The text goes to a
 // file next to it (same folder, so the rename can't cross disks) and is renamed over it;
 // a write that fails halfway (a full disk) leaves the old file as it was. Throws as
@@ -179,11 +195,9 @@ if (invoked) {
     process.exit(1);
   }
   if (to) {
-    // A clone made by Herdr records where it came from; keep that note when rebuilding.
     let old = null;
     try { old = JSON.parse(fs.readFileSync(to, "utf8")); } catch {}
-    if (old?.cloned_from && !r.layout.cloned_from) r.layout.cloned_from = old.cloned_from;
-    try { writeWhole(fs, to, JSON.stringify(r.layout, null, 2) + "\n"); }
+    try { writeWhole(fs, to, JSON.stringify(carryOver(r.layout, old), null, 2) + "\n"); }
     catch (e) { console.error(`Cannot write ${to}: ${e.message}. The old file is unchanged.`); process.exit(1); }
   }
 }

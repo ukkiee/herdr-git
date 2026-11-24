@@ -44,7 +44,8 @@ left alone; `install.sh` says so, and you can bind the action to another key in
 The `git-tools` layout is a copy, so it doesn't pick up changes Herdr makes to `main`.
 **Run `./install.sh` again after every Herdr update** (and after `git pull` here). It
 rebuilds the layout from your current `main`. Changes you made by hand to
-`git-tools.json` are lost then.
+`git-tools.json` are lost then, except its `link_handlers` (the mods that take
+Ctrl/Cmd-clicks on terminal links), which stay as they were.
 
 ### Back to `main`
 

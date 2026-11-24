@@ -40,7 +40,7 @@ Changes·Files 패널은 그대로 둡니다. mod가 실행하고 쓰는 것은
 `git-tools` 레이아웃은 복사본이라 Herdr가 `main`에 준 변경을 따라가지 않습니다. **Herdr를
 업데이트할 때마다 `./install.sh`를 다시 실행하세요**(이 저장소를 `git pull`한 뒤에도).
 지금의 `main`으로 이 레이아웃을 다시 만듭니다. `git-tools.json`을 손으로 고친 내용은 이때
-사라집니다.
+사라집니다. 터미널 링크의 Ctrl/Cmd-클릭을 받는 mod 목록(`link_handlers`)만 그대로 남습니다.
 
 ### `main`으로 돌아가기
 

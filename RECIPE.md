@@ -1412,7 +1412,10 @@ block `tabs` and `work-body`, which holds the stack `panel-body`, which holds th
 `changes` and `files`. On its own output it finds `work-body` inside `git-work` and `tabs` inside
 `git-tabs` and rebuilds the same thing.
 `node layout.mjs <main.json>` only checks; `node layout.mjs <main.json> <out.json>`
-writes, keeping `cloned_from` of an existing file. It writes with
+writes, keeping `cloned_from` and `link_handlers` of an existing file
+(`carryOver(layout, old)`: Herdr adds a mod with link rules to a layout's `link_handlers`
+only once, so a list lost in a rebuild never comes back; the old list wins over one `main`
+carries). It writes with
 `writeWhole(fs, path, text)`: the whole text goes to a temporary file in the same folder,
 which is then renamed over the target, so a write that fails halfway leaves the old file
 as it was.
@@ -2982,8 +2985,9 @@ in English.
 **Setup**
 
 - The `git-tools` layout is a copy of Herdr's `main`: it doesn't follow Herdr updates. Run
-  `install.sh` again after one. Edits made by hand to `git-tools.json` are lost then.
-- `git-tools.json` keeps the `cloned_from` of the first install.
+  `install.sh` again after one. Edits made by hand to `git-tools.json` are lost then,
+  except its `link_handlers`.
+- `git-tools.json` keeps the `cloned_from` of the first install and its `link_handlers`.
 - `layout.clone` copies clicks (an open side panel, sizes) into the `git-tools` layout.
 - The key section is `layout:git-tools`, not `global`: in other layouts these node ids
   don't exist. `cmd-shift-l` (Herdr's `layout.switch`) moves to the next layout; with

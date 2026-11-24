@@ -313,9 +313,17 @@ const all = (name, ctx = {}, t = ko) => look(menuItems(name, everything, ctx), t
   assert.deepEqual(off("file", { count: 1, files, editPending: true }), ["file.dropSelected", "file.extractSelected"]);
   assert.deepEqual(off("file", { count: 1, files }), []);
 
-  // Nothing is read before the menu opens.
+  // A right-click never waits on git for its menu: facts kept open it at once, and without
+  // them a timer of QUICK_WAIT (300 ms at most) opens it whatever git is doing.
   const details = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "log-details.js"), "utf8");
   assert.doesNotMatch(details, /const facts = [^;\n]*\?\s*await readEditFacts/, "a right-click waits for git before its menu opens");
+  const quick = Number(/const QUICK_WAIT = (\d+);/.exec(details)?.[1]);
+  assert.ok(quick > 0 && quick <= 300, `QUICK_WAIT is ${quick}`);
+  assert.match(details, /cx\.timer\.after\(QUICK_WAIT, \(\) => open\(\)\)/, "the menu opens on a timer, not on git's answer");
+  // Reading ahead waits until the selection stays (later.js dwell, each move starts the wait
+  // again) and reads one set of commits at a time: arrowing through the list reads nothing.
+  assert.match(details, /this\.warmKey \|\| this\.warmStay\.hold\(cx,/, "reading ahead without waiting for the selection to stay");
+  assert.match(details, /warmLater\(cx\) \{ this\.warmStay\.moved\(\);/, "a move doesn't start the wait again");
 }
 
 console.log("ok");

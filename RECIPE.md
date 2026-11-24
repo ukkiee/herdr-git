@@ -610,6 +610,17 @@ The menus and toolbars of the Log panel are one table, `MENUS` in `log-menus.js`
 order, the lines, each item's words key, when it is off (`when`, its reason as the
 tooltip) and when it shows (`shown`). An item the screen has no handler for doesn't show.
 
+In the Commit list and Commit details menus, Cherry-Pick, Revert Commit and the history
+edits are on or off from the edit facts of the commits picked (`readEditFacts`). The Log
+panel keeps the facts it read per commits picked and refs' state (`facts-cache.js`, up to
+32), and reads them for the selection once it has stayed 500 ms (`DWELL`; each move starts
+the wait again), one read at a time and up to 10 commits, and again on a poll
+after a ref moved. A right-click with facts kept at the present refs' state opens the menu with those items settled; without them the menu waits up to 250 ms for the facts,
+then opens with those items off and nothing to say until they answer (all on after 3 s
+without an answer, checked when picked). Every opening reads the facts again behind the menu
+and changes only the items that differ. A `changed` from git-tools' own writes clears the
+kept facts.
+
 ### Git operations
 
 Every word of these screens is in the tables named under "Words"; the sizes are the
@@ -1832,6 +1843,7 @@ the git ones run against real temporary repositories):
 | `skeleton.js` | `HEIGHT` (720: the height a list fills before its column is measured), `ROOM` (24: the empty end of a bar that takes a row's rest), `LEAD` (the fixed places `slot`, `check`, `icon`, `file`, `mark`, `dot`: their width and what stands in for them), `skeletonRows(specs, { height })` → `[{ height, left, right, gap, pieces }]` (a skeleton list's rows from a screen's description of its real rows, as many as the height shows plus one; `ui.js` `skeleton` draws them), `skeletonCount(specs, height)` (that many rows without the pieces: a new height redraws only when it changes), `skeletonFills(specs)` (whether a section fills, so the height is measured), `skeletonSize(id)` (what a screen keeps for one list: the element id and the measured height), `checkSize(size)` (the size when it came from `skeletonSize` or is left out, else an error naming what it got) |
 | `popup-press.js` | `SAME_PRESS` (200 ms: a press this soon after the popup's answer is the press that closed it), `popupPress({ now })` → `{ opened, closed(shown), opens }` (whether a press on the control that opened a popup opens it or only closes it; a popup whose answer never comes costs one press) |
 | `hand-over.js` | `handOver(key, value)`, `takeOver(key)` (what an opener has read, handed to the popup it opens without copying it; one slot, emptied when taken) |
+| `facts-cache.js` | `CACHE_MAX` (32: the sets of commits kept), `factsKey(repo, hashes)` (the repository, its machine and the commits in their order; null with none), `factsCache(max)` → `{ get(key, refs), put(key, refs, facts), clear(), size() }` (edit facts kept per key at the refs' state they were read at; another state or none known finds nothing; only facts that were read are kept; past `max` the one used longest ago goes), `menuFacts(kept)` → `{ now(), first(facts), done(facts), late() }` (what a commit menu's items get while the facts are read: kept facts at once, else waiting, then the first facts, then the whole; `late()` after 3 s stops the waiting and keeps what is known), `sameFacts(a, b)` (equal but for git's own words) |
 
 Each of these files' header says what it exports and why.
 
@@ -3239,7 +3251,7 @@ Each line is one check: do what it says, see what follows.
 **Offline**
 
 1. Run `node layout.test.mjs` at the root, `node <file>` for every `*.test.mjs` in
-   `mods/git-tools` (67 files) and `node tools/gen-icon-theme.test.mjs`: each prints
+   `mods/git-tools` (68 files) and `node tools/gen-icon-theme.test.mjs`: each prints
    `ok` (the last one after `skip: …` unless `ICON_THEME_SOURCE` is set).
 2. Run `herdr-app check mods/git-tools`: it passes.
 

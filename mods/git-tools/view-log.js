@@ -19,6 +19,7 @@ import { readTurns, STUCK } from "./read-turns.js";
 import { oneTimer, dwell, each, spawnOrUndo } from "./later.js";
 import { moveRecent } from "./recent.js";
 import { readRefsState, readGitDir, refsChanged, resolveCommit } from "./git-log.js";
+import { factsCache } from "./facts-cache.js";
 import { fetchAll, restoreBranch, trackedBranch } from "./git-branch.js";
 import { remoteFailure } from "./git-remote.js";
 import { location, watchSettled, panelFrame, toolbar, spacer, iconButton, notice, skeleton, skeletonSize, notRepository, errorStrip, noteBar, sentence, toggleLogPanel, logPanelShown, broadcast, scriptedRepo, takeWrite, releaseWrite, writeBlock, writeName, writingOn, readBlocked, fromRepo, gitButtonPlaced, openMenu, progressBar } from "./ui.js";
@@ -228,6 +229,8 @@ export default class LogView {
     this.widths = { branches: stored(BRANCHES), details: stored(DETAILS) };
     this.listWidth = null;
     this.refs = null; // the refs' state the list was last read at
+    // The commit menus' edit facts kept per commits picked and refs' state (facts-cache.js).
+    this.facts = factsCache();
     this.lost = false; // finding the repository failed (not "not a repository"): the poll asks again
     this.finding = readTurns(); // the searches for the shown folder's repository (refresh)
     this.polls = readTurns(); // the poll's look at the refs
@@ -814,6 +817,8 @@ export default class LogView {
     if (e.type === OPTIONS_EVENT) { this.loadOptions(cx); return; }
     if (e.type === DETAILS_EVENT) { this.details.loadOptions(cx); return; }
     if (e.type !== "changed" || (e.root && e.root !== this.repo?.root)) return;
+    // A write can change what the refs' state doesn't show (an operation begun, the index).
+    this.facts.clear();
     if (this.repo) this.poll(cx);
     else if (!this.finding.busy()) this.refresh(cx);
   }

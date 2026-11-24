@@ -108,7 +108,7 @@
 | 화면 | `view-*.js`, `commit-form.js`, `commit-stash-tab.js`, `log-branches.js`, `log-list.js`, `log-details.js`, `log-filters.js` | 그리기와 사람의 입력 |
 | git | `git.js`, `git-status.js`, `git-commit.js`, `git-rollback.js`, `git-snapshot.js`, `git-diff.js`, `git-push.js`, `git-log.js`, `git-log-filter.js`, `git-branch.js`, `git-show.js`(`readLastCommit` 포함), `files-data.js` | git과 폴더 읽기 명령을 부르고 결과를 해석한다 |
 | git 동작 | `git-operation.js`, `git-conflict.js`, `git-smart.js`, `git-stash.js`, `git-reset.js`, `git-rewrite.js`, `git-changes.js`, `git-remote.js`, `git-refs.js`, `git-compare.js`, `git-revision.js`, `git-worktree.js`, `git-heads.js`, `git-patch.js` | Operation in progress 읽기와 merge·rebase·cherry-pick·revert의 실행·판정, 충돌 파일 쓰기, Smart operation, stash, reset과 하드 전 기록, 히스토리 다시 쓰기, 파일 단위 되돌리기·체리픽, pull·업데이트, 태그·이름 변경·원격, 비교·패치·가져오기, 리비전의 파일과 하위 커밋, 새 워크트리, VCS widget이 보일 브랜치, 로컬 변경의 패치와 패치 적용 |
-| 순수 계산 | `graph.js`, `tree.js`, `bus.js`, `lock.js`, `read-turns.js`, `clock.js`, `later.js`, `folder-watch.js`, `i18n.js`, `icon-theme.js`, `files-tree.js`, `editor-language.js`, `merge-chunks.js`, `conflicts-model.js`, `merge-revisions-model.js`, `rebase-plan.js`, `log-menus.js`, `log-select.js`, `log-options.js`, `branch-order.js`, `vcs-ops.js`, `git-console.js`, `ui-icons.js`, `pick-notes.js`, `ui-size.js`, `focus-repo.js`, `let-go.js`, `skeleton.js`, `recent.js`, `popup-press.js`, `hand-over.js`, `diff-colors.js` | 그래프 배치, 경로 트리와 3상태 체크, 버스와 잠금 값, 되풀이하는 읽기의 차례, 사본의 git 시계, 타이머·작업으로 미룬 일과 머문 폴더 판정, 폴더 감시와 그 취소, 언어와 문장, 아이콘 고르기, Files panel의 줄·표시·찾기 순위·키, 미리보기의 구문 색, 병합 덩어리, 두 충돌 창이 보일 것과 켜질 것, 리베이스 계획과 편집 판정, Log panel의 메뉴·툴바 표, 여러 커밋 고르기, 그래프·표시 옵션 값, 브랜치 순서와 즐겨찾기, VCS Operations popup의 항목, 콘솔 기록의 꼴과 자격 증명 가림, UI icon 대응, Cherry-Pick·Revert 결과의 알림, 메뉴 너비·팝업 자리·창이 자리를 채우는지·위젯 블록 폭, 패널이 따를 저장소와 탭 기록, 닫히는 화면이 쥔 데이터 비우기, 로딩 스켈레톤의 행과 조각 자리, 떠난 폴더의 기억(최근 N개)과 Commit list의 첫 묶음, Diff tab의 행 색 |
+| 순수 계산 | `graph.js`, `tree.js`, `bus.js`, `lock.js`, `read-turns.js`, `clock.js`, `later.js`, `folder-watch.js`, `i18n.js`, `icon-theme.js`, `files-tree.js`, `editor-language.js`, `merge-chunks.js`, `conflicts-model.js`, `merge-revisions-model.js`, `rebase-plan.js`, `log-menus.js`, `log-select.js`, `log-options.js`, `branch-order.js`, `vcs-ops.js`, `git-console.js`, `ui-icons.js`, `pick-notes.js`, `ui-size.js`, `focus-repo.js`, `let-go.js`, `skeleton.js`, `recent.js`, `popup-press.js`, `hand-over.js`, `diff-colors.js`, `facts-cache.js` | 그래프 배치, 경로 트리와 3상태 체크, 버스와 잠금 값, 되풀이하는 읽기의 차례, 사본의 git 시계, 타이머·작업으로 미룬 일과 머문 폴더 판정, 폴더 감시와 그 취소, 언어와 문장, 아이콘 고르기, Files panel의 줄·표시·찾기 순위·키, 미리보기의 구문 색, 병합 덩어리, 두 충돌 창이 보일 것과 켜질 것, 리베이스 계획과 편집 판정, Log panel의 메뉴·툴바 표, 여러 커밋 고르기, 그래프·표시 옵션 값, 브랜치 순서와 즐겨찾기, VCS Operations popup의 항목, 콘솔 기록의 꼴과 자격 증명 가림, UI icon 대응, Cherry-Pick·Revert 결과의 알림, 메뉴 너비·팝업 자리·창이 자리를 채우는지·위젯 블록 폭, 패널이 따를 저장소와 탭 기록, 닫히는 화면이 쥔 데이터 비우기, 로딩 스켈레톤의 행과 조각 자리, 떠난 폴더의 기억(최근 N개)과 Commit list의 첫 묶음, Diff tab의 행 색, 커밋 메뉴가 읽은 편집 사실의 기억 |
 | 데이터 | `messages-*.js`, `icon-theme-data.js`, `icons/theme/`, `icons/ui/`(그 밖의 `icons/` 파일 포함) | 문구 표, 생성한 아이콘 규칙, 아이콘 파일 |
 
 저장소 루트에는 레이아웃 변환 `layout.mjs`, 설치 `install.sh`, 키 `keys.json`, 아이콘 생성기
@@ -730,11 +730,15 @@ Rollback은 Rollback dialog의 버튼으로만 실행되고, 쓰기 전에 버�
   받는다. 바로 주면 아직 그려지지 않은 칸이라 잃고, 창을 연 패널이 메뉴가 닫히며 키보드를 되가져간다.
   대화식 리베이스 창도 같은 이유로 열린 뒤 한 번 더 키보드를 가져와, 클릭 없이 키가 듣는다.
 - **편집 판정은 순수 모듈이다**(`rebase-plan.js`의 `editCheck`, 사실은 `git-rewrite.js`의
-  `readEditFacts`가 읽는다). 커밋과 파일의 우클릭 메뉴는 git을 기다리지 않고 바로 열고, 사실은 그 뒤에서
-  읽는다. 사실이 필요한 항목은 답이 올 때까지 꺼 두고, 답이 오면 켜거나 사유와 함께 꺼 둔다(`openMenu`의
-  `live`). 가장 느린 `git status`가 정하는 픽스업·다음으로 스쿼시만 마지막까지 기다린다. 3초(`FACTS_WAIT`)
-  안에 답이 없으면 켜고 고를 때 판정한다. 꺼지는 경우: merge 커밋,
-  현재 브랜치 밖, 진행 중 동작, 보호 브랜치에 푸시됨(현재 브랜치의 추적 원격 브랜치가 Protected
+  `readEditFacts`가 읽는다). 커밋과 파일의 우클릭 메뉴는 항목이 정해진 채로 열려야 한다. 열 때마다
+  꺼졌다 켜지는 항목은 매번 눈에 걸린다. 그래서 Log panel이 읽은 사실을 고른 커밋과 ref 상태별로
+  기억하고(`facts-cache.js`, ref·HEAD가 움직이면 무효), 선택이 500 ms(`DWELL`, 옮길 때마다 다시 잼) 머물면 한 번에 하나씩 미리 읽는다. 기억이 있으면
+  메뉴를 바로 그 사실로 열고, 없으면 250 ms(`QUICK_WAIT`)까지 사실을 기다렸다 연다. 그래도 답이 없으면
+  사실이 필요한 항목을 꺼 둔 채 열고, 답이 오면 켜거나 사유와 함께 꺼 둔다(`openMenu`의 `live`). 가장
+  느린 `git status`가 정하는 픽스업·다음으로 스쿼시만 마지막까지 기다린다. 3초(`FACTS_WAIT`) 안에 답이
+  없으면 켜고 고를 때 판정한다. 열 때마다 뒤에서 다시 읽어 달라진 항목만 바꾼다. ref 상태가 보이지 않는
+  변화(진행 중 동작, 로컬 변경)는 git-tools의 쓰기가 알리는 `changed`에 기억을 비워 맞춘다. 꺼지는 경우:
+  merge 커밋, 현재 브랜치 밖, 진행 중 동작, 보호 브랜치에 푸시됨(현재 브랜치의 추적 원격 브랜치가 Protected
   branch이고 그 커밋이 거기서 닿음, HEAD 커밋 포함), 다시 쌓는 범위에 merge 커밋, 실행 취소는 마지막
   커밋에서만(첫 커밋은 막음), 픽스업·다음으로 스쿼시는 로컬 변경이 없을 때(추적 안 함 파일도
   변경으로 센다, Commit panel이 그 파일도 커밋하므로), 커밋 스쿼시는 둘 이상 고를 때만, 파일 단위
@@ -1258,7 +1262,7 @@ Herdr는 mod를 QuickJS로 돌린다. JIT가 없고, 한 호출이 너무 오래
   바꿀 때마다 사람이 다시 본다. 확인 절차는 RECIPE의 "Done when"에 있다.
 
 **전체 오프라인 검사:** `node tools/check.mjs`가 한 번에 돌린다. 루트의 `node layout.test.mjs`,
-`mods/git-tools`의 `*.test.mjs` 67개 각각, `node tools/gen-icon-theme.test.mjs`가 모두 `ok`를 찍고,
+`mods/git-tools`의 `*.test.mjs` 68개 각각, `node tools/gen-icon-theme.test.mjs`가 모두 `ok`를 찍고,
 `herdr-app check mods/git-tools`가 통과한다. 테스트는 node 내장 모듈(`node:assert/strict` 등)만 쓴다.
 
 **느린 엔진의 예산:** `icon-theme.test.mjs`가 JIT를 끈 node로 규칙을 꽂는 시간을 재서, 규칙을

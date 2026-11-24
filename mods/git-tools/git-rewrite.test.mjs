@@ -499,4 +499,28 @@ const step = (hash, action, message) => ({ hash, action, ...(message == null ? {
   assert.equal(head(repo), hashes[3]);
 }
 
+// readEditFacts' first: told everything but the local changes while git status still runs.
+{
+  const repo = init("facts-first");
+  sh(repo, "echo one > one && git add one && git commit -q -m one && echo dirty > dirty");
+  let release, early = null, calls = 0;
+  const held = new Promise((go) => { release = go; });
+  const slow = async (cmd, args, options) => {
+    if (args.includes("--porcelain=v1")) await held;
+    return exec(cmd, args, options);
+  };
+  const facts = await readEditFacts(makeGit(slow, null), repo, [head(repo)], { first: (f) => { calls++; early = f; release(); } });
+  assert.equal(calls, 1);
+  assert.equal(early.ok, true);
+  assert.equal(early.head, facts.head);
+  assert.deepEqual(early.commits, facts.commits);
+  assert.equal(early.localChanges, undefined, "git status hasn't answered yet");
+  assert.equal(facts.localChanges, true);
+  // A hash that isn't there says nothing early.
+  let told = false;
+  const none = await readEditFacts(git, repo, ["0".repeat(40)], { first: () => { told = true; } });
+  assert.equal(none.ok, false);
+  assert.equal(told, false);
+}
+
 console.log("ok");

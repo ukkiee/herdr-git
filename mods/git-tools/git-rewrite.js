@@ -74,15 +74,17 @@ async function tracked(git, root, branch) {
 //   pushed: `oldest` is on some remote branch: rewriting it needs a force push next.
 //   localChanges: the working tree or the index has anything to commit, untracked files
 //     included (the Commit panel commits those too); null when git couldn't say.
-export async function readEditFacts(git, root, hashes) {
+// first(facts): called once with all of it but localChanges, which comes last: in a big
+//   working tree git status takes longer than everything else together.
+export async function readEditFacts(git, root, hashes, { first } = {}) {
   const wanted = [...new Set((hashes ?? []).filter((h) => typeof h === "string"))];
   const bad = wanted.find((h) => !HASH.test(h));
   if (!wanted.length || bad) return unknown(bad ?? "");
-  const [headR, branchR, op, changes] = await Promise.all([
+  const reading = git.read(root, ["status", "--porcelain=v1", "-z", "--untracked-files=normal"]);
+  const [headR, branchR, op] = await Promise.all([
     git.read(root, ["rev-parse", "--verify", "-q", "HEAD"]),
     git.read(root, ["symbolic-ref", "-q", "--short", "HEAD"]),
     readOperation(git, root),
-    git.read(root, ["status", "--porcelain=v1", "-z", "--untracked-files=normal"]),
   ]);
   if (!headR.ok) return result(headR);
   const head = headR.out.trim(), branch = branchR.ok ? branchR.out.trim() : null;
@@ -112,11 +114,13 @@ export async function readEditFacts(git, root, hashes) {
       pushed = remote.ok && remote.out.trim() !== "";
     }
   }
-  return {
+  const facts = {
     ok: true, code: 0, out: "", err: "", head, branch, operation: op.ok ? op.kind : null,
     protected: upstream?.protected ? upstream.name : null, mergeAbove, pushed, oldest, commits,
-    localChanges: changes.ok ? changes.out !== "" : null,
   };
+  first?.(facts);
+  const changes = await reading;
+  return { ...facts, localChanges: changes.ok ? changes.out !== "" : null };
 }
 
 // readMessages(git, root, hashes) → { ok, err, msg?, messages, joined }

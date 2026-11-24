@@ -9,9 +9,9 @@
 
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { theme, closeOverlay } from "herdr";
-import { answerMenu, menuMetrics, icon } from "./ui.js";
-import { menuChecks } from "./ui-size.js";
+import { theme, closeOverlay, shared } from "herdr";
+import { answerMenu, menuMetrics, icon, MENU_ROWS } from "./ui.js";
+import { menuChecks, menuStates } from "./ui-size.js";
 
 export default class Menu {
   init(p, cx) {
@@ -45,7 +45,8 @@ export default class Menu {
   }
 
   render() {
-    const t = theme(), m = menuMetrics;
+    const t = theme(), m = menuMetrics, settled = shared(MENU_ROWS);
+    if (settled?.key === this.key) ({ items: this.items, at: this.at } = menuStates(this.items, settled.states, this.at));
     return v_flex().id("git-menu").track_focus(this.handle).w_full().min_h(0).p(m.pad).bg(t.popover).text_size(12.8)
       .on_key_down((e, cx) => {
         if (e.key === "down") this.move(1);

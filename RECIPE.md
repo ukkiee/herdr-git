@@ -627,11 +627,14 @@ dialog's own (`openDialog` in its file).
   changes only what moved since. When the kept width is that 4px (the last folder wasn't a
   repository), the bar doesn't show until the read answers: the block is resized once,
   to the answer, rather than widened for the bar and again for the widget.
-  Click: a 380×520 popup 2px below the widget, kept inside the block's right end: the
+  Click: a 380×520 popup 2px below the widget (a click while it is open only closes it),
+  kept inside the block's right end: the
   search box `Search for branches and actions` with Refresh; Update Project…, Commit…,
   Push…; the in-progress items; New Branch…, New Worktree…, Checkout Tag or Revision…;
   then Recent (up to 5), Local, Remote and Tags trees, each branch row with a › opening
-  the same menu as the Branch tree beside it. While the popup reads, the six actions and
+  the same menu as the Branch tree beside it. The list the widget last read shows at once
+  and the popup's own read replaces it, the keyboard and an open branch menu staying on
+  their rows. Before the widget has read anything, while the popup reads, the six actions and
   a line show at once and can be picked (the widget runs them on its own repository);
   the groups' place is a skeleton in their rows' shape (26px rows: a group's name, then
   branches 26px in and a remote's 44px in, each with an icon, a name bar and ›). The
@@ -1726,7 +1729,7 @@ filter and branch changes and next batch run anyway).
 `"en"` or `"ko"`, the system language a copy last read. Written only when it changes
 (every write redraws every copy).
 
-**Two more shared values.** `git-tools.menus`: how many popup menus `openMenu` has open;
+**More shared values.** `git-tools.menu-rows`: the open menu's rows that settled after it opened, `{ key, states }` (a shared value and not an event: the answer can come before the menu's copy has started). `git-tools.menus`: how many popup menus `openMenu` has open;
 while it isn't 0, `tip(el, text)` in `ui.js` attaches no tooltip, and every screen
 attaches its tooltips only through `tip` (`ui-ids.test.mjs` fails on a `.tooltip(` call
 anywhere else; the menu screens draw their own). Herdr builds a tooltip once, when the
@@ -1819,9 +1822,11 @@ the git ones run against real temporary repositories):
 | `git-compare.js`, `git-revision.js`, `git-worktree.js` | comparisons, patches, Get from, Show Changes to Parents (`parentDiffs`); a revision's files, history, child commits; new worktrees and Checkout Tag or Revision |
 | `git-patch.js` | `readPatchFiles(text)` (pure: a patch's files, statuses and names as `git apply -p1` takes them), `applyPatch(git, root, { file, paths })` (checked files only, always named with `--include`, in parts when there are many; a 3-way retry; conflicts from `ls-files -u`), `READ_LIMIT`, `readMayBeCut(text)` (the 1 MiB read limit in UTF-8 bytes), `homePath(typed, home)` (a leading `~` or `~/` as that machine's home), `changesCommit(git, root, { paths, message })` (a commit of the checked local changes on HEAD, no ref) |
 | `git-console.js`, `log-menus.js`, `log-select.js`, `log-options.js`, `branch-order.js`, `vcs-ops.js`, `ui-icons.js` | console records, with a URL's credentials hidden; the Log panel's menus; picking commits; graph and view options; branch order and favorites (the widget popup's favorites first) and the Branch tree's rows (`treeRows`, a tag's row made when asked for); the VCS Operations popup's items; UI icons |
-| `ui-size.js`, `focus-repo.js` | `textWidth`, `menuWidth`, `menuChecks`, `MENU_TEXT`, `HINT_TEXT`, `MENU_GAP`, `MENU_CHECK`, `belowSpot`, `pressSpot`, `sideOf`, `dialogFills`, `dialogRoom`, `ERROR_BOX`, `ERROR_ROOM`, `widgetBlockWidth`; `whereFocused`, `newPanes`, `rememberTab`, `isTabScreen`, `registerTab`, `forgetTab` |
+| `ui-size.js`, `focus-repo.js` | `textWidth`, `menuWidth`, `menuChecks`, `menuStates`, `MENU_TEXT`, `HINT_TEXT`, `MENU_GAP`, `MENU_CHECK`, `belowSpot`, `pressSpot`, `sideOf`, `dialogFills`, `dialogRoom`, `ERROR_BOX`, `ERROR_ROOM`, `widgetBlockWidth`; `whereFocused`, `newPanes`, `rememberTab`, `isTabScreen`, `registerTab`, `forgetTab` |
 | `recent.js` | `keepRecent(map, key, value, limit)` (the newest last; past `limit` the oldest go: what a panel keeps of the folders it left), `takeRecent(map, key)` (taken out as it is used), `moveRecent(map, from, kept, to, limit)` (a move: the folder come back to is taken out before the one left goes in, so `limit` folders are kept besides the one shown), `firstBatch({ commits, seen, through }, batch)` → the Commit list's first `batch` commits, or null under No Merges with merges left out past one batch (where they end in git's order is lost) |
 | `skeleton.js` | `HEIGHT` (720: the height a list fills before its column is measured), `ROOM` (24: the empty end of a bar that takes a row's rest), `LEAD` (the fixed places `slot`, `check`, `icon`, `file`, `mark`, `dot`: their width and what stands in for them), `skeletonRows(specs, { height })` → `[{ height, left, right, gap, pieces }]` (a skeleton list's rows from a screen's description of its real rows, as many as the height shows plus one; `ui.js` `skeleton` draws them), `skeletonCount(specs, height)` (that many rows without the pieces: a new height redraws only when it changes), `skeletonFills(specs)` (whether a section fills, so the height is measured), `skeletonSize(id)` (what a screen keeps for one list: the element id and the measured height), `checkSize(size)` (the size when it came from `skeletonSize` or is left out, else an error naming what it got) |
+| `popup-press.js` | `SAME_PRESS` (200 ms: a press this soon after the popup's answer is the press that closed it), `popupPress({ now })` → `{ opened, closed(shown), opens }` (whether a press on the control that opened a popup opens it or only closes it; a popup whose answer never comes costs one press) |
+| `hand-over.js` | `handOver(key, value)`, `takeOver(key)` (what an opener has read, handed to the popup it opens without copying it; one slot, emptied when taken) |
 
 Each of these files' header says what it exports and why.
 
@@ -1895,7 +1900,7 @@ preview, a compare Diff tab's working-tree side, the Conflicts dialog's working-
 Apply Patch's patch file, and the app home's `console.jsonl` and `settings.json`),
 `openOverlay` (with `at` for the Push dialog's ▾ menu), `closeOverlay`, the app action
 `overlay.close` (Esc; answered with `on_action`), `shared`,
-`setShared` (keys `git-tools.bus`, `git-tools.lock`, `git-tools.lang`, `git-tools.menus`
+`setShared` (keys `git-tools.bus`, `git-tools.lock`, `git-tools.lang`, `git-tools.menu-rows`, `git-tools.menus`
 and `git-tools.tabs`), `window` (its `platform`, for reading the system language, the
 Files panel's folder reads and Reveal in Finder) and `settings().dark` (Herdr's look, for
 the dark icon variants only when the theme's color can't be read). Also
@@ -2626,10 +2631,10 @@ in English.
   is written only by a deleted branch's Restore, putting back that branch's
   `branch.<name>.remote` and `.merge`. The Files panel writes nothing.
 - **Outside the mod folder**: the clipboard (Copy Revision Number, Copy Path, Copy
-  Relative Path, Create Patch to the clipboard), five keys of the app
+  Relative Path, Create Patch to the clipboard), six keys of the app
   home's `shared.json` (through `setShared`): `git-tools.bus` (the last 8 events),
   `git-tools.lock` (`{}` when nothing writes), `git-tools.lang` (`"en"` or `"ko"`),
-  `git-tools.menus` (the open menus' count) and `git-tools.tabs` (the open git-tools tabs'
+  `git-tools.menu-rows` (the open menu's settled rows), `git-tools.menus` (the open menus' count) and `git-tools.tabs` (the open git-tools tabs'
   panes and repositories), `localStorage`, and the app home's `git-tools/` folder:
   `console.jsonl` (at most 512 KiB), `settings.json`, and a `git-tools-result.XXXXXXXX`
   file (mode 0600) while a merge result is saved or a clipboard patch is applied, removed
@@ -3229,7 +3234,7 @@ Each line is one check: do what it says, see what follows.
 **Offline**
 
 1. Run `node layout.test.mjs` at the root, `node <file>` for every `*.test.mjs` in
-   `mods/git-tools` (64 files) and `node tools/gen-icon-theme.test.mjs`: each prints
+   `mods/git-tools` (66 files) and `node tools/gen-icon-theme.test.mjs`: each prints
    `ok` (the last one after `skip: …` unless `ICON_THEME_SOURCE` is set).
 2. Run `herdr-app check mods/git-tools`: it passes.
 

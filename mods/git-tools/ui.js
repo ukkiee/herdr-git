@@ -449,6 +449,9 @@ export function newTab(name, props) {
 }
 
 const MENU_ROW = 28, MENU_PAD = 5, MENU_RULE = 9;
+// The open menu's rows that settled after it opened: { key, states } (openMenu's live). A
+// shared value, not an event: the answer may come before the menu's copy has started.
+export const MENU_ROWS = "git-tools.menu-rows";
 
 // A popup menu. Resolves with the chosen item's `value`, or null when it's dismissed.
 // items: [{ label, value, disabled?, hint?, title?, rule?, checked? }] (`hint`: dim text on
@@ -465,7 +468,9 @@ const MENU_ROW = 28, MENU_PAD = 5, MENU_RULE = 9;
 // opener's to word; the menu screen draws them as given.
 // width: the narrowest the menu is. It widens to its longest label (ui-size.js menuWidth),
 // so a label with a long branch name still shows what it does.
-export function openMenu(bus, items, { width = 220, at, lang } = {}) {
+// live(update): for a menu that opens before all it shows is known. Called once the menu is
+// open; update(rows) sets each row's `disabled` and `title` (the same rows in the same order).
+export function openMenu(bus, items, { width = 220, at, lang, live } = {}) {
   // Unique among all copies: every opener sees every answer and takes the one with its key.
   const key = `menu-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   const height = MENU_PAD * 2 + items.length * MENU_ROW + items.filter((it, i) => it.rule && i > 0).length * MENU_RULE;
@@ -474,6 +479,12 @@ export function openMenu(bus, items, { width = 220, at, lang } = {}) {
   answer.then(() => menuShown(key, false), () => menuShown(key, false));
   const spot = at && Number.isFinite(at.x) && Number.isFinite(at.y) ? { x: at.x, y: at.y } : undefined;
   openOverlay({ mod: MOD, kind: "popup", width: menuWidth(items, { min: width }), height, ...(spot ? { at: spot } : {}), props: { view: "menu", key, items, lang: openingLang(lang) } });
+  if (live) {
+    let open = true;
+    const closed = () => { open = false; if (shared(MENU_ROWS)?.key === key) setShared(MENU_ROWS, null); };
+    answer.then(closed, closed);
+    live((rows) => { if (open) setShared(MENU_ROWS, { key, states: rows.map((r) => ({ disabled: Boolean(r.disabled), title: r.title ?? null })) }); });
+  }
   return answer;
 }
 

@@ -16,9 +16,10 @@
 //
 // ctx, as each screen hands it:
 //   commit menu:   { count (commits selected), current (branch name), writing, edit? (the
-//                  edit facts of the commits selected, git-rewrite.js readEditFacts) }
+//                  edit facts of the commits selected, git-rewrite.js readEditFacts),
+//                  editPending? (those facts are still being read) }
 //   file menu:     { writing, count (commits shown), files? ({ picked, total }: the commit's
-//                  files picked), edit? (the edit facts of the commit shown) }
+//                  files picked), edit? (the edit facts of the commit shown), editPending? }
 //   branch menus:  { name, current, upstream, gone, writing, deleteBlock, scope (the row's:
 //                  "local" | "remote" | "head", a detached HEAD) }: branchContext below
 //   toolbars:      { loaded, name, upstream (the cursor's local branch tracks one),
@@ -43,14 +44,20 @@ const tracked = (ctx) => (ctx.upstream ? null : { text: "" });
 // A history edit: off for the edit check's reason (rebase-plan.js). ctx.edit: the edit
 // facts of the commits picked (git-rewrite.js readEditFacts) when the menu has them; without
 // them only the number picked is checked, and the item checks the rest when picked.
-const edit = (action) => (ctx) => editCheck(action, ctx.edit ?? null, ctx.count ?? 1).why;
+// While they are read (ctx.editPending) the item waits, off with nothing to say. Fixup and
+// Squash Into wait for the local changes too, the last of the facts to answer.
+const WAITING = { text: "" };
+const factsDue = (ctx) => Boolean(ctx.editPending && !ctx.edit);
+const waits = (action, ctx) => (factsDue(ctx) || (ctx.editPending && (action === "fixup" || action === "squashInto") && ctx.edit.localChanges === undefined) ? WAITING : null);
+const edit = (action) => (ctx) => editCheck(action, ctx.edit ?? null, ctx.count ?? 1).why ?? waits(action, ctx);
 // The same for Commit details' file edits, which also need how many of the commit's files
 // are picked (ctx.files).
-const fileEdit = (action) => (ctx) => editCheck(action, ctx.edit ?? null, ctx.count ?? 1, ctx.files ?? null).why;
+const fileEdit = (action) => (ctx) => editCheck(action, ctx.edit ?? null, ctx.count ?? 1, ctx.files ?? null).why ?? waits(action, ctx);
 // Cherry-Pick and Revert Commit: off on a merge commit (git needs a parent to be named),
 // and Cherry-Pick also on a commit the current branch already has. From the same edit
 // facts; without them the item is on and git decides.
 const pick = (action) => (ctx) => {
+  if (factsDue(ctx)) return WAITING;
   const commits = ctx.edit?.commits ?? [];
   if (commits.some((c) => c.parents > 1)) return { key: "pick.mergeCommit" };
   const here = action === "cherryPick" ? commits.find((c) => c.onBranch) : null;
@@ -78,7 +85,7 @@ const ITEMS = {
   "commit.pushUpToHere": { key: "log.pushUpToHere", when: one },
   // Only for a commit outside the current branch (one in it is already under it), and
   // only on a branch.
-  "commit.rebaseOnto": { key: "log.rebaseOntoCommit", args: current, write: true, when: (ctx) => one(ctx) ?? (!ctx.current || ctx.edit?.commits?.[0]?.onBranch ? { text: "" } : null) },
+  "commit.rebaseOnto": { key: "log.rebaseOntoCommit", args: current, write: true, when: (ctx) => one(ctx) ?? (!ctx.current || factsDue(ctx) || ctx.edit?.commits?.[0]?.onBranch ? { text: "" } : null) },
   "commit.newBranch": { key: "log.newBranch", write: true, when: one },
   "commit.newTag": { key: "log.newTag", write: true, when: one },
   // The Commit list's left and right keys (log-list.js).

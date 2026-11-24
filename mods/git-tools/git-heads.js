@@ -123,6 +123,12 @@ function ongoingItems(op) {
   return [abort];
 }
 
+// rowAgain(rows, was) → where the row `was` is in `rows`, the rows of a newer read, or -1.
+export function rowAgain(rows, was) {
+  if (!was) return -1;
+  return rows.findIndex((r) => r.kind === was.kind && r.id === was.id && r.scope === was.scope && r.name === was.name);
+}
+
 // popupRows({ heads, op, query, folded, handled }, t) → the popup's rows, top to bottom:
 //   { kind: "action", id, label, run? }     an action (run: an in-progress item's, above)
 //   { kind: "rule" }                         a line between sections

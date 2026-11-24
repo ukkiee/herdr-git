@@ -1,12 +1,13 @@
 # Herdr mod 플랫폼 한계
 
-출처는 Herdr 앱 홈(`~/.config/herdr-app`)의 `AGENTS.md`, `herdr.d.ts`, `gpui-kit.d.ts`(gpui-shell 0.7.1), 내장 mod 코드, `herdr-app commands`다.
-표기: **[문서]** 문서·타입이 명시, **[코드]** 내장 mod가 실제로 씀, **[타입만]** 타입 선언만 있고 내장 사용 예 없음(런타임 미검증), **[실험]** 직접 실행해 관측, **[미확인]** 찾지 못함.
+출처는 Herdr 앱 홈(`~/.config/herdr-app`)의 `AGENTS.md`, `herdr.d.ts`, `gpui-kit.d.ts`(gpui-shell 0.7.1), 내장 mod 코드, `herdr-app commands`, Herdr 앱의 공개 소스다.
+표기: **[문서]** 문서·타입이 명시, **[코드]** 내장 mod가 실제로 씀, **[소스]** 앱 소스에서 읽음(실행해 보지 않음), **[타입만]** 타입 선언만 있고 내장 사용 예 없음(런타임 미검증), **[실험]** 직접 실행해 관측, **[미확인]** 찾지 못함.
 
 ## 배치
 
 - 내장 레이아웃과 내장 mod는 읽기 전용이고 시작할 때마다 통째로 교체된다. 고치면 다음 시작에 `<name>-edited`로 밀려난다. [문서]
 - 구조를 바꾸려면 `layout.clone`, 코드를 바꾸려면 `mod.clone`. 복제본은 업데이트되지 않는다. [문서]
+- 레이아웃 맨 위의 `link_handlers`는 터미널 링크의 Ctrl/Cmd-클릭을 받을 mod와 그 순서다. Herdr는 `mod.json`에 링크 규칙이 있는 mod를 처음 볼 때 보이던 개인 레이아웃의 이 목록에 더하고, `seen.json`에 `links:<mod>`로 기억한다. 그 뒤로는 목록에서 빠져도 어느 레이아웃에도 다시 넣지 않는다. 내장 레이아웃에는 넣지 않는다. [문서/소스] 그래서 설치 스크립트가 `git-tools` 레이아웃을 다시 만들 때 옛 파일의 목록을 옮긴다(`layout.mjs`의 `carryOver`).
 - `mod.json`의 `"place": "bottom" | "right"`는 내장 `main`에 자동 도킹되지 않는다. 실행 중에도 재시작 뒤에도. [실험]
 - `main`의 뼈대: `root(row) = [sidebar, work(column) = [tabs, work-body(row) = [main, panel], status]]`. `panel` > `panel-body`(stack) > `files`, `changes` 블록. `work` column은 `resizable: false`라 그 안에 직접 넣은 블록은 경계 드래그가 안 된다. [코드]
 - 우상단 Files/Changes 버튼은 내장 `tabs` mod가 그리고, 레이아웃 노드 id(`files`, `changes`)를 `layout.select` + `layout.show`로 연다. 보일 버튼은 `shared("workspace.panels")`가 정한다. [코드]

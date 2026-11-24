@@ -6,7 +6,8 @@ import { mkdtempSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
-import { toMainGit, writeWhole, copyChanged, LOG_ID, MOD, TABS_ROW_ID, BUTTON_ID, BUTTON_WIDTH, WIDGET_ID, WIDGET_WIDTH } from "./layout.mjs";
+import { execFileSync } from "node:child_process";
+import { toMainGit, carryOver, writeWhole, copyChanged, LOG_ID, MOD, TABS_ROW_ID, BUTTON_ID, BUTTON_WIDTH, WIDGET_ID, WIDGET_WIDTH } from "./layout.mjs";
 
 // The parts of Herdr's shipped `main` the transform touches, plus a field of each
 // kind it must leave alone.
@@ -214,6 +215,39 @@ for (const id of ["work", "tabs", "work-body", "panel-body", "changes", "files"]
 assert.equal(toMainGit(null).ok, false);
 assert.equal(toMainGit({}).ok, false);
 
+// ---- what a rebuild keeps from the git-tools.json it replaces
+
+// Herdr adds a mod with link rules to a layout's `link_handlers` once and then remembers
+// it did, so a list the rebuild dropped would not come back. The old file's list wins,
+// with its order and its removals; `cloned_from` stays as before.
+{
+  const built = () => toMainGit(main()).layout;
+  const old = { cloned_from: { name: "main", version: "0.1.15" }, link_handlers: ["viewer", "browser"] };
+  const input = built(), before = JSON.stringify(input);
+  const kept = carryOver(input, old);
+  assert.equal(JSON.stringify(input), before, "the new layout is not modified");
+  assert.deepEqual(kept.link_handlers, ["viewer", "browser"]);
+  assert.deepEqual(kept.cloned_from, old.cloned_from);
+  const { link_handlers: _l, cloned_from: _c, ...rest } = kept;
+  assert.deepEqual(rest, built(), "everything else is the new build");
+
+  // A list `main` itself carries gives way to the old file's, and stays when there is none.
+  const fromMain = toMainGit({ ...main(), link_handlers: ["shipped"] }).layout;
+  assert.deepEqual(fromMain.link_handlers, ["shipped"]);
+  assert.deepEqual(carryOver(fromMain, old).link_handlers, ["viewer", "browser"]);
+  assert.deepEqual(carryOver(fromMain, { link_handlers: [] }).link_handlers, []);
+  assert.deepEqual(carryOver(fromMain, {}).link_handlers, ["shipped"]);
+  assert.deepEqual(carryOver(fromMain, null).link_handlers, ["shipped"]);
+
+  // Something that isn't a list of mod names is left behind.
+  assert.equal(carryOver(built(), { link_handlers: "viewer" }).link_handlers, undefined);
+  assert.equal(carryOver(built(), { link_handlers: ["viewer", 1] }).link_handlers, undefined);
+
+  // The new build's own `cloned_from` is kept over the old one.
+  const note = { name: "main", version: "0.1.17" };
+  assert.deepEqual(carryOver({ ...built(), cloned_from: note }, old).cloned_from, note);
+}
+
 // ---- writing files the person already has
 
 // A disk that fills up halfway: the write puts part of the text down, then fails.
@@ -232,6 +266,21 @@ const leftovers = (dir, name) => fs.readdirSync(dir).filter((entry) => entry !==
   writeWhole(fs, file, "the new layout\n");
   assert.equal(fs.readFileSync(file, "utf8"), "the new layout\n");
   assert.deepEqual(leftovers(dir, "git-tools.json"), []);
+}
+
+// `node layout.mjs <main.json> <out.json>`, as install.sh runs it over an existing
+// git-tools.json: the new build, with that file's `cloned_from` and `link_handlers`.
+{
+  const dir = `${tmp}/rebuild`, from = `${dir}/main.json`, to = `${dir}/git-tools.json`;
+  fs.mkdirSync(dir);
+  fs.writeFileSync(from, JSON.stringify(main()));
+  const old = { ...toMainGit(main()).layout, cloned_from: { name: "main", version: "0.1.15" }, link_handlers: ["viewer"] };
+  fs.writeFileSync(to, JSON.stringify(old));
+  execFileSync(process.execPath, [fileURLToPath(new URL("./layout.mjs", import.meta.url)), from, to]);
+  const written = JSON.parse(fs.readFileSync(to, "utf8"));
+  assert.deepEqual(written.link_handlers, ["viewer"]);
+  assert.deepEqual(written.cloned_from, old.cloned_from);
+  assert.notEqual(find(written, LOG_ID), null, "the file is the rebuilt layout");
 }
 
 // The mod folder is copied by content. Herdr reloads every copy of a mod each time a file

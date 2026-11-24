@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { textWidth, menuWidth, menuChecks, MENU_CHECK, MENU_GAP, belowSpot, pressSpot, sideOf, dialogFills, dialogRoom, ERROR_BOX, ERROR_ROOM, widgetBlockWidth } from "./ui-size.js";
+import { textWidth, menuWidth, menuChecks, menuStates, MENU_CHECK, MENU_GAP, belowSpot, pressSpot, sideOf, dialogFills, dialogRoom, ERROR_BOX, ERROR_ROOM, widgetBlockWidth } from "./ui-size.js";
 
 // ---- text: a Hangul syllable is as wide as the font size, Latin letters narrower
 {
@@ -142,6 +142,20 @@ import { textWidth, menuWidth, menuChecks, MENU_CHECK, MENU_GAP, belowSpot, pres
   assert.equal(widgetBlockWidth(0, 240, 2), 4, "no widget (not a repository): the padding only");
   assert.equal(widgetBlockWidth(NaN, 240, 2), null, "not measured: left alone");
   assert.equal(widgetBlockWidth(80, 240, 2), 84);
+}
+
+// menuStates: rows that settle once the menu is open keep their place, and the keyboard
+// leaves a row that went off.
+{
+  const items = [{ label: "a", value: 1, disabled: true }, { label: "b", value: 2 }, { label: "c", value: 3, disabled: true, title: "wait" }];
+  const states = [{ disabled: false, title: null }, { disabled: true, title: "no" }, { disabled: false, title: null }];
+  const next = menuStates(items, states, 1);
+  assert.deepEqual(next.items.map((it) => [it.label, it.value, it.disabled, it.title]), [["a", 1, false, undefined], ["b", 2, true, "no"], ["c", 3, false, undefined]]);
+  assert.equal(next.at, 0, "the keyboard moves to the first row that is on");
+  assert.equal(menuStates(items, states, 2).at, 2, "a row still on keeps the keyboard");
+  assert.equal(menuStates(items.map((it) => ({ ...it, disabled: true })), states.map(() => ({ disabled: true })), -1).at, -1);
+  assert.equal(menuStates(items, [{ disabled: false }], 1).items, items, "another number of rows changes nothing");
+  assert.equal(menuStates(items, [{ disabled: false }], 1).at, 1);
 }
 
 console.log("ok");

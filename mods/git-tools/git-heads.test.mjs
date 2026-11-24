@@ -7,7 +7,7 @@ import { mkdtempSync, writeFileSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
 import { makeGit } from "./git.js";
-import { readHeads, widgetFace, faceOf, popupRows, popupStep } from "./git-heads.js";
+import { readHeads, widgetFace, faceOf, popupRows, popupStep, rowAgain } from "./git-heads.js";
 import { readOperation } from "./git-operation.js";
 import { translator } from "./i18n.js";
 import { menuItems, branchContext } from "./log-menus.js";
@@ -349,6 +349,15 @@ const shape = (rows, tr = en) => rows.map((r) => r.kind === "rule" ? "|"
   assert.equal(shape([plain[popupStep(plain, -1, 1, { query: "" })]])[0], shape(plain)[0]);
   assert.equal(shape([plain[popupStep(plain, -1, -1, { query: "" })]])[0], "[Tags]");
   assert.equal(popupStep([], -1, 1, { query: "" }), -1);
+}
+
+// rowAgain: the row the keyboard was on, found again in the rows of a newer read.
+{
+  const rows = [{ kind: "action", id: "vcs.commit" }, { kind: "group", id: "local" }, { kind: "branch", scope: "local", name: "main" }, { kind: "branch", scope: "recent", name: "main" }];
+  assert.equal(rowAgain(rows, { kind: "branch", scope: "recent", name: "main", label: "main" }), 3);
+  assert.equal(rowAgain(rows, { kind: "group", id: "local", open: false }), 1);
+  assert.equal(rowAgain(rows, { kind: "branch", scope: "local", name: "gone" }), -1);
+  assert.equal(rowAgain(rows, undefined), -1);
 }
 
 console.log("git-heads: ok");

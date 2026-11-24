@@ -23,7 +23,8 @@ import { div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input, Popup } from "gpui-base";
 import { exec, theme, openOverlay, closeOverlay } from "herdr";
 import { makeGit, repoRoot } from "./git.js";
-import { readHeads, popupRows, popupStep, popupTarget } from "./git-heads.js";
+import { readHeads, popupRows, popupStep, popupTarget, rowAgain } from "./git-heads.js";
+import { handOver, takeOver } from "./hand-over.js";
 import { readFavorites } from "./git-branch.js";
 import { isFavorite, orderBranches, refOf } from "./branch-order.js";
 import { readOperation } from "./git-operation.js";
@@ -130,10 +131,13 @@ export const POPUP_WIDTH = WIDTH;
 // goes, window coordinates; side: where a branch's menu opens, "right" or "left" (the
 // popup sits at the window's right edge). op: the operation in progress as the opener
 // read it (readOperation's), or null: its rows stand from the start, so the rows under
-// them don't move down once the popup's own read answers.
-export function openVcsPopup(bus, { root, on = null, lang, at, side, op = null } = {}) {
+// them don't move down once the popup's own read answers. kept: { heads, prefs }, what the
+// opener last read of the branches, or null: the list shows at once and the popup's own read
+// replaces it.
+export function openVcsPopup(bus, { root, on = null, lang, at, side, op = null, kept = null } = {}) {
   const key = newKey("vcs-popup");
   const answer = bus.wait(key);
+  if (kept) handOver(key, kept);
   const spot = at && Number.isFinite(at.x) && Number.isFinite(at.y) ? { at: { x: at.x, y: at.y } } : {};
   // Only what popupRows reads of it goes in the props.
   const ongoing = op?.kind ? { kind: op.kind, canSkip: Boolean(op.canSkip), conflicts: op.conflicts ?? [] } : null;
@@ -172,7 +176,8 @@ export default class VcsPopup {
     // may be picked at once: the pick runs on the widget's own operation (POPUP_ACTIONS),
     // as the widget's ≫ and ■ do, and does nothing once that operation is over.
     this.op = p.op?.kind ? p.op : null;
-    this.read = false;
+    this.read = false; // there is a list or an answer to show
+    this.fresh = false; // this popup's own read has answered
     this.err = null;
     this.folded = new Set(["remote", "tags"]);
     this.at = -1; // the row the keyboard is on
@@ -186,16 +191,30 @@ export default class VcsPopup {
     this.handle = cx.focus_handle();
     this.makeInput("");
     this.input.focus();
-    this.reload(cx);
+    // From a timer: this popup may be opened by the press that closes another one (a menu, the
+    // VCS Operations popup), and then a read init starts gets no answer at all, neither git's
+    // nor the runner's clock (docs/herdr-mod-platform.md).
+    cx.timer.after(0, (cx) => { this.reload(cx); cx.notify(); });
     cx.timer.after(FIRST_LOOK, (cx) => this.firstLook(cx));
+    const kept = takeOver(p.key);
+    if (kept) { this.useHeads(kept.heads, kept.prefs); this.read = true; }
   }
 
-  // A popup opened by the press that also closes the one before it (a press on the widget
-  // while its popup is open) has been seen to get no answer at all to its first read:
-  // neither git's answer nor the runner's clock comes, and the popup stays on "Loading".
-  // So a popup with no read done yet reads again once.
+  // A popup whose own read hasn't answered yet reads again once.
   firstLook(cx) {
-    if (!this.read) this.reload(cx);
+    if (!this.fresh) this.reload(cx);
+  }
+
+  // The branches to show, in the Branch tree's order and with its stars (branch-order.js).
+  // Favorites that can't be read leave main and master starred.
+  useHeads(heads, prefs) {
+    this.prefs = prefs ?? { favorite: [], unfavorite: [] };
+    const current = heads.head.branch;
+    this.heads = {
+      ...heads,
+      local: orderBranches(heads.local, { scope: "local", current, prefs: this.prefs, favoritesFirst: true }),
+      remote: orderBranches(heads.remote, { scope: "remote", current, prefs: this.prefs, favoritesFirst: true }),
+    };
   }
 
   makeInput(value) {
@@ -213,20 +232,18 @@ export default class VcsPopup {
       const [heads, op, prefs] = top.ok
         ? await Promise.all([readHeads(repo.git, top.root), readOperation(repo.git, top.root), readFavorites(repo.git, top.root)])
         : [{ ok: false, err: top.err }, null, null];
+      // The list may be showing already: the keyboard and an open branch menu stay on their rows.
+      const shown = this.rows(), on = shown[this.at], menuOn = this.sub ? shown[this.sub.row] : null;
       this.loading = false;
       this.read = true;
-      // The Branch tree's order and stars (branch-order.js). Favorites that can't be read
-      // leave main and master starred.
-      this.prefs = prefs?.ok ? { favorite: prefs.favorite, unfavorite: prefs.unfavorite } : { favorite: [], unfavorite: [] };
-      const current = heads.ok ? heads.head.branch : null;
-      this.heads = heads.ok ? {
-        ...heads,
-        local: orderBranches(heads.local, { scope: "local", current, prefs: this.prefs, favoritesFirst: true }),
-        remote: orderBranches(heads.remote, { scope: "remote", current, prefs: this.prefs, favoritesFirst: true }),
-      } : null;
+      this.fresh = true;
+      if (heads.ok) this.useHeads(heads, prefs?.ok ? { favorite: prefs.favorite, unfavorite: prefs.unfavorite } : null);
+      else this.heads = null;
       this.op = op?.ok ? op : null;
       this.err = heads.ok ? null : heads.err;
-      this.rows();
+      const rows = this.rows();
+      this.at = rowAgain(rows, on);
+      if (this.sub) this.sub.row = rowAgain(rows, menuOn);
       cx.notify();
     });
   }

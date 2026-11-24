@@ -40,7 +40,7 @@ Changes·Files 패널은 그대로 둡니다. mod가 실행하고 쓰는 것은
 `git-tools` 레이아웃은 복사본이라 Herdr가 `main`에 준 변경을 따라가지 않습니다. **Herdr를
 업데이트할 때마다 `./install.sh`를 다시 실행하세요**(이 저장소를 `git pull`한 뒤에도).
 지금의 `main`으로 이 레이아웃을 다시 만듭니다. `git-tools.json`을 손으로 고친 내용은 이때
-사라집니다.
+사라집니다. 터미널 링크의 Ctrl/Cmd-클릭을 받는 mod 목록(`link_handlers`)만 그대로 남습니다.
 
 ### `main`으로 돌아가기
 
@@ -53,7 +53,7 @@ Changes·Files 패널은 그대로 둡니다. mod가 실행하고 쓰는 것은
 
 먼저 `main`으로 바꾼 뒤, 앱 홈에서 `mods/git-tools/`, `git-tools/`, `layouts/git-tools.json`을
 지우고 `keys.json`의 `layout:git-tools` 절을 지우세요. Herdr가 `layouts/.state/git-tools.json`과
-`shared.json`의 `git-tools.bus`, `git-tools.lock`, `git-tools.lang`, `git-tools.menus`,
+`shared.json`의 `git-tools.bus`, `git-tools.lock`, `git-tools.lang`, `git-tools.menu-rows`, `git-tools.menus`,
 `git-tools.tabs` 키를 남겨 두었을 수 있는데, 모두 지워도 됩니다.
 
 롤백 기록과 지운 브랜치 기록은 git이 정리할 때까지 각 저장소에 남습니다. 그 저장소에서
@@ -226,9 +226,10 @@ Changes·Files 패널은 그대로 둡니다. mod가 실행하고 쓰는 것은
   되돌립니다.
 - **Herdr 앱 홈의 파일**(`~/.config/herdr-app` 또는 `$HERDR_APP_HOME`): `install.sh`가
   `mods/git-tools/`와 `layouts/git-tools.json`을 쓰고 `keys.json`에 키 세 개를 더합니다.
-  mod는 `shared.json`에 작은 값 다섯 개를 둡니다. `git-tools.bus`는 화면끼리 저장소가
+  mod는 `shared.json`에 작은 값 여섯 개를 둡니다. `git-tools.bus`는 화면끼리 저장소가
   바뀌었다고 알리는 데, `git-tools.lock`은 어느 저장소에서 git-tools의 쓰기가 돌고 있는지
   적는 데, `git-tools.lang`은 마지막으로 읽은 시스템 언어(`"en"` 또는 `"ko"`)를 적는 데,
+  `git-tools.menu-rows`는 열린 메뉴에서 뒤늦게 정해진 항목의 상태를 적는 데,
   `git-tools.menus`는 열린 메뉴 수를 적어 툴팁이 메뉴를 가리지 않게 하는 데,
   `git-tools.tabs`는 열린 git-tools 탭과 각 탭을 연 저장소를 적는 데 씁니다. 그곳의
   `git-tools` 폴더에는 `console.jsonl`(Git 콘솔, 최대 512 KiB)과 `settings.json`(프로젝트
@@ -247,7 +248,6 @@ Changes·Files 패널은 그대로 둡니다. mod가 실행하고 쓰는 것은
 - 패널은 git-tools 탭이 자기를 기록한 뒤에야(열릴 때나 포커스를 받을 때) 그 탭의 저장소를
   따릅니다. 그 전에는 space의 폴더를 따릅니다.
 - 다른 레이아웃에서 돌아오면 Log panel, Commit panel, VCS 위젯이 6초쯤 비어 있을 수 있습니다.
-  팝업이 열린 채 VCS 위젯을 다시 누르면 새 팝업이 6초쯤 로드 중일 수 있습니다.
 - 메뉴 막대 메뉴가 없습니다. Git 메뉴는 VCS 작업 팝업(`cmd-shift-v`)이고, Commit panel이나 Log
   panel이 보일 때만 열립니다.
 - 알림에는 버튼을 하나까지만 달 수 있어서, 편집을 위해 멈춘 리베이스 알림은 계속·중단 버튼 대신

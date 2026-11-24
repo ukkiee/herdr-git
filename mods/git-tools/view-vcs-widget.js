@@ -30,11 +30,12 @@ import { exec, theme, notify, run } from "herdr";
 import { makeGit, repoRoot } from "./git.js";
 import { readTurns } from "./read-turns.js";
 import { oneTimer, dwell, each, spawnOrUndo } from "./later.js";
+import { popupPress } from "./popup-press.js";
 import { readHeads, widgetFace, faceOf } from "./git-heads.js";
 import { moveRecent } from "./recent.js";
 import { readGitDir, stateChanged } from "./git-log.js";
 import { readOperation, continueOperation, abortOperation, skipOperation, operationName } from "./git-operation.js";
-import { checkout, deleteBranch } from "./git-branch.js";
+import { checkout, deleteBranch, readFavorites } from "./git-branch.js";
 import { pressSpot, widgetBlockWidth } from "./ui-size.js";
 import { openConflicts, openConflictsIfStopped } from "./view-conflicts.js";
 import { location, watchSettled, uiGlyph, iconButton, darkLook, skeleton, broadcast, openCommitPanel, openMenu, takeWrite, releaseWrite, writeBlock, readBlocked, sentence } from "./ui.js";
@@ -62,6 +63,7 @@ export class VcsWidget {
     this.who = who;
     this.repo = null; // { git, root, on } once the followed folder is a repository
     this.heads = null; // readHeads' result
+    this.prefs = null; // the favorite branches read with it, for the popup's order
     this.op = null; // readOperation's result, null when not read
     this.read = false; // a read has answered once (a repository or not), or there is no folder
     this.context = null;
@@ -73,6 +75,7 @@ export class VcsWidget {
     // context key → what the widget showed there when it left (see remember), newest last.
     this.seen = new Map();
     this.recalled = false; // what shows was recalled, and no read has answered since
+    this.presses = popupPress(); // whether a press on the widget opens its popup or closes it
   }
 
   contextKey() { const { folder, on } = this.host.where(); return JSON.stringify([folder, on]); }
@@ -86,7 +89,7 @@ export class VcsWidget {
     if (context === this.context && this.reads.busy()) { this.again = true; return; }
     if (context !== this.context) {
       const left = this.context, kept = this.remember();
-      this.context = context; this.repo = null; this.heads = null; this.op = null; this.reads.drop(); this.again = false;
+      this.context = context; this.repo = null; this.heads = null; this.prefs = null; this.op = null; this.reads.drop(); this.again = false;
       this.unwatch();
       if (left !== null) this.stay.moved();
       // A folder seen before shows what it showed at once. Another one shows the block's
@@ -116,10 +119,11 @@ export class VcsWidget {
           if (!top.ok) { if (this.reads.use(turn)) { this.repo = null; this.heads = null; this.op = null; this.read = true; this.recalled = false; } return; }
           repo = this.repo?.root === top.root ? this.repo : { git, root: top.root, on };
         }
-        const [heads, op] = await Promise.all([readHeads(repo.git, repo.root), readOperation(repo.git, repo.root)]);
+        const [heads, op, prefs] = await Promise.all([readHeads(repo.git, repo.root), readOperation(repo.git, repo.root), readFavorites(repo.git, repo.root)]);
         if (context !== this.context || !this.reads.use(turn)) return;
         this.repo = repo;
         this.heads = heads;
+        this.prefs = prefs.ok ? { favorite: prefs.favorite, unfavorite: prefs.unfavorite } : null;
         this.read = true;
         this.recalled = false;
         this.op = op.ok ? op : null;
@@ -313,7 +317,11 @@ export class VcsWidget {
     cx.spawn(async (cx) => {
       // The answer arrives in this copy's own call (ui.js), so what the pick starts is
       // this copy's work and outlives the popup.
-      const pick = await openVcsPopup(host.bus, { root: repo.root, on: repo.on, lang: host.lang, at, side: host.popupSide?.(), op: this.op });
+      const shown = this.presses.opened();
+      let pick;
+      const kept = this.heads?.ok && this.heads.local ? { heads: this.heads, prefs: this.prefs } : null;
+      try { pick = await openVcsPopup(host.bus, { root: repo.root, on: repo.on, lang: host.lang, at, side: host.popupSide?.(), op: this.op, kept }); }
+      finally { this.presses.closed(shown); }
       if (!pick) return;
       // A branch menu's item comes with its branch; the popup's own actions with the pick.
       if (popupHandles(pick.id)) POPUP_ACTIONS[pick.id](this, pick.target ?? pick, cx);
@@ -346,7 +354,7 @@ export class VcsWidget {
     const dark = darkLook(background ?? t.background);
     let main = h_flex().id("vcs-widget").h(26).px(8).gap(5).min_w(0).items_center().rounded(6).text_size(12).text_color(t.foreground)
       .hover((s) => s.bg(t.hover))
-      .on_mouse_down("left", (e, cx) => { cx.stop_propagation(); this.open(e, cx); });
+      .on_mouse_down("left", (e, cx) => { cx.stop_propagation(); if (this.presses.opens()) this.open(e, cx); });
     if (face.kind === "progress") {
       main = main.child(div().flex_none().text_color(t.ansi3).child("⚠"))
         .child(div().min_w(0).truncate().child(tr(face.name.key, face.name.args)));

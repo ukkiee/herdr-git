@@ -33,7 +33,7 @@ import { tip, ROW, ICON, icon, uiGlyph, fileGlyph, folderGlyph, darkLook, row, t
 import { formatDateTime } from "./i18n.js";
 import { DETAILS_KEY, readDetailsOptions, toggleDetailsOption, detailsMenu } from "./log-options.js";
 import { appSetting, saveAppSetting } from "./app-files.js";
-import { spawnOrUndo, each, oneTimer } from "./later.js";
+import { spawnOrUndo, each, dwell } from "./later.js";
 
 // What a panel broadcasts after saving Commit details' View Options.
 export const DETAILS_EVENT = "log-details-options";
@@ -213,9 +213,7 @@ export function openCommitMenu(host, commits, cx) {
 
 // The most commits whose edit facts a right-click reads: each one costs git calls.
 const EDIT_FACTS_MAX = 50;
-// Reading ahead (LogDetails warm): how long the selection stays before its facts are read
-// (ms), so moving through the list reads nothing, and the most commits read ahead.
-const WARM_WAIT = 300;
+// The most commits whose edit facts are read ahead of a right-click (LogDetails warm).
 const WARM_MAX = 10;
 
 // ---- the column
@@ -241,7 +239,8 @@ export default class LogDetails {
     this.list = new WindowedList("log-detail-files");
     this.handle = cx.focus_handle();
     this.checkoutError = null; // the error strip text checkoutCommit put there last
-    this.warming = oneTimer(); // reading the picked commits' edit facts ahead (warm)
+    this.warmStay = dwell(); // how long the selection has stayed, before reading ahead (warm)
+    this.warmKey = null; // the commits whose edit facts are being read ahead, one read at a time
   }
 
   // ---- reading
@@ -259,7 +258,7 @@ export default class LogDetails {
     this.describe();
     cx.notify();
     if (!this.commit) return;
-    this.warmSoon(cx);
+    this.warmLater(cx);
     const { hash } = this.commit;
     cx.spawn(async (cx) => {
       const r = await readCommit(repo.git, repo.root, hash);
@@ -292,7 +291,7 @@ export default class LogDetails {
     this.describe();
     cx.notify();
     if (!repo) return;
-    this.warmSoon(cx);
+    this.warmLater(cx);
     cx.spawn(async (cx) => {
       const read = [];
       // A few at a time: a Shift range can pick hundreds.
@@ -325,7 +324,7 @@ export default class LogDetails {
   // What failed for the commit shown (its files and message, or the branches that
   // contain it) is read again; what was read stays.
   retry(cx) {
-    this.warmSoon(cx);
+    this.warm(cx);
     if (this.many) { if (this.info && !this.info.ok) this.showMany(this.many, cx); return; }
     if (!this.commit || !this.host.repo) return;
     if (this.info && !this.info.ok) this.show(this.commit, cx);
@@ -333,24 +332,34 @@ export default class LogDetails {
   }
 
   // The edit facts of the commits picked, read ahead of a right-click (openWithFacts) once
-  // the selection has stayed WARM_WAIT, and again on a poll after a ref moved: the menu then
-  // opens with its items settled. Facts already kept at the refs' present state cost no git
-  // call; more than WARM_MAX commits aren't read ahead.
-  warmSoon(cx) { if (this.host.facts) this.warming.after(cx, WARM_WAIT, (cx) => this.warm(cx)); }
-
+  // the selection has stayed DWELL ms (later.js dwell: each move starts the wait again, so
+  // moving through the list reads nothing), and again on a poll after a ref moved: the menu
+  // then opens with its items settled. One read ahead at a time; when it ends on commits no
+  // longer picked, the picked ones are read next. Facts already kept at the refs' present
+  // state cost no git call; more than WARM_MAX commits aren't read ahead.
   warm(cx) {
     const host = this.host, repo = host.repo, refs = host.refs;
-    const hashes = (this.many ?? (this.commit ? [this.commit] : [])).map((c) => c.hash);
+    if (!host.facts || this.warmKey || this.warmStay.hold(cx, (cx) => this.warm(cx))) return;
+    const hashes = this.pickedHashes();
     if (!repo || refs == null || !hashes.length || hashes.length > WARM_MAX) return;
     const key = factsKey(repo, hashes);
     if (host.facts.get(key, refs)) return;
+    this.warmKey = key;
     try {
-      cx.spawn(async () => {
-        const facts = await readEditFacts(repo.git, repo.root, hashes);
-        if (repo === host.repo) host.facts.put(key, refs, facts);
+      cx.spawn(async (cx) => {
+        try {
+          const facts = await readEditFacts(repo.git, repo.root, hashes);
+          if (repo === host.repo) host.facts.put(key, refs, facts);
+        } finally { this.warmKey = null; }
+        if (factsKey(host.repo, this.pickedHashes()) !== key) this.warm(cx);
       });
-    } catch { /* the host refused the read: the right-click reads them */ }
+    } catch { this.warmKey = null; /* the host refused the read: the right-click reads them */ }
   }
+
+  // The selection moved: reading ahead waits until it stays (warm).
+  warmLater(cx) { this.warmStay.moved(); this.warm(cx); }
+
+  pickedHashes() { return (this.many ?? (this.commit ? [this.commit] : [])).map((c) => c.hash); }
 
   // Apart from readCommit, so a slow walk doesn't hold the rest back, and one walk at a time:
   // walks for commits arrowed past would hold the runner's slots the newest commit's files

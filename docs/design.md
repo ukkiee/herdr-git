@@ -732,7 +732,7 @@ Rollback은 Rollback dialog의 버튼으로만 실행되고, 쓰기 전에 버�
 - **편집 판정은 순수 모듈이다**(`rebase-plan.js`의 `editCheck`, 사실은 `git-rewrite.js`의
   `readEditFacts`가 읽는다). 커밋과 파일의 우클릭 메뉴는 항목이 정해진 채로 열려야 한다. 열 때마다
   꺼졌다 켜지는 항목은 매번 눈에 걸린다. 그래서 Log panel이 읽은 사실을 고른 커밋과 ref 상태별로
-  기억하고(`facts-cache.js`, ref·HEAD가 움직이면 무효), 선택이 300 ms 머물면 미리 읽는다. 기억이 있으면
+  기억하고(`facts-cache.js`, ref·HEAD가 움직이면 무효), 선택이 500 ms(`DWELL`, 옮길 때마다 다시 잼) 머물면 한 번에 하나씩 미리 읽는다. 기억이 있으면
   메뉴를 바로 그 사실로 열고, 없으면 250 ms(`QUICK_WAIT`)까지 사실을 기다렸다 연다. 그래도 답이 없으면
   사실이 필요한 항목을 꺼 둔 채 열고, 답이 오면 켜거나 사유와 함께 꺼 둔다(`openMenu`의 `live`). 가장
   느린 `git status`가 정하는 픽스업·다음으로 스쿼시만 마지막까지 기다린다. 3초(`FACTS_WAIT`) 안에 답이

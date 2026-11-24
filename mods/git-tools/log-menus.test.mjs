@@ -320,6 +320,10 @@ const all = (name, ctx = {}, t = ko) => look(menuItems(name, everything, ctx), t
   const quick = Number(/const QUICK_WAIT = (\d+);/.exec(details)?.[1]);
   assert.ok(quick > 0 && quick <= 300, `QUICK_WAIT is ${quick}`);
   assert.match(details, /cx\.timer\.after\(QUICK_WAIT, \(\) => open\(\)\)/, "the menu opens on a timer, not on git's answer");
+  // Reading ahead waits until the selection stays (later.js dwell, each move starts the wait
+  // again) and reads one set of commits at a time: arrowing through the list reads nothing.
+  assert.match(details, /this\.warmKey \|\| this\.warmStay\.hold\(cx,/, "reading ahead without waiting for the selection to stay");
+  assert.match(details, /warmLater\(cx\) \{ this\.warmStay\.moved\(\);/, "a move doesn't start the wait again");
 }
 
 console.log("ok");

@@ -613,9 +613,9 @@ tooltip) and when it shows (`shown`). An item the screen has no handler for does
 In the Commit list and Commit details menus, Cherry-Pick, Revert Commit and the history
 edits are on or off from the edit facts of the commits picked (`readEditFacts`). The Log
 panel keeps the facts it read per commits picked and refs' state (`facts-cache.js`, up to
-32), and reads them for the selection once it has stayed 300 ms (up to 10 commits) and again
-on a poll after a ref moved. A right-click with facts kept at the present refs' state opens
-the menu with those items settled; without them the menu waits up to 250 ms for the facts,
+32), and reads them for the selection once it has stayed 500 ms (`DWELL`; each move starts
+the wait again), one read at a time and up to 10 commits, and again on a poll
+after a ref moved. A right-click with facts kept at the present refs' state opens the menu with those items settled; without them the menu waits up to 250 ms for the facts,
 then opens with those items off and nothing to say until they answer (all on after 3 s
 without an answer, checked when picked). Every opening reads the facts again behind the menu
 and changes only the items that differ. A `changed` from git-tools' own writes clears the

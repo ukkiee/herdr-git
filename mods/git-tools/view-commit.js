@@ -85,6 +85,42 @@ function statusColor(status, t) {
   return { modified: t.ansi4, renamed: t.ansi4, added: t.ansi2, deleted: t.muted, conflict: t.ansi9 ?? t.ansi1, unversioned: t.ansi1 }[status] ?? t.foreground;
 }
 
+// The list as drawn: a group row, then its files (flat) or its folder tree.
+//   items(group) → the group's files; closed, collapsed: the folding; paths: each group's
+//   paths (apply); grouped: by directory. Built when the data or the folding changes, never
+//   in render.
+function panelRows({ items, closed, collapsed, paths, grouped }) {
+  const rows = [];
+  for (const group of GROUPS) {
+    const files = items(group.id);
+    if (!files.length) continue;
+    const open = !closed[group.id];
+    // The Last commit group's paths are none: nothing in it is checked or rolled back.
+    rows.push({ id: `g:${group.id}`, kind: "group", group: group.id, depth: 0, count: files.length, paths: paths[group.id] ?? [], open, item: null });
+    if (!open) continue;
+    // Changes opens with the Merge Conflicts node: the files in conflict under it, the
+    // operation's other files and the person's changes after it.
+    const conflicts = group.id === "changes" ? files.filter((f) => f.status === "conflict") : [];
+    if (conflicts.length) {
+      const shown = !closed.conflicts;
+      rows.push({ id: "node:conflicts", kind: "node", group: "conflicts", depth: 1, count: conflicts.length, paths: paths.conflicts, open: shown, item: null });
+      if (shown) {
+        for (const r of buildRows(conflicts, { grouped, compact: true, collapsed: collapsed.conflicts })) {
+          rows.push({ ...r, id: `conflicts:${r.key}`, kind: r.folder ? "folder" : "file", group: "conflicts", depth: r.depth + 2 });
+        }
+      }
+    }
+    const rest = conflicts.length ? files.filter((f) => f.status !== "conflict") : files;
+    for (const r of buildRows(rest, { grouped, compact: true, collapsed: collapsed[group.id] })) {
+      rows.push({ ...r, id: `${group.id}:${r.key}`, kind: r.folder ? "folder" : "file", group: group.id, depth: r.depth + 1 });
+    }
+  }
+  return rows;
+}
+
+// The row `selected` (a row id) is at in `rows`, or -1.
+const rowAt = (rows, selected) => (selected ? rows.findIndex((r) => r.id === selected) : -1);
+
 export default class CommitView {
   init(p, cx) {
     this.fixed = p?.folder ? { folder: p.folder, on: p.on ?? null } : null;
@@ -118,6 +154,7 @@ export default class CommitView {
     this.seen = new Map();
     this.reads = readTurns(); // the reads of the folder shown (refresh)
     this.moving = oneTimer(); // what render leaves to a timer, one at a time
+    this.parted = false; // a move was taken up and no refresh ran since (see move)
     this.stay = dwell(); // a folder moved to is read once it has stayed DWELL ms (refresh)
     this.watching = null; // the watches of the shown root: { root, stops } (watch)
     this.list = new WindowedList("commit-files");
@@ -150,9 +187,9 @@ export default class CommitView {
   // ---- what the commit form (and anything else hosted here) may use
 
   // repo: { git, root, on, folder }, or null outside a repository.
-  // settled(): the panel shows where the focused pane is. A move render notices is taken
-  // up only in a timer (render), so until then repo is still the repository left, and a
-  // press that writes would write there.
+  // settled(): the panel shows where the focused pane is. A move is taken up by the next
+  // render or refresh (move), so until then repo is still the repository left, and a press
+  // that writes would write there.
   settled() { return this.contextKey() === this.context; }
 
   // included() →[{ path, status }]: the files checked for the next commit, both groups,
@@ -243,30 +280,19 @@ export default class CommitView {
 
   refresh(cx) {
     const { folder, on } = this.where(), context = this.contextKey();
-    // A change that lands while this folder is read is read once that read is done.
-    // Another folder doesn't wait for it, nor does anything once it is stuck: a read whose
-    // answer never comes would keep the panel on "Loading…" for good (read-turns.js).
-    if (context === this.context && this.reads.busy()) { this.again = true; return; }
     // Another folder is taken up before asking whether reads wait: a write on the
-    // repository left behind must not keep that repository on screen.
-    if (context !== this.context) {
-      this.reads.drop(); this.again = false;
-      const left = this.context, kept = this.remember();
-      this.unwatch();
-      if (left !== undefined) this.stay.moved();
-      this.context = context; this.repo = null; this.lost = false;
-      // A write's failure belongs to the repository it ran on, like a read's.
-      this.error = null; this.writeError = null; this.note = null; this.notRepo = false; this.read = false;
-      this.picked = new Set(); this.selected = null; this.last = null; this.op = null;
-      this.closed = CLOSED();
-      this.collapsed = COLLAPSED();
-      this.apply({ hasHead: false, changes: [], unversioned: [] });
-      this.list.top = 0;
-      this.recall(moveRecent(this.seen, left, kept, context, SEEN));
-      // Drawn now, not when the read ends: the window would keep the folder left on screen
-      // until then. Never called from render (render takes a move up in a timer).
-      cx.notify();
-    }
+    // repository left behind must not keep that repository on screen. Drawn now, not when
+    // the read ends: the window would keep the folder left on screen until then. Never
+    // called from render (render takes a move up itself, see there).
+    if (context !== this.context) { this.move(context); cx.notify(); }
+    // Leaving for reads and watches: the folder left stops being watched, and the one moved
+    // to is read once it has stayed DWELL ms. Here, not in move: render may stop nothing.
+    if (this.parted) { this.parted = false; this.unwatch(); this.stay.moved(); }
+    // A change that lands while this folder is read is read once that read is done.
+    // Another folder doesn't wait for it (move dropped its reads), nor does anything once
+    // it is stuck: a read whose answer never comes would keep the panel on "Loading…" for
+    // good (read-turns.js).
+    if (this.reads.busy()) { this.again = true; return; }
     if (this.readBlocked()) { this.waiting = true; return; }
     this.waiting = false;
     // A folder moved to is read once it has stayed DWELL ms: one passed through is never
@@ -345,27 +371,58 @@ export default class CommitView {
     });
   }
 
+  // Taking up another folder: the folder left is remembered, and the panel shows the one
+  // moved to as it was left there (recall), or its skeleton. render calls it before it
+  // draws, so it builds no rows and starts or stops nothing: the next refresh (render's
+  // timer) stops the watches of the folder left and starts the wait before reading
+  // (`parted`). Taken up in that timer instead, the first frame on a folder come back to
+  // would show the folder left, its list and its folding: a Changes group folded there
+  // would open for a moment.
+  move(context) {
+    this.reads.drop(); this.again = false;
+    const left = this.context, kept = this.remember();
+    // Before the first move nothing is held: the panel's first look reads at once.
+    this.parted = left !== undefined;
+    this.context = context; this.repo = null; this.lost = false;
+    // A write's failure belongs to the repository it ran on, like a read's.
+    this.error = null; this.writeError = null; this.note = null; this.notRepo = false; this.read = false;
+    this.picked = new Set(); this.selected = null; this.last = null; this.op = null;
+    this.closed = CLOSED();
+    this.collapsed = COLLAPSED();
+    this.apply({ hasHead: false, changes: [], unversioned: [] });
+    this.list.top = 0;
+    this.recall(moveRecent(this.seen, left, kept, context, SEEN));
+  }
+
   // Leaving a folder: what the panel shows of its repository is kept, so coming back
   // shows it at once instead of "Loading…" (recall); the read that follows puts it right.
-  // → what to keep (refresh puts it in `seen`, recent.js moveRecent), or null.
+  // The rows drawn are kept with it: recall runs in render, where none are built. Not the
+  // Last commit group's (always last): Amend is off there until the form follows, and its
+  // commit is read again.
+  // → what to keep (move puts it in `seen`, recent.js moveRecent), or null.
   remember() {
     if (!this.context || !this.repo || !this.read || this.notRepo) return null;
+    let end = this.rows.length;
+    while (end > 0 && this.rows[end - 1].group === "last") end--;
+    const at = this.at < end ? this.at : -1;
     return {
       repo: this.repo, op: this.op, status: { hasHead: this.hasHead, detached: this.detached, changes: this.changes, unversioned: this.unversioned },
-      picked: this.picked, selected: this.selected, closed: this.closed, collapsed: this.collapsed, top: this.list.top,
+      picked: this.picked, selected: at >= 0 ? this.selected : null, closed: this.closed, collapsed: this.collapsed, top: this.list.top,
+      paths: this.paths, rows: end < this.rows.length ? this.rows.slice(0, end) : this.rows, at,
     };
   }
 
-  // Back on a folder seen before: its files, Included, folding and place in the list as
-  // they were left. They may be out of date for the moment the read takes; files gone
+  // Back on a folder seen before: its files, Included, folding, rows and place in the list
+  // as they were left. They may be out of date for the moment the read takes; files gone
   // since then drop out of Included when it lands (apply).
   recall(was) {
     if (!was) return;
     this.repo = was.repo;
-    this.picked = was.picked; this.selected = was.selected;
-    this.closed = was.closed; this.collapsed = was.collapsed;
     this.op = was.op ?? null;
-    this.apply(was.status);
+    this.take(was.status);
+    this.picked = was.picked; this.selected = was.selected; this.at = was.at;
+    this.closed = was.closed; this.collapsed = was.collapsed;
+    this.paths = was.paths; this.rows = was.rows; this.checks.clear();
     this.list.top = was.top;
     this.read = true;
   }
@@ -373,14 +430,19 @@ export default class CommitView {
   // Takes a status as readStatus returns it, with this.op already set. Files still listed
   // stay Included.
   apply(status) {
-    this.changes = status.changes; this.unversioned = status.unversioned; this.hasHead = status.hasHead;
-    this.detached = Boolean(status.detached);
+    this.take(status);
     const conflicts = this.changes.filter((f) => f.status === "conflict");
     this.paths = { changes: this.changes.map((f) => f.path), conflicts: conflicts.map((f) => f.path), unversioned: this.unversioned.map((f) => f.path) };
     this.picked = keepIncluded(this.picked, [...this.changes, ...this.unversioned]);
+    this.rebuild();
+  }
+
+  // A status's files and HEAD, with this.op already set.
+  take(status) {
+    this.changes = status.changes; this.unversioned = status.unversioned; this.hasHead = status.hasHead;
+    this.detached = Boolean(status.detached);
     // Continue commits whatever is staged, so those files can't be left out.
     this.locked = new Set(this.op?.kind ? this.op.staged : []);
-    this.rebuild();
   }
 
   // Only this computer's folders can be watched. Reads don't write under .git (git.js
@@ -417,37 +479,12 @@ export default class CommitView {
 
   // ---- rows
 
-  // The list as drawn: a group row, then its files (flat) or its folder tree. Built when
-  // the data or the folding changes, never in render.
+  // The rows of the shown folder (panelRows), the selection kept on its row if still there.
   rebuild() {
-    const rows = [];
-    for (const group of GROUPS) {
-      const items = this.items(group.id);
-      if (!items.length) continue;
-      const open = !this.closed[group.id];
-      // The Last commit group's paths are none: nothing in it is checked or rolled back.
-      rows.push({ id: `g:${group.id}`, kind: "group", group: group.id, depth: 0, count: items.length, paths: this.paths[group.id] ?? [], open, item: null });
-      if (!open) continue;
-      // Changes opens with the Merge Conflicts node: the files in conflict under it, the
-      // operation's other files and the person's changes after it.
-      const conflicts = group.id === "changes" ? items.filter((f) => f.status === "conflict") : [];
-      if (conflicts.length) {
-        const shown = !this.closed.conflicts;
-        rows.push({ id: "node:conflicts", kind: "node", group: "conflicts", depth: 1, count: conflicts.length, paths: this.paths.conflicts, open: shown, item: null });
-        if (shown) {
-          for (const r of buildRows(conflicts, { grouped: this.grouped, compact: true, collapsed: this.collapsed.conflicts })) {
-            rows.push({ ...r, id: `conflicts:${r.key}`, kind: r.folder ? "folder" : "file", group: "conflicts", depth: r.depth + 2 });
-          }
-        }
-      }
-      const rest = conflicts.length ? items.filter((f) => f.status !== "conflict") : items;
-      for (const r of buildRows(rest, { grouped: this.grouped, compact: true, collapsed: this.collapsed[group.id] })) {
-        rows.push({ ...r, id: `${group.id}:${r.key}`, kind: r.folder ? "folder" : "file", group: group.id, depth: r.depth + 1 });
-      }
-    }
+    const rows = panelRows({ items: (group) => this.items(group), closed: this.closed, collapsed: this.collapsed, paths: this.paths, grouped: this.grouped });
     this.rows = rows;
     this.checks.clear();
-    this.at = this.selected ? rows.findIndex((r) => r.id === this.selected) : -1;
+    this.at = rowAt(rows, this.selected);
     if (this.at < 0) this.selected = null;
   }
 
@@ -511,6 +548,13 @@ export default class CommitView {
     this.grouped = grouped;
     try { localStorage.setItem(GROUPED_KEY, grouped ? "1" : "0"); } catch { /* not kept, still switches */ }
     this.rebuild();
+    // The rows kept for the folders left are built again now: coming back takes them as
+    // they are (recall runs in render).
+    for (const was of this.seen.values()) {
+      was.rows = panelRows({ items: (group) => was.status[group] ?? [], closed: was.closed, collapsed: was.collapsed, paths: was.paths, grouped });
+      was.at = rowAt(was.rows, was.selected);
+      if (was.at < 0) was.selected = null;
+    }
     if (this.at >= 0) this.list.reveal(this.at, this.rows.length);
   }
 
@@ -708,11 +752,14 @@ export default class CommitView {
   }
 
   render(cx) {
-    // Another folder to follow: read in a timer, since nothing may start inside render
+    // Another folder to follow is taken up before drawing (move), so the first frame there
+    // already shows it. It is read in a timer, since nothing may start inside render
     // (cx.notify throws there and cx.spawn runs its first part there). A timer the host
     // refuses leaves nothing set: the next render tries again (later.js).
-    if (this.contextKey() !== this.context || this.stay.late()) {
-      this.moving.after(cx, 0, (cx) => { if (this.contextKey() !== this.context || this.stay.late()) this.refresh(cx); });
+    const here = this.contextKey();
+    if (here !== this.context) this.move(here);
+    if (this.parted || this.stay.late()) {
+      this.moving.after(cx, 0, (cx) => { if (this.parted || this.contextKey() !== this.context || this.stay.late()) this.refresh(cx); });
     }
     // A read skipped while another copy wrote to this repository: the release redraws
     // every copy (shared state), so it is taken up here, even if that copy's "changed"

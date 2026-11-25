@@ -251,13 +251,24 @@ git 모듈과 순수 계산 모듈은 `herdr`를 import하지 않는다. 그래�
   - **재료만 기억하고, 그린 행은 꺼낼 때 다시 만든다**(타이머 안: `refresh`는 `render`에서 돌지 않는다).
     Log panel은 Branch tree의 읽은 것과 Commit list의 앞 1,000개(`BATCH`)만 둔다. `refs`, 행,
     선택과 Commit details는 두지 않는다(옮기면 선택이 풀리는 것은 전과 같다). VCS widget은 얼굴의
-    재료(`git-heads.js` `faceOf`)만 두고 브랜치·태그 목록은 두지 않는다.
+    재료(`git-heads.js` `faceOf`)만 두고 브랜치·태그 목록은 두지 않는다. Commit panel만 예외다(아래).
+  - **Commit panel은 그린 행까지 두고, 옮김을 `render`에서 받는다.** 옮김을 타이머로 넘기면 돌아온
+    폴더의 첫 그림이 떠난 폴더의 목록과 접힘이라, 거기서 접어 둔 Changes가 한 그림 동안 펼쳐졌다
+    접힌다. 그래서 `render`가 그리기 전에 `move`가 떠난 폴더를 기억하고 돌아온 폴더를 꺼낸다. `move`는
+    행을 만들지 않고(`remember`가 둔 행을 그대로 쓴다) 아무것도 시작하거나 멈추지 않는다. 떠난 폴더의
+    감시 멈춤과 머묾 대기(`stay.moved`), 읽기는 `render`가 건 타이머의 `refresh`가 한다(`parted`).
+    Last commit group의 행은 두지 않는다: 다른 저장소로 따라가면 양식이 Amend를 끄고, 같은 저장소면 그
+    커밋을 다시 읽어 붙인다. 행은 펼친 묶음 것뿐이라 접은 묶음은 한 행이다. Group by Directory를 바꾸면
+    기억한 폴더들의 행도 그 자리(클릭 처리)에서 다시 만든다. `commit-move.test.mjs`가 소스에서 `render`가 그리기 전에
+    `move`를 부르는지, `move`·`recall`이 행을 만들거나 무엇을 시작하지 않는지 본다.
   - **꺼낸 그 자리에서 다시 그리기를 요청한다**(`cx.notify()`, Log panel은 `redraw`). 상태만 바꾸고
     읽기가 끝날 때 그리면, 창은 그때까지 떠난 폴더의 그림을 둔다. 폴더를 옮기는 `refresh`는 `render`가 건
-    타이머에서 돌므로 그 안에서 요청해도 된다.
-  - **옮긴 직후 누른 쓰기는 쓰지 않고 다시 읽는다**(Commit panel). 그래도 옮긴 뒤 한 그림 동안은
-    떠난 폴더의 양식이 화면에 있다: `render`가 옮김을 알아채 타이머로 넘기기 전에는 `host.repo`가 아직
-    떠난 저장소이고, 넘긴 뒤 다음 그림 전에는 `host.repo`는 새 저장소인데 단추는 옛 그림이다. 그래서
+    타이머에서 돌므로 그 안에서 요청해도 된다. Commit panel이 `render`에서 꺼낼 때는 그 그림이 곧
+    꺼낸 것이라 요청하지 않는다.
+  - **옮긴 직후 누른 쓰기는 쓰지 않고 다시 읽는다**(Commit panel). 그래도 포커스가 옮긴 뒤 다음
+    그림까지는 떠난 폴더의 양식이 화면에 있다: `render`나 `refresh`가 옮김을 받기 전에는 `host.repo`가
+    아직 떠난 저장소이고, `render` 밖의 `refresh`(주기 읽기, 감시)가 받으면 다음 그림 전까지
+    `host.repo`는 새 저장소인데 단추는 옛 그림이다. 그래서
     한 번 눌러 바로 쓰는 입구(`commit-form.js` `run`·`rebase`·`operate`(Skip, 그리고 묻기 전의 Abort), `commit-stash-tab.js`
     `unstash`)는 패널이 위치를 따라왔는지(`settled()`)와, 양식이 마지막으로 그려진 저장소(`render`의
     `follow()`가 맞추는 `where`. Stash 탭은 자기 `repo`)가 `host.repo`인지 보고, 아니면 쓰지 않고
@@ -1138,7 +1149,8 @@ Herdr는 mod를 QuickJS로 돌린다. JIT가 없고, 한 호출이 너무 오래
   `cx.timer.after`·`cx.spawn`이 오는 자리를 찾는다.
 - **`render` 안에서 하지 않는 일.** `render`는 Herdr 데이터가 바뀔 때마다 창 전체로 다시 돈다.
   그 안에서 `cx.notify()`는 예외를 던지고 `cx.spawn`은 첫 부분을 그 자리에서 돈다. 그래서 읽기
-  시작, 저장소 이동 처리, 입력 상자를 다시 만드는 일은 `cx.timer.after`로 미룬다. 파싱, 트리,
+  시작, 저장소 이동 처리, 입력 상자를 다시 만드는 일은 `cx.timer.after`로 미룬다. Commit panel은
+  이동 가운데 화면 바꾸기만 `render`에서 한다(3절 "떠난 폴더의 화면 기억": 행을 만들지 않는다). 파싱, 트리,
   그래프, 라벨 맞추기는 데이터가 올 때 한 번 계산해 둔다.
 - **Log panel의 첫 답은 패널 자신의 타이머로도 그린다.** 다시 불러온 직후, 읽기 작업 안의 `cx.notify()`가
   창을 다시 그리지 않아 Log panel이 로딩 스켈레톤에 남은 적이 있다([플랫폼](herdr-mod-platform.md)). `init`에서

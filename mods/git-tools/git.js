@@ -154,12 +154,20 @@ export function chunks(paths, cost = (path) => path.length * 3 + 1) {
   return out;
 }
 
+// Being outside a repository is told only by git's words: its exit code (128) is the same
+// for other failures. git says them in the person's language when it has its translations,
+// so a read that asks where the repository is goes with `{ env: ASK_IN_C }`, and git's words
+// are always these. Every other answer is told by exit codes and state files, never words.
+export const ASK_IN_C = { LC_ALL: "C" };
+// outsideRepo(r) → whether a read asked with ASK_IN_C failed for being outside a repository.
+export const outsideRepo = (r) => r.code > 0 && /not a git repository/i.test(r.err);
+
 // The repository a folder belongs to: { ok: true, root }, or { ok: false, notRepo, err }.
 // notRepo tells "this folder isn't in a repository" (show the notice) from "git could not
 // be asked" (show the error and try again later).
 export async function repoRoot(git, folder) {
-  const r = await git.read(folder, ["rev-parse", "--show-toplevel"]);
+  const r = await git.read(folder, ["rev-parse", "--show-toplevel"], { env: ASK_IN_C });
   const root = r.out.trim();
   if (r.ok && root) return { ok: true, root };
-  return { ok: false, notRepo: r.code > 0 && /not a git repository/i.test(r.err), err: r.err };
+  return { ok: false, notRepo: outsideRepo(r), err: r.err };
 }

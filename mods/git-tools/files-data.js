@@ -15,7 +15,7 @@
 // ("windows" reads folders with PowerShell on this computer). Paths in results are
 // relative to `folder` and use "/". What the marks mean for a row (ignored under an
 // ignored folder, a folder's dot) is files-tree.js's job.
-import { makeGit, chunks } from "./git.js";
+import { makeGit, chunks, ASK_IN_C, outsideRepo } from "./git.js";
 
 export const PER_FOLDER = 500;
 export const TOTAL = 5000;
@@ -104,12 +104,12 @@ export async function readFolder(exec, folder, { on = null, platform = null, lim
 // folder's path from root with a trailing "/" ("" at the root). Not being in a repository
 // is ok with repo null; a git that can't run or answers otherwise is not ok.
 async function repoOf(git, folder) {
-  const r = await git.read(folder, ["rev-parse", "--show-toplevel", "--show-prefix"]);
+  const r = await git.read(folder, ["rev-parse", "--show-toplevel", "--show-prefix"], { env: ASK_IN_C });
   if (r.ok) {
     const [root, prefix = ""] = r.out.split("\n");
     if (root) return { ok: true, repo: { root, prefix }, err: "" };
   }
-  if (r.code > 0 && /not a git repository/i.test(r.err)) return { ok: true, repo: null, err: "" };
+  if (outsideRepo(r)) return { ok: true, repo: null, err: "" };
   return { ok: false, repo: null, err: r.err };
 }
 

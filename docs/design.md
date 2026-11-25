@@ -521,6 +521,9 @@ Rollback은 Rollback dialog의 버튼으로만 실행되고, 쓰기 전에 버�
   무엇이 막았는지는 종료 코드, 상태 파일, `status --porcelain=v2`, 실행 전후의 HEAD로 가른다(`settle`).
   종료 코드만으로는 알 수 없다: 빈 cherry-pick은 충돌 없는 exit 1이고, `rebase -i`의 edit은 exit 0으로
   멈춘다. git의 글은 보여 주기만 한다.
+  예외는 저장소 밖인지 하나다. 그것은 종료 코드로 갈리지 않아(다른 실패도 128) git의 글로만 알 수 있으므로,
+  그 읽기(`git.js` `repoRoot`, Files panel의 `repoOf`)는 `LC_ALL=C`(`ASK_IN_C`)로 물어 글이 늘 영어로 오게 한다.
+  번역이 있는 git(Homebrew 등)은 한국어 로캘에서 "깃 저장소가 아닙니다"라고 답해, 영어 글만 보면 오류 띠가 뜬다.
 - **상태 파일**은 `MERGE_HEAD`, `CHERRY_PICK_HEAD`, `REVERT_HEAD`, `rebase-merge`, `rebase-apply`,
   `sequencer`를 `rev-parse --absolute-git-dir --git-path …`로 찾고, git 폴더 안에서
   `git grep --no-index`로 읽는다. 그래서 연결된 worktree에서도 맞고 읽기가 `.git` 아래를 고치지

@@ -1,9 +1,10 @@
 // node commit-press.test.mjs: a press on the Commit panel that writes at once checks, before
 // it writes, that the panel has taken up where the focused pane is (no app, no git).
-// render notices a move but leaves it to a timer (it may change nothing), so for one frame
-// host.repo is still the repository left; and right after the move is taken up, host.repo is
-// the new one while the buttons on screen are still the old one's. A press in either gap
-// would write to a repository the person wasn't looking at. So each of these
+// After the focused pane moves, until the next render or refresh takes the move up (move),
+// host.repo is still the repository left; and when a refresh outside render (the poll, a
+// watch) takes it up, host.repo is the new one until the next render while the buttons on
+// screen are still the old one's. A press in either gap would write to a repository the
+// person wasn't looking at. So each of these
 // - commit-form.js run, rebase and operate: calls this.behind(cx) before it takes the lock
 //   (setBusy) or writes, and run calls no follow() before it (follow would make the new
 //   repository the drawn one),

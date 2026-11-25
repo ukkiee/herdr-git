@@ -830,8 +830,9 @@ machine); back on a terminal, they follow its folder again.
   draws the repository before, writes nothing: the panel reads where it is now and draws
   that, and the next press writes there.
 - **Coming back to a folder** shown before: its files, checks, folding and place in the
-  list show at once as they were left, without the skeleton, and the read that follows
-  puts them right (files gone since then leave the checks). A commit that succeeds
+  list show as they were left from the first frame there, without the skeleton (a group
+  folded there never shows its files for a moment), and the read that follows puts them
+  right (files gone since then leave the checks). A commit that succeeds
   while the panel shows another repository clears the checks kept for its own. The
   panel keeps this for the 8 folders it last left; a folder not among them starts with
   the skeleton and nothing checked.
@@ -2985,7 +2986,10 @@ in English.
   running) and catches up when shown.
 - A panel moving to another repository is noticed in `render`, which can't start
   anything: the move happens in a `cx.timer.after(0, …)` of that copy. Starting the
-  read from render throws at its `cx.notify()` and leaves the Log panel loading.
+  read from render throws at its `cx.notify()` and leaves the Log panel loading. The
+  Commit panel takes up what it shows in `render` itself (the rows it kept for that
+  folder, none built), so its first frame there isn't the folder left; stopping the old
+  watches and reading wait for the timer.
 - After a popup menu over the Log panel closes, the panel focuses its Commit list itself
   (the `"focus"` command never comes without `"focusable": true`).
 - Commit details hides below 930px of panel width with the default columns. In a
@@ -3251,7 +3255,7 @@ Each line is one check: do what it says, see what follows.
 **Offline**
 
 1. Run `node layout.test.mjs` at the root, `node <file>` for every `*.test.mjs` in
-   `mods/git-tools` (68 files) and `node tools/gen-icon-theme.test.mjs`: each prints
+   `mods/git-tools` (69 files) and `node tools/gen-icon-theme.test.mjs`: each prints
    `ok` (the last one after `skip: …` unless `ICON_THEME_SOURCE` is set).
 2. Run `herdr-app check mods/git-tools`: it passes.
 

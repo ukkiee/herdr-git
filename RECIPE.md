@@ -2547,7 +2547,8 @@ in English.
 
 - **Programs the mod runs**, through `exec`, on the space's machine when it has one:
   `git`, and `env` when a call sets a variable (`env GIT_TERMINAL_PROMPT=0 git …` for
-  push and fetch). git subcommands: `rev-parse`, `status`, `add --intent-to-add`,
+  push and fetch, `env LC_ALL=C git rev-parse …` for the read that finds the repository a
+  folder is in, so a computer set to another language still says `not a git repository`). git subcommands: `rev-parse`, `status`, `add --intent-to-add`,
   `commit`, `rm`, `log`, `for-each-ref`, `checkout`, `restore --staged`,
   `checkout-index` (never `--force`), `update-index` (`--force-remove`, `--cacheinfo`,
   `--unresolve`), `diff-files`, `hash-object` (without `-w`),
@@ -3334,7 +3335,8 @@ Each line is one check: do what it says, see what follows.
     and a change made there shows in the Commit panel within 10 s.
 31. In a repository with more than 1,000 commits, scroll to the bottom of the Commit list:
     more commits load and the graph continues without breaks.
-32. In a folder outside a repository both panels say `<folder> is not in a git repository.`
+32. In a folder outside a repository both panels say `<folder> is not in a git repository.`,
+    also on a computer set to Korean whose git has its translations (no error strip).
 33. In a repository without commits: the Commit panel lists the files, Amend is off with
     `No commits to amend yet`, the Commit list says `No commits yet`.
 34. In a clean repository the Commit panel says `No changes`.

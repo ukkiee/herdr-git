@@ -261,6 +261,16 @@ const gitState = (repo) => {
   const r = await readMarks(exec, dir);
   assert.deepEqual(r, { ok: true, repo: null, marks: {}, err: "" });
   assert.equal(markLookup(r.marks).mark("a.txt"), null);
+  // The same on a computer set to Korean, where git says it in Korean when it can.
+  const env = { ...process.env, LANG: "ko_KR.UTF-8" };
+  for (const k of ["LC_ALL", "LC_MESSAGES", "LANGUAGE"]) delete env[k];
+  const inKorean = (cmd, args = [], { cwd } = {}) => new Promise((resolve, reject) => {
+    execFile(cmd, args, { cwd, env, maxBuffer: 64 * 1024 * 1024 }, (err, stdout, stderr) => {
+      if (err && typeof err.code !== "number") return reject(err);
+      resolve({ code: err ? err.code : 0, stdout, stderr });
+    });
+  });
+  assert.deepEqual(await readMarks(inKorean, dir), { ok: true, repo: null, marks: {}, err: "" });
 }
 
 const sorted = (list) => [...list].sort();

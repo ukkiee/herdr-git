@@ -14,6 +14,18 @@ const exec = (cmd, args = [], { cwd } = {}) => new Promise((resolve, reject) => 
   });
 });
 const sh = (cwd, cmd) => execFileSync("sh", ["-c", cmd], { cwd, encoding: "utf8" });
+// The same exec on a computer set to Korean: git's own words come in Korean when it has them.
+const korean = () => {
+  const env = { ...process.env, LANG: "ko_KR.UTF-8" };
+  for (const k of ["LC_ALL", "LC_MESSAGES", "LANGUAGE"]) delete env[k];
+  return env;
+};
+const inKorean = (cmd, args = [], { cwd } = {}) => new Promise((resolve, reject) => {
+  execFile(cmd, args, { cwd, env: korean() }, (err, stdout, stderr) => {
+    if (err && typeof err.code !== "number") return reject(err);
+    resolve({ code: err ? err.code : 0, stdout, stderr });
+  });
+});
 
 const repo = `${root}/repo`;
 mkdirSync(`${repo}/src/deep`, { recursive: true });
@@ -116,6 +128,21 @@ const git = makeGit(exec, null);
   assert.equal(gone.ok, false);
   assert.equal(gone.notRepo, false, "a folder that can't be reached is an error, not 'not a repository'");
   assert.ok(gone.err.length > 0);
+}
+
+// git says "not a git repository" in the person's language. Outside a repository with a
+// Korean locale is still "not a repository", not a failure: with a git that has its
+// translations, as here (no LC_ALL, LANG=ko_KR.UTF-8), and with one that answers in
+// Korean unless asked in the C locale, for a git without them.
+{
+  const r = await repoRoot(makeGit(inKorean, null), outside);
+  assert.deepEqual([r.ok, r.notRepo], [false, true]);
+  const translated = async (cmd, args) => {
+    const c = cmd === "env" && args.includes("LC_ALL=C");
+    return { code: 128, stdout: "", stderr: c ? "fatal: not a git repository (or any of the parent directories): .git\n" : "fatal: (현재 폴더 또는 상위 폴더 중 일부가) 깃 저장소가 아닙니다: .git\n" };
+  };
+  const t = await repoRoot(makeGit(translated, null), "/somewhere");
+  assert.deepEqual([t.ok, t.notRepo], [false, true]);
 }
 
 // A long list of paths is split so each part fits one command: at most 1,000 paths and

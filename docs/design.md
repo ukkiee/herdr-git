@@ -106,21 +106,35 @@
 | 공용 부품 | `ui.js` | 저장소 찾기, 행·버튼·체크박스, 보이는 행만 그리는 `WindowedList`, 창과 메뉴 열기, 툴팁(`tip`), Progress bar, 로딩 스켈레톤(`skeleton`), `uiGlyph`·`iconButton`, 쓰기 잠금과 창 요청의 화면 쪽, git-tools 탭의 저장소 기록, 실패 띠의 "콘솔에서 보기" |
 | 화면 쪽 등록과 파일 | `serve-actions.js`, `app-files.js`, `space-tabs.js`, `log-pick.js`, `log-rewrite.js` | 창이 패널에 요청하는 쓰기의 표(`SERVE_ACTIONS`), 앱 홈 `git-tools` 폴더의 기록·설정 파일, 종류마다 하나인 space 탭, Log panel 쪽의 Cherry-Pick·Revert와 히스토리 편집 처리 |
 | 화면 | `view-*.js`, `commit-form.js`, `commit-stash-tab.js`, `log-branches.js`, `log-list.js`, `log-details.js`, `log-filters.js` | 그리기와 사람의 입력 |
-| git | `git.js`, `git-status.js`, `git-commit.js`, `git-rollback.js`, `git-snapshot.js`, `git-diff.js`, `git-push.js`, `git-log.js`, `git-log-filter.js`, `git-branch.js`, `git-show.js`(`readLastCommit` 포함), `files-data.js` | git과 폴더 읽기 명령을 부르고 결과를 해석한다 |
-| git 동작 | `git-operation.js`, `git-conflict.js`, `git-smart.js`, `git-stash.js`, `git-reset.js`, `git-rewrite.js`, `git-changes.js`, `git-remote.js`, `git-refs.js`, `git-compare.js`, `git-revision.js`, `git-worktree.js`, `git-heads.js`, `git-patch.js` | Operation in progress 읽기와 merge·rebase·cherry-pick·revert의 실행·판정, 충돌 파일 쓰기, Smart operation, stash, reset과 하드 전 기록, 히스토리 다시 쓰기, 파일 단위 되돌리기·체리픽, pull·업데이트, 태그·이름 변경·원격, 비교·패치·가져오기, 리비전의 파일과 하위 커밋, 새 워크트리, VCS widget이 보일 브랜치, 로컬 변경의 패치와 패치 적용 |
+| git | `git.js`, `git-port.js`, `git-root.js`, `git-status.js`, `git-commit.js`, `git-rollback.js`, `git-snapshot.js`, `git-diff.js`, `git-push.js`, `git-log.js`, `git-log-filter.js`, `git-branch.js`, `git-show.js`(`readLastCommit` 포함), `files-data.js` | git과 폴더 읽기 명령을 부르고 결과를 해석한다 |
+| git 동작 | `git-operation.js`, `git-conflict.js`, `git-blocked.js`, `git-smart-stash.js`, `git-smart.js`, `git-stash.js`, `git-reset.js`, `git-rewrite.js`, `git-changes.js`, `git-remote.js`, `git-refs.js`, `git-compare.js`, `git-revision.js`, `git-worktree.js`, `git-heads.js`, `git-patch.js` | Operation in progress 읽기와 merge·rebase·cherry-pick·revert의 실행·판정, 충돌 파일 쓰기, Smart operation(길을 막는 파일과 막힘을 알리는 checkout, 변경을 넣어 두는 stash와 멈춘 요청의 표식, 강제 checkout과 종류별 요청), stash, reset과 하드 전 기록, 히스토리 다시 쓰기, 파일 단위 되돌리기·체리픽, pull·업데이트, 태그·이름 변경·원격, 비교·패치·가져오기, 리비전의 파일과 하위 커밋, 새 워크트리, VCS widget이 보일 브랜치, 로컬 변경의 패치와 패치 적용 |
 | 순수 계산 | `graph.js`, `tree.js`, `bus.js`, `lock.js`, `read-turns.js`, `clock.js`, `later.js`, `folder-watch.js`, `i18n.js`, `icon-theme.js`, `files-tree.js`, `editor-language.js`, `merge-chunks.js`, `conflicts-model.js`, `merge-revisions-model.js`, `rebase-plan.js`, `log-menus.js`, `log-select.js`, `log-options.js`, `branch-order.js`, `vcs-ops.js`, `git-console.js`, `ui-icons.js`, `pick-notes.js`, `ui-size.js`, `focus-repo.js`, `let-go.js`, `skeleton.js`, `recent.js`, `popup-press.js`, `hand-over.js`, `diff-colors.js`, `facts-cache.js` | 그래프 배치, 경로 트리와 3상태 체크, 버스와 잠금 값, 되풀이하는 읽기의 차례, 사본의 git 시계, 타이머·작업으로 미룬 일과 머문 폴더 판정, 폴더 감시와 그 취소, 언어와 문장, 아이콘 고르기, Files panel의 줄·표시·찾기 순위·키, 미리보기의 구문 색, 병합 덩어리, 두 충돌 창이 보일 것과 켜질 것, 리베이스 계획과 편집 판정, Log panel의 메뉴·툴바 표, 여러 커밋 고르기, 그래프·표시 옵션 값, 브랜치 순서와 즐겨찾기, VCS Operations popup의 항목, 콘솔 기록의 꼴과 자격 증명 가림, UI icon 대응, Cherry-Pick·Revert 결과의 알림, 메뉴 너비·팝업 자리·창이 자리를 채우는지·위젯 블록 폭, 패널이 따를 저장소와 탭 기록, 닫히는 화면이 쥔 데이터 비우기, 로딩 스켈레톤의 행과 조각 자리, 떠난 폴더의 기억(최근 N개)과 Commit list의 첫 묶음, Diff tab의 행 색, 커밋 메뉴가 읽은 편집 사실의 기억 |
 | 데이터 | `messages-*.js`, `icon-theme-data.js`, `icons/theme/`, `icons/ui/`(그 밖의 `icons/` 파일 포함) | 문구 표, 생성한 아이콘 규칙, 아이콘 파일 |
 
-저장소 루트에는 레이아웃 변환 `layout.mjs`, 설치 `install.sh`, 키 `keys.json`, 아이콘 생성기
-`tools/gen-icon-theme.mjs`가 있다. 각 모듈의 책임과 함정은 그 파일의 머리 주석에 있다.
+저장소 루트에는 레이아웃 변환 `layout.mjs`, 설치 `install.mjs`, 키 `keys.json`, 린트 설정
+`.oxlintrc.json`이 있고, `tools/`에 아이콘 생성기 `gen-icon-theme.mjs`와 검사 스크립트가 있다. 각 모듈의 책임과 함정은 그 파일의 머리 주석에 있다.
 
 ### 화면 코드와 git 코드의 경계
 
-git 모듈과 순수 계산 모듈은 `herdr`를 import하지 않는다. 그래서 node가 이 모듈들을 그대로
+git 모듈과 순수 계산 모듈은 `herdr`를 import하지 않는다. 그래서 bun(과 node)이 이 모듈들을 그대로
 불러 테스트할 수 있다.
 
 - `git.js`의 `makeGit(exec, on)`이 실행기를 만든다. `exec`는 인자로 받고, `on`은 git을 돌릴
   머신이다. 다른 git 모듈은 모두 이 `git`과 저장소 루트를 받는다.
+- **git 모듈은 실행기의 꼴만 안다.** 그 꼴(`READ`, `ASK_IN_C`, `outsideRepo`, `chunks`, 결과
+  `{ ok, code, out, err }`)은 `git-port.js`에 있고, 실행기 자체(`makeGit`, `PARALLEL`, `recordWith`)는
+  `git.js`에 있다. git 모듈은 `git-port.js`만 import하고 `git.js`는 import하지 않는다. 저장소 찾기
+  `repoRoot`는 `git-root.js`다. `app-files.js`는 화면 모듈을 import하지 않고, Git console 알림에 쓸
+  `broadcast`를 `recordGit(call, broadcast)`의 인자로 받는다(`main.js`가 `ui.js`의 것을 넘긴다).
+- **모듈 사이 import는 한쪽으로만 간다.** 린트가 순환을 오류로 막는다(`import/no-cycle`). Smart
+  operation은 그래서 세 모듈이다: 길을 막는 파일과 막힘을 알리는 checkout(`git-blocked.js`), 변경을
+  넣어 두는 stash와 멈춘 요청의 표식(`git-smart-stash.js`), 강제 checkout과 종류별 요청(`git-smart.js`,
+  앞 둘을 다시 내보낸다). `git-operation.js`와 `git-remote.js`는 앞 둘만 import하고, `git-smart.js`가
+  그 둘의 요청을 돌리므로 import는 한쪽으로만 간다.
+- **QuickJS에 없는 것은 린트가 미리 잡는다.** 린트는 oxlint(`.oxlintrc.json`, `bun run lint`)이고 경고도
+  실패로 친다. `mods/git-tools/**/*.js`에서 `setTimeout`·`setInterval`·`Intl`·`navigator`·`process` 전역과
+  `Promise.race`를 막고, `mods/git-tools/core/` 아래 모듈이 `herdr`·`gpui-*`·adapters를 import하면
+  오류로 막는다. 테스트(`*.test.mjs`)는 bun이나 node에서 돌므로 이 제한 밖이다.
 - 실행기 하나는 git을 동시에 `PARALLEL`(4)개까지만 돌리고 나머지는 줄 세운다. Herdr가 동시에 도는
   `exec`를 묶어 넘는 것을 곧바로 거절하는데([플랫폼](herdr-mod-platform.md)), 화면은 여러 읽기를 함께
   열고 앱이 켜질 때는 모든 화면이 한꺼번에 읽기 때문이다. 그래도 그 한도로 거절되면 아무것도 돌지 않은
@@ -320,7 +334,7 @@ git 모듈과 순수 계산 모듈은 `herdr`를 import하지 않는다. 그래�
 
 ### 설치와 레이아웃
 
-Herdr의 내장 `main` 레이아웃은 구조 변경을 받지 않는다. 그래서 `install.sh`가 `main`을 복제한
+Herdr의 내장 `main` 레이아웃은 구조 변경을 받지 않는다. 그래서 `install.mjs`가 `main`을 복제한
 `git-tools` 레이아웃을 만들고 네 곳만 바꾼다([ADR 0001](adr/0001-clone-main-layout.md)).
 
 - `panel-body`의 `changes` 블록은 id를 그대로 두고 내용만 Commit panel로 바꾼다. 탭 바의
@@ -347,16 +361,22 @@ Herdr의 내장 `main` 레이아웃은 구조 변경을 받지 않는다. 그래
   `work-body`, `panel-body`, `changes`, `files`)가 없으면 아무것도 쓰지 않고 없는 노드를 알린다.
   짐작해서 고치지 않는 것은, Herdr 업데이트로 `main`의 구조가 바뀐 것을 알아채야 하기
   때문이다.
-- `install.sh`는 앞의 네 검사(node, `main.json`, 변환 가능, Herdr 실행 중) 가운데 하나라도
+- **설치는 node로 돈다**(`node install.mjs`). 쓰는 사람에게 bun을 요구하지 않으려는 것이다. 그래서
+  `install.mjs`와 `layout.mjs`는 node 내장 모듈만 쓰고, 그 테스트(`install.test.mjs`, `layout.test.mjs`)는
+  bun과 node 둘 다에서 돈다(CI가 node로 한 번 더 돌린다).
+- `install.mjs`는 앞의 세 검사(`main.json`이 있는지, 변환 가능, Herdr 실행 중) 가운데 하나라도
   실패하면 `Nothing was changed.`로 멈춘다. `git-tools.json`과 `keys.json`은 임시 파일에 다
-  쓴 뒤 이름을 바꿔 덮는다. `keys.json`에는 비어 있는 키만 더한다.
+  쓴 뒤 이름을 바꿔 덮는다(`writeWhole`). `keys.json`에는 비어 있는 키만 더한다.
 - **mod 폴더는 내용이 다른 파일만 쓴다**(`layout.mjs`의 `copyChanged`). Herdr는 mod 폴더의
   파일이 하나 저장될 때마다 모든 사본을 다시 불러오고, 이 mod는 파일이 2,500개가 넘는다.
-  쓸 파일은 제자리 옆에 숨은 이름으로 다 쓴 뒤 차례로 이름을 바꿔 넣는다. Herdr는 숨은
-  파일에는 다시 불러오지 않으므로 반쯤 쓰인 파일을 읽지 않는다. 앱 홈에만 있는 파일은
-  그대로 둔다.
+  테스트(`*.test.mjs`)는 복사하지 않는다. 쓸 파일은 제자리 옆에 숨은 이름으로 다 쓴 뒤 차례로
+  이름을 바꿔 넣는다. Herdr는 숨은 파일에는 다시 불러오지 않으므로 반쯤 쓰인 파일을 읽지 않는다.
+  그 뒤 원본에 없는 `.js`·`.mjs`를 하위 폴더까지 지운다. 옮기거나 지운 모듈이 남으면 옛 import가
+  여전히 그것을 불러오기 때문이다. 지우기는 모든 이름 바꾸기 뒤에 몰아서 해, 쓰기와 지우기가
+  Herdr가 다시 불러오기 한 번으로 묶는 짧은 틈 안에 들게 한다. 쓰기가 실패하면 아무것도 지우지
+  않는다. 앱 홈에만 있는 다른 파일(Herdr가 둔 것일 수 있다), 숨은 파일, 숨은 폴더 안은 그대로 둔다.
 - `git-tools` 레이아웃은 복제본이라 Herdr의 `main` 변경을 따라가지 않는다. Herdr를 업데이트한 뒤에는
-  `install.sh`를 다시 돌린다.
+  `node install.mjs`를 다시 돌린다.
 - `cmd-k`는 mod 명령이 아니다. 숨은 사본은 명령을 받지 못하고, 숨은 부모를 보이며 stack의 자식을
   고르는 앱 명령이 없다. 그래서 키가 1×1 팝업을 열고, 그 사본이 `layout.select`와 `layout.show`를
   부르고 `commit-focus` 사건을 보낸 뒤 스스로 닫는다. mod가 포커스를 받을 수 없어(`focusable` 아님)
@@ -522,7 +542,7 @@ Rollback은 Rollback dialog의 버튼으로만 실행되고, 쓰기 전에 버�
   종료 코드만으로는 알 수 없다: 빈 cherry-pick은 충돌 없는 exit 1이고, `rebase -i`의 edit은 exit 0으로
   멈춘다. git의 글은 보여 주기만 한다.
   예외는 저장소 밖인지 하나다. 그것은 종료 코드로 갈리지 않아(다른 실패도 128) git의 글로만 알 수 있으므로,
-  그 읽기(`git.js` `repoRoot`, Files panel의 `repoOf`)는 `LC_ALL=C`(`ASK_IN_C`)로 물어 글이 늘 영어로 오게 한다.
+  그 읽기(`git-root.js` `repoRoot`, Files panel의 `repoOf`)는 `LC_ALL=C`(`ASK_IN_C`)로 물어 글이 늘 영어로 오게 한다.
   번역이 있는 git(Homebrew 등)은 한국어 로캘에서 "깃 저장소가 아닙니다"라고 답해, 영어 글만 보면 오류 띠가 뜬다.
 - **상태 파일**은 `MERGE_HEAD`, `CHERRY_PICK_HEAD`, `REVERT_HEAD`, `rebase-merge`, `rebase-apply`,
   `sequencer`를 `rev-parse --absolute-git-dir --git-path …`로 찾고, git 폴더 안에서
@@ -614,7 +634,7 @@ Rollback은 Rollback dialog의 버튼으로만 실행되고, 쓰기 전에 버�
 
 - **거절 판정은 mod가 한다.** 동작이 실패했고, 진행 중 상태가 생기지 않았고, HEAD가 그대로이고,
   그 동작이 건드릴 파일에 로컬 변경이 있으면 "거절"이다. git의 글을 읽지 않으려고 막는 파일을 직접
-  계산한다(`git-smart.js`).
+  계산한다(`git-blocked.js`).
   - merge, pull(merge 방식), cherry-pick, revert: 로컬 변경 ∩ 그 동작이 바꿀 파일. 스테이징된
     변경이 하나라도 있으면 그 파일들도 더한다(git은 무관한 스테이징에도 거절한다).
   - rebase, pull(rebase 방식), 체크아웃하고 리베이스, 다시 쌓는 히스토리 편집 6종(옛 커밋의 메시지
@@ -837,7 +857,7 @@ Rollback은 Rollback dialog의 버튼으로만 실행되고, 쓰기 전에 버�
   `ls-files -u`로 가르고, 충돌이 남으면 패널이 Conflicts dialog를 연다. 충돌 없는 3-way는 "스테이징
   되었습니다" 알림을 띄운다. 3-way도 거절되면, 패치가 아닌 글이면, 없는 파일이면 아무것도 바꾸지
   않는다. 단, 체크한 파일이 1000개를 넘거나 경로마다 `길이×6+11`로 어림한 합이 60,000을 넘으면
-  명령 줄 한도 때문에 여러 번에 나눠 `git apply`하고(`git.js`의 `chunks`), 그때 뒤 부분이 거절되면
+  명령 줄 한도 때문에 여러 번에 나눠 `git apply`하고(`git-port.js`의 `chunks`), 그때 뒤 부분이 거절되면
   앞 부분은 적용된 채 남는다. 클립보드의 글은 그 머신의 임시 파일 `git-tools-result.XXXXXXXX`로 넘기고 패널이 적용한 뒤
   지운다. 파일에서 읽는 패치는 `readTextFile`의 한도인 1 MiB까지이고, 한도는 UTF-8 바이트로 잰다.
   경로의 `~`와 `~/…`는 패치가 있는 머신의 홈 폴더로 푼다(이 컴퓨터는 `home()`, 원격은
@@ -1130,8 +1150,8 @@ Herdr는 mod를 QuickJS로 돌린다. JIT가 없고, 한 호출이 너무 오래
   뒤에도 남는다. 그래서 닫히는 사본은 화면과 그 부품이 쥔 데이터를 같은 꼴의 빈 값으로 바꾼다
   (`main.js`의 `close`). 꼴을 남기는 것은 닫힌 직후 잠깐 더 도는 일이 기대한 꼴을 찾게 하려는 것이다.
   큰 저장소의 Log 탭 하나를 닫으면 그 탭이 쓰던 11 MB 가운데 7 MB쯤이 돌아오고, 화면의 껍데기와
-  클로저가 붙잡은 것은 남는다. node는 순환을 거두므로 이 두 규칙은 node 테스트로 지킬 수 없고
-  QuickJS에서 잰다.
+  클로저가 붙잡은 것은 남는다. 테스트가 도는 bun과 node의 엔진은 순환을 거두므로 이 두 규칙은
+  테스트로 지킬 수 없고 QuickJS에서 잰다.
 - **호스트 작업 한도.** Herdr는 끝나지 않은 호스트 작업을 runtime 하나(모든 mod 공용)에 1,024개까지 받고,
   넘으면 `cx.sleep`, `cx.timer.after`, `exec`, `cx.spawn`이 곧바로 던진다([플랫폼](herdr-mod-platform.md)).
   기다리는 `watchFolder` 호출과 그것을 기다리는 작업도 하나씩이다. 그래서 쥐는 작업의 수는 사본마다 상수로 둔다:
@@ -1238,7 +1258,7 @@ Herdr는 mod를 QuickJS로 돌린다. JIT가 없고, 한 호출이 너무 오래
   보임, 필터가 틀린 커밋을 돌려줌, 지난 커밋 묶음의 파일이 틀림, Files panel의 git 표시·폴더
   읽기·찾기 목록이 틀리거나 읽기가 `.git` 아래를 고침.
   지운 브랜치의 보관은 `GIT_COMMITTER_DATE`를 넣어 29일·31일 전 기록을 만들고 git의 기본 정리를
-  돌려 본다. Files panel의 폴더 읽기와 찾기 훑기는 node가 도는 컴퓨터의 `sh` 길만 테스트한다.
+  돌려 본다. Files panel의 폴더 읽기와 찾기 훑기는 테스트가 도는 컴퓨터의 `sh` 길만 테스트한다.
 - **git 동작의 테스트.** 같은 방식으로 저장소 상태(작업 트리, 인덱스, ref, reflog, stash, 상태 파일)를
   다시 읽는다. 테스트 파일은 맨 위에서 `GIT_CONFIG_GLOBAL=/dev/null`과 `GIT_CONFIG_NOSYSTEM=1`을 걸어
   사용자 설정을 받지 않고, `rebase.updateRefs`·`pull.rebase` 같은 경우는 저장소 설정으로 따로 켠다.
@@ -1273,21 +1293,27 @@ Herdr는 mod를 QuickJS로 돌린다. JIT가 없고, 한 호출이 너무 오래
   쓰기 잠금·"로드 중"이 풀리지 않음, 사본이 사건을 다시 받지 못함, 폴더가 없는 곳에서 `late()`가 굳어 헛
   읽기가 되풀이됨.
   화면 전체(main.js로 만든 Log·Commit·VCS widget·Files 사본)를 빠르게 옮기며 남은 작업을 세는 테스트는 없다.
-  화면 모듈은 `gpui-kit`을 import해서 node가 불러오지 못하기 때문이다.
+  화면 모듈은 `gpui-kit`을 import해서 bun이나 node가 불러오지 못하기 때문이다.
 - **앱에서 눈으로만 볼 수 있는 것.** 그려진 모양과 색, 클릭·키·창의 동작, 창과 패널 사이의 요청,
   원격 space, 큰 저장소의 체감 속도, 한국어 문장이 자연스러운지. 화면에는 자동 테스트가 없어서
   바꿀 때마다 사람이 다시 본다. 확인 절차는 RECIPE의 "Done when"에 있다.
 
-**전체 오프라인 검사:** `node tools/check.mjs`가 한 번에 돌린다. 루트의 `node layout.test.mjs`,
-`mods/git-tools`의 `*.test.mjs` 68개 각각, `node tools/gen-icon-theme.test.mjs`가 모두 `ok`를 찍고,
-`herdr-app check mods/git-tools`가 통과한다. 테스트는 node 내장 모듈(`node:assert/strict` 등)만 쓴다.
+**전체 오프라인 검사:** `bun tools/check.mjs`가 한 번에 돌린다. 저장소의 `*.test.mjs`(루트의
+`layout.test.mjs`·`install.test.mjs`, `mods/git-tools`의 것 각각, `tools/`의 `gen-icon-theme.test.mjs`·
+`docs.test.mjs`)를 이 스크립트를 돌린 런타임으로 하나씩 돌려 모두 exit 0이고, `herdr-app check
+mods/git-tools`가 통과한다(그 명령이 없으면 skip으로 적는다). `bun run check`는 그 앞에 린트
+(`bun run lint`)를 돌린다. 테스트는 node 내장 모듈(`node:assert/strict` 등)만 쓰므로 bun과 node 어느
+쪽으로도 돈다. CI는 린트와 전체 검사를 bun으로 돌린 뒤, 설치 쪽 테스트(`layout.test.mjs`,
+`install.test.mjs`)를 node로 한 번 더 돌린다. 사용자는 bun 없이 node로 설치하기 때문이다.
 
-**느린 엔진의 예산:** `icon-theme.test.mjs`가 JIT를 끈 node로 규칙을 꽂는 시간을 재서, 규칙을
-힌트 아래에 꽂기만 하는 단순한 순회의 8배 안인지 본다. 시작할 때 규칙마다 하는 계산이 다시
-늘어나면 여기서 걸린다. 처음 보는 이름 하나가 돌리는 정규식의 수(평균 4, 최대 16 이하)도 같은
-파일이 센다.
+**느린 엔진의 예산:** `icon-theme.test.mjs`가 테스트를 돌린 런타임과 상관없이 JIT를 끈 node
+(`node --jitless`)로 규칙을 꽂는 시간을 재서, 규칙을 힌트 아래에 꽂기만 하는 단순한 순회의 8배
+안인지 본다. bun은 `--jitless`를 받고도 JIT를 끄지 않기 때문이다. node가 PATH에 없거나 PATH의
+`node`가 bun이면(node 없는 컴퓨터에서 `bun run`이 그렇게 놓는다) 이 측정만 `skip: …`을 찍고
+건너뛴다. 시작할 때 규칙마다 하는 계산이 다시 늘어나면 여기서 걸린다. 처음 보는 이름 하나가
+돌리는 정규식의 수(평균 4, 최대 16 이하)도 같은 파일이 센다.
 
-**생성물 재현 검사:** `ICON_THEME_SOURCE=<폴더> node tools/gen-icon-theme.test.mjs`가 임시 폴더에
+**생성물 재현 검사:** `ICON_THEME_SOURCE=<폴더> bun tools/gen-icon-theme.test.mjs`가 임시 폴더에
 테마를 다시 만들어 커밋된 생성물과 바이트 단위로 비교한다. 변수가 없으면 `skip: …`과 `ok`만
 찍는다.
 

@@ -1395,7 +1395,7 @@ The rules and their reasons are in `docs/design.md` (section 4); what a person s
 
 ### Layout: `layouts/git-tools.json`
 
-`install.sh` builds it from the person's current `layouts/main.json` with `layout.mjs`.
+`install.mjs` builds it from the person's current `layouts/main.json` with `layout.mjs`.
 `toMainGit(main, { button })` is pure and returns `{ ok: true, layout }` or
 `{ ok: false, error }`. Four changes, nothing else:
 
@@ -1439,31 +1439,40 @@ carries). It writes with
 which is then renamed over the target, so a write that fails halfway leaves the old file
 as it was.
 
-### Install: `install.sh`
+### Install: `install.mjs`
 
-In order, stopping with `Nothing was changed.` at any of the first four:
+`node install.mjs`, in order, stopping with `Nothing was changed.` at any of the first three:
 
-1. `node` exists.
-2. `layouts/main.json` exists in the app home (`$HERDR_APP_HOME`, else
+1. `layouts/main.json` exists in the app home (`$HERDR_APP_HOME`, else
    `~/.config/herdr-app`).
-3. `node layout.mjs main.json` accepts it.
-4. `herdr-app status` answers (Herdr is running).
-5. Copies `mods/git-tools/` into the app home with `node layout.mjs --copy <from> <to>`
-   (`copyChanged(fs, from, to)` → `{ written, same }`), which writes only the files the
-   app home lacks or holds with other bytes: Herdr reloads every copy of the mod each
-   time a file in its folder is saved. Each file to write first goes whole to a hidden
-   name beside its place (`.<name>.<pid>.tmp`; Herdr doesn't reload for hidden files),
-   then all are renamed into place. Files only the app home has stay. It prints
-   `N files updated, M already the same.` Then runs `herdr-app check` on the folder.
-6. The first time only: `herdr-app do layout.clone '{"name":"main","as":"git-tools"}'`
+2. `readMain(fs, from)` (`layout.mjs`) reads it and `toMainGit` accepts it; what is wrong
+   goes to stderr.
+3. `herdr-app status` answers (Herdr is running).
+4. Copies `mods/git-tools/` into the app home with `copyChanged(fs, from, to)`
+   (`layout.mjs`) → `{ written, same, removed }`. Tests (`*.test.mjs`) are not copied.
+   It writes only the files the app home lacks or holds with other bytes: Herdr reloads
+   every copy of the mod each time a file in its folder is saved. Each file to write first
+   goes whole to a hidden name beside its place (`.<name>.<pid>.tmp`; Herdr doesn't
+   reload for hidden files), then all are renamed into place. After the last rename it
+   deletes the `.js` and `.mjs` files the app home's mod folder has and the repository's
+   doesn't, in subfolders too, so the writes and the deletes land within the short span
+   Herdr folds into one reload. Every other file only the app home has stays, as do hidden
+   files and anything in a hidden folder. It prints `N files updated, M already the same.`
+   (`N files updated, M already the same, K removed.` when it deleted any). Then runs
+   `herdr-app check` on the folder and stops with its exit code if it fails.
+5. The first time only: `herdr-app do layout.clone '{"name":"main","as":"git-tools"}'`
    (so the person's clicks and theme pick come along).
-7. Writes `layouts/git-tools.json` with `layout.mjs`, runs
+6. Writes `layouts/git-tools.json` (`writeLayout` in `layout.mjs`), runs
    `herdr-app do layout.switch '{"name":"git-tools"}'`, and stops if Herdr wrote
-   `layouts/git-tools.error`.
-8. Adds the keys of `keys.json` to the app home's `keys.json` with `node`: a key already
-   bound in the same section, `global` or `terminal` is left alone and reported. When it
-   adds any, it writes `keys.json.<pid>.tmp` next to it and renames that over
-   `keys.json`. Without an app-home `keys.json` it says to add the keys by hand.
+   `layouts/git-tools.error`, printing it.
+7. Adds the keys of `keys.json` to the app home's `keys.json` (`addKeys`, which merges
+   with the pure `mergeKeys`): a key already bound in the same section, `global` or
+   `terminal` is left alone and reported. When it adds any, it writes
+   `keys.json.<pid>.tmp` next to it and renames that over `keys.json`. Without an
+   app-home `keys.json` it says to add the keys by hand.
+
+`install(…)` takes `fs` and the `herdr-app` runner as arguments; `install.test.mjs` runs
+it against a temporary app home and a stand-in `herdr-app`.
 
 `layouts/main.json` is never written.
 
@@ -1795,12 +1804,14 @@ same, written to the working file without marking it resolved), `reset`,
 panel), `POPUP_ACTIONS` in `view-vcs-popup.js` (VCS widget popup) or `VCS_ACTIONS` in
 `view-vcs-ops.js` (VCS Operations popup).
 
-**Git and pure modules** (no herdr import, so node tests each with its `*.test.mjs`;
+**Git and pure modules** (no herdr import, so bun tests each with its `*.test.mjs`;
 the git ones run against real temporary repositories):
 
 | file | exports |
 |---|---|
-| `git.js` | `READ`, `makeGit(exec, on, { record, wait })` → `git(cwd, args, { timeout, env })` → `{ ok, code, out, err }` and `git.read` (with the screen's clock `wait(ms, ring) → stop`, a command whose answer hasn't come 5 s past its timeout is given up on: a read is asked once more, then it is `git did not answer in N s.`; an answer takes its ring back), `PARALLEL` (4: the git commands one runner keeps going at once; the rest wait their turn, and one Herdr refuses for too many execs at once is tried again after one of the runner's own ends, five runs at most), `repoRoot(git, folder)`, `chunks(paths, cost?)` (a path list split to fit one command each), `recordWith(fn)` (the recorder for runners made without one) |
+| `git.js` | `makeGit(exec, on, { record, wait })` → `git(cwd, args, { timeout, env })` → `{ ok, code, out, err }` and `git.read` (with the screen's clock `wait(ms, ring) → stop`, a command whose answer hasn't come 5 s past its timeout is given up on: a read is asked once more, then it is `git did not answer in N s.`; an answer takes its ring back), `PARALLEL` (4: the git commands one runner keeps going at once; the rest wait their turn, and one Herdr refuses for too many execs at once is tried again after one of the runner's own ends, five runs at most), `recordWith(fn)` (the recorder for runners made without one) |
+| `git-port.js` | `READ` (the flags of a command that only looks), `chunks(paths, cost?)` (a path list split to fit one command each), `ASK_IN_C` (the C locale for a read told by git's words), `outsideRepo(r)` (whether such a read failed for being outside a repository) |
+| `git-root.js` | `repoRoot(git, folder)` |
 | `read-turns.js` | `readTurns({ stuck, now, most })` → `{ start, ask, again, busy, stuck, use, end, drop }` (a screen's repeated read: going only for `stuck` ms after it starts, a newer one may always start, up to `most` going at once through `ask`, the asks past it kept as one that `again` starts once a read ends; an answer is dropped only when a newer one was used), `pageAt(list, skip, page)` (the list with a page read from `skip` after it, or null when the list no longer ends there: a next page answered twice is placed once), `STUCK` (80 s) |
 | `clock.js` | `makeClock(arm, now?)` → `{ wait(ms, ring) → stop, close() }` (the copy's one clock for its git runners: one host timer, `arm` = `cx.timer.after`, set for the soonest deadline and cancelled once no call waits; `wait` throws when the host refuses the timer and none is set; `close` drops every deadline and the timer) |
 | `later.js` | `oneTimer()` → `{ after(cx, ms, fn), busy() }` (what render leaves to a timer, one at a time; a refused timer leaves nothing set), `DWELL` (500 ms), `dwell({ now })` → `{ moved, hold(cx, fn), late }` (a followed folder is read once it has stayed `DWELL` ms; `hold` sets one timer for the time left; `late` says a held read lost its timer and the time is up), `each(...fns)` (calls every fn, also past one whose task or timer the host refuses; the refusal is not thrown on, any other error is once all have run), `spawnOrUndo(cx, undo, body)` (`cx.spawn`; a refused task runs `undo` and is thrown on) |
@@ -1832,7 +1843,9 @@ the git ones run against real temporary repositories):
 | `pick-notes.js` | `pickNotes(type, commits, r)` → `[{ title, body, level }]` (the notifications a Cherry-Pick or Revert Commit ends with), `commitsOf(request)` → `[{ hash, subject }]`, `noteText(t, note)` |
 | `git-conflict.js`, `merge-chunks.js` | the three versions, accepting a side, saving a result, undoing a resolution, resolving simple conflicts; the chunks, decisions and result text |
 | `conflicts-model.js`, `merge-revisions-model.js` | what the two conflict dialogs show and allow |
-| `git-smart.js` | the blocking files per request (a checkout's `{ name, remote }` or `{ revision }`), `checkoutBranch` and `checkoutRevisionOf` (refused with the files in the way), `forceCheckout`, `smartRun`, the `gittools.smart-stash` mark |
+| `git-blocked.js` | `blockedBy(git, root, request)` (the local changes in the way of a request, a checkout's `{ name, remote }` or `{ revision }` among them), `checkoutTarget` (where a checkout goes), `checkoutBranch` and `checkoutRevisionOf` (refused with the files in the way) |
+| `git-smart-stash.js` | `smartRunWith(git, root, { request, run, now })` (a request run with the local changes stashed before it and brought back after), `smartMessage` (the stash's message), `SMART_MARK` (the `gittools.smart-stash` mark a stopped request leaves), `readSmartMark` and `settleSmartStash` (the read that brings a stopped request's changes back) |
+| `git-smart.js` | `forceCheckout`, `SMART_RUNS` (the requests Smart runs itself, by type), `smartRun` (`smartRunWith` with the request run by its type), the other exports of `git-blocked.js` and `git-smart-stash.js` again (one place for screens to take Smart from) |
 | `git-stash.js`, `git-reset.js`, `git-rewrite.js`, `rebase-plan.js`, `git-changes.js` | stash; reset and the record before a hard one; history edits through one rebase plan (`editCheck`, `readEditFacts`); file-level revert and cherry-pick |
 | `git-remote.js`, `git-refs.js`, `git-heads.js` | pull, update, Update Project, the Update Info range; tags, branch names, remotes, Push Tag; what the VCS widget shows and keeps of a folder it left (`faceOf`), the popup's rows (`popupRows`), where ↑ ↓ go among them (`popupStep`) and the branch a row's menu is about (`popupTarget`) |
 | `git-compare.js`, `git-revision.js`, `git-worktree.js` | comparisons, patches, Get from, Show Changes to Parents (`parentDiffs`); a revision's files, history, child commits; new worktrees and Checkout Tag or Revision |
@@ -2152,7 +2165,7 @@ commands). It refuses another version (the two rule files' SHA-256 are pinned), 
 the four `<type>` rules (IDE file types, not names) and rules whose icon is missing
 (`Groovyfile`), adds each rule's lookup hints and rank, and writes the same bytes for the
 same input (hint lists sorted by code point).
-`ICON_THEME_SOURCE=<folder> node tools/gen-icon-theme.test.mjs` regenerates into a
+`ICON_THEME_SOURCE=<folder> bun tools/gen-icon-theme.test.mjs` regenerates into a
 temporary folder and compares every byte; without the variable it prints `skip: …`
 and `ok`.
 
@@ -2666,11 +2679,12 @@ in English.
   working-tree side, the Conflicts dialog's working-tree file and Apply Patch's patch file
   (`readTextFile`, up to 1 MiB); `watchFolder` watches the repository root and its git
   folder, and the Files panel's folder.
-- **`install.sh`** runs `node`, `herdr-app status`, `herdr-app check`,
+- **`install.mjs`** runs `herdr-app status`, `herdr-app check`,
   `herdr-app do layout.clone` (first time) and `herdr-app do layout.switch`, and writes in
-  the app home: `mods/git-tools/` (only the files that differ), `layouts/git-tools.json`,
-  and `keys.json` (only added to). Each file is written whole to a temporary file next to
-  it and renamed over it.
+  the app home: `mods/git-tools/` (only the files that differ, and it deletes the `.js` and
+  `.mjs` files there the repository no longer has), `layouts/git-tools.json`, and
+  `keys.json` (only added to). Each file is written whole to a temporary file next to it
+  and renamed over it.
 
 ## Watch out
 
@@ -2827,7 +2841,7 @@ in English.
   Squash Into…, open the panel the same way (`ui.js` `openCommitPanel`).
 - In a command name the text after `:` arrives as typed (`branches-filter:<text>`).
 - `overlay.close` closes the topmost overlay, toasts included. Saving any file of the mod
-  (and so an `install.sh` that changes one) restarts every copy: open dialogs close and
+  (and so an `install.mjs` that changes one) restarts every copy: open dialogs close and
   what screens held (checks, a typed message, filters) starts over.
 - Each of those reloads ties up about 23 MB of the JS heap all mods share (256 MB) until
   Herdr is restarted, with the panels on a big repository: the old module code and what
@@ -2871,7 +2885,7 @@ in English.
   2 min; every other command that may write (commit, push, checkout, a new or deleted
   branch, a tag, a stash, …) 10 min (`git.js`), since hooks and the network may take that long and git stopped halfway may
   leave a ref half written or a lock behind. Its output is capped at 8 MiB.
-- Reads must not write under `.git` (`git.js` `READ`), or the folder watch wakes the next
+- Reads must not write under `.git` (`git-port.js` `READ`), or the folder watch wakes the next
   read and the panel reads forever.
 - A commit refused by git (a hook, a merge in progress) takes back the
   `add --intent-to-add` of the paths this commit added to the index (it checks the index
@@ -3014,7 +3028,7 @@ in English.
 **Setup**
 
 - The `git-tools` layout is a copy of Herdr's `main`: it doesn't follow Herdr updates. Run
-  `install.sh` again after one. Edits made by hand to `git-tools.json` are lost then,
+  `node install.mjs` again after one. Edits made by hand to `git-tools.json` are lost then,
   except its `link_handlers`.
 - `git-tools.json` keeps the `cloned_from` of the first install and its `link_handlers`.
 - `layout.clone` copies clicks (an open side panel, sizes) into the `git-tools` layout.
@@ -3022,7 +3036,7 @@ in English.
   don't exist. `cmd-shift-l` (Herdr's `layout.switch`) moves to the next layout; with
   more than two layouts, press it until `main` shows. Herdr's own Changes is unchanged
   there.
-- `install.sh` writes `layouts/git-tools.json` and `keys.json` to a temporary file and
+- `install.mjs` writes `layouts/git-tools.json` and `keys.json` to a temporary file and
   renames it over the old one. Herdr reads the renamed `git-tools.json` as it reads an
   edited one (the install switches to it right after).
 - `layouts/.state/<name>.json` disappears when nothing differs from the layout file; that
@@ -3231,7 +3245,7 @@ in English.
   in steps on `cx.timer.after(0, …)`, each at most 16 lookups and none started after
   4 ms. Filing the rules is one step that can't be cut (the same work every copy does
   once in `main.js`). A screen that looks up names itself asks only for the rows in view.
-- The theme adds 2,502 files, about 5.6 MB, to the mod folder; `install.sh` copies the
+- The theme adds 2,502 files, about 5.6 MB, to the mod folder; `install.mjs` copies the
   folder whole. The source SVGs are not minified, and no minifier is used (it would be a
   dependency).
 - Rules match the whole name, and a rule with `/` sees the repository-relative path, not
@@ -3257,23 +3271,28 @@ Each line is one check: do what it says, see what follows.
 
 **Offline**
 
-1. Run `node layout.test.mjs` at the root, `node <file>` for every `*.test.mjs` in
-   `mods/git-tools` (69 files) and `node tools/gen-icon-theme.test.mjs`: each prints
-   `ok` (the last one after `skip: …` unless `ICON_THEME_SOURCE` is set).
+1. Run `bun layout.test.mjs` and `bun install.test.mjs` at the root, `bun <file>` for
+   every `*.test.mjs` in `mods/git-tools` (73 files), `bun tools/gen-icon-theme.test.mjs`
+   and `bun tools/docs.test.mjs`: each exits 0 and prints `ok` (`docs: pass` for the last; the
+   icon theme's after `skip: …` unless `ICON_THEME_SOURCE` is set). `node layout.test.mjs`
+   and `node install.test.mjs` pass too: the install runs on node.
 2. Run `herdr-app check mods/git-tools`: it passes.
 
-`node tools/check.mjs` runs both steps and prints one line per test file.
+`bun tools/check.mjs` runs both steps and prints one line per test file. `bun run lint`
+(oxlint with `.oxlintrc.json`, after `bun install` once) reports nothing; `bun run check`
+runs it before both steps.
 
 **Install**
 
-3. Run `./install.sh` with Herdr open: it ends with `Layout git-tools is shown.`, the
+3. Run `node install.mjs` with Herdr open: it ends with `Layout git-tools is shown.`, the
    window shows the `git-tools` layout, `layouts/main.json` is byte for byte as before, and the app
    home's `keys.json` has `cmd-k` and `cmd-shift-g` under `layout:git-tools` (or a line
    saying which key was already taken).
-4. Run `./install.sh` again: it prints `0 files updated, …`, and
-   `layouts/git-tools.json` and `keys.json` are byte for byte as after the first run.
+4. Run `node install.mjs` again: it prints `0 files updated, …`, and
+   `layouts/git-tools.json` and `keys.json` are byte for byte as after the first run. The
+   app home's `mods/git-tools/` holds no `*.test.mjs`.
 5. Point `HERDR_APP_HOME` at a copy whose `layouts/main.json` lacks `panel-body`, run
-   `./install.sh`: it names the missing node, prints `Nothing was changed.` and writes
+   `node install.mjs`: it names the missing node, prints `Nothing was changed.` and writes
    nothing.
 
 **Local flow** (a practice repository with a remote, in a local space)
@@ -3708,7 +3727,7 @@ conflicting file, and an ignored folder `node_modules`)
 133. In a space on another machine the Files panel shows that machine's folder and marks
      (within 10 s of a change), and its menu has no Reveal in Finder.
 134. Point `HERDR_APP_HOME` at a copy whose `layouts/main.json` lacks the `files` block,
-     run `./install.sh`: it names `files`, prints `Nothing was changed.` and writes
+     run `node install.mjs`: it names `files`, prints `Nothing was changed.` and writes
      nothing.
 135. Make a folder `locked` unreadable (`chmod 000 locked`) and unfold it: the error
      strip says `locked can't be read: no permission.` and nothing shows under it (no

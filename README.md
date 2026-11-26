@@ -20,12 +20,23 @@ cd herdr-git && node install.mjs
 
 `install.mjs` copies the mod (only the files that differ from what is installed, and it
 removes the mod's scripts this repository no longer has), builds the `git-tools` layout
-from your current `main` layout, switches to it and adds the keys. If your `main` layout
-isn't shaped the way it expects, it says which part is missing and changes nothing.
+from your current `main` layout, switches to it and adds the keys. On macOS the layout
+also gets a Git button and the VCS widget beside the tab bar. If your `main` layout isn't
+shaped the way it expects, it says which part is missing and changes nothing.
 
 Everything lives in that `git-tools` layout, a copy of Herdr's `main`. Herdr's own layout
 and its Changes and Files panels are left as they are. What the mod runs and writes is
 listed under [What it runs and writes](#what-it-runs-and-writes).
+
+### From Herdr's gallery
+
+Adding it from Herdr's layout gallery copies this repository's `layouts/git-tools.json`
+and `mods/git-tools/` into the app home; `install.mjs` doesn't run. That layout file is
+built from the `main` layout of the Herdr version named in its `cloned_from`, and is the
+same on every OS: there is no Git button, the VCS widget sits in the Log panel's toolbar,
+and `cmd-shift-g` or the Commit panel's toolbar shows the Log panel. For the keys, add the
+`layout:git-tools` section of this repository's `keys.json` to yours. Running
+`node install.mjs` later rebuilds the layout from your own `main`.
 
 ### Keys
 

@@ -1,12 +1,15 @@
 // node layout.test.mjs: the main → git-tools transform, on layouts shaped like Herdr's
-// `main`, and how the install writes files the person already has.
+// `main`, how the install writes files the person already has, and whether the
+// repository's layouts/git-tools.json is still what Herdr's `main` gives. That last check
+// reads layouts/main.json in the app home (`$HERDR_APP_HOME`, else ~/.config/herdr-app)
+// and prints "skip: …" where there is none, as on CI.
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import { mkdtempSync, realpathSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
-import { toMainGit, carryOver, writeWhole, copyChanged, copyReport, readMain, LOG_ID, MOD, TABS_ROW_ID, BUTTON_ID, BUTTON_WIDTH, WIDGET_ID, WIDGET_WIDTH } from "./layout.mjs";
+import { toMainGit, toPortable, herdrVersion, carryOver, writeWhole, copyChanged, copyReport, readMain, LOG_ID, MOD, TABS_ROW_ID, BUTTON_ID, BUTTON_WIDTH, WIDGET_ID, WIDGET_WIDTH } from "./layout.mjs";
 
 // The parts of Herdr's shipped `main` the transform touches, plus a field of each
 // kind it must leave alone.
@@ -247,6 +250,38 @@ assert.equal(toMainGit({}).ok, false);
   assert.deepEqual(carryOver({ ...built(), cloned_from: note }, old).cloned_from, note);
 }
 
+// ---- the layout the repository ships
+
+// The gallery file: no Git button and no VCS widget block on any OS, the tab bar as Herdr
+// has it, no `link_handlers`, and `cloned_from` naming the version of `main` it came from.
+{
+  const input = { ...main(), cloned_from: { name: "terminals", version: "0.1.2" }, link_handlers: ["viewer"] };
+  const before = JSON.stringify(input);
+  const r = toPortable(input, "0.1.18");
+  assert.equal(r.ok, true);
+  assert.equal(JSON.stringify(input), before, "the input layout is not modified");
+  const { cloned_from, ...rest } = r.layout;
+  assert.deepEqual(cloned_from, { name: "main", version: "0.1.18" });
+  assert.equal("link_handlers" in r.layout, false);
+  assert.deepEqual(rest, toMainGit(main(), { button: false }).layout);
+  assert.equal(find(r.layout, TABS_ROW_ID), null);
+  assert.equal(find(r.layout, WIDGET_ID), null);
+  assert.equal(find(r.layout, BUTTON_ID), null);
+  // From a layout that has the Git button, the same file.
+  assert.deepEqual(toPortable(toMainGit(main()).layout, "0.1.18").layout, toPortable(main(), "0.1.18").layout);
+  // A `main` it can't transform fails as `toMainGit` does; so does a version that isn't one.
+  const broken = main();
+  find(broken, "panel-body").children = [];
+  assert.match(toPortable(broken, "0.1.18").error, /\bchanges\b/);
+  for (const version of [undefined, "", "herdr-app 0.1.18", "0.1"]) assert.equal(toPortable(main(), version).ok, false, String(version));
+}
+
+// What `herdr-app --version` prints.
+assert.equal(herdrVersion("herdr-app 0.1.18\n"), "0.1.18");
+assert.equal(herdrVersion("herdr-app 0.2.0-beta.1"), "0.2.0-beta.1");
+assert.equal(herdrVersion(""), null);
+assert.equal(herdrVersion("gpui-shell 0.7.1"), null);
+
 // ---- writing files the person already has
 
 // A disk that fills up halfway: the write puts part of the text down, then fails.
@@ -280,6 +315,19 @@ const leftovers = (dir, name) => fs.readdirSync(dir).filter((entry) => entry !==
   assert.deepEqual(written.link_handlers, ["viewer"]);
   assert.deepEqual(written.cloned_from, old.cloned_from);
   assert.notEqual(find(written, LOG_ID), null, "the file is the rebuilt layout");
+}
+
+// `node layout.mjs --portable <main.json> <out.json> <version>` writes the shipped layout
+// whole: nothing of the file it replaces comes along, `link_handlers` included.
+{
+  const dir = `${tmp}/portable`, from = `${dir}/main.json`, to = `${dir}/git-tools.json`;
+  fs.mkdirSync(dir);
+  fs.writeFileSync(from, JSON.stringify(main()));
+  fs.writeFileSync(to, JSON.stringify({ ...toMainGit(main()).layout, link_handlers: ["viewer"] }));
+  execFileSync(process.execPath, [fileURLToPath(new URL("./layout.mjs", import.meta.url)), "--portable", from, to, "0.1.99"]);
+  const text = fs.readFileSync(to, "utf8");
+  assert.equal(text, JSON.stringify(toPortable(main(), "0.1.99").layout, null, 2) + "\n");
+  assert.deepEqual(fs.readdirSync(dir).sort(), ["git-tools.json", "main.json"], "no temporary file left behind");
 }
 
 // The mod folder is copied by content. Herdr reloads every copy of a mod each time a file
@@ -344,6 +392,43 @@ const leftovers = (dir, name) => fs.readdirSync(dir).filter((entry) => entry !==
   assert.equal(readMain(fs, `${dir}/main.json`).ok, true);
   assert.match(readMain(fs, `${dir}/bad.json`).error, /^Cannot read .*bad\.json: /);
   assert.equal(readMain(fs, `${dir}/empty.json`).error, `${dir}/empty.json is not shaped like the Herdr main layout this was built for: the layout has no node tree.`);
+}
+
+// ---- the repository's layouts/git-tools.json
+
+// Always: the file is the shipped layout's shape, written by `--portable` (so a rebuild
+// from the same `main` gives the same bytes).
+const shippedPath = fileURLToPath(new URL("./layouts/git-tools.json", import.meta.url));
+const shippedText = fs.readFileSync(shippedPath, "utf8");
+const shipped = JSON.parse(shippedText);
+{
+  assert.deepEqual(find(shipped, "changes")?.content, { mod: MOD, props: { view: "commit" } });
+  assert.deepEqual(find(shipped, "files")?.content, { mod: MOD, props: { view: "files" } });
+  assert.deepEqual(find(shipped, LOG_ID)?.content, { mod: MOD, props: { view: "log" } });
+  assert.equal(find(shipped, TABS_ROW_ID), null, "no row beside the tab bar");
+  assert.equal(find(shipped, WIDGET_ID), null);
+  assert.equal(find(shipped, BUTTON_ID), null);
+  assert.equal(parentOf(shipped, "tabs")?.id, "work", "the tab bar as Herdr has it");
+  assert.equal("link_handlers" in shipped, false, "no link_handlers: Herdr fills them in for each person");
+  assert.equal(shipped.cloned_from?.name, "main");
+  const again = toMainGit(shipped, { button: false });
+  assert.equal(again.ok, true);
+  assert.deepEqual(again.layout, shipped, "toMainGit(file, { button: false }) gives the file back");
+  assert.deepEqual(toPortable(shipped, shipped.cloned_from.version).layout, shipped);
+  assert.equal(shippedText, JSON.stringify(shipped, null, 2) + "\n", "written by layout.mjs --portable, not by hand");
+}
+
+// Where Herdr is installed: its `main` still gives the same file. Herdr rewrites `main` to
+// the running version's on every start, so a difference means an update changed it.
+{
+  const herdrMain = `${process.env.HERDR_APP_HOME || `${homedir()}/.config/herdr-app`}/layouts/main.json`;
+  const rebuild = `node layout.mjs --portable ${herdrMain} layouts/git-tools.json`;
+  if (!fs.existsSync(herdrMain)) console.log(`skip: no ${herdrMain}, so layouts/git-tools.json was not compared with Herdr's main`);
+  else {
+    const r = toPortable(JSON.parse(fs.readFileSync(herdrMain, "utf8")), shipped.cloned_from.version);
+    assert.ok(r.ok, `Herdr's main changed and no longer transforms (${r.error}): fix layout.mjs, then rebuild with ${rebuild}`);
+    assert.deepEqual(r.layout, shipped, `Herdr's main changed: rebuild layouts/git-tools.json with ${rebuild}`);
+  }
 }
 
 console.log("ok");

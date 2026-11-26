@@ -23,7 +23,6 @@
 import { readStatus } from "./git-status.js";
 import { readOperation, settle } from "./git-operation.js";
 import { blockedBy, checkoutBranch, smartRun } from "./git-smart.js";
-import { fetchAll } from "./git-branch.js";
 import { resetTo } from "./git-reset.js";
 import { sentence } from "./i18n.js";
 
@@ -273,16 +272,23 @@ async function currentTracking(git, root) {
   return { t };
 }
 
+// The fetch an update of the current branch needs: its tracked branch's remote and no
+// other, so a remote it doesn't track (one that can't be reached, say) doesn't hold it up.
+// Pruned, as the Log panel's Fetch prunes. A branch that tracks a local branch needs none.
+const fetchTracked = (git, root, t) => (t.upstream.remote === "."
+  ? Promise.resolve({ ok: true, code: 0, out: "", err: "" })
+  : git(root, ["fetch", "--prune", "--end-of-options", t.upstream.remote], FETCH));
+
 // updateProject(git, root, { method, now? }) → a result (above)
-//   Fetches every remote, then brings the current branch's tracked branch in by `method`
-//   ("merge" or "rebase"). Tracked local changes are put away first and brought back
-//   after (Smart, git-smart.js: a stop leaves them in the stash with the mark). A detached
-//   HEAD or a branch without a tracked branch is refused with the reason, and nothing is
-//   fetched. now: the time in the stash's message.
+//   Fetches the tracked branch's remote (fetchTracked), then brings the current branch's
+//   tracked branch in by `method` ("merge" or "rebase"). Tracked local changes are put
+//   away first and brought back after (Smart, git-smart.js: a stop leaves them in the
+//   stash with the mark). A detached HEAD or a branch without a tracked branch is refused
+//   with the reason, and nothing is fetched. now: the time in the stash's message.
 export async function updateProject(git, root, { method, now = new Date() } = {}) {
   const { t, no } = await currentTracking(git, root);
   if (no) return no;
-  const fetched = await fetchAll(git, root);
+  const fetched = await fetchTracked(git, root, t);
   if (!fetched.ok) return failedWith(fetched, { fetchFailed: true, changed: true });
   const before = await readOperation(git, root);
   if (!before.ok) return failedWith(before, { changed: true });
@@ -308,13 +314,14 @@ export async function updateProject(git, root, { method, now = new Date() } = {}
 }
 
 // resetToRemote(git, root, { copy }) → a result with `snapshot`
-//   Fetches every remote, then resets the current branch hard to its tracked branch:
-//   local commits and changes go. The changes are recorded first as a "Reset" snapshot
-//   (git-reset.js resetTo, copy: the calling copy's id); not recorded, not reset.
+//   Fetches the tracked branch's remote (fetchTracked), then resets the current branch
+//   hard to its tracked branch: local commits and changes go. The changes are recorded
+//   first as a "Reset" snapshot (git-reset.js resetTo, copy: the calling copy's id); not
+//   recorded, not reset.
 export async function resetToRemote(git, root, { copy } = {}) {
   const { t, no } = await currentTracking(git, root);
   if (no) return no;
-  const fetched = await fetchAll(git, root);
+  const fetched = await fetchTracked(git, root, t);
   if (!fetched.ok) return failedWith(fetched, { fetchFailed: true, changed: true });
   const from = await hashOf(git, root, "HEAD");
   const to = await hashOf(git, root, t.upstream.ref);

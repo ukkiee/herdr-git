@@ -2619,8 +2619,10 @@ in English.
   continue `-c commit.cleanup=whitespace`). Continuing and rewriting run
   with `GIT_EDITOR=true`. Saving a merge result on another machine runs `sh` there with
   `mktemp`, `cp -p`, `printf … >>` and `mv`.
-- **Network**: `git fetch --all --prune` (every remote; Fetch buttons,
-  `log-fetch`/`branches-fetch` and Update Project), `git fetch <remote>` (Pull, Update,
+- **Network**: `git fetch --all --prune` (every remote; Fetch buttons and
+  `log-fetch`/`branches-fetch`), `git fetch --prune <remote>` (Update Project and Reset to
+  the Remote Branch: only the current branch's tracked remote, none when it tracks a local
+  branch), `git fetch <remote>` (Pull, Update,
   Checkout and Update, an edited remote with Fetch from the remote), `git pull`, and `git
   push` (Push and Force Push,
   `--force-with-lease=refs/heads/<target>:<last seen hash>` for Force Push,

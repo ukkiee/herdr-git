@@ -384,6 +384,23 @@ mods/git-tools/
 Herdr의 내장 `main` 레이아웃은 구조 변경을 받지 않는다. 그래서 `install.mjs`가 `main`을 복제한
 `git-tools` 레이아웃을 만들고 네 곳만 바꾼다([ADR 0001](adr/0001-clone-main-layout.md)).
 
+레이아웃을 얻는 길은 둘이다.
+
+- **Herdr 갤러리:** 저장소의 `layouts/git-tools.json`과 `mods/git-tools/`가 앱 홈에 그대로
+  복사된다. 이 파일은 공용판이다(`layout.mjs`의 `toPortable`). `toMainGit(main, { button: false })`에서
+  `link_handlers`를 빼고 `cloned_from: {name: "main", version}`을 단다. 모든 OS에 같은 파일이 가므로
+  Git 버튼과 VCS widget 블록이 없고, VCS widget은 Log panel의 Commit list 툴바에 그려진다
+  (`view-log.js`의 `drawsWidget`). 그 파일을 만든 Herdr 버전(`cloned_from.version`)의 `main`
+  기준이다. `link_handlers`는 Herdr가 사람마다 가진 mod로 채우는 목록이라 싣지 않는다.
+  `cloned_from`은 Herdr의 `layout.clone`이 남기는 것과 같은 꼴로, 어느 버전의 `main`인지 보이려고
+  단다. Herdr는 복제본을 업데이트하지 않으므로 이 값으로 파일을 바꾸지 않는다.
+- **`node install.mjs`:** 지금 쓰는 Herdr의 `main`에서 만들고, macOS에서는 탭 바 옆에 Git 버튼과
+  VCS widget을 더한다. 갤러리로 받은 파일이 있으면 그 자리에 다시 만든다.
+- 공용판은 `node layout.mjs --portable <앱 홈>/layouts/main.json layouts/git-tools.json`으로 다시
+  만든다(버전은 `herdr-app --version`에서 읽는다). Herdr는 시작할 때마다 `main`을 그 버전의
+  원본으로 다시 쓰므로, `layout.test.mjs`는 앱 홈에 `layouts/main.json`이 있으면 거기서 다시 만든
+  공용판이 저장소 파일과 다를 때 실패한다. 없으면(CI) 그 비교만 `skip`으로 넘어간다.
+
 - `panel-body`의 `changes` 블록은 id를 그대로 두고 내용만 Commit panel로 바꾼다. 탭 바의
   Changes 버튼이 이 id를 열기 때문이다.
 - 같은 이유로 `panel-body`의 `files` 블록도 id를 두고 내용만 Files panel로 바꾼다. Git 버튼과

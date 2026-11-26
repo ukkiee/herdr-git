@@ -20,3 +20,4 @@ Commit panel을 우상단 Changes 버튼으로, Files panel을 Files 버튼으�
 - Git 버튼은 탭 바 밖의 블록이다. Changes 버튼과의 사이에 탭 바의 오른쪽 여백이 끼어 간격이 탭 바 안의 버튼 사이보다 넓다. 탭 바의 오른쪽 끝에 창 버튼이 있는 OS에서는 블록이 그 바깥에 놓이므로 macOS에서만 넣는다.
 - VCS widget(현재 브랜치, 받을·보낼 커밋 수, 진행 중 동작)도 같은 row의 블록으로 Git 버튼 왼쪽에 둔다(`git-vcs-widget`). 블록은 240px로 만들어지고, 위젯이 그려지면 `layout.resize`로 위젯 내용 너비에 맞춰진다. 위젯은 360px까지 넓어지고 그보다 긴 브랜치 이름은 줄여 보인다. Git 버튼과 같은 이유로 macOS에서만 넣고, 다른 OS에서는 포커스를 따르는 Log panel의 Commit list 툴바 왼쪽 끝에 같은 위젯을 그린다. 위젯이 생기기 전에 만든 `git-tools` 레이아웃에 다시 설치하면 그 자리에 더해진다.
 - `main` 레이아웃으로 돌아가면 Herdr의 원래 Changes와 Files가 그대로 있다.
+- 저장소는 Herdr 갤러리용으로 `toMainGit(main, { button: false })`로 만든 공용판 스냅숏 `layouts/git-tools.json`을 함께 싣는다. 만든 Herdr 버전의 `main`에 묶이므로, 앱 홈의 `main`에서 다시 만든 것과 다르면 `layout.test.mjs`가 실패한다.

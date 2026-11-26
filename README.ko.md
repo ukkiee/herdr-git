@@ -18,12 +18,21 @@ cd herdr-git && node install.mjs
 
 `install.mjs`는 mod를 복사하고(설치된 것과 다른 파일만 쓰고, 이 저장소에 더는 없는 mod
 스크립트는 지웁니다), 지금의 `main` 레이아웃으로 `git-tools` 레이아웃을 만들어 그리로
-바꾸고, 키를 더합니다. `main` 레이아웃의 구조가 예상과 다르면 어느 부분이 없는지 알리고
-아무것도 바꾸지 않습니다.
+바꾸고, 키를 더합니다. macOS에서는 탭 바 옆에 Git 버튼과 VCS widget도 둡니다. `main`
+레이아웃의 구조가 예상과 다르면 어느 부분이 없는지 알리고 아무것도 바꾸지 않습니다.
 
 모두 Herdr의 `main`을 복사한 이 `git-tools` 레이아웃 안에 있습니다. Herdr의 원래 레이아웃과
 Changes·Files 패널은 그대로 둡니다. mod가 실행하고 쓰는 것은
 [실행하고 쓰는 것](#실행하고-쓰는-것)에 있습니다.
+
+### Herdr 갤러리에서 받기
+
+Herdr의 레이아웃 갤러리에서 받으면 이 저장소의 `layouts/git-tools.json`과 `mods/git-tools/`가
+앱 홈에 복사되고, `install.mjs`는 돌지 않습니다. 그 레이아웃 파일은 `cloned_from`에 적힌
+Herdr 버전의 `main` 레이아웃으로 만든 것이고 모든 OS에서 같습니다. Git 버튼이 없고, VCS
+widget은 Log panel 툴바에 있으며, Log panel은 `cmd-shift-g`나 Commit panel 툴바로
+보입니다. 키는 이 저장소 `keys.json` 파일의 `layout:git-tools` 절을 내 `keys.json`에
+더하세요. 나중에 `node install.mjs`를 실행하면 내 `main`으로 레이아웃을 다시 만듭니다.
 
 ### 키
 

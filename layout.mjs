@@ -5,6 +5,10 @@
 //
 //   node layout.mjs <main.json>              check only: exit 1 and the reason if it can't be done
 //   node layout.mjs <main.json> <out.json>   write the transformed layout to out.json
+//   node layout.mjs --portable <main.json> <out.json> [<herdr version>]
+//                                            write the layout the repository ships
+//                                            (`toPortable`), for the version given or
+//                                            else the one `herdr-app --version` prints
 //   node layout.mjs --copy <from> <to>       copy the mod folder, writing only what differs
 //                                            and deleting the modules <from> no longer has
 
@@ -97,6 +101,26 @@ export function toMainGit(main, { button = true } = {}) {
   work.children[work.children.indexOf(oldRow ?? tabs)] = button ? row : { ...bar, ...(height ? { size: height } : {}) };
   return { ok: true, layout };
 }
+
+// toPortable(main, version) → { ok: true, layout } or { ok: false, error }: the layout the
+// repository ships as layouts/git-tools.json, which Herdr's gallery copies as it is to
+// every OS. So it has no Git button and no VCS widget block (`button: false`): the tab bar
+// ends with the window's own buttons on every OS but macOS, and a block right of it would
+// sit outside them. The Log panel's Commit list toolbar draws the widget instead. It has no
+// `link_handlers`, which Herdr fills in for each person from the mods they have.
+// `cloned_from` is the note Herdr's own clone writes: the Herdr version whose `main` it
+// was built from. Herdr keeps that note and never updates a clone from it.
+export function toPortable(main, version) {
+  if (typeof version !== "string" || !/^\d+\.\d+\.\d+\S*$/.test(version)) return fail(`"${version}" is not a Herdr version`);
+  const r = toMainGit(main, { button: false });
+  if (!r.ok) return r;
+  const { link_handlers: _handlers, cloned_from: _note, ...layout } = r.layout;
+  return { ok: true, layout: { ...layout, cloned_from: { name: "main", version } } };
+}
+
+// herdrVersion(text) → the version in what `herdr-app --version` prints ("herdr-app 0.1.18"),
+// or null.
+export const herdrVersion = (text) => /^herdr-app (\d+\.\d+\.\d+\S*)\s*$/.exec(String(text).trim())?.[1] ?? null;
 
 // carryOver(layout, old) → `layout` with what the git-tools.json it replaces holds that
 // isn't built from `main`:
@@ -227,6 +251,25 @@ if (invoked) {
     try {
       console.log(copyReport(copyChanged(fs, source, target)));
     } catch (e) { console.error(`Cannot copy to ${target}: ${e.message}. Files already there are whole.`); process.exit(1); }
+    process.exit(0);
+  }
+  if (process.argv[2] === "--portable") {
+    const [source, target, given] = process.argv.slice(3);
+    if (!source || !target) { console.error("usage: node layout.mjs --portable <main.json> <out.json> [<herdr version>]"); process.exit(2); }
+    let version = given;
+    if (!version) {
+      const { spawnSync } = await import("node:child_process");
+      version = herdrVersion(spawnSync("herdr-app", ["--version"], { encoding: "utf8" }).stdout ?? "");
+      if (!version) { console.error("Cannot tell the Herdr version from `herdr-app --version`: give it after <out.json>."); process.exit(2); }
+    }
+    let main;
+    try { main = JSON.parse(fs.readFileSync(source, "utf8")); }
+    catch (e) { console.error(`Cannot read ${source}: ${e.message}`); process.exit(1); }
+    const r = toPortable(main, version);
+    if (!r.ok) { console.error(`${source} is not shaped like the Herdr main layout this was built for: ${r.error}.`); process.exit(1); }
+    // Written whole, with nothing carried over from the file it replaces.
+    try { writeWhole(fs, target, JSON.stringify(r.layout, null, 2) + "\n"); }
+    catch (e) { console.error(`Cannot write ${target}: ${e.message}. The old file is unchanged.`); process.exit(1); }
     process.exit(0);
   }
   const [from, to] = process.argv.slice(2);

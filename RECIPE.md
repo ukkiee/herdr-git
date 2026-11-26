@@ -7,22 +7,28 @@ and tabs for the rest of git.
 
 ![git-tools](preview.png)
 
-Install it with `node install.mjs` while Herdr runs: it copies `mods/git-tools/`, builds
-the `git-tools` layout as a clone of `main` with the screens' blocks added, switches to it
-and adds the keys, which belong to that layout. Copying the mod folder alone shows nothing:
-the panels are blocks of that layout, and every other screen opens from them.
+There are two ways to add it. From Herdr's gallery, `layouts/git-tools.json` and
+`mods/git-tools/` are copied into the app home as they are. That layout file is one build
+for every OS, made from `main` of the Herdr version in its `cloned_from`: it has no Git
+button, and the VCS widget sits in the Log panel's Commit list toolbar. Or run
+`node install.mjs` while Herdr runs: it copies `mods/git-tools/`, builds the `git-tools`
+layout as a clone of the running Herdr's `main` with the screens' blocks added (on macOS
+also the Git button and the VCS widget beside the tab bar), switches to it and adds the
+keys, which belong to that layout. Copying the mod folder alone shows nothing: the panels
+are blocks of that layout, and every other screen opens from them.
 
 The tab bar's Changes button opens a **Commit panel**: the changed files as a checkbox
 tree, a message box, Commit and Commit and Push…, and while Amend is on the files of the
 last commit. The Files button opens a **Files panel**: the focused folder as a tree with
 git marks, a search box and a read-only preview. Under the work area a **Log panel**
 shows the branches, every commit with a colored graph, and the selected commit's files
-and message; a **Git button** beside the Changes button shows and hides it. Diffs open
+and message; a **Git button** beside the Changes button shows and hides it (without one, a button in the
+Commit panel's toolbar does). Diffs open
 as tabs; Push, Rollback, Restore, New Branch and Deleted Branches are dialogs;
 right-click opens small popup menus. A rollback is recorded first and can be restored,
 staging included; a deleted branch is recorded first and can be restored from a notice
 under the Log panel or, later, from the Deleted Branches dialog. A **VCS widget** left of
-the Git button shows the branch and any operation in progress and opens a branch popup;
+the Git button (without one, at the left of the Log panel's toolbar) shows the branch and any operation in progress and opens a branch popup;
 `cmd-shift-v` opens the **VCS Operations popup**. Stash, merge, rebase, pull, update,
 cherry-pick, revert, reset, history edits, tags, remotes and worktrees run from the
 menus, toolbars and dialogs; conflicts open the Conflicts and Merge Revisions dialogs,
@@ -1447,6 +1453,13 @@ carries). It writes with
 `writeWhole(fs, path, text)`: the whole text goes to a temporary file in the same folder,
 which is then renamed over the target, so a write that fails halfway leaves the old file
 as it was.
+`node layout.mjs --portable <main.json> <out.json> [<version>]` writes the repository's
+`layouts/git-tools.json`, the file the gallery copies: `toPortable(main, version)` is
+`toMainGit` with `button: false`, without `link_handlers` (Herdr fills that list in for
+each person) and with `cloned_from: { "name": "main", "version" }`. The version defaults to
+what `herdr-app --version` prints. It writes the whole file with `writeWhole` and carries
+nothing over. `layout.test.mjs` checks that file's shape, and where the app home has a
+`layouts/main.json`, fails when a rebuild from it would differ.
 
 ### Install: `install.mjs`
 

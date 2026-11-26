@@ -396,6 +396,7 @@ export function generate(src, modDir) {
   }
   writeFileSync(join(theme, "LICENSE"), readFileSync(join(src, "LICENSE")));
   writeFileSync(join(theme, "NOTICE.md"), notice({ icons, fileRules, folderRules, skipped }));
+  mkdirSync(dirname(join(modDir, DATA_FILE)), { recursive: true });
   writeFileSync(join(modDir, DATA_FILE), dataModule({ fileRules: withHints(fileRules), folderRules: withHints(folderRules), darkFiles, closedOnly, skipped }));
   return { icons, fileRules, folderRules, darkFiles, closedOnly, skipped };
 }

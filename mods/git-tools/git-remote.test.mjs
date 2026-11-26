@@ -648,6 +648,34 @@ const commitMine = (mine, path, at, word) => { edit(mine, path, at, word); sh(mi
   assert.equal(rev(mine, "HEAD^2"), rev(mine, "refs/remotes/origin/main"));
 }
 {
+  // Only the tracked branch's remote is fetched: another remote that can't be reached
+  // holds neither the update nor the reset up. A branch gone from the tracked remote is
+  // pruned.
+  const { mine, theirs } = setup();
+  sh(mine, "git remote add away ../nowhere.git");
+  push(theirs, "a.txt", 0, "their-a1");
+  sh(theirs, "git push -q origin --delete feature 2>&1");
+  const r = await updateProject(git, mine, { method: "merge" });
+  assert.equal(r.outcome, "done", r.err);
+  assert.equal(head(mine), rev(theirs, "main"));
+  assert.equal(rev(mine, "refs/remotes/origin/feature"), "", "pruned");
+  push(theirs, "c.txt", 0, "their-c1");
+  const reset = await resetToRemote(git, mine, { copy: "0123456789abcdef" });
+  assert.equal(reset.outcome, "done", reset.err);
+  assert.equal(head(mine), rev(theirs, "main"));
+}
+{
+  // A branch that tracks a local branch updates from it with no fetch: its remote can't
+  // be reached here.
+  const { mine } = setup();
+  sh(mine, "git branch -q --track topic main");
+  commitMine(mine, "a.txt", 0, "my-a1");
+  sh(mine, "git checkout -q topic && git remote set-url origin ../nowhere.git");
+  const r = await updateProject(git, mine, { method: "merge" });
+  assert.equal(r.outcome, "done", r.err);
+  assert.equal(head(mine), rev(mine, "main"));
+}
+{
   // Rebase, with local changes put away and brought back (Smart), staging kept.
   const { mine, theirs } = setup();
   push(theirs, "a.txt", 0, "their-a1");

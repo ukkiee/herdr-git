@@ -9,7 +9,7 @@
 // Every result is { ok, code, out, err, … } and nothing throws. A sentence the module
 // writes itself comes in English (err) with msg: { key, args } from messages-conflicts.js.
 
-import { READ } from "./git.js";
+import { READ } from "./git-port.js";
 import { merge, applyNonConflicting, resolveSimple, resolved, resultText } from "./merge-chunks.js";
 
 const done = (extra = {}) => ({ ok: true, code: 0, out: "", err: "", ...extra });

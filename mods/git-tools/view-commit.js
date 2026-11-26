@@ -24,7 +24,8 @@
 import { div } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { exec, theme } from "herdr";
-import { makeGit, repoRoot } from "./git.js";
+import { makeGit } from "./git.js";
+import { repoRoot } from "./git-root.js";
 import { readTurns } from "./read-turns.js";
 import { oneTimer, dwell, each } from "./later.js";
 import { moveRecent } from "./recent.js";
@@ -445,7 +446,7 @@ export default class CommitView {
     this.locked = new Set(this.op?.kind ? this.op.staged : []);
   }
 
-  // Only this computer's folders can be watched. Reads don't write under .git (git.js
+  // Only this computer's folders can be watched. Reads don't write under .git (git-port.js
   // READ), so a refresh never wakes its own watch. The watches of one root at a time: a
   // newer root, or leaving the repository, stops them (unwatch), which cancels their
   // pending calls at once. The repository's git folder is watched too: a linked worktree's

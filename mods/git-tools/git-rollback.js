@@ -1,7 +1,7 @@
 // Rolling files back to HEAD. The only caller is the Rollback dialog (view-rollback.js);
 // what is rolled back is recorded first, so Restore (git-snapshot.js) can bring it back.
 
-import { chunks } from "./git.js";
+import { chunks } from "./git-port.js";
 import { record } from "./git-snapshot.js";
 import { sentence } from "./i18n.js";
 
@@ -219,7 +219,7 @@ async function holdHead(git, root, paths, head, disk) {
   const found = new Set();
   const mode = (path) => head.get(path).split(" ")[0];
   const kept = paths.filter((path) => (disk.modes.get(path) ?? mode(path)) === mode(path));
-  const files = kept.filter((path) => /^100/.test(mode(path)));
+  const files = kept.filter((path) => mode(path).startsWith("100"));
   for (const path of kept) if (!files.includes(path)) found.add(path);
   for (const chunk of chunks(files)) {
     const r = await git.read(root, ["hash-object", "--", ...chunk]);

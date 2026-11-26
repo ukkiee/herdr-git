@@ -14,7 +14,8 @@
 import { div } from "gpui-kit";
 import { v_flex } from "gpui-base";
 import { exec, theme } from "herdr";
-import { makeGit, repoRoot } from "./git.js";
+import { makeGit } from "./git.js";
+import { repoRoot } from "./git-root.js";
 import { readTurns, STUCK } from "./read-turns.js";
 import { oneTimer, dwell, each, spawnOrUndo } from "./later.js";
 import { moveRecent } from "./recent.js";

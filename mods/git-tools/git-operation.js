@@ -10,7 +10,7 @@
 // and how a request ended from the state and HEAD read again after it ran.
 
 import { readStatus } from "./git-status.js";
-import { blockedBy } from "./git-smart.js";
+import { blockedBy } from "./git-blocked.js";
 
 // Continue and Skip may run hooks (pre-commit, commit-msg, post-checkout) for minutes;
 // this is exec's cap.

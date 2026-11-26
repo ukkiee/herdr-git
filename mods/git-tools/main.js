@@ -32,7 +32,7 @@
 
 import { View, div } from "gpui-kit";
 import { props, nextCommand, theme } from "herdr";
-import { subscribe, lockSide, LOCK_BEAT, UNKNOWN, openCommitPanel, close, speakAs, fixedLang, rememberedLang, rememberLang, readSystemLang, claimTab, releaseTab, tabRecorded } from "./ui.js";
+import { subscribe, broadcast, lockSide, LOCK_BEAT, UNKNOWN, openCommitPanel, close, speakAs, fixedLang, rememberedLang, rememberLang, readSystemLang, claimTab, releaseTab, tabRecorded } from "./ui.js";
 import { isTabScreen } from "./focus-repo.js";
 import { letGo } from "./let-go.js";
 import { translator } from "./i18n.js";
@@ -88,6 +88,9 @@ import CheckoutRef from "./view-checkout-ref.js";
 import CreatePatch from "./view-create-patch.js";
 import ApplyPatch from "./view-apply-patch.js";
 import Remotes from "./view-remotes.js";
+
+// The Git console's recorder: one function for every copy, so each copy installs the same one.
+const recordConsole = (call) => recordGit(call, broadcast);
 
 // When the system's language isn't known yet, how long to wait before each next ask.
 const ASK_AGAIN = [1000, 3000, 10000];
@@ -183,7 +186,7 @@ export default class GitTools extends View {
     warmIcons();
     // Every runner records its writes in the Git console (git.js). Each copy installs the
     // same function, before its screen can run git.
-    recordWith(recordGit);
+    recordWith(recordConsole);
     this.say(() => this.screen.init(p, cx));
     // A tab's screen records its pane with its repository, so the panels follow that
     // repository while the tab has the focus (ui.js claimTab). Again from render while

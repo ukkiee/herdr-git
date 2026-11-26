@@ -4,7 +4,7 @@
 // returns { ok, code, out, err, msg?, … } instead of throwing. No `herdr` import: node
 // tests it (git-patch.test.mjs).
 
-import { chunks } from "./git.js";
+import { chunks } from "./git-port.js";
 
 // A commit the mod makes for itself needs no name the person configured.
 const IDENTITY = ["-c", "user.name=git-tools", "-c", "user.email=git-tools@localhost"];

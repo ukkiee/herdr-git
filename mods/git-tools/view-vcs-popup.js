@@ -22,7 +22,8 @@
 import { div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input, Popup } from "gpui-base";
 import { exec, theme, openOverlay, closeOverlay } from "herdr";
-import { makeGit, repoRoot } from "./git.js";
+import { makeGit } from "./git.js";
+import { repoRoot } from "./git-root.js";
 import { readHeads, popupRows, popupStep, popupTarget, rowAgain } from "./git-heads.js";
 import { handOver, takeOver } from "./hand-over.js";
 import { readFavorites } from "./git-branch.js";

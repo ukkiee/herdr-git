@@ -1,6 +1,17 @@
 # git-tools
 
-Git tools inside the Herdr desktop app, in a layout called `git-tools`.
+Git tools inside the Herdr desktop app, in a layout called `git-tools`: a Commit panel
+and a Files panel in the side panel, a Log panel with the branches and a colored commit
+graph under the work area, a VCS widget that shows the branch, and dialogs, popup menus
+and tabs for the rest of git.
+
+![git-tools](preview.png)
+
+Install it with `node install.mjs` while Herdr runs: it copies `mods/git-tools/`, builds
+the `git-tools` layout as a clone of `main` with the screens' blocks added, switches to it
+and adds the keys, which belong to that layout. Copying the mod folder alone shows nothing:
+the panels are blocks of that layout, and every other screen opens from them.
+
 The tab bar's Changes button opens a **Commit panel**: the changed files as a checkbox
 tree, a message box, Commit and Commit and Push…, and while Amend is on the files of the
 last commit. The Files button opens a **Files panel**: the focused folder as a tree with
@@ -20,8 +31,6 @@ revision, history, Update Info and the Git console open as space tabs. Files and
 show Atom Material Icons, and buttons and menus their UI icons. The words are Korean
 when the computer's first preferred language is Korean, English otherwise. Spaces on
 another machine run git there.
-
-![git-tools](preview.png)
 
 ## What you see
 
@@ -1487,6 +1496,41 @@ copy gets it, and `takesVcsOps` in `vcs-ops.js` lets one of them open the popup)
 `mod.json`: `{ "place": "none", "title": "Git", "overlay": { "kind": "popup", "width": 1, "height": 1 } }`.
 The overlay entry exists only for `mod.open:git-tools` (`cmd-k`).
 
+The files sit in folders by role, ports and adapters. Imports go `adapters/in` → `core`
+← `adapters/out`: nothing under `core/` imports `herdr`, `gpui-*` or `adapters/`
+(`.oxlintrc.json` fails it), so bun loads every core module as it is. Screens may import
+out adapters (`makeGit`, the locks, the bus) directly; an out adapter never imports a
+screen. A file's name is unique across the folders, so the rest of this brief names files
+alone. Every `*.test.mjs` sits beside the module it tests; one that reads several
+files sits with them (`commit-move`, `commit-press` in `adapters/in/panels/`;
+`screen-fields`, `space-tab-reads`, `ui-ids` in `adapters/in/shared/`).
+
+```text
+mods/git-tools/
+  main.js, mod.json         the router and the mod's entry; Herdr looks for them here
+  icons/                    theme/ (the Icon theme), ui/ (UI icons), the Lucide SVGs
+  jsconfig.json, gpui-kit.d.ts   types for an editor
+  core/                     knows neither herdr nor the screens
+    domain/                 git rules as pure functions: tree, merge-chunks, rebase-plan, branch-order
+    app/                    the git modules that run git and read its answer: git-*.js
+                            (all but git.js, git-console.js and git-port.js)
+    ports/                  git-port.js: what core expects of a git runner
+    i18n/                   i18n.js and messages-<area>.js (core's git modules word errors and times)
+  adapters/
+    in/                     the Herdr screens
+      panels/               view-commit, commit-form, commit-stash-tab, view-log, log-branches,
+                            log-list, log-details, log-filters, log-pick, log-rewrite,
+                            view-files, view-vcs-widget, view-log-button
+      tabs/                 view-diff, view-console, view-compare-files, view-compare-branches,
+                            view-revision-tree, view-history-tab, view-update-info, view-icon-sheet
+      dialogs/              every other view-*.js: dialogs and popups
+      shared/               ui.js, serve-actions.js, space-tabs.js
+      logic/                the screens' pure modules and data (graph, read-turns, later,
+                            icon-theme, icon-theme-data, files-tree, ui-size, recent, ...)
+    out/                    git.js (the runner), git-console, clock, folder-watch,
+                            app-files, bus, lock, files-data
+```
+
 One mod, many screens. `main.js` owns the one `View`. In `init` it makes the copy's
 side of the bus (`subscribe()`, set on the screen as `screen.bus`) and of the write locks
 (`lockSide(bus.id)`, set as `screen.locks`), both before the screen's `init`; routes on
@@ -1804,8 +1848,9 @@ same, written to the working file without marking it resolved), `reset`,
 panel), `POPUP_ACTIONS` in `view-vcs-popup.js` (VCS widget popup) or `VCS_ACTIONS` in
 `view-vcs-ops.js` (VCS Operations popup).
 
-**Git and pure modules** (no herdr import, so bun tests each with its `*.test.mjs`;
-the git ones run against real temporary repositories):
+**Git and pure modules** (in `core/`, `adapters/out/` and `adapters/in/logic/`; no herdr
+import, so bun tests each with its `*.test.mjs`; the git ones run against real temporary
+repositories):
 
 | file | exports |
 |---|---|

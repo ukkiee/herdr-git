@@ -14,7 +14,7 @@
 //                                             with XML comments (the per-file license header) removed
 //   icons/theme/LICENSE                       the source LICENSE, verbatim
 //   icons/theme/NOTICE.md                     source, commit, plugin version, what was changed
-//   icon-theme-data.js                        the rules, in source order, with lookup hints, plus icon facts
+//   adapters/in/logic/icon-theme-data.js      the rules, in source order, with lookup hints, plus icon facts
 //
 // Same input, same bytes: lists are in source order or sorted by code point, and nothing from
 // the running machine (date, path, locale) is written.
@@ -327,6 +327,9 @@ function withHints(rules) {
   return rules.map((rule, i) => ({ ...rule, rank: place[i], ...hintOf(rule.pattern) }));
 }
 
+// Where the rules module sits in the mod folder.
+export const DATA_FILE = "adapters/in/logic/icon-theme-data.js";
+
 export function generate(src, modDir) {
   const xml = {};
   for (const name of Object.keys(PINNED_SHA256)) {
@@ -393,14 +396,14 @@ export function generate(src, modDir) {
   }
   writeFileSync(join(theme, "LICENSE"), readFileSync(join(src, "LICENSE")));
   writeFileSync(join(theme, "NOTICE.md"), notice({ icons, fileRules, folderRules, skipped }));
-  writeFileSync(join(modDir, "icon-theme-data.js"), dataModule({ fileRules: withHints(fileRules), folderRules: withHints(folderRules), darkFiles, closedOnly, skipped }));
+  writeFileSync(join(modDir, DATA_FILE), dataModule({ fileRules: withHints(fileRules), folderRules: withHints(folderRules), darkFiles, closedOnly, skipped }));
   return { icons, fileRules, folderRules, darkFiles, closedOnly, skipped };
 }
 
 function notice({ icons, fileRules, folderRules, skipped }) {
   return `# Icon theme notice
 
-The icons in \`files/\`, \`folders/\` and \`foldersOpen/\` and the rules in \`../../icon-theme-data.js\`
+The icons in \`files/\`, \`folders/\` and \`foldersOpen/\` and the rules in \`../../${DATA_FILE}\`
 come from Atom Material Icons by Elior "Mallowigi" Boukhobza, MIT License (full text in \`LICENSE\`).
 
 - Source: https://github.com/AtomMaterialUI/iconGenerator

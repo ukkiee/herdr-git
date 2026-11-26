@@ -6,14 +6,20 @@
 // it guards and what to update when it fails.
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const MOD = join(root, "mods/git-tools");
 const recipe = readFileSync(join(root, "RECIPE.md"), "utf8");
 const recipeLines = recipe.split("\n");
-const sources = readdirSync(MOD).filter((f) => f.endsWith(".js")).sort();
+// The mod's .js files by name, from all its folders but icons/. RECIPE names a file by its
+// name alone, so a name the mod has twice fails here.
+const modPaths = readdirSync(MOD, { recursive: true }).filter((p) => p.endsWith(".js") && !p.startsWith("icons/")).sort();
+const pathOf = new Map(modPaths.map((p) => [basename(p), join(MOD, p)]));
+assert.deepEqual(modPaths.filter((p) => pathOf.get(basename(p)) !== join(MOD, p)), [], "a .js name is the only one of its name in mods/git-tools");
+const sources = [...pathOf.keys()].sort();
+assert.ok(sources.length > 0, "mods/git-tools has .js files");
 
 // Splits `text` at any of `seps` outside `code` and outside (), {} and []: the top-level
 // items of a list written in prose, such as a table cell's exports.
@@ -73,8 +79,8 @@ function splitTop(text, seps) {
     const exported = new Set();
     for (const f of files) {
       inTable.add(f);
-      if (!existsSync(join(MOD, f))) { problems.push(`RECIPE.md line ${n + 1}: ${f} is not in mods/git-tools`); continue; }
-      for (const name of Object.keys(await import(pathToFileURL(join(MOD, f)).href))) exported.add(name);
+      if (!pathOf.has(f)) { problems.push(`RECIPE.md line ${n + 1}: ${f} is not in mods/git-tools`); continue; }
+      for (const name of Object.keys(await import(pathToFileURL(pathOf.get(f)).href))) exported.add(name);
     }
     const items = splitTop(cells[2].replace(/\\\|/g, "|"), [",", ";", " and "]);
     const names = items.map((item) => item.match(/^`([A-Za-z_$][\w$]*)(?:`|\()/)?.[1]);
@@ -88,7 +94,7 @@ function splitTop(text, seps) {
     }
   }
   for (const f of sources) {
-    if (existsSync(join(MOD, f.replace(/\.js$/, ".test.mjs"))) && !inTable.has(f)) {
+    if (existsSync(pathOf.get(f).replace(/\.js$/, ".test.mjs")) && !inTable.has(f)) {
       problems.push(`${f}: has its own test but no row in RECIPE.md's table of git and pure modules`);
     }
   }
@@ -97,7 +103,7 @@ function splitTop(text, seps) {
 
 // The source of every module, without its whole-line comments: what the code calls, not
 // what a comment mentions.
-const code = Object.fromEntries(sources.map((f) => [f, readFileSync(join(MOD, f), "utf8").replace(/^\s*\/\/.*$/gm, "")]));
+const code = Object.fromEntries(sources.map((f) => [f, readFileSync(pathOf.get(f), "utf8").replace(/^\s*\/\/.*$/gm, "")]));
 const flat = (text) => text.replace(/\s+/g, " ").trim();
 
 // The keys of Herdr's shared state the mod writes. RECIPE lists them twice: in "Herdr and
@@ -186,7 +192,7 @@ const flat = (text) => text.replace(/\s+/g, " ").trim();
 // Done when 1 says how many `*.test.mjs` files mods/git-tools holds. A new test file
 // changes that number here.
 {
-  const tests = readdirSync(MOD).filter((f) => f.endsWith(".test.mjs")).length;
+  const tests = readdirSync(MOD, { recursive: true }).filter((f) => f.endsWith(".test.mjs")).length;
   const said = recipe.match(/every `\*\.test\.mjs` in\s+`mods\/git-tools` \((\d+) files\)/);
   assert.ok(said, 'RECIPE.md Done when 1 says "every `*.test.mjs` in `mods/git-tools` (N files)"');
   assert.equal(Number(said[1]), tests, `RECIPE.md Done when 1: mods/git-tools holds ${tests} *.test.mjs files`);

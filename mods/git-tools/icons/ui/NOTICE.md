@@ -8,4 +8,4 @@ Elior "Mallowigi" Boukhobza, MIT License (full text in `LICENSE`).
 - Paths: each file keeps its path below `common/src/main/resources/` in the source,
   and a `_dark` file sits beside the icons that have one.
 - Changes: none. The files are the source's bytes, license comments included.
-- Which name draws which file, and in color or in the text color: `../../ui-icons.js`.
+- Which name draws which file, and in color or in the text color: `../../adapters/in/logic/ui-icons.js`.

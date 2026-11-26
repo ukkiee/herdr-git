@@ -7,7 +7,7 @@ import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:f
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { generate, hintOf } from "./gen-icon-theme.mjs";
+import { DATA_FILE, generate, hintOf } from "./gen-icon-theme.mjs";
 
 // Would the mod try this rule for `name`? Filed under the whole name or the last extension
 // (when it is filed at all), and holding one of the needles (when it has any).
@@ -70,7 +70,7 @@ try {
   generate(src, out);
   const made = listFiles(join(out, "icons/theme"));
   assert.deepEqual(made, listFiles(join(committed, "icons/theme")), "same files in icons/theme");
-  for (const f of [...made.map((f) => join("icons/theme", f)), "icon-theme-data.js"]) {
+  for (const f of [...made.map((f) => join("icons/theme", f)), DATA_FILE]) {
     assert.ok(readFileSync(join(out, f)).equals(readFileSync(join(committed, f))), `${f} differs`);
   }
   console.log(`${made.length + 1} files match ${relative(process.cwd(), committed) || "."}`);

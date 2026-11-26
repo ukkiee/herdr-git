@@ -43,7 +43,7 @@
     },
     {
       "files": [
-        "mods/git-tools/core/**"
+        "mods/git-tools/core/**/*.js"
       ],
       "rules": {
         "no-restricted-imports": [

@@ -100,32 +100,79 @@
 
 ### 파일 지도
 
-| 묶음 | 파일 | 책임 |
+mod 폴더는 포트와 어댑터(헥사고날) 구조다. git 세계의 판단은 `core/`에, Herdr와 닿는 코드는
+`adapters/`에 있다. 파일 이름은 폴더가 달라도 mod 안에서 하나뿐이라, 이 문서는 파일을 이름으로만 가리킨다.
+
+```text
+mods/git-tools/
+  main.js, mod.json   길잡이와 mod 설정. Herdr가 mod 폴더 루트에서 찾는다
+  icons/              아이콘 파일. 코드가 이 경로를 그대로 쓴다
+  jsconfig.json, gpui-kit.d.ts   편집기의 타입 확인용
+  core/               herdr도 화면도 모르는 안쪽
+    domain/           git 규칙의 순수 계산
+    app/              git을 부르고 결과를 해석하는 모듈(유스케이스)
+    ports/            core가 git 실행기에 바라는 꼴
+    i18n/             언어 판정, 문장, 문구 표
+  adapters/
+    in/               들어오는 쪽: Herdr 화면
+      panels/         레이아웃 블록의 패널과 위젯
+      tabs/           탭으로 여는 화면
+      dialogs/        대화상자와 팝업
+      shared/         화면들이 함께 쓰는 부품과 표
+      logic/          화면 쪽 순수 계산과 데이터
+    out/              나가는 쪽: git 실행기와 그 밖의 입출력
+```
+
+| 폴더 | 파일 | 책임 |
 |---|---|---|
-| 길잡이 | `main.js` | 사본을 만들고 화면에 버스·잠금·언어·시계를 넘긴 뒤 `props.view`로 화면을 고른다(`VIEWS` 표) |
-| 공용 부품 | `ui.js` | 저장소 찾기, 행·버튼·체크박스, 보이는 행만 그리는 `WindowedList`, 창과 메뉴 열기, 툴팁(`tip`), Progress bar, 로딩 스켈레톤(`skeleton`), `uiGlyph`·`iconButton`, 쓰기 잠금과 창 요청의 화면 쪽, git-tools 탭의 저장소 기록, 실패 띠의 "콘솔에서 보기" |
-| 화면 쪽 등록과 파일 | `serve-actions.js`, `app-files.js`, `space-tabs.js`, `log-pick.js`, `log-rewrite.js` | 창이 패널에 요청하는 쓰기의 표(`SERVE_ACTIONS`), 앱 홈 `git-tools` 폴더의 기록·설정 파일, 종류마다 하나인 space 탭, Log panel 쪽의 Cherry-Pick·Revert와 히스토리 편집 처리 |
-| 화면 | `view-*.js`, `commit-form.js`, `commit-stash-tab.js`, `log-branches.js`, `log-list.js`, `log-details.js`, `log-filters.js` | 그리기와 사람의 입력 |
-| git | `git.js`, `git-port.js`, `git-root.js`, `git-status.js`, `git-commit.js`, `git-rollback.js`, `git-snapshot.js`, `git-diff.js`, `git-push.js`, `git-log.js`, `git-log-filter.js`, `git-branch.js`, `git-show.js`(`readLastCommit` 포함), `files-data.js` | git과 폴더 읽기 명령을 부르고 결과를 해석한다 |
-| git 동작 | `git-operation.js`, `git-conflict.js`, `git-blocked.js`, `git-smart-stash.js`, `git-smart.js`, `git-stash.js`, `git-reset.js`, `git-rewrite.js`, `git-changes.js`, `git-remote.js`, `git-refs.js`, `git-compare.js`, `git-revision.js`, `git-worktree.js`, `git-heads.js`, `git-patch.js` | Operation in progress 읽기와 merge·rebase·cherry-pick·revert의 실행·판정, 충돌 파일 쓰기, Smart operation(길을 막는 파일과 막힘을 알리는 checkout, 변경을 넣어 두는 stash와 멈춘 요청의 표식, 강제 checkout과 종류별 요청), stash, reset과 하드 전 기록, 히스토리 다시 쓰기, 파일 단위 되돌리기·체리픽, pull·업데이트, 태그·이름 변경·원격, 비교·패치·가져오기, 리비전의 파일과 하위 커밋, 새 워크트리, VCS widget이 보일 브랜치, 로컬 변경의 패치와 패치 적용 |
-| 순수 계산 | `graph.js`, `tree.js`, `bus.js`, `lock.js`, `read-turns.js`, `clock.js`, `later.js`, `folder-watch.js`, `i18n.js`, `icon-theme.js`, `files-tree.js`, `editor-language.js`, `merge-chunks.js`, `conflicts-model.js`, `merge-revisions-model.js`, `rebase-plan.js`, `log-menus.js`, `log-select.js`, `log-options.js`, `branch-order.js`, `vcs-ops.js`, `git-console.js`, `ui-icons.js`, `pick-notes.js`, `ui-size.js`, `focus-repo.js`, `let-go.js`, `skeleton.js`, `recent.js`, `popup-press.js`, `hand-over.js`, `diff-colors.js`, `facts-cache.js` | 그래프 배치, 경로 트리와 3상태 체크, 버스와 잠금 값, 되풀이하는 읽기의 차례, 사본의 git 시계, 타이머·작업으로 미룬 일과 머문 폴더 판정, 폴더 감시와 그 취소, 언어와 문장, 아이콘 고르기, Files panel의 줄·표시·찾기 순위·키, 미리보기의 구문 색, 병합 덩어리, 두 충돌 창이 보일 것과 켜질 것, 리베이스 계획과 편집 판정, Log panel의 메뉴·툴바 표, 여러 커밋 고르기, 그래프·표시 옵션 값, 브랜치 순서와 즐겨찾기, VCS Operations popup의 항목, 콘솔 기록의 꼴과 자격 증명 가림, UI icon 대응, Cherry-Pick·Revert 결과의 알림, 메뉴 너비·팝업 자리·창이 자리를 채우는지·위젯 블록 폭, 패널이 따를 저장소와 탭 기록, 닫히는 화면이 쥔 데이터 비우기, 로딩 스켈레톤의 행과 조각 자리, 떠난 폴더의 기억(최근 N개)과 Commit list의 첫 묶음, Diff tab의 행 색, 커밋 메뉴가 읽은 편집 사실의 기억 |
-| 데이터 | `messages-*.js`, `icon-theme-data.js`, `icons/theme/`, `icons/ui/`(그 밖의 `icons/` 파일 포함) | 문구 표, 생성한 아이콘 규칙, 아이콘 파일 |
+| 루트 | `main.js` | 사본을 만들고 화면에 버스·잠금·언어·시계를 넘긴 뒤 `props.view`로 화면을 고른다(`VIEWS` 표) |
+| 루트 | `mod.json`, `icons/theme/`, `icons/ui/`(그 밖의 `icons/` 파일 포함) | mod 설정, 아이콘 파일 |
+| `core/domain` | `tree.js`, `merge-chunks.js`, `rebase-plan.js`, `branch-order.js` | 경로 트리와 3상태 체크, 병합 덩어리, 리베이스 계획과 편집 판정, 브랜치 순서와 즐겨찾기 |
+| `core/ports` | `git-port.js` | git 실행기의 꼴: `READ`, `ASK_IN_C`, `outsideRepo`, `chunks`, 결과 `{ ok, code, out, err }` |
+| `core/app` | `git-root.js`, `git-status.js`, `git-commit.js`, `git-rollback.js`, `git-snapshot.js`, `git-diff.js`, `git-push.js`, `git-log.js`, `git-log-filter.js`, `git-branch.js`, `git-show.js`(`readLastCommit` 포함) | git 명령을 부르고 결과를 해석한다: 저장소 찾기, 상태, 커밋, Rollback과 그 기록, diff, push, log와 필터, 브랜치, 커밋 보기 |
+| `core/app` | `git-operation.js`, `git-conflict.js`, `git-blocked.js`, `git-smart-stash.js`, `git-smart.js`, `git-stash.js`, `git-reset.js`, `git-rewrite.js`, `git-changes.js`, `git-remote.js`, `git-refs.js`, `git-compare.js`, `git-revision.js`, `git-worktree.js`, `git-heads.js`, `git-patch.js` | Operation in progress 읽기와 merge·rebase·cherry-pick·revert의 실행·판정, 충돌 파일 쓰기, Smart operation(길을 막는 파일과 막힘을 알리는 checkout, 변경을 넣어 두는 stash와 멈춘 요청의 표식, 강제 checkout과 종류별 요청), stash, reset과 하드 전 기록, 히스토리 다시 쓰기, 파일 단위 되돌리기·체리픽, pull·업데이트, 태그·이름 변경·원격, 비교·패치·가져오기, 리비전의 파일과 하위 커밋, 새 워크트리, VCS widget이 보일 브랜치, 로컬 변경의 패치와 패치 적용 |
+| `core/i18n` | `i18n.js`, `messages-*.js` | 언어 판정과 문장(`translator`, `sentence`, `formatTime`), 영역마다 하나인 문구 표 |
+| `adapters/out` | `git.js`, `git-console.js`, `clock.js`, `folder-watch.js`, `app-files.js`, `bus.js`, `lock.js`, `files-data.js` | git 실행기(`makeGit`, `PARALLEL`, `recordWith`), 콘솔 기록의 꼴과 자격 증명 가림, 사본의 git 시계, 폴더 감시와 그 취소, 앱 홈 `git-tools` 폴더의 기록·설정 파일, 버스와 잠금 값, Files panel의 폴더 읽기(`sh`, Windows는 PowerShell)와 git 표시 |
+| `adapters/in/panels` | `view-commit.js`, `commit-form.js`, `commit-stash-tab.js`, `view-log.js`, `log-branches.js`, `log-list.js`, `log-details.js`, `log-filters.js`, `log-pick.js`, `log-rewrite.js`, `view-files.js`, `view-vcs-widget.js`, `view-log-button.js` | 레이아웃 블록의 화면: Commit panel(양식, Stash 탭), Log panel(Branch tree, Commit list, Commit details, 필터, Cherry-Pick·Revert와 히스토리 편집 처리), Files panel, VCS widget, Git button |
+| `adapters/in/tabs` | `view-diff.js`, `view-console.js`, `view-compare-files.js`, `view-compare-branches.js`, `view-revision-tree.js`, `view-history-tab.js`, `view-update-info.js`, `view-icon-sheet.js` | 탭 화면: Diff tab, Git console, 비교 탭, 리비전의 저장소 보기, 기록, Update Info tab, Icon sheet |
+| `adapters/in/dialogs` | 나머지 `view-*.js`(34개) | 대화상자와 팝업. 팝업은 `view-menu.js`, `view-vcs-popup.js`, `view-vcs-ops.js`, `view-go-to-hash.js`, `view-checkout-ref.js` |
+| `adapters/in/shared` | `ui.js`, `serve-actions.js`, `space-tabs.js` | `ui.js`: 저장소 찾기, 행·버튼·체크박스, 보이는 행만 그리는 `WindowedList`, 창과 메뉴 열기, 툴팁(`tip`), Progress bar, 로딩 스켈레톤(`skeleton`), `uiGlyph`·`iconButton`, 쓰기 잠금과 창 요청의 화면 쪽, git-tools 탭의 저장소 기록, 실패 띠의 "콘솔에서 보기". 창이 패널에 요청하는 쓰기의 표(`SERVE_ACTIONS`), 종류마다 하나인 space 탭 |
+| `adapters/in/logic` | `graph.js`, `read-turns.js`, `later.js`, `one-at-a-time.js`, `icon-theme.js`, `icon-theme-data.js`, `files-tree.js`, `editor-language.js`, `conflicts-model.js`, `merge-revisions-model.js`, `log-menus.js`, `log-select.js`, `log-options.js`, `vcs-ops.js`, `ui-icons.js`, `pick-notes.js`, `ui-size.js`, `focus-repo.js`, `let-go.js`, `skeleton.js`, `recent.js`, `popup-press.js`, `hand-over.js`, `diff-colors.js`, `facts-cache.js` | 화면 쪽 순수 계산과 데이터: 그래프 배치, 되풀이하는 읽기의 차례, 타이머·작업으로 미룬 일과 머문 폴더 판정, 한 번에 하나만 도는 느린 읽기, 아이콘 고르기와 생성한 아이콘 규칙, Files panel의 줄·표시·찾기 순위·키, 미리보기의 구문 색, 두 충돌 창이 보일 것과 켜질 것, Log panel의 메뉴·툴바 표, 여러 커밋 고르기, 그래프·표시 옵션 값, VCS Operations popup의 항목, UI icon 대응, Cherry-Pick·Revert 결과의 알림, 메뉴 너비·팝업 자리·창이 자리를 채우는지·위젯 블록 폭, 패널이 따를 저장소와 탭 기록, 닫히는 화면이 쥔 데이터 비우기, 로딩 스켈레톤의 행과 조각 자리, 떠난 폴더의 기억(최근 N개)과 Commit list의 첫 묶음, 팝업을 닫은 누름과 여는 누름 가르기, 여는 쪽이 읽은 것을 팝업에 넘기기, Diff tab의 행 색, 커밋 메뉴가 읽은 편집 사실의 기억 |
 
 저장소 루트에는 레이아웃 변환 `layout.mjs`, 설치 `install.mjs`, 키 `keys.json`, 린트 설정
 `.oxlintrc.json`이 있고, `tools/`에 아이콘 생성기 `gen-icon-theme.mjs`와 검사 스크립트가 있다. 각 모듈의 책임과 함정은 그 파일의 머리 주석에 있다.
 
 ### 화면 코드와 git 코드의 경계
 
-git 모듈과 순수 계산 모듈은 `herdr`를 import하지 않는다. 그래서 bun(과 node)이 이 모듈들을 그대로
-불러 테스트할 수 있다.
+의존은 한쪽으로만 간다: `adapters/in` → `core` ← `adapters/out`.
+
+- **core는 바깥을 모른다.** `core/` 아래 모듈은 `herdr`, `gpui-*`, `adapters/`의 어느 것도 import하지
+  않는다. `.oxlintrc.json`의 core 규칙(`mods/git-tools/core/**`의 `no-restricted-imports`)이 이것을
+  오류로 막는다. 그래서 bun(과 node)이 core 모듈을 그대로 불러 테스트할 수 있다. `adapters/in/logic`과
+  `adapters/out`의 모듈도 `app-files.js` 말고는 herdr를 import하지 않아 같은 식으로 테스트하지만,
+  린트가 지키는 것은 core뿐이다.
+- **화면은 out 어댑터를 직접 import해도 된다.** `adapters/in`의 화면은 `makeGit`(`git.js`), `lock.js`,
+  `bus.js` 같은 out 어댑터를 `main.js`를 거치지 않고 가져다 쓴다. 경계가 지키는 것은 core가 Herdr 없이
+  테스트된다는 것이고, 화면과 out 어댑터는 어차피 사본 안에서 함께 돈다. 그래서 규칙은 core에만 건다.
+  반대 방향은 막는다: out 어댑터는 화면을 import하지 않는다. `app-files.js`는 Git console 알림에 쓸
+  `broadcast`를 `recordGit(call, broadcast)`의 인자로 받는다(`main.js`가 `ui.js`의 것을 넘긴다).
+- **문구 표는 core에 있다**(`core/i18n`). core의 git 모듈이 사람에게 보일 글을 만들기 때문이다:
+  `git-rewrite.js`의 `english()`(거절 이유의 영어 `err`, 화면은 `msg` 키로 제 언어를 쓴다),
+  `git-log.js`의 `formatTime(…, "en")`, `git-remote.js`·`git-rollback.js`·`git-snapshot.js`의
+  `sentence(t, …)`. 문구 표와 `i18n.js`는 herdr를 모르는 순수 코드라 core에 있어도 의존 방향이 깨지지 않는다.
+- **테스트는 모듈 옆에 있다.** `x.test.mjs`는 `x.js`와 같은 폴더다. 여러 파일을 보는 테스트는 그것이 보는
+  쪽에 둔다: 패널 소스를 읽는 `commit-move.test.mjs`·`commit-press.test.mjs`는 `adapters/in/panels`,
+  화면 전체를 훑는 `screen-fields.test.mjs`·`space-tab-reads.test.mjs`·`ui-ids.test.mjs`는
+  `adapters/in/shared`, `git-operation-*.test.mjs`·`git-rewrite-fixup.test.mjs`는 `core/app`. 설치는
+  테스트를 복사하지 않는다(아래 "설치와 레이아웃").
 
 - `git.js`의 `makeGit(exec, on)`이 실행기를 만든다. `exec`는 인자로 받고, `on`은 git을 돌릴
   머신이다. 다른 git 모듈은 모두 이 `git`과 저장소 루트를 받는다.
 - **git 모듈은 실행기의 꼴만 안다.** 그 꼴(`READ`, `ASK_IN_C`, `outsideRepo`, `chunks`, 결과
-  `{ ok, code, out, err }`)은 `git-port.js`에 있고, 실행기 자체(`makeGit`, `PARALLEL`, `recordWith`)는
-  `git.js`에 있다. git 모듈은 `git-port.js`만 import하고 `git.js`는 import하지 않는다. 저장소 찾기
-  `repoRoot`는 `git-root.js`다. `app-files.js`는 화면 모듈을 import하지 않고, Git console 알림에 쓸
-  `broadcast`를 `recordGit(call, broadcast)`의 인자로 받는다(`main.js`가 `ui.js`의 것을 넘긴다).
+  `{ ok, code, out, err }`)은 포트 `core/ports/git-port.js`에 있고, 실행기 자체(`makeGit`, `PARALLEL`,
+  `recordWith`)는 out 어댑터 `adapters/out/git.js`에 있다. git 모듈은 `git-port.js`만 import하고
+  `git.js`는 import하지 않는다(core 규칙이 막는다). 저장소 찾기 `repoRoot`는 git을 부르는 유스케이스라
+  `core/app/git-root.js`다.
 - **모듈 사이 import는 한쪽으로만 간다.** 린트가 순환을 오류로 막는다(`import/no-cycle`). Smart
   operation은 그래서 세 모듈이다: 길을 막는 파일과 막힘을 알리는 checkout(`git-blocked.js`), 변경을
   넣어 두는 stash와 멈춘 요청의 표식(`git-smart-stash.js`), 강제 checkout과 종류별 요청(`git-smart.js`,
@@ -133,8 +180,8 @@ git 모듈과 순수 계산 모듈은 `herdr`를 import하지 않는다. 그래�
   그 둘의 요청을 돌리므로 import는 한쪽으로만 간다.
 - **QuickJS에 없는 것은 린트가 미리 잡는다.** 린트는 oxlint(`.oxlintrc.json`, `bun run lint`)이고 경고도
   실패로 친다. `mods/git-tools/**/*.js`에서 `setTimeout`·`setInterval`·`Intl`·`navigator`·`process` 전역과
-  `Promise.race`를 막고, `mods/git-tools/core/` 아래 모듈이 `herdr`·`gpui-*`·adapters를 import하면
-  오류로 막는다. 테스트(`*.test.mjs`)는 bun이나 node에서 돌므로 이 제한 밖이다.
+  `Promise.race`를 막는다(core의 import 규칙은 위). 테스트(`*.test.mjs`)는 bun이나 node에서 돌므로 이
+  제한 밖이다.
 - 실행기 하나는 git을 동시에 `PARALLEL`(4)개까지만 돌리고 나머지는 줄 세운다. Herdr가 동시에 도는
   `exec`를 묶어 넘는 것을 곧바로 거절하는데([플랫폼](herdr-mod-platform.md)), 화면은 여러 읽기를 함께
   열고 앱이 켜질 때는 모든 화면이 한꺼번에 읽기 때문이다. 그래도 그 한도로 거절되면 아무것도 돌지 않은
@@ -178,7 +225,7 @@ git 모듈과 순수 계산 모듈은 `herdr`를 import하지 않는다. 그래�
   고치면 그 변경이 다음 읽기를 부르고 새로고침이 끝없이 돈다. 마지막 설정은 서명 표시를 끈다:
   사용자의 `log.showSignature`가 켜져 있으면 git이 서명된 커밋의 검증 줄을 `log`·`show`가 낼 글
   앞에 붙여, 정해진 꼴로 읽는 출력이 깨진다.
-- 판단은 git 모듈과 순수 모듈에 둔다. 되살릴지, 누구를 걸지, 어떤 아이콘인지, 어느 언어인지를
+- 판단은 git 모듈과 순수 모듈(`core/`, `adapters/in/logic`)에 둔다. 되살릴지, 누구를 걸지, 어떤 아이콘인지, 어느 언어인지를
   화면이 정하지 않는다. 화면에는 자동 테스트가 없기 때문이다.
 
 ### 사본과 상태

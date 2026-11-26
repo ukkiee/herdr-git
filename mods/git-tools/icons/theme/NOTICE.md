@@ -1,6 +1,6 @@
 # Icon theme notice
 
-The icons in `files/`, `folders/` and `foldersOpen/` and the rules in `../../icon-theme-data.js`
+The icons in `files/`, `folders/` and `foldersOpen/` and the rules in `../../adapters/in/logic/icon-theme-data.js`
 come from Atom Material Icons by Elior "Mallowigi" Boukhobza, MIT License (full text in `LICENSE`).
 
 - Source: https://github.com/AtomMaterialUI/iconGenerator

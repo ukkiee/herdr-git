@@ -113,7 +113,7 @@ export const watchSettled = (dir, options, cx) => watchFolderSettled(watchFolder
 
 // ---- the git-tools layout's nodes
 
-// Ids install.sh (layout.mjs) gives the layout. The Commit panel is the `changes` child
+// Ids install.mjs (layout.mjs) gives the layout. The Commit panel is the `changes` child
 // of the `panel-body` stack inside `panel`, as in Herdr's own main layout.
 export const LOG_NODE = "git-log";
 

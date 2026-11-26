@@ -23,8 +23,8 @@ const fakeWatch = () => {
     p.cancel = () => { if (calls.delete(call)) call.resolve([]); };
     return p;
   };
-  const change = (paths) => { for (const c of [...calls]) { calls.delete(c); c.resolve(paths(c.dir)); } };
-  const fail = () => { for (const c of [...calls]) { calls.delete(c); c.reject(new Error("can't watch")); } };
+  const change = (paths) => { for (const c of calls) { calls.delete(c); c.resolve(paths(c.dir)); } };
+  const fail = () => { for (const c of calls) { calls.delete(c); c.reject(new Error("can't watch")); } };
   return { watchFolder, change, fail, pending: () => calls.size, dirs: () => [...calls].map((c) => c.dir) };
 };
 

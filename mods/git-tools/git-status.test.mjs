@@ -10,6 +10,8 @@ import { translator } from "./i18n.js";
 // The person's own git settings stay out of every repository here.
 process.env.GIT_CONFIG_GLOBAL = "/dev/null";
 process.env.GIT_CONFIG_NOSYSTEM = "1";
+// Some checks match git's own words, which git gives in the locale's language: C keeps them English.
+process.env.LC_ALL = "C";
 
 const base = realpathSync(mkdtempSync(`${tmpdir()}/git-tools-status-`));
 // Same shape as herdr's exec: resolves with { code, stdout, stderr }, rejects when it can't start.

@@ -5,9 +5,8 @@ import * as fs from "node:fs";
 import { mkdtempSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
-import vm from "node:vm";
 import { execFileSync } from "node:child_process";
-import { toMainGit, carryOver, writeWhole, copyChanged, LOG_ID, MOD, TABS_ROW_ID, BUTTON_ID, BUTTON_WIDTH, WIDGET_ID, WIDGET_WIDTH } from "./layout.mjs";
+import { toMainGit, carryOver, writeWhole, copyChanged, copyReport, readMain, LOG_ID, MOD, TABS_ROW_ID, BUTTON_ID, BUTTON_WIDTH, WIDGET_ID, WIDGET_WIDTH } from "./layout.mjs";
 
 // The parts of Herdr's shipped `main` the transform touches, plus a field of each
 // kind it must leave alone.
@@ -268,8 +267,8 @@ const leftovers = (dir, name) => fs.readdirSync(dir).filter((entry) => entry !==
   assert.deepEqual(leftovers(dir, "git-tools.json"), []);
 }
 
-// `node layout.mjs <main.json> <out.json>`, as install.sh runs it over an existing
-// git-tools.json: the new build, with that file's `cloned_from` and `link_handlers`.
+// `node layout.mjs <main.json> <out.json>` over an existing git-tools.json, as the install
+// rebuilds it: the new build, with that file's `cloned_from` and `link_handlers`.
 {
   const dir = `${tmp}/rebuild`, from = `${dir}/main.json`, to = `${dir}/git-tools.json`;
   fs.mkdirSync(dir);
@@ -286,7 +285,8 @@ const leftovers = (dir, name) => fs.readdirSync(dir).filter((entry) => entry !==
 // The mod folder is copied by content. Herdr reloads every copy of a mod each time a file
 // in its folder is saved, so a file that is already the same is not written again, and a
 // file that differs is written whole under a hidden name (Herdr ignores those) and then
-// renamed into place: Herdr never reads half a file.
+// renamed into place: Herdr never reads half a file. Tests are not copied, and the modules
+// only the app home has are deleted; its other files stay.
 {
   const from = `${tmp}/mod-from`, to = `${tmp}/mod-to`;
   fs.mkdirSync(`${from}/icons/theme`, { recursive: true });
@@ -295,51 +295,55 @@ const leftovers = (dir, name) => fs.readdirSync(dir).filter((entry) => entry !==
   fs.writeFileSync(`${from}/view.js`, "new view\n");
   fs.writeFileSync(`${from}/icons/theme/a.svg`, "<svg/>\n");
   fs.writeFileSync(`${from}/icons/x.svg`, "<svg new/>\n");
+  fs.writeFileSync(`${from}/view.test.mjs`, "a test\n");
+  fs.writeFileSync(`${from}/icons/theme/a.test.mjs`, "a test in a subfolder\n");
   fs.writeFileSync(`${to}/main.js`, "export default 1;\n");
   fs.writeFileSync(`${to}/view.js`, "old view, longer than the new one\n");
   fs.writeFileSync(`${to}/icons/x.svg`, "<svg old/>\n");
   fs.writeFileSync(`${to}/gone.js`, "only in the app home\n");
+  fs.writeFileSync(`${to}/icons/gone.mjs`, "only in the app home\n");
+  fs.writeFileSync(`${to}/icons/own.svg`, "only in the app home\n");
   const stamp = (file) => { const s = fs.statSync(file); return [s.ino, s.mtimeMs]; };
   const kept = stamp(`${to}/main.js`);
   const names = (dir, rel = "") => fs.readdirSync(`${dir}/${rel}`, { withFileTypes: true })
     .flatMap((e) => (e.isDirectory() ? names(dir, `${rel}${e.name}/`) : [`${rel}${e.name}`])).sort();
   const hidden = () => names(to).filter((name) => name.split("/").pop().startsWith("."));
 
-  // A disk that fills up: every file in place is still whole, and nothing is left behind.
+  // A disk that fills up: every file in place is still whole, nothing is deleted and
+  // nothing is left behind.
   assert.throws(() => copyChanged(halfFs, from, to), /no space left/);
+  assert.equal(fs.readFileSync(`${to}/gone.js`, "utf8"), "only in the app home\n");
   assert.equal(fs.readFileSync(`${to}/view.js`, "utf8"), "old view, longer than the new one\n");
   assert.equal(fs.readFileSync(`${to}/icons/x.svg`, "utf8"), "<svg old/>\n");
   assert.deepEqual(hidden(), []);
 
-  assert.deepEqual(copyChanged(fs, from, to), { written: ["icons/theme/a.svg", "icons/x.svg", "view.js"], same: 1 });
+  const r = copyChanged(fs, from, to);
+  assert.deepEqual(r, { written: ["icons/theme/a.svg", "icons/x.svg", "view.js"], same: 1, removed: ["gone.js", "icons/gone.mjs"] });
+  assert.equal(copyReport(r), "3 files updated, 1 already the same, 2 removed.");
   assert.deepEqual(stamp(`${to}/main.js`), kept, "a file that is already the same is not written again");
-  for (const name of names(from)) assert.equal(fs.readFileSync(`${to}/${name}`, "utf8"), fs.readFileSync(`${from}/${name}`, "utf8"), name);
-  assert.equal(fs.readFileSync(`${to}/gone.js`, "utf8"), "only in the app home\n", "a file only the app home has stays");
+  const mod = names(from).filter((name) => !name.endsWith(".test.mjs"));
+  for (const name of mod) assert.equal(fs.readFileSync(`${to}/${name}`, "utf8"), fs.readFileSync(`${from}/${name}`, "utf8"), name);
+  assert.deepEqual(names(to), [...mod, "icons/own.svg"].sort(), "no test copied, an icon only the app home has stays");
   assert.deepEqual(hidden(), []);
-  assert.deepEqual(copyChanged(fs, from, to), { written: [], same: 4 }, "run again, nothing is written");
+  const again = copyChanged(fs, from, to);
+  assert.deepEqual(again, { written: [], same: 4, removed: [] }, "run again, nothing is written");
+  assert.equal(copyReport(again), "0 files updated, 4 already the same.");
 
   // A folder the app home doesn't have yet.
-  assert.deepEqual(copyChanged(fs, from, `${tmp}/mod-new`), { written: ["icons/theme/a.svg", "icons/x.svg", "main.js", "view.js"], same: 0 });
-  assert.deepEqual(names(`${tmp}/mod-new`), names(from));
+  assert.deepEqual(copyChanged(fs, from, `${tmp}/mod-new`), { written: ["icons/theme/a.svg", "icons/x.svg", "main.js", "view.js"], same: 0, removed: [] });
+  assert.deepEqual(names(`${tmp}/mod-new`), mod);
 }
 
-// The keys step of install.sh, run as install.sh runs it but on a disk that fills up:
-// the person's keys.json is still whole and unchanged.
+// readMain names the file in what it says goes wrong.
 {
-  const dir = `${tmp}/keys`, file = `${dir}/keys.json`;
+  const dir = `${tmp}/read`;
   fs.mkdirSync(dir);
-  const before = JSON.stringify({ global: { "cmd-x": "existing.action" }, terminal: {} }, null, 2) + "\n";
-  fs.writeFileSync(file, before);
-  const install = fs.readFileSync(new URL("./install.sh", import.meta.url), "utf8");
-  const script = install.slice(install.indexOf("<<'EOF'\n") + "<<'EOF'\n".length, install.lastIndexOf("\nEOF"));
-  const wanted = fileURLToPath(new URL("./keys.json", import.meta.url));
-  const run = (useFs) => vm.runInNewContext(script, { require: () => useFs, process: { argv: ["node", "-", file, wanted], pid: 4242 }, console: { log() {} } });
-  assert.throws(() => run(halfFs), /no space left/);
-  assert.equal(fs.readFileSync(file, "utf8"), before);
-  assert.deepEqual(leftovers(dir, "keys.json"), []);
-  run(fs);
-  assert.equal(JSON.parse(fs.readFileSync(file, "utf8"))["layout:git-tools"]["cmd-k"], "mod.open:git-tools");
-  assert.deepEqual(leftovers(dir, "keys.json"), []);
+  fs.writeFileSync(`${dir}/main.json`, JSON.stringify(main()));
+  fs.writeFileSync(`${dir}/bad.json`, "{ not json");
+  fs.writeFileSync(`${dir}/empty.json`, "{}");
+  assert.equal(readMain(fs, `${dir}/main.json`).ok, true);
+  assert.match(readMain(fs, `${dir}/bad.json`).error, /^Cannot read .*bad\.json: /);
+  assert.equal(readMain(fs, `${dir}/empty.json`).error, `${dir}/empty.json is not shaped like the Herdr main layout this was built for: the layout has no node tree.`);
 }
 
 console.log("ok");

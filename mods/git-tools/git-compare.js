@@ -5,7 +5,7 @@
 // Every function takes `git` from makeGit (git.js) and the repository root, and returns
 // a result instead of throwing. No `herdr` import: node tests it (git-compare.test.mjs).
 
-import { chunks } from "./git.js";
+import { chunks } from "./git-port.js";
 import { parseDiff } from "./git-diff.js";
 import { record } from "./git-snapshot.js";
 

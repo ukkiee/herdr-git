@@ -1,11 +1,7 @@
 // The git runner every git-*.js module is handed. It takes `exec` as an argument instead
 // of importing "herdr", so node can test the git modules against real repositories.
 
-// Reads must write nothing under .git (no index refresh or lock, no fsmonitor cookie):
-// the Commit panel watches the folder, and a read that touched .git would start the next read.
-// log.showSignature off: with the person's setting on, git puts a signed commit's
-// verification lines ahead of what `log` or `show` was asked to print.
-export const READ = ["--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "diff.autoRefreshIndex=false", "-c", "log.showSignature=false"];
+import { READ } from "./git-port.js";
 
 // The recorder every runner without its own hands its writes to (main.js installs the Git
 // console's, app-files.js). One value for all copies, never a copy's state: every copy
@@ -133,41 +129,4 @@ export function makeGit(exec, on, { record, wait } = {}) {
   // For anything that only looks: status, log, diff, for-each-ref, rev-parse.
   git.read = (cwd, args, options) => run(cwd, [...READ, ...args], options);
   return git;
-}
-
-// Paths go on the command line (herdr's exec has no stdin), so a long list is split to
-// stay far below the smallest limit an OS or an ssh hop puts on one command.
-const CHUNK_BYTES = 60000, CHUNK_PATHS = 1000;
-
-// chunks(paths, cost?) → [[path]]: `paths` in order, in parts that each fit one command.
-// cost: the bytes one path takes on the command line, worst case UTF-8; a caller that
-// puts more around each path (pathspec magic, a mode and an object) says how much.
-export function chunks(paths, cost = (path) => path.length * 3 + 1) {
-  const out = [];
-  let chunk = [], bytes = 0;
-  for (const path of paths) {
-    const size = cost(path);
-    if (chunk.length && (bytes + size > CHUNK_BYTES || chunk.length >= CHUNK_PATHS)) { out.push(chunk); chunk = []; bytes = 0; }
-    chunk.push(path); bytes += size;
-  }
-  if (chunk.length) out.push(chunk);
-  return out;
-}
-
-// Being outside a repository is told only by git's words: its exit code (128) is the same
-// for other failures. git says them in the person's language when it has its translations,
-// so a read that asks where the repository is goes with `{ env: ASK_IN_C }`, and git's words
-// are always these. Every other answer is told by exit codes and state files, never words.
-export const ASK_IN_C = { LC_ALL: "C" };
-// outsideRepo(r) → whether a read asked with ASK_IN_C failed for being outside a repository.
-export const outsideRepo = (r) => r.code > 0 && /not a git repository/i.test(r.err);
-
-// The repository a folder belongs to: { ok: true, root }, or { ok: false, notRepo, err }.
-// notRepo tells "this folder isn't in a repository" (show the notice) from "git could not
-// be asked" (show the error and try again later).
-export async function repoRoot(git, folder) {
-  const r = await git.read(folder, ["rev-parse", "--show-toplevel"], { env: ASK_IN_C });
-  const root = r.out.trim();
-  if (r.ok && root) return { ok: true, root };
-  return { ok: false, notRepo: outsideRepo(r), err: r.err };
 }

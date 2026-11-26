@@ -6,6 +6,7 @@
 //   node layout.mjs <main.json>              check only: exit 1 and the reason if it can't be done
 //   node layout.mjs <main.json> <out.json>   write the transformed layout to out.json
 //   node layout.mjs --copy <from> <to>       copy the mod folder, writing only what differs
+//                                            and deleting the modules <from> no longer has
 
 export const MOD = "git-tools";
 export const LOG_ID = "git-log";
@@ -113,6 +114,25 @@ export function carryOver(layout, old) {
   return out;
 }
 
+// readMain(fs, from, { button }) → { ok: true, layout } or { ok: false, error }: reads
+// Herdr's main layout from the file `from` and transforms it with `toMainGit`. `error` is
+// a sentence for the person, naming the file. `fs`: node's fs module.
+export function readMain(fs, from, { button = true } = {}) {
+  let main;
+  try { main = JSON.parse(fs.readFileSync(from, "utf8")); }
+  catch (e) { return fail(`Cannot read ${from}: ${e.message}`); }
+  const r = toMainGit(main, { button });
+  return r.ok ? r : fail(`${from} is not shaped like the Herdr main layout this was built for: ${r.error}.`);
+}
+
+// writeLayout(fs, layout, to): writes `layout` to the file `to` whole (`writeWhole`), with
+// what the file it replaces carries over (`carryOver`). Throws as fs does.
+export function writeLayout(fs, layout, to) {
+  let old = null;
+  try { old = JSON.parse(fs.readFileSync(to, "utf8")); } catch {}
+  writeWhole(fs, to, JSON.stringify(carryOver(layout, old), null, 2) + "\n");
+}
+
 // writeWhole(fs, path, text): replaces the file whole or not at all. The text goes to a
 // file next to it (same folder, so the rename can't cross disks) and is renamed over it;
 // a write that fails halfway (a full disk) leaves the old file as it was. Throws as
@@ -128,30 +148,49 @@ export function writeWhole(fs, path, text) {
   }
 }
 
-// copyChanged(fs, from, to) → { written: [path relative to the folder], same: count }
-//   Copies folder `from` over folder `to`, writing only the files `to` lacks or holds with
-//   other bytes. Herdr reloads every copy of a mod each time a file in its folder is
-//   saved, so rewriting a file that is already the same costs a reload for nothing, and
-//   a mod of thousands of files costs thousands. Every file to write is first written
-//   whole beside its place under a hidden name (Herdr doesn't reload for hidden files),
-//   then all are renamed into place one after another: Herdr never reads half a file.
-//   Files only `to` has are left alone. Throws as fs does, with nothing renamed when a
-//   write failed and no hidden file left behind. `fs`: node's fs module.
-export function copyChanged(fs, from, to) {
-  const files = [];
+// Tests sit next to the modules they test but are not part of the installed mod.
+export const isTest = (name) => name.endsWith(".test.mjs");
+const isModule = (name) => name.endsWith(".js") || name.endsWith(".mjs");
+
+// files(fs, root, { hidden }) → [path relative to root], sorted: every file under `root`,
+// in subfolders too. hidden: false leaves out files and folders whose name starts with ".".
+const files = (fs, root, { hidden = true } = {}) => {
+  const out = [];
   const walk = (rel) => {
-    for (const entry of fs.readdirSync(rel ? `${from}/${rel}` : from, { withFileTypes: true })) {
+    for (const entry of fs.readdirSync(rel ? `${root}/${rel}` : root, { withFileTypes: true })) {
+      if (!hidden && entry.name.startsWith(".")) continue;
       const next = rel ? `${rel}/${entry.name}` : entry.name;
       if (entry.isDirectory()) walk(next);
-      else if (entry.isFile()) files.push(next);
+      else if (entry.isFile()) out.push(next);
     }
   };
   walk("");
-  files.sort();
+  return out.sort();
+};
+
+// copyChanged(fs, from, to) → { written, same: count, removed }
+//   Makes folder `to` hold the mod in folder `from`. `written` and `removed` list paths
+//   relative to the folder. Tests (`*.test.mjs`) are not copied.
+//   Only the files `to` lacks or holds with other bytes are written. Herdr reloads every
+//   copy of a mod each time a file in its folder is saved, so rewriting a file that is
+//   already the same costs a reload for nothing, and a mod of thousands of files costs
+//   thousands. Every file to write is first written whole beside its place under a hidden
+//   name (Herdr doesn't reload for hidden files), then all are renamed into place one
+//   after another: Herdr never reads half a file.
+//   Then the `.js` and `.mjs` files `to` has and `from` doesn't are deleted (a module moved
+//   or removed, a test an older install copied), in subfolders too: a module left behind
+//   would still load where an old import names it. They go only after every rename, so the
+//   whole install lands within the short span Herdr folds into one reload. Every other
+//   file only `to` has stays (Herdr may keep files of its own there), as do hidden files
+//   and everything in a hidden folder.
+//   Throws as fs does. A failed write leaves nothing renamed, nothing deleted and no hidden
+//   file behind; a failed delete leaves every file in place whole. `fs`: node's fs module.
+export function copyChanged(fs, from, to) {
+  const source = files(fs, from).filter((rel) => !isTest(rel));
   const pending = [], written = [];
   let same = 0;
   try {
-    for (const rel of files) {
+    for (const rel of source) {
       const data = fs.readFileSync(`${from}/${rel}`), target = `${to}/${rel}`;
       let old = null;
       try { old = fs.readFileSync(target); } catch {}
@@ -167,7 +206,16 @@ export function copyChanged(fs, from, to) {
     for (const { temp } of pending) { try { fs.unlinkSync(temp); } catch {} }
     throw error;
   }
-  return { written, same };
+  const keep = new Set(source);
+  const removed = fs.existsSync(to) ? files(fs, to, { hidden: false }).filter((rel) => isModule(rel) && !keep.has(rel)) : [];
+  for (const rel of removed) fs.unlinkSync(`${to}/${rel}`);
+  return { written, same, removed };
+}
+
+// copyReport({ written, same, removed }) → the line the copy prints.
+export function copyReport({ written, same, removed }) {
+  const gone = removed.length ? `, ${removed.length} removed` : "";
+  return `${written.length} ${written.length === 1 ? "file" : "files"} updated, ${same} already the same${gone}.`;
 }
 
 const invoked = typeof process !== "undefined" && process.argv[1] && import.meta.url === (await import("node:url")).pathToFileURL(process.argv[1]).href;
@@ -177,27 +225,18 @@ if (invoked) {
     const [source, target] = process.argv.slice(3);
     if (!source || !target) { console.error("usage: node layout.mjs --copy <from> <to>"); process.exit(2); }
     try {
-      const r = copyChanged(fs, source, target);
-      console.log(`${r.written.length} ${r.written.length === 1 ? "file" : "files"} updated, ${r.same} already the same.`);
+      console.log(copyReport(copyChanged(fs, source, target)));
     } catch (e) { console.error(`Cannot copy to ${target}: ${e.message}. Files already there are whole.`); process.exit(1); }
     process.exit(0);
   }
   const [from, to] = process.argv.slice(2);
   if (!from) { console.error("usage: node layout.mjs <main.json> [<out.json>]"); process.exit(2); }
-  let main;
-  try { main = JSON.parse(fs.readFileSync(from, "utf8")); }
-  catch (e) { console.error(`Cannot read ${from}: ${e.message}`); process.exit(1); }
   // Only on macOS: elsewhere the tab bar ends with the window's own buttons (minimize,
   // maximize, close), and a block right of it would sit outside them.
-  const r = toMainGit(main, { button: process.platform === "darwin" });
-  if (!r.ok) {
-    console.error(`${from} is not shaped like the Herdr main layout this was built for: ${r.error}.`);
-    process.exit(1);
-  }
+  const r = readMain(fs, from, { button: process.platform === "darwin" });
+  if (!r.ok) { console.error(r.error); process.exit(1); }
   if (to) {
-    let old = null;
-    try { old = JSON.parse(fs.readFileSync(to, "utf8")); } catch {}
-    try { writeWhole(fs, to, JSON.stringify(carryOver(r.layout, old), null, 2) + "\n"); }
+    try { writeLayout(fs, r.layout, to); }
     catch (e) { console.error(`Cannot write ${to}: ${e.message}. The old file is unchanged.`); process.exit(1); }
   }
 }

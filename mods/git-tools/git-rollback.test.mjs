@@ -208,7 +208,7 @@ const index = (repo, path) => sh(repo, `git ls-files -s -z -- ":(literal)${path}
     mkdirSync(`${repo}/clean/m`, { recursive: true });
     writeFileSync(`${repo}/clean/m/x`, "head\n");
     sh(repo, "git add -A && git commit -q -m first");
-    for (const { path, obstacle } of cases) sh(repo, `rm -rf "${obstacle}"`);
+    for (const { obstacle } of cases) sh(repo, `rm -rf "${obstacle}"`);
     sh(repo, "rm -rf clean");
     if (deletion === "staged") sh(repo, "git add -u");
     for (const { put } of cases) sh(repo, put);
@@ -257,7 +257,7 @@ rm c-blocked c-back m-blocked m-back && mkdir c-blocked m-blocked`);
   assert.deepEqual(onDisk(repo, "m-blocked"), { folder: [] });
   assert.equal(text(repo, "c-back"), "ours\n");
   assert.equal(text(repo, "m-back"), "head\n");
-  assert.deepEqual(status(repo).filter((line) => /-back$/.test(line)), []);
+  assert.deepEqual(status(repo).filter((line) => line.endsWith("-back")), []);
 }
 
 // What the disk under the temporary folder treats as one name. These cases mean something
@@ -582,7 +582,7 @@ git merge -q other || true`);
   const folds = sameFile("Σ", "ς");
   for (const how of ["assume-unchanged", "skip-worktree", "both", "ignoreStat"]) {
     const repo = init(`flagged-${how}`);
-    const flagged = ["Σ/x", "gone", "edited", "filtered", "new"], plain = ["plain", "plain-gone", "plain-new"];
+    const flagged = ["Σ/x", "gone", "edited", "filtered", "new"];
     const tracked = ["Σ/x", "gone", "edited", "filtered", "plain", "plain-gone"];
     mkdirSync(`${repo}/Σ`);
     writeFileSync(`${repo}/.gitattributes`, "filtered filter=broken\n");

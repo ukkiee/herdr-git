@@ -91,7 +91,7 @@ export default class MergeRevisionsView {
     this.current = -1; // the chunk Previous and Next Conflict went to
     this.editor = null; // the EditorState while the result is edited by hand
     this.waiting = false; // asked the owner, no answer yet
-    // The question shown over the dialog: { kind: "unresolved" | "overwrite", then, passed }
+    // The question shown over the dialog: { kind: "unresolved" | "overwrite", after, passed }
     // before saving (saveQuestion), { kind: "accept", column } before Accept Left or Right
     // on a file edited since git left it.
     this.confirm = null;
@@ -230,7 +230,7 @@ export default class MergeRevisionsView {
       const now = await this.disk();
       this.checking = false;
       const kind = saveQuestion(state, { opened: this.opened, now, passed });
-      if (kind) { this.confirm = { kind, then, passed }; this.handle.focus(); cx.notify(); return; }
+      if (kind) { this.confirm = { kind, after: then, passed }; this.handle.focus(); cx.notify(); return; }
       if (this.editor) { this.editor.release(); this.editor = null; }
       const text = resultText(state);
       this.waiting = true;
@@ -299,7 +299,7 @@ export default class MergeRevisionsView {
       const now = await this.disk();
       this.checking = false;
       const kind = leaveQuestion({ opened: this.opened, now, passed });
-      if (kind) { this.confirm = { kind, then: "leave", passed }; this.handle.focus(); cx.notify(); return; }
+      if (kind) { this.confirm = { kind, after: "leave", passed }; this.handle.focus(); cx.notify(); return; }
       if (this.editor) { this.editor.release(); this.editor = null; }
       this.waiting = true;
       cx.notify();
@@ -427,11 +427,11 @@ export default class MergeRevisionsView {
     if (q.kind === "unresolved") {
       [id, title, text] = ["mr-unresolved", this.t("conflicts.mrUnresolvedTitle"), this.t("conflicts.mrUnresolvedBody", { n: this.file?.state ? leftToDecide(this.file.state) : 0 })];
       [cancel, ok] = [this.t("conflicts.mrBackToResolving"), this.t("conflicts.mrSaveAnyway")];
-      yes = (cx) => this.save(q.then, cx, [...q.passed, "unresolved"]);
+      yes = (cx) => this.save(q.after, cx, [...q.passed, "unresolved"]);
     } else if (q.kind === "overwrite") {
       [id, title, text] = ["mr-changed", this.t("conflicts.overwriteTitle"), this.t("conflicts.mrChangedOnDiskBody", { path: this.path ?? "" })];
       [cancel, ok] = [this.t("dialogs.cancel"), this.t("conflicts.mrOverwrite")];
-      yes = (cx) => (q.then === "leave" ? this.leave(cx, [...q.passed, "overwrite"]) : this.save(q.then, cx, [...q.passed, "overwrite"]));
+      yes = (cx) => (q.after === "leave" ? this.leave(cx, [...q.passed, "overwrite"]) : this.save(q.after, cx, [...q.passed, "overwrite"]));
     } else {
       const column = this.word(q.column === "yours" ? this.titles.left : this.titles.right);
       [id, title, text] = ["mr-overwrite", this.t("conflicts.overwriteTitle"), this.t("conflicts.overwriteBody", { path: this.path ?? "", column })];

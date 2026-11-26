@@ -15,7 +15,8 @@
 // ("windows" reads folders with PowerShell on this computer). Paths in results are
 // relative to `folder` and use "/". What the marks mean for a row (ignored under an
 // ignored folder, a folder's dot) is files-tree.js's job.
-import { makeGit, chunks, ASK_IN_C, outsideRepo } from "./git.js";
+import { makeGit } from "./git.js";
+import { chunks, ASK_IN_C, outsideRepo } from "./git-port.js";
 
 export const PER_FOLDER = 500;
 export const TOTAL = 5000;

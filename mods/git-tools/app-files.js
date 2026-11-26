@@ -11,7 +11,6 @@
 import { appHome, readTextFile, writeTextFile } from "herdr";
 import * as fs from "fs/promises";
 import { consoleEntry, readEntries, appendEntries, updateText } from "./git-console.js";
-import { broadcast } from "./ui.js";
 
 const DIR = "git-tools";
 const CONSOLE = "console.jsonl";
@@ -37,9 +36,10 @@ const fileIo = (name) => ({
 // records stay in the file, never in the shared value (every write there redraws the window).
 export const CONSOLE_EVENT = "console";
 
-// recordGit(call): git.js's recorder (main.js installs it with recordWith): adds the call's
-// record to the log and tells the console tabs. A failure is left to git.js, which ignores it.
-export async function recordGit(call) {
+// recordGit(call, broadcast): git.js's recorder (main.js installs it with recordWith, handing
+// in ui.js's broadcast): adds the call's record to the log and tells the console tabs through
+// `broadcast`. A failure is left to git.js, which ignores it.
+export async function recordGit(call, broadcast) {
   const entry = consoleEntry(call);
   const r = await updateText(fileIo(CONSOLE), (text) => appendEntries(text, [entry]));
   if (!r.ok) throw new Error(r.err);

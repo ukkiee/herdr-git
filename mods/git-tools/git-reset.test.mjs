@@ -2,7 +2,7 @@
 // (no app needed). Each case reads the repository again with git itself: HEAD, the index
 // and the working tree, and the snapshot a hard reset records first.
 import { execFile, execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync, chmodSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, chmodSync } from "node:fs";
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
 import { makeGit } from "./git.js";

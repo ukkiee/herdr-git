@@ -13,12 +13,13 @@
 
 ```sh
 git clone https://github.com/ukkiee/herdr-git
-cd herdr-git && ./install.sh
+cd herdr-git && node install.mjs
 ```
 
-`install.sh`는 mod를 복사하고(설치된 것과 다른 파일만), 지금의 `main` 레이아웃으로
-`git-tools` 레이아웃을 만들어 그리로 바꾸고, 키를 더합니다. `main` 레이아웃의 구조가 예상과
-다르면 어느 부분이 없는지 알리고 아무것도 바꾸지 않습니다.
+`install.mjs`는 mod를 복사하고(설치된 것과 다른 파일만 쓰고, 이 저장소에 더는 없는 mod
+스크립트는 지웁니다), 지금의 `main` 레이아웃으로 `git-tools` 레이아웃을 만들어 그리로
+바꾸고, 키를 더합니다. `main` 레이아웃의 구조가 예상과 다르면 어느 부분이 없는지 알리고
+아무것도 바꾸지 않습니다.
 
 모두 Herdr의 `main`을 복사한 이 `git-tools` 레이아웃 안에 있습니다. Herdr의 원래 레이아웃과
 Changes·Files 패널은 그대로 둡니다. mod가 실행하고 쓰는 것은
@@ -33,12 +34,12 @@ Changes·Files 패널은 그대로 둡니다. mod가 실행하고 쓰는 것은
 | `cmd-shift-v` | VCS 작업 팝업을 엽니다(Commit panel이나 Log panel이 보일 때) |
 
 세 키는 `git-tools` 레이아웃에서만 동작합니다. 이미 다른 기능에 쓰는 키는 건드리지
-않습니다. `install.sh`가 그 사실을 알려 주니, `keys.json`에서 다른 키에 묶으면 됩니다.
+않습니다. `install.mjs`가 그 사실을 알려 주니, `keys.json`에서 다른 키에 묶으면 됩니다.
 
 ### Herdr를 업데이트한 뒤
 
 `git-tools` 레이아웃은 복사본이라 Herdr가 `main`에 준 변경을 따라가지 않습니다. **Herdr를
-업데이트할 때마다 `./install.sh`를 다시 실행하세요**(이 저장소를 `git pull`한 뒤에도).
+업데이트할 때마다 `node install.mjs`를 다시 실행하세요**(이 저장소를 `git pull`한 뒤에도).
 지금의 `main`으로 이 레이아웃을 다시 만듭니다. `git-tools.json`을 손으로 고친 내용은 이때
 사라집니다. 터미널 링크의 Ctrl/Cmd-클릭을 받는 mod 목록(`link_handlers`)만 그대로 남습니다.
 
@@ -47,7 +48,7 @@ Changes·Files 패널은 그대로 둡니다. mod가 실행하고 쓰는 것은
 `cmd-shift-l`(Herdr의 레이아웃 전환 키)을 누르세요. 누를 때마다 다음 레이아웃으로
 넘어가니, 레이아웃이 둘보다 많으면 `main`이 보일 때까지 누릅니다. Herdr의 원래 Changes
 패널이 그대로 있습니다. 돌아오려면 `git-tools` 레이아웃이 보일 때까지 누르거나
-`./install.sh`를 실행하세요.
+`node install.mjs`를 실행하세요.
 
 ### 지우기
 
@@ -224,7 +225,7 @@ Changes·Files 패널은 그대로 둡니다. mod가 실행하고 쓰는 것은
   git 설정을 바꾸지 않습니다. 기록은 그 클론에만 있습니다: `push --all`과 clone은 옮기지
   않습니다. 지운 브랜치를 복원하면 그 브랜치의 `branch.<name>.remote`, `.merge` 설정도
   되돌립니다.
-- **Herdr 앱 홈의 파일**(`~/.config/herdr-app` 또는 `$HERDR_APP_HOME`): `install.sh`가
+- **Herdr 앱 홈의 파일**(`~/.config/herdr-app` 또는 `$HERDR_APP_HOME`): `install.mjs`가
   `mods/git-tools/`와 `layouts/git-tools.json`을 쓰고 `keys.json`에 키 세 개를 더합니다.
   mod는 `shared.json`에 작은 값 여섯 개를 둡니다. `git-tools.bus`는 화면끼리 저장소가
   바뀌었다고 알리는 데, `git-tools.lock`은 어느 저장소에서 git-tools의 쓰기가 돌고 있는지

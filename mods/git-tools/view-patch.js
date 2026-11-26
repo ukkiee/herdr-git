@@ -72,7 +72,7 @@ export default class PatchView {
     if (this.writing()) return;
     this.waiting = true; this.error = null;
     cx.notify();
-    askOwner(this, "patch-create", { root: this.root, on: this.on, ...this.options(), file }, "ui.logPanel", cx, (r, cx) => {
+    askOwner(this, "patch-create", { root: this.root, on: this.on, ...this.options(), file }, "ui.logPanel", cx, (r) => {
       this.waiting = false;
       if (r.ok) { notify({ title: this.t("revision.saved", { file }), level: "info" }); close(this.overlay); return; }
       this.error = sentence(this.t, r.msg, r.err);

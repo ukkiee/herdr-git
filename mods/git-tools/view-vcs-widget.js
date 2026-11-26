@@ -27,7 +27,8 @@
 import { div } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { exec, theme, notify, run } from "herdr";
-import { makeGit, repoRoot } from "./git.js";
+import { makeGit } from "./git.js";
+import { repoRoot } from "./git-root.js";
 import { readTurns } from "./read-turns.js";
 import { oneTimer, dwell, each, spawnOrUndo } from "./later.js";
 import { popupPress } from "./popup-press.js";
@@ -47,7 +48,7 @@ import { openVcsPopup, askAbort, branchMenuRows, deleteBlockOf, popupHandles, PO
 const POLL = 10000;
 const FIRST_LOOK = 6000; // ms after the block starts: a first read still unanswered then is made again once
 const PAD = 2; // the block's padding each side of the widget
-// The layout block install.sh gives the widget (the git-tools layout on macOS), sized to the widget.
+// The layout block install.mjs gives the widget (the git-tools layout on macOS), sized to the widget.
 const BLOCK_ID = "git-vcs-widget";
 const WIDGET_MAX = 360; // px: a longer branch name is cut rather than widen the block further
 const SEEN = 8; // how many folders besides the one shown the widget keeps the last face of (see remember)
@@ -166,7 +167,7 @@ export class VcsWidget {
   // On this computer: read again when a terminal's git moves a ref or HEAD, starts or
   // ends an operation, or resolves a conflict. One watch, for the repository record followed
   // (`this.watching`): another folder or repository stops it (unwatch), which cancels its
-  // pending call at once. The reads write nothing there (git.js READ).
+  // pending call at once. The reads write nothing there (git-port.js READ).
   watch(repo, cx) {
     if (repo.on || this.watching === repo) return;
     this.unwatch();

@@ -105,7 +105,7 @@ const init = (name) => {
 // The room a folder may fill: the tree's total less what the other loaded folders hold
 // (a folder read again doesn't count against itself).
 {
-  const loaded = new Map([["", new Array(3).fill({ name: "x", dir: false })], ["a", new Array(4).fill({ name: "y", dir: false })]]);
+  const loaded = new Map([["", Array.from({ length: 3 }, () => ({ name: "x", dir: false }))], ["a", Array.from({ length: 4 }, () => ({ name: "y", dir: false }))]]);
   assert.equal(roomFor(loaded, "b", 10), 3);
   assert.equal(roomFor(loaded, "a", 10), 7);
   assert.equal(roomFor(loaded, "b", 5), 0);

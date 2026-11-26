@@ -122,7 +122,7 @@ export function optionChips(id, picked, t, { label = (o) => o, removeTitle, onRe
 
 // Modify options ▾: a menu of the options not picked yet (description, the flag dim on
 // the right). pick(option, cx) with the one chosen.
-export function modifyOptions(screen, id, t, { options, picked, label, title, pick }) {
+export function modifyOptions(screen, id, t, { options, picked, title, pick }) {
   return h_flex().id(id).h(26).px(8).gap(4).items_center().rounded(5).cursor_pointer().text_color(t.accent)
     .hover((s) => s.bg(t.hover))
     .on_mouse_down("left", stop)

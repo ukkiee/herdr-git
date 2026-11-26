@@ -133,7 +133,7 @@ export default class FilesView {
   // A folder change is taken up first: the open folders and the previewed file of the
   // folder left are kept for coming back, and what its tree showed too (remember).
   // → true when the folder changed.
-  enter(cx) {
+  enter(_cx) {
     const key = this.contextKey();
     if (key === this.context?.key) return false;
     if (this.context) this.saved.set(this.context.key, { open: this.open, file: this.file });
@@ -261,7 +261,7 @@ export default class FilesView {
   // drops what was read inside it, which frees its share of the total.
   toggle(path, cx) {
     if (this.open.has(path)) {
-      for (const folder of [...this.open]) if (folder === path || folder.startsWith(`${path}/`)) {
+      for (const folder of this.open) if (folder === path || folder.startsWith(`${path}/`)) {
         this.open.delete(folder);
         this.folders.delete(folder);
       }

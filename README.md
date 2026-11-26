@@ -15,13 +15,13 @@ run on.
 
 ```sh
 git clone https://github.com/ukkiee/herdr-git
-cd herdr-git && ./install.sh
+cd herdr-git && node install.mjs
 ```
 
-`install.sh` copies the mod (only the files that differ from what is installed), builds
-the `git-tools` layout from your current `main` layout, switches to it and adds the keys.
-If your `main` layout isn't shaped the way it expects, it says which part is missing and
-changes nothing.
+`install.mjs` copies the mod (only the files that differ from what is installed, and it
+removes the mod's scripts this repository no longer has), builds the `git-tools` layout
+from your current `main` layout, switches to it and adds the keys. If your `main` layout
+isn't shaped the way it expects, it says which part is missing and changes nothing.
 
 Everything lives in that `git-tools` layout, a copy of Herdr's `main`. Herdr's own layout
 and its Changes and Files panels are left as they are. What the mod runs and writes is
@@ -36,13 +36,13 @@ listed under [What it runs and writes](#what-it-runs-and-writes).
 | `cmd-shift-v` | opens the VCS Operations popup (while the Commit panel or the Log panel shows) |
 
 All three work only in the `git-tools` layout. A key you already use for something else is
-left alone; `install.sh` says so, and you can bind the action to another key in
+left alone; `install.mjs` says so, and you can bind the action to another key in
 `keys.json`.
 
 ### After a Herdr update
 
 The `git-tools` layout is a copy, so it doesn't pick up changes Herdr makes to `main`.
-**Run `./install.sh` again after every Herdr update** (and after `git pull` here). It
+**Run `node install.mjs` again after every Herdr update** (and after `git pull` here). It
 rebuilds the layout from your current `main`. Changes you made by hand to
 `git-tools.json` are lost then, except its `link_handlers` (the mods that take
 Ctrl/Cmd-clicks on terminal links), which stay as they were.
@@ -51,7 +51,7 @@ Ctrl/Cmd-clicks on terminal links), which stay as they were.
 
 Press `cmd-shift-l` (Herdr's layout switch). It moves to the next layout, so with more
 than two layouts press it until `main` shows. Herdr's own Changes panel is there
-unchanged. Press it until the `git-tools` layout shows, or run `./install.sh`, to come
+unchanged. Press it until the `git-tools` layout shows, or run `node install.mjs`, to come
 back.
 
 ### Remove it
@@ -249,7 +249,7 @@ Herdr. git's own messages are shown as git writes them.
   that clone: `push --all` and clone don't carry them. Restoring a deleted branch also
   writes back its `branch.<name>.remote` and `.merge` config.
 - **Files in Herdr's app home** (`~/.config/herdr-app`, or `$HERDR_APP_HOME`):
-  `install.sh` writes `mods/git-tools/` and `layouts/git-tools.json`, and adds three
+  `install.mjs` writes `mods/git-tools/` and `layouts/git-tools.json`, and adds three
   keys to `keys.json`. The mod keeps six small values in `shared.json`: `git-tools.bus`
   (how its screens tell each other the repository changed), `git-tools.lock` (which
   repository a git-tools write is running on), `git-tools.lang` (the system language

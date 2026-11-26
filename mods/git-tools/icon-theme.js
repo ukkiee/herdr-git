@@ -36,7 +36,7 @@ export function darkColor(color) {
   let rgb = null;
   const hex = /^#([0-9a-f]{3,8})$/.exec(s);
   if (hex && [3, 4, 6, 8].includes(hex[1].length)) {
-    const h = hex[1].length <= 4 ? [...hex[1].slice(0, 3)].map((c) => c + c).join("") : hex[1].slice(0, 6);
+    const h = hex[1].length <= 4 ? hex[1].slice(0, 3).split("").map((c) => c + c).join("") : hex[1].slice(0, 6);
     rgb = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16));
   } else {
     const fn = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)/.exec(s);
@@ -67,7 +67,7 @@ const ranksAbove = (a, b) => !b || a.priority > b.priority || (a.priority === b.
 
 // The rules' indexes in rank order: from their generated `rank`, or sorted when a list lacks it.
 function rankOrder(rules) {
-  const at = new Array(rules.length);
+  const at = Array.from({ length: rules.length });
   for (let i = 0; i < rules.length; i++) {
     const rank = rules[i].rank;
     if (!Number.isInteger(rank) || rank < 0 || rank >= rules.length || at[rank] !== undefined) {

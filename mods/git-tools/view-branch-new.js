@@ -147,7 +147,7 @@ export default class BranchNewView {
     if (this.waiting || !this.root || this.writing()) return;
     this.waiting = true; this.error = null;
     cx.notify();
-    askOwner(this, "branch-delete", { root: this.root, on: this.on, name: this.name }, "ui.logPanel", cx, (r, cx) => {
+    askOwner(this, "branch-delete", { root: this.root, on: this.on, name: this.name }, "ui.logPanel", cx, (r) => {
       this.waiting = false;
       if (r.ok) close(this.overlay);
       else this.error = sentence(this.t, r.msg, r.err);

@@ -1,5 +1,6 @@
-// Full offline check: every *.test.mjs with node, then `herdr-app check mods/git-tools`.
-//   node tools/check.mjs
+// Full offline check: every *.test.mjs, then `herdr-app check mods/git-tools`.
+//   bun tools/check.mjs
+// Each test runs on the runtime running this script (process.execPath).
 // One line per test file (PASS or FAIL, its time, its last line, and what it skipped), then the
 // totals. Exits 1 when a test or the app's check fails.
 //

@@ -9,7 +9,7 @@
 // which is not a branch or a tag: no branch list, tag list, Commit list or push sees it.
 // No `herdr` import: node tests it against real repositories (git-snapshot.test.mjs).
 
-import { chunks } from "./git.js";
+import { chunks } from "./git-port.js";
 import { sentence } from "./i18n.js";
 
 export const SNAPSHOTS = "refs/git-tools/rollback";
@@ -435,7 +435,7 @@ export async function restore(git, root, { snapshot, paths = [], copy } = {}) {
   // A failed index write is said after the paths it left: the files are back all the same.
   let broke = null;
   if (staging) {
-    const put = await putStaging(git, root, restored, { then: then.entries, now: now.entries, held: held.entries, conflicts: made.conflicts, intents: made.intents });
+    const put = await putStaging(git, root, restored, { madeHead: then.entries, now: now.entries, held: held.entries, conflicts: made.conflicts, intents: made.intents });
     stagingSkipped.push(...put.skipped);
     if (put.wrote) touched = true;
     if (!put.ok) {
@@ -550,11 +550,11 @@ const UNSTAGED = "Restored all of it. Its staging doesn't fit the index HEAD has
 
 // The files a snapshot changed (its working tree or its index against the HEAD it was made
 // on) that that HEAD had, HEAD has no longer, and the snapshot's working tree still has:
-// git would merge each as deleted against modified. → { ok, paths, then, tree, index }:
+// git would merge each as deleted against modified. → { ok, paths, madeHead, tree, index }:
 // the paths, and their entries ("<mode> <object>") in that HEAD, the snapshot's tree and
 // its index (no key: not there). A file the snapshot left as it was stays deleted.
 async function notInHead(git, root, snapshot, parents) {
-  const none = { ok: true, paths: [], then: new Map(), tree: new Map(), index: new Map() };
+  const none = { ok: true, paths: [], madeHead: new Map(), tree: new Map(), index: new Map() };
   const [then, staged] = parents;
   if (!then) return none;
   const changed = new Set();
@@ -568,7 +568,7 @@ async function notInHead(git, root, snapshot, parents) {
   const [was, now, tree, index] = await Promise.all([inTree(git, root, then, all), inTree(git, root, "HEAD", all), inTree(git, root, snapshot, all), staged ? inTree(git, root, staged, all) : { ok: true, entries: new Map() }]);
   for (const r of [was, now, tree, index]) if (!r.ok) return r;
   const paths = all.filter((path) => was.entries.has(path) && !now.entries.has(path) && tree.entries.has(path));
-  return { ok: true, paths, then: was.entries, tree: tree.entries, index: index.entries };
+  return { ok: true, paths, madeHead: was.entries, tree: tree.entries, index: index.entries };
 }
 
 // Which of `paths` have something on disk at them or under them, tracked or not, ignored
@@ -600,7 +600,7 @@ async function withoutPaths(git, root, snapshot, parents, gone, copy) {
     const base = await git(root, ["read-tree", commit], { env });
     if (!base.ok) return base;
     for (const chunk of chunks(gone.paths, (path) => path.length * 3 + 120)) {
-      const r = await git(root, ["update-index", "--add", ...chunk.flatMap((path) => ["--cacheinfo", ...gone.then.get(path).split(" "), path])], { env });
+      const r = await git(root, ["update-index", "--add", ...chunk.flatMap((path) => ["--cacheinfo", ...gone.madeHead.get(path).split(" "), path])], { env });
       if (!r.ok) return r;
     }
     return git(root, ["write-tree"], { env });
@@ -636,7 +636,7 @@ async function revive(git, root, gone, copy) {
     const list = wrote.taken.join("\n");
     return { ok: false, code: -1, out: "", err: `Restored the rest. Not written, because something is on disk there now:\n${list}`, msg: { key: "restore.revivedNotWritten", args: { list } } };
   }
-  const staged = gone.paths.filter((path) => gone.index.get(path) !== gone.then.get(path));
+  const staged = gone.paths.filter((path) => gone.index.get(path) !== gone.madeHead.get(path));
   const add = staged.filter((path) => gone.index.has(path));
   for (const chunk of chunks(add, (path) => path.length * 3 + 120)) {
     const r = await git(root, ["update-index", "--add", ...chunk.flatMap((path) => ["--cacheinfo", ...gone.index.get(path).split(" "), path])]);
@@ -678,14 +678,14 @@ async function madeOn(git, root, snapshot) {
 }
 
 // Puts the staging of restored `paths` back on the real index (see restore).
-// then, now, held: "<mode> <object>" by path in the HEAD the snapshot was made on, HEAD
+// madeHead, now, held: "<mode> <object>" by path in the HEAD the snapshot was made on, HEAD
 // now, and the snapshot's second parent. intents: the paths the index only announced,
 // which go back as announced (`git add -N`). → { ok, skipped, wrote } (on a failed git
 // call, its failure too, and left: the paths whose staging it didn't get to; wrote: an
 // index write was started).
-async function putStaging(git, root, paths, { then, now, held, conflicts, intents }) {
+async function putStaging(git, root, paths, { madeHead, now, held, conflicts, intents }) {
   const skipped = [], remove = [], stage = [], announce = [];
-  const keep = paths.filter((path) => !conflicts.has(path) && (intents.has(path) || held.get(path) !== then.get(path)));
+  const keep = paths.filter((path) => !conflicts.has(path) && (intents.has(path) || held.get(path) !== madeHead.get(path)));
   for (const path of paths) if (conflicts.has(path)) skipped.push({ path, ...STAGING.conflict });
   const [index, announced] = await Promise.all([indexEntries(git, root, keep), intentPaths(git, root, keep)]);
   for (const r of [index, announced]) if (!r.ok) return { ...r, skipped, wrote: false, left: keep };

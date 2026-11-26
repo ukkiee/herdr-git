@@ -210,7 +210,11 @@ export function resultText(state) {
 // counts(state) → { changes, conflicts }: open changes that are not conflicts, open conflicts.
 export function counts(state) {
   let changes = 0, conflicts = 0;
-  for (const chunk of state.chunks) if (open(chunk)) chunk.kind === "conflict" ? conflicts++ : changes++;
+  for (const chunk of state.chunks) {
+    if (!open(chunk)) continue;
+    if (chunk.kind === "conflict") conflicts++;
+    else changes++;
+  }
   return { changes, conflicts };
 }
 

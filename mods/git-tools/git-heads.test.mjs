@@ -244,7 +244,7 @@ assert.deepEqual(widgetFace(heads(), op({ kind: "revert", canContinue: true })).
 
 // Every action the popup has is handled here, unless a case says otherwise.
 const all = () => true;
-const shape = (rows, tr = en) => rows.map((r) => r.kind === "rule" ? "|"
+const shape = (rows) => rows.map((r) => r.kind === "rule" ? "|"
   : r.kind === "group" ? `[${r.label}]`
   : r.kind === "folder" ? `${r.label}/`
   : r.kind === "branch" ? `${r.scope}:${r.name}`
@@ -299,7 +299,7 @@ const shape = (rows, tr = en) => rows.map((r) => r.kind === "rule" ? "|"
 // reference has them. Continue opens the Conflicts dialog while any are left (as ≫ does).
 {
   const at = (over) => popupRows({ heads: heads(), op: op(over), query: "", folded: new Set(["recent", "local", "remote", "tags"]), handled: all }, ko);
-  const middle = (rows) => shape(rows, ko).slice(4, shape(rows, ko).indexOf("|", 4));
+  const middle = (rows) => shape(rows).slice(4, shape(rows).indexOf("|", 4));
   assert.deepEqual(middle(at({ kind: "rebase", rebasing: "feature", conflicts: UU, canSkip: true })), ["리베이스 중단", "리베이스 계속 진행", "커밋 건너 뛰기"]);
   assert.deepEqual(middle(at({ kind: "merge", conflicts: UU })), ["병합 중단"]);
   assert.deepEqual(middle(at({ kind: "cherry-pick", canContinue: true })), ["체리픽 중단", "Cherry-Pick 계속"]);
@@ -315,7 +315,7 @@ const shape = (rows, tr = en) => rows.map((r) => r.kind === "rule" ? "|"
   const rows = popupRows({ heads: heads(), op: op(), query: "TOP", folded: new Set(["recent", "local", "remote", "tags"]), handled: all }, en);
   assert.deepEqual(shape(rows), ["[Recent]", "recent:topic", "[Local]", "local:topic", "[Remote]", "origin/", "remote:origin/topic"]);
   assert.deepEqual(shape(popupRows({ heads: heads(), op: op(), query: "push", folded: new Set(), handled: all }, en)), ["Push…"]);
-  assert.deepEqual(shape(popupRows({ heads: heads(), op: op(), query: "브랜치", folded: new Set(), handled: all }, ko), ko), ["새 브랜치…"]);
+  assert.deepEqual(shape(popupRows({ heads: heads(), op: op(), query: "브랜치", folded: new Set(), handled: all }, ko)), ["새 브랜치…"]);
   assert.deepEqual(popupRows({ heads: heads(), op: op(), query: "nothing-like-this", folded: new Set(), handled: all }, en), []);
 }
 

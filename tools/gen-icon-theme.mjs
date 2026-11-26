@@ -63,7 +63,7 @@ const stripComments = (svg) => svg.replace(/<!--[\s\S]*?-->/g, "").replace(/^\s+
 // ".*\.ext$" or ".*\.(a|b)$" with plain extensions: letters, digits, "_" and "-", none of which
 // a regex reads as a quantifier ("c+" is one or more "c"; such a pattern takes the parser's way).
 // (".*" doesn't cross a line break; the mod gives such a name the rule all the same.)
-const EXTENSION_ONLY = /^\.\*\\\.(?:\(([A-Za-z0-9_\-|]+)\)|([A-Za-z0-9_\-]+))\$$/;
+const EXTENSION_ONLY = /^\.\*\\\.(?:\(([A-Za-z0-9_\-|]+)\)|([A-Za-z0-9_-]+))\$$/;
 // Most strings one part of a pattern may stand for before the reading gives up on it.
 const MAX_STRINGS = 256;
 // Most characters a character class may stand for and still be listed.
@@ -322,7 +322,7 @@ export function hintOf(pattern) {
 // Each rule with its hint and its place in rank order.
 function withHints(rules) {
   const rank = rules.map((_, i) => i).sort((a, b) => rules[b].priority - rules[a].priority || a - b);
-  const place = new Array(rules.length);
+  const place = Array.from({ length: rules.length });
   rank.forEach((i, at) => { place[i] = at; });
   return rules.map((rule, i) => ({ ...rule, rank: place[i], ...hintOf(rule.pattern) }));
 }

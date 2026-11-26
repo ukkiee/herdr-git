@@ -22,7 +22,8 @@
 
 import { readStatus } from "./git-status.js";
 import { readOperation, settle } from "./git-operation.js";
-import { blockedBy, checkoutBranch, smartRun } from "./git-smart.js";
+import { blockedBy, checkoutBranch } from "./git-blocked.js";
+import { smartRunWith } from "./git-smart-stash.js";
 import { resetTo } from "./git-reset.js";
 import { sentence } from "./i18n.js";
 
@@ -307,7 +308,7 @@ export async function updateProject(git, root, { method, now = new Date() } = {}
   const status = await readStatus(git, root);
   const local = status.ok && status.changes.some((c) => c.status !== "conflict" && c.status !== "unversioned" && c.xy);
   if (!local) return settled(git, root, before, await step(git, root), { type: how, target: t.upstream.ref }, before.head);
-  const r = await smartRun(git, root, { request: { type: "Update" }, run: step, now });
+  const r = await smartRunWith(git, root, { request: { type: "Update" }, run: step, now });
   const to = r.operation?.head ?? null;
   const ended = r.outcome === "done" || (r.outcome === "stopped" && !r.operation?.kind);
   return { ...r, updated: ended && before.head && to && to !== before.head ? { from: before.head, to } : null, changed: true };

@@ -1,6 +1,8 @@
-# The full offline check (tools/check.mjs) on every push to main and every pull request.
-# The runner has no Herdr app, so the `herdr-app check` step reports skipped; the tests
-# still run against real temporary git repositories.
+# On every push to main and every pull request: oxlint (.oxlintrc.json, warnings fail),
+# then the full offline check (tools/check.mjs) with bun. The runner has no Herdr app, so
+# the `herdr-app check` step reports skipped; the tests still run against real temporary
+# git repositories. Last, the install side's tests run again under node: people install
+# with `node install.mjs` and need no bun, so layout.mjs and install.mjs must hold there too.
 name: check
 
 on:
@@ -20,4 +22,11 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 26
-      - run: node tools/check.mjs
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.5
+      - run: bun install --frozen-lockfile
+      - run: bun run lint
+      - run: bun tools/check.mjs
+      - run: node layout.test.mjs
+      - run: node install.test.mjs

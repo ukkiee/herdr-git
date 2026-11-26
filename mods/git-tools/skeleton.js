@@ -126,7 +126,7 @@ export function skeletonRows(specs = [{}], { height = HEIGHT } = {}) {
     const count = s.rows ?? fillRows(height - used, s.rowHeight);
     for (let k = 0; k < count; k++, n++) {
       const depth = s.depth[k % s.depth.length];
-      const o = { ...s, ...(s.at[depth] ?? {}) };
+      const o = { ...s, ...s.at[depth] };
       out.push({
         height: s.rowHeight, left: s.indent[0] + depth * s.indent[1], right: s.padRight, gap: s.gap,
         pieces: [...o.lead.map((p) => place(p, s)), ...o.cols.map((c) => column(c, n)), ...o.trail.map((p) => place(p, s))],

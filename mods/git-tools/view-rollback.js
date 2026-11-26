@@ -236,7 +236,7 @@ export default class RollbackView {
     return false;
   }
 
-  command(name, cx) {
+  command(name, _cx) {
     if (name === "focus") this.handle.focus();
     else if (name === "rollback-toggle") this.act("space");
     else if (name === "rollback-delete-added") this.toggleDelete();

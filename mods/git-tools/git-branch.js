@@ -353,6 +353,7 @@ const IDENTITY = ["-c", "user.name=git-tools", "-c", "user.email=git-tools@local
 // A reflog message is one line in which git squeezes every run of whitespace into one
 // space, so each field must be a single word: "%", whitespace and control characters
 // are written as %XX.
+// oxlint-disable-next-line no-control-regex -- control characters are the ones to encode
 const word = (s) => String(s).replace(/[%\s\x00-\x1f\x7f]/gu, (c) => encodeURIComponent(c));
 const unword = (s) => { try { return decodeURIComponent(s); } catch { return null; } };
 const recordMessage = ({ name, upstream }) => ["deleted", word(name), ...(upstream ? [word(upstream.remote), word(upstream.merge)] : [])].join(" ");

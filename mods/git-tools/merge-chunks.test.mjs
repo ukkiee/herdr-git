@@ -5,8 +5,6 @@ import assert from "node:assert/strict";
 import { merge, decide, resultText, counts, resolveSimple, applyNonConflicting, edit, resolved } from "./merge-chunks.js";
 
 const kinds = (state) => state.chunks.map((c) => c.kind);
-// The index of the first chunk of `kind`.
-const at = (state, kind, from = 0) => state.chunks.findIndex((c, i) => i >= from && c.kind === kind);
 
 // Chunks: unchanged lines, a change on one side only, the same change on both sides, and a
 // conflict. The result starts as the base, and the counts say what is left to do.

@@ -320,7 +320,10 @@ const DIRS = ["", "src/", "test/", "tests/unit/", "src/locales/", ".github/workf
 // Filing the rules (warm) stays a plain walk over them. The app's engine has no JIT and stops a
 // call that runs too long, so anything worked out per rule at start (reading a pattern, say)
 // belongs in the generator. Measured without the JIT, against a walk that only files every
-// rule under its hints: the ratio holds on a slow machine too.
+// rule under its hints: the ratio holds on a slow machine too. The measure always runs in
+// `node --jitless`, whichever runtime runs this file: bun accepts `--jitless` but keeps its
+// JIT on. Without node on the PATH it prints a skip line instead, and also when `node` turns
+// out to be bun (`bun run` puts a `node` that is bun on the PATH of a machine without node).
 {
   const here = dirname(fileURLToPath(import.meta.url));
   const code = `
@@ -337,10 +340,22 @@ const DIRS = ["", "src/", "test/", "tests/unit/", "src/locales/", ".github/workf
         }
       }
     });
-    console.log(JSON.stringify({ warm, walk }));`;
-  const { warm, walk } = JSON.parse(execFileSync(process.execPath, ["--jitless", "--input-type=module", "-e", code], { encoding: "utf8" }));
-  console.log(`filing the rules without the JIT: ${warm.toFixed(1)} ms, ${(warm / walk).toFixed(1)} times a plain walk`);
-  assert.ok(warm <= 8 * walk, `filing took ${warm} ms, a plain walk ${walk} ms`);
+    console.log(JSON.stringify({ warm, walk, bun: typeof Bun !== "undefined" }));`;
+  const node = process.versions.bun ? "node" : process.execPath;
+  let measured;
+  try {
+    measured = execFileSync(node, ["--jitless", "--input-type=module", "-e", code], { encoding: "utf8" });
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+    console.log("skip: filing the rules without the JIT needs node on the PATH");
+  }
+  const result = measured && JSON.parse(measured);
+  if (result?.bun) console.log("skip: filing the rules without the JIT needs node, and `node` on the PATH is bun");
+  else if (result) {
+    const { warm, walk } = result;
+    console.log(`filing the rules without the JIT: ${warm.toFixed(1)} ms, ${(warm / walk).toFixed(1)} times a plain walk`);
+    assert.ok(warm <= 8 * walk, `filing took ${warm} ms, a plain walk ${walk} ms`);
+  }
 }
 
 // A background takes the _dark variants (light ink) when light ink shows better on it than

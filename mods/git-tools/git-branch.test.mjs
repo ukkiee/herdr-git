@@ -9,6 +9,8 @@ import { makeGit } from "./git.js";
 import { translator } from "./i18n.js";
 import { readBranches, checkout, checkoutRevision, checkBranchName, createBranch, fetchAll, deleteBranch, restoreBranch, readDeletedBranches, restoreBranches, readFavorites, setFavorite, readMyBranches, readTags } from "./git-branch.js";
 
+// Some checks match git's own words, which git gives in the locale's language: C keeps them English.
+process.env.LC_ALL = "C";
 const tmp = realpathSync(mkdtempSync(`${tmpdir()}/git-tools-branch-`));
 // Same shape as herdr's exec: resolves with { code, stdout, stderr }, rejects when it can't start.
 const exec = (cmd, args = [], { cwd } = {}) => new Promise((resolve, reject) => {
@@ -847,7 +849,7 @@ const ended = Math.floor(Date.now() / 1000);
   assert.equal(r.ok, true, r.err);
   for (const b of r.branches) assert.ok(b.time >= started && b.time <= ended, `${b.name}: deleted between ${started} and ${ended}, not ${b.time}`);
   const free = { restorable: true, reason: "" };
-  assert.deepEqual(r.branches.map(({ time, ...b }) => b), [
+  assert.deepEqual(r.branches.map(({ time: _time, ...b }) => b), [
     { name: "moved", hash: v1, subject: "v one", upstream: null, restorable: false, reason: "a branch of this name exists now at another commit", msg: { key: "branches.nameTaken", args: { name: "moved" } } },
     { name: "twice", hash: tw1, subject: "t one", upstream: null, ...free },
     { name: "-f", hash: f1b, subject: "f one", upstream: null, ...free },

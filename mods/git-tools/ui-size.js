@@ -9,8 +9,8 @@
 
 // Hangul, CJK and full-width forms: one em each.
 const WIDE = /[ᄀ-ᇿ⺀-鿿가-힯豈-﫿＀-￯]/;
-const NARROW = new Set([..."iljt.,:;'|!()[]{} `fIr"]);
-const BROAD = new Set([..."mwMW@%"]);
+const NARROW = new Set("iljt.,:;'|!()[]{} `fIr");
+const BROAD = new Set("mwMW@%");
 
 // textWidth(text, size) → about how many px `text` takes at font size `size`.
 export function textWidth(text, size) {

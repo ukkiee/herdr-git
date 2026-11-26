@@ -125,7 +125,7 @@ export function keepPressed(read, now, open) {
   const kept = (path) => !path || open.has(path);
   for (const [path, folder] of read) if (kept(path)) out.set(path, folder);
   for (const [path, folder] of now) if (!read.has(path) && kept(path)) out.set(path, folder);
-  for (const path of [...out.keys()]) if (!parentsRead(out, path)) out.delete(path);
+  for (const path of out.keys()) if (!parentsRead(out, path)) out.delete(path);
   return out;
 }
 

@@ -152,7 +152,7 @@ export function makeCopy(io, { id = newId(), now = Date.now } = {}) {
     // An answer may be among the events that went: a wait left open would never end, so
     // a wait that began before the last lost number counts as closed. One that began
     // after it lost nothing of its own.
-    for (const [key, wait] of [...menus]) {
+    for (const [key, wait] of menus) {
       if (lost(wait)) settle(key, null);
       else wait.restarted = false;
     }
@@ -171,7 +171,7 @@ export function makeCopy(io, { id = newId(), now = Date.now } = {}) {
       stopped = true;
       if (wake) { const w = wake; wake = null; w(null); }
       if (unanswered === undefined) return;
-      for (const key of [...taken]) answer(key, unanswered);
+      for (const key of taken) answer(key, unanswered);
     },
     // Nothing may be started or redrawn from a render, hence the timer. One the host refuses
     // (past its limit of outstanding tasks) leaves nothing scheduled: the next render tries

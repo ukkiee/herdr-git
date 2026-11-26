@@ -107,7 +107,7 @@ export default class PullView {
     spawnOrUndo(cx, () => { this.waiting = false; }, async (cx) => {
       // Remembered for this branch when it isn't the tracked one; forgotten when it is.
       const up = this.targets?.upstream, tracked = up && up.remote === pick.remote && up.branch === pick.branch;
-      const all = { ...((await appSetting(MEMORY_KEY, {})) ?? {}) }, key = memoryOf(this.on, this.root, this.targets?.branch);
+      const all = { ...(await appSetting(MEMORY_KEY, {})) }, key = memoryOf(this.on, this.root, this.targets?.branch);
       if (tracked) delete all[key]; else all[key] = `${pick.remote}/${pick.branch}`;
       await saveAppSetting(MEMORY_KEY, all);
       askOwner(this, "remote-pull", { root: this.root, on: this.on, who: this.who, type: "pull", remote: pick.remote, branch: pick.branch, options: this.options }, this.who, cx, (r) => {

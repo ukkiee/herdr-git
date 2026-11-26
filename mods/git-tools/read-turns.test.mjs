@@ -157,9 +157,8 @@ const clock = () => { let t = 1000; return { now: () => t, pass: (ms) => { t += 
     alarms.push(alarm);
     return () => { alarms = alarms.filter((a) => a !== alarm); };
   };
-  let state = "before", answering = false, calls = 0, waiting = 0, mostWaiting = 0;
+  let state = "before", answering = false, waiting = 0, mostWaiting = 0;
   const exec = (_cmd, _args) => {
-    calls++;
     if (answering) return Promise.resolve({ code: 0, stdout: state, stderr: "" });
     waiting++; mostWaiting = Math.max(mostWaiting, waiting);
     return new Promise(() => {});

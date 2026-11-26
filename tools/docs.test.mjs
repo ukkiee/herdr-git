@@ -1,4 +1,4 @@
-// node tools/docs.test.mjs: the public docs still say what the code does, wherever a
+// bun tools/docs.test.mjs: the public docs still say what the code does, wherever a
 // mismatch can be found without reading the prose. RECIPE.md copies many facts out of the
 // code (export names, shared-state keys, which files the mod reads), and README.md and
 // README.ko.md say the same things in two languages; a code change that misses one of

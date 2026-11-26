@@ -1,0 +1,67 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": [
+    "import",
+    "unicorn",
+    "oxc"
+  ],
+  "rules": {
+    "import/no-cycle": "error"
+  },
+  "overrides": [
+    {
+      "files": [
+        "mods/git-tools/**/*.js"
+      ],
+      "rules": {
+        "no-restricted-globals": [
+          "error",
+          {
+            "name": "setTimeout",
+            "message": "QuickJS mods have no setTimeout: use cx.timer.after"
+          },
+          {
+            "name": "setInterval",
+            "message": "QuickJS mods have no setInterval: use cx.timer.every"
+          },
+          {
+            "name": "Intl",
+            "message": "QuickJS mods have no Intl"
+          },
+          "navigator",
+          "process"
+        ],
+        "no-restricted-properties": [
+          "error",
+          {
+            "object": "Promise",
+            "property": "race",
+            "message": "In QuickJS the winner's value stays held until the losing promise settles"
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "mods/git-tools/core/**"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "herdr",
+                  "gpui-*",
+                  "**/adapters/**"
+                ],
+                "message": "core does not know herdr or the adapters"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

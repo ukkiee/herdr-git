@@ -39,7 +39,9 @@ const blank = (text) => !String(text ?? "").trim();
 // C-quoted, which git takes back apart.
 const ESCAPES = { "\\": "\\\\", "\"": "\\\"", "\n": "\\n", "\t": "\\t", "\r": "\\r" };
 function pathLine(path) {
+  // oxlint-disable-next-line no-control-regex -- control characters are what git would misread
   if (!/^"|[\x00-\x1f\x7f]/.test(path)) return path;
+  // oxlint-disable-next-line no-control-regex -- the same characters, C-quoted
   return `"${path.replace(/[\\"\x00-\x1f\x7f]/g, (ch) => ESCAPES[ch] ?? `\\${ch.charCodeAt(0).toString(8).padStart(3, "0")}`)}"`;
 }
 

@@ -13,7 +13,7 @@
 // has the keyboard): refresh, diff-up, diff-down, diff-page-up, diff-page-down, diff-top,
 // diff-end, diff-left, diff-right.
 
-import { div, svg } from "gpui-kit";
+import { div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { exec, theme, settings } from "herdr";
 import { openTab, watchSettled, notice, skeleton, skeletonSize, iconButton, errorStrip, spacer, fileGlyph, darkLook, WindowedList, sentence } from "./ui.js";
@@ -121,7 +121,7 @@ export default class DiffView {
     this.watch(cx);
   }
 
-  // Only this computer's folders can be watched. Reads don't write under .git (git.js
+  // Only this computer's folders can be watched. Reads don't write under .git (git-port.js
   // READ), so reading the diff never wakes its own watch. A tab nobody looks at doesn't
   // watch: its first wake while hidden stops the watch (wake), and the read when it is
   // drawn again starts it again.

@@ -23,6 +23,8 @@ process.env.GIT_CONFIG_NOSYSTEM = "1";
 // A prompt would wait for a terminal these tests don't have.
 process.env.GIT_ASKPASS = "";
 process.env.SSH_ASKPASS = "";
+// Some checks match git's own words, which git gives in the locale's language: C keeps them English.
+process.env.LC_ALL = "C";
 
 const base = realpathSync(mkdtempSync(`${tmpdir()}/git-tools-remote-`));
 const exec = (cmd, args = [], { cwd } = {}) => new Promise((resolve, reject) => {

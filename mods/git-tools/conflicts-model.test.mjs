@@ -182,9 +182,15 @@ const picked = { hash: "0acda529c3f0e1d2b3a4958677a8b9c0d1e2f3a4", subject: "fea
     if (style) sh(repo, `git config merge.conflictStyle ${style}`);
     for (const [path, [b]] of Object.entries(files)) put(repo, path, b);
     sh(repo, "git add -A && git commit -qm base && git checkout -qb feature");
-    for (const [path, [, , t]] of Object.entries(files)) t === null ? sh(repo, `git rm -q ${path}`) : put(repo, path, t);
+    for (const [path, [, , t]] of Object.entries(files)) {
+        if (t === null) sh(repo, `git rm -q ${path}`);
+        else put(repo, path, t);
+      }
     sh(repo, "git add -A && git commit -qm feature && git checkout -q main");
-    for (const [path, [, o]] of Object.entries(files)) o === null ? sh(repo, `git rm -q ${path}`) : put(repo, path, o);
+    for (const [path, [, o]] of Object.entries(files)) {
+        if (o === null) sh(repo, `git rm -q ${path}`);
+        else put(repo, path, o);
+      }
     sh(repo, "git add -A && git commit -qm main");
     return repo;
   };
